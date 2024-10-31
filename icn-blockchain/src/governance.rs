@@ -1,3 +1,5 @@
+// governance.rs
+
 use chrono::Utc;
 use std::collections::VecDeque;
 
@@ -26,6 +28,7 @@ pub struct Proposal {
 }
 
 impl Proposal {
+    /// Initializes a new proposal with the given parameters.
     pub fn new(id: u64, proposal_type: ProposalType, description: String) -> Self {
         Proposal {
             id,
@@ -38,22 +41,27 @@ impl Proposal {
         }
     }
 
+    /// Validates the proposal type and ensures it's still open for voting.
     pub fn validate(&self, expected_type: ProposalType) -> bool {
         self.status == ProposalStatus::Open && self.proposal_type == expected_type
     }
 
+    /// Registers a vote with the given voter ID and weight.
     pub fn vote(&mut self, voter_id: &str, weight: i64) {
         self.votes.push((voter_id.to_string(), weight));
     }
 
+    /// Calculates the total votes based on weight.
     pub fn total_votes(&self) -> i64 {
         self.votes.iter().map(|(_, weight)| weight).sum()
     }
 
+    /// Closes the proposal, preventing further voting.
     pub fn close(&mut self) {
         self.status = ProposalStatus::Closed;
     }
 
+    /// Checks if the proposal is nearing its closing time and sends a notification.
     pub fn check_and_notify(&self, time_remaining: u64) {
         if time_remaining <= 15 && self.status == ProposalStatus::Open {
             println!(
@@ -71,6 +79,7 @@ pub struct ProposalHistory {
 }
 
 impl ProposalHistory {
+    /// Initializes a new proposal history tracker.
     pub fn new() -> Self {
         ProposalHistory {
             proposals: VecDeque::new(),
@@ -78,20 +87,24 @@ impl ProposalHistory {
         }
     }
 
+    /// Adds a proposal to the history, generating a notification.
     pub fn add_proposal(&mut self, proposal: Proposal) {
         self.proposals.push_back(proposal);
-        self.notifications
-            .push_back("New proposal created.".to_string());
+        self.notifications.push_back("New proposal created.".to_string());
     }
 
+    /// Closes a specific proposal by ID and notifies of closure.
     pub fn close_proposal(&mut self, proposal_id: u64) {
         if let Some(proposal) = self.proposals.iter_mut().find(|p| p.id == proposal_id) {
             proposal.close();
-            self.notifications
-                .push_back(format!("Proposal '{}' has closed for voting", proposal.description));
+            self.notifications.push_back(format!(
+                "Proposal '{}' has closed for voting",
+                proposal.description
+            ));
         }
     }
 
+    /// Sends reminders for open proposals.
     pub fn send_voting_reminder(&mut self) {
         for proposal in self.proposals.iter() {
             if proposal.status == ProposalStatus::Open {
@@ -103,6 +116,7 @@ impl ProposalHistory {
         }
     }
 
+    /// Displays the proposal history with current vote counts.
     pub fn display_history(&self) {
         for proposal in &self.proposals {
             println!(

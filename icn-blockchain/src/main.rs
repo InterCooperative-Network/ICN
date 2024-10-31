@@ -1,3 +1,5 @@
+// main.rs
+
 mod blockchain;
 mod did;
 mod transaction;
@@ -20,6 +22,7 @@ fn main() {
     let (sender_did, _) = DID::generate_random(String::from("did:icn:001"));
     let (receiver_did, _) = DID::generate_random(String::from("did:icn:002"));
 
+    // Create and add transactions
     let transaction1 = Transaction::new(sender_did.id.clone(), receiver_did.id.clone(), 100);
     blockchain.add_transaction(transaction1.clone());
     reputation_system.increase_reputation(&sender_did.id, 10);
@@ -28,8 +31,10 @@ fn main() {
     blockchain.add_transaction(transaction2.clone());
     reputation_system.decrease_reputation(&receiver_did.id, 5);
 
-    blockchain.mine_block();
+    // Finalize the block instead of mining
+    blockchain.finalize_block();
 
+    // Create proposals
     let mut funding_proposal = Proposal::new(
         1,
         ProposalType::Funding,
@@ -48,9 +53,11 @@ fn main() {
         String::from("Allocate 500 units for community project"),
     );
 
+    // Fetch reputations for DID holders
     let sender_reputation = reputation_system.get_reputation(&sender_did.id);
     let receiver_reputation = reputation_system.get_reputation(&receiver_did.id);
 
+    // Voting on proposals
     if funding_proposal.validate(ProposalType::Funding) {
         funding_proposal.vote(&sender_did.id, sender_reputation);
         reputation_system.reward_voting(&sender_did.id, 2);
@@ -68,6 +75,7 @@ fn main() {
         reputation_system.reward_voting(&receiver_did.id, 2);
     }
 
+    // Checking proposal statuses and notifying users
     funding_proposal.check_and_notify(15);
     policy_proposal.check_and_notify(15);
     allocation_proposal.check_and_notify(15);
@@ -76,12 +84,14 @@ fn main() {
     policy_proposal.close();
     allocation_proposal.close();
 
+    // Adding proposals to history and sending reminders
     proposal_history.add_proposal(funding_proposal);
     proposal_history.add_proposal(policy_proposal);
     proposal_history.add_proposal(allocation_proposal);
 
     proposal_history.send_voting_reminder();
 
+    // Displaying proposal history and blockchain details
     println!("\n=== Proposal History ===");
     proposal_history.display_history();
 

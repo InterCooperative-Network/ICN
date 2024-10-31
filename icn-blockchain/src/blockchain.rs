@@ -1,3 +1,5 @@
+// src/blockchain.rs
+
 use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest};
 use chrono::Utc;
@@ -59,8 +61,8 @@ impl Blockchain {
         self.pending_transactions.push(transaction);
     }
 
-    /// Mines a new block containing pending transactions.
-    pub fn mine_block(&mut self) {
+    /// Finalizes a new block with pending transactions.
+    pub fn finalize_block(&mut self) {
         let previous_hash = self.chain.last().unwrap().hash.clone();
         let new_block = Block::new(
             self.chain.len() as u64,
