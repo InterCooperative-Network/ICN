@@ -8,18 +8,49 @@ use blockchain::Blockchain;
 use did::DID;
 use transaction::Transaction;
 use reputation::ReputationSystem;
-use governance::Proposal;
+use governance::{Proposal, ProposalType, ProposalStatus};
+use std::collections::VecDeque;
+
+#[derive(Debug)]
+struct ProposalHistory {
+    proposals: VecDeque<Proposal>,
+}
+
+impl ProposalHistory {
+    pub fn new() -> Self {
+        ProposalHistory {
+            proposals: VecDeque::new(),
+        }
+    }
+
+    pub fn add_proposal(&mut self, proposal: Proposal) {
+        self.proposals.push_back(proposal);
+    }
+
+    pub fn display_history(&self) {
+        for proposal in &self.proposals {
+            println!(
+                "Proposal ID: {}, Description: '{}', Result: {}, Total Votes: {}",
+                proposal.id,
+                proposal.description,
+                match proposal.status {
+                    ProposalStatus::Closed => "Closed",
+                    ProposalStatus::Open => "Open",
+                },
+                proposal.total_votes()
+            );
+        }
+    }
+}
 
 fn main() {
-    // Initialize Blockchain, Reputation System, and Governance
     let mut blockchain = Blockchain::new();
     let mut reputation_system = ReputationSystem::new();
+    let mut proposal_history = ProposalHistory::new();
 
-    // Generate DIDs for testing governance and transactions
     let (sender_did, _) = DID::generate_random(String::from("did:icn:001"));
     let (receiver_did, _) = DID::generate_random(String::from("did:icn:002"));
 
-    // Create transactions and update reputation
     let transaction1 = Transaction::new(sender_did.id.clone(), receiver_did.id.clone(), 100);
     blockchain.add_transaction(transaction1.clone());
     reputation_system.increase_reputation(&sender_did.id, 10);
@@ -28,29 +59,67 @@ fn main() {
     blockchain.add_transaction(transaction2.clone());
     reputation_system.decrease_reputation(&receiver_did.id, 5);
 
-    // Mine the block with pending transactions
     blockchain.mine_block();
 
-    // Governance - Create a proposal and conduct voting
-    let mut proposal = Proposal::new(1, String::from("Increase community funding"));
+    let mut funding_proposal = Proposal::new(
+        1,
+        String::from("Increase community funding"),
+        ProposalType::Funding,
+        None,
+        60,
+    );
 
-    // Display reputation for weighted voting
+    let mut policy_proposal = Proposal::new(
+        2,
+        String::from("Amend community policy"),
+        ProposalType::PolicyChange,
+        None,
+        60,
+    );
+
+    let mut allocation_proposal = Proposal::new(
+        3,
+        String::from("Allocate 500 units for community project"),
+        ProposalType::ResourceAllocation,
+        Some(500),
+        60,
+    );
+
     let sender_reputation = reputation_system.get_reputation(&sender_did.id);
     let receiver_reputation = reputation_system.get_reputation(&receiver_did.id);
 
-    // Cast votes based on reputation scores
-    proposal.vote(&sender_did.id, sender_reputation);
-    proposal.vote(&receiver_did.id, receiver_reputation);
+    if funding_proposal.validate(ProposalType::Funding) {
+        funding_proposal.vote(&sender_did.id, sender_reputation);
+        reputation_system.reward_voting(&sender_did.id, 2);
+    }
 
-    // Close the proposal and display the result
-    proposal.close();
-    println!(
-        "Proposal '{}' Results - Total Weighted Votes: {}",
-        proposal.description,
-        proposal.total_votes()
-    );
+    if policy_proposal.validate(ProposalType::PolicyChange) {
+        policy_proposal.vote(&receiver_did.id, receiver_reputation);
+        reputation_system.reward_voting(&receiver_did.id, 2);
+    }
 
-    // Display Blockchain and Reputation for Reference
+    if allocation_proposal.validate(ProposalType::ResourceAllocation) {
+        allocation_proposal.vote(&sender_did.id, sender_reputation);
+        allocation_proposal.vote(&receiver_did.id, receiver_reputation);
+        reputation_system.reward_voting(&sender_did.id, 2);
+        reputation_system.reward_voting(&receiver_did.id, 2);
+    }
+
+    funding_proposal.check_and_notify(15);
+    policy_proposal.check_and_notify(15);
+    allocation_proposal.check_and_notify(15);
+
+    funding_proposal.close();
+    policy_proposal.close();
+    allocation_proposal.check_status();
+
+    proposal_history.add_proposal(funding_proposal);
+    proposal_history.add_proposal(policy_proposal);
+    proposal_history.add_proposal(allocation_proposal);
+
+    println!("\n=== Proposal History ===");
+    proposal_history.display_history();
+
     println!("Blockchain: {:?}", blockchain.chain);
     println!(
         "Reputation Scores:\nSender: {} => {}\nReceiver: {} => {}",
