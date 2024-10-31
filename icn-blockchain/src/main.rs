@@ -8,40 +8,8 @@ use blockchain::Blockchain;
 use did::DID;
 use transaction::Transaction;
 use reputation::ReputationSystem;
-use governance::{Proposal, ProposalType, ProposalStatus};
+use governance::{Proposal, ProposalType, ProposalStatus, ProposalHistory};
 use std::collections::VecDeque;
-
-#[derive(Debug)]
-struct ProposalHistory {
-    proposals: VecDeque<Proposal>,
-}
-
-impl ProposalHistory {
-    pub fn new() -> Self {
-        ProposalHistory {
-            proposals: VecDeque::new(),
-        }
-    }
-
-    pub fn add_proposal(&mut self, proposal: Proposal) {
-        self.proposals.push_back(proposal);
-    }
-
-    pub fn display_history(&self) {
-        for proposal in &self.proposals {
-            println!(
-                "Proposal ID: {}, Description: '{}', Result: {}, Total Votes: {}",
-                proposal.id,
-                proposal.description,
-                match proposal.status {
-                    ProposalStatus::Closed => "Closed",
-                    ProposalStatus::Open => "Open",
-                },
-                proposal.total_votes()
-            );
-        }
-    }
-}
 
 fn main() {
     let mut blockchain = Blockchain::new();
@@ -119,6 +87,11 @@ fn main() {
 
     println!("\n=== Proposal History ===");
     proposal_history.display_history();
+
+    println!("\n=== Proposal Analytics ===");
+    proposal_history.total_votes_for_proposals();
+    proposal_history.participation_rate(100); // Assume a total of 100 members for example
+    proposal_history.voting_trends();
 
     println!("Blockchain: {:?}", blockchain.chain);
     println!(
