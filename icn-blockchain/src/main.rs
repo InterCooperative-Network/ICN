@@ -3,45 +3,14 @@ mod did;
 mod transaction;
 mod reputation;
 mod governance;
+mod notifications;
 
 use blockchain::Blockchain;
 use did::DID;
 use transaction::Transaction;
 use reputation::ReputationSystem;
-use governance::{Proposal, ProposalType, ProposalStatus};
+use governance::{Proposal, ProposalType, ProposalStatus, ProposalHistory};
 use std::collections::VecDeque;
-
-#[derive(Debug)]
-struct ProposalHistory {
-    proposals: VecDeque<Proposal>,
-}
-
-impl ProposalHistory {
-    pub fn new() -> Self {
-        ProposalHistory {
-            proposals: VecDeque::new(),
-        }
-    }
-
-    pub fn add_proposal(&mut self, proposal: Proposal) {
-        self.proposals.push_back(proposal);
-    }
-
-    pub fn display_history(&self) {
-        for proposal in &self.proposals {
-            println!(
-                "Proposal ID: {}, Description: '{}', Result: {}, Total Votes: {}",
-                proposal.id,
-                proposal.description,
-                match proposal.status {
-                    ProposalStatus::Closed => "Closed",
-                    ProposalStatus::Open => "Open",
-                },
-                proposal.total_votes()
-            );
-        }
-    }
-}
 
 fn main() {
     let mut blockchain = Blockchain::new();
@@ -63,26 +32,20 @@ fn main() {
 
     let mut funding_proposal = Proposal::new(
         1,
-        String::from("Increase community funding"),
         ProposalType::Funding,
-        None,
-        60,
+        String::from("Increase community funding"),
     );
 
     let mut policy_proposal = Proposal::new(
         2,
-        String::from("Amend community policy"),
         ProposalType::PolicyChange,
-        None,
-        60,
+        String::from("Amend community policy"),
     );
 
     let mut allocation_proposal = Proposal::new(
         3,
-        String::from("Allocate 500 units for community project"),
         ProposalType::ResourceAllocation,
-        Some(500),
-        60,
+        String::from("Allocate 500 units for community project"),
     );
 
     let sender_reputation = reputation_system.get_reputation(&sender_did.id);
@@ -111,11 +74,13 @@ fn main() {
 
     funding_proposal.close();
     policy_proposal.close();
-    allocation_proposal.check_status();
+    allocation_proposal.close();
 
     proposal_history.add_proposal(funding_proposal);
     proposal_history.add_proposal(policy_proposal);
     proposal_history.add_proposal(allocation_proposal);
+
+    proposal_history.send_voting_reminder();
 
     println!("\n=== Proposal History ===");
     proposal_history.display_history();
