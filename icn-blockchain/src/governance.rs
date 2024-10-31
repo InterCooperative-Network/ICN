@@ -1,5 +1,5 @@
-use std::collections::HashMap;
-use chrono::{Utc, Duration};
+use chrono::Utc;
+use std::collections::VecDeque;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProposalType {
@@ -17,64 +17,101 @@ pub enum ProposalStatus {
 #[derive(Debug, Clone)]
 pub struct Proposal {
     pub id: u64,
-    pub description: String,
     pub proposal_type: ProposalType,
-    pub votes: HashMap<String, i64>,
-    pub status: ProposalStatus,
+    pub description: String,
     pub resource_amount: Option<u64>,
-    pub created_at: i64,
-    pub duration_seconds: i64,
+    pub duration: u64,
+    pub status: ProposalStatus,
+    votes: Vec<(String, i64)>, // Tuple of voter ID and vote weight
 }
 
 impl Proposal {
-    pub fn new(id: u64, description: String, proposal_type: ProposalType, resource_amount: Option<u64>, duration_seconds: i64) -> Self {
+    pub fn new(id: u64, proposal_type: ProposalType, description: String) -> Self {
         Proposal {
             id,
-            description,
             proposal_type,
-            votes: HashMap::new(),
+            description,
+            resource_amount: None,
+            duration: 60,
             status: ProposalStatus::Open,
-            resource_amount,
-            created_at: Utc::now().timestamp(),
-            duration_seconds,
+            votes: Vec::new(),
         }
-    }
-
-    pub fn vote(&mut self, did: &str, reputation: i64) {
-        if self.status == ProposalStatus::Open {
-            *self.votes.entry(did.to_string()).or_insert(0) += reputation;
-            println!("DID {} voted with weight {}. Total votes: {:?}", did, reputation, self.votes);
-        } else {
-            println!("Proposal is closed. No further votes allowed.");
-        }
-    }
-
-    pub fn close(&mut self) {
-        self.status = ProposalStatus::Closed;
-        println!("Proposal {} is now closed for voting.", self.id);
-    }
-
-    pub fn total_votes(&self) -> i64 {
-        self.votes.values().sum()
     }
 
     pub fn validate(&self, expected_type: ProposalType) -> bool {
         self.status == ProposalStatus::Open && self.proposal_type == expected_type
     }
 
-    pub fn check_status(&mut self) {
-        let now = Utc::now().timestamp();
-        if self.status == ProposalStatus::Open && (now - self.created_at) > self.duration_seconds {
-            self.close();
+    pub fn vote(&mut self, voter_id: &str, weight: i64) {
+        self.votes.push((voter_id.to_string(), weight));
+    }
+
+    pub fn total_votes(&self) -> i64 {
+        self.votes.iter().map(|(_, weight)| weight).sum()
+    }
+
+    pub fn close(&mut self) {
+        self.status = ProposalStatus::Closed;
+    }
+
+    pub fn check_and_notify(&self, time_remaining: u64) {
+        if time_remaining <= 15 && self.status == ProposalStatus::Open {
+            println!(
+                "Notification: Proposal '{}' is nearing its end. Time remaining: {} minutes.",
+                self.description, time_remaining
+            );
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ProposalHistory {
+    pub proposals: VecDeque<Proposal>,
+    pub notifications: VecDeque<String>,
+}
+
+impl ProposalHistory {
+    pub fn new() -> Self {
+        ProposalHistory {
+            proposals: VecDeque::new(),
+            notifications: VecDeque::new(),
         }
     }
 
-    pub fn check_and_notify(&self, reminder_threshold: i64) {
-        let now = Utc::now().timestamp();
-        let time_left = self.duration_seconds - (now - self.created_at);
+    pub fn add_proposal(&mut self, proposal: Proposal) {
+        self.proposals.push_back(proposal);
+        self.notifications
+            .push_back("New proposal created.".to_string());
+    }
 
-        if self.status == ProposalStatus::Open && time_left <= reminder_threshold {
-            println!("Reminder: Proposal '{}' is closing soon! Time left: {} seconds", self.description, time_left);
+    pub fn close_proposal(&mut self, proposal_id: u64) {
+        if let Some(proposal) = self.proposals.iter_mut().find(|p| p.id == proposal_id) {
+            proposal.close();
+            self.notifications
+                .push_back(format!("Proposal '{}' has closed for voting", proposal.description));
+        }
+    }
+
+    pub fn send_voting_reminder(&mut self) {
+        for proposal in self.proposals.iter() {
+            if proposal.status == ProposalStatus::Open {
+                self.notifications.push_back(format!(
+                    "Reminder: Proposal '{}' is still open for voting!",
+                    proposal.description
+                ));
+            }
+        }
+    }
+
+    pub fn display_history(&self) {
+        for proposal in &self.proposals {
+            println!(
+                "Proposal ID: {}, Description: '{}', Status: {:?}, Total Votes: {}",
+                proposal.id,
+                proposal.description,
+                proposal.status,
+                proposal.total_votes()
+            );
         }
     }
 }
