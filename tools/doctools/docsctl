@@ -1,0 +1,338 @@
+#!/usr/bin/env python3
+import click
+from pathlib import Path
+import questionary
+import sys
+import os
+from datetime import datetime
+import yaml
+import re
+import shutil
+
+class DocManager:
+    def __init__(self, root_dir="docs"):
+        self.root_dir = Path(root_dir)
+        self.templates_dir = self.root_dir / "templates"
+        self.ensure_directory_structure()
+
+    def ensure_directory_structure(self):
+        """Create the base directory structure if it doesn't exist."""
+        directories = [
+            "architecture/overview",
+            "architecture/backend",
+            "architecture/frontend",
+            "architecture/diagrams/system",
+            "architecture/diagrams/sequence",
+            "architecture/diagrams/component",
+            "specifications/core",
+            "specifications/api",
+            "specifications/protocols",
+            "development/setup",
+            "development/guides",
+            "development/plans",
+            "user/guides",
+            "user/tutorials",
+            "templates",
+        ]
+
+        for dir_path in directories:
+            (self.root_dir / dir_path).mkdir(parents=True, exist_ok=True)
+
+    def create_metadata(self, title, doc_type, version="1.0.0", status="draft", 
+                       authors=None, reviewers=None, related_docs=None):
+        """Generate metadata for a document."""
+        metadata = {
+            "title": title,
+            "version": version,
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "status": status,
+            "authors": authors or [],
+            "reviewers": reviewers or [],
+            "related_docs": related_docs or [],
+            "type": doc_type,
+            "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        return metadata
+
+    def generate_filename(self, title, doc_type):
+        """Generate a filename from title and type."""
+        filename = re.sub(r'[^a-zA-Z0-9\s-]', '', title.lower())
+        filename = re.sub(r'\s+', '-', filename)
+        
+        if doc_type in ["specification", "plan"]:
+            date_prefix = datetime.now().strftime("%Y-%m-%d")
+            return f"{date_prefix}-{filename}.md"
+        
+        return f"{filename}.md"
+
+    def get_directory_for_type(self, doc_type):
+        """Determine the appropriate directory for a document type."""
+        type_dirs = {
+            "specification": self.root_dir / "specifications/core",
+            "architecture": self.root_dir / "architecture/overview",
+            "guide": self.root_dir / "development/guides",
+            "plan": self.root_dir / "development/plans",
+            "tutorial": self.root_dir / "user/tutorials",
+        }
+        return type_dirs.get(doc_type, self.root_dir)
+
+    def format_document(self, metadata, content):
+        """Format a document with metadata and content."""
+        yaml_metadata = yaml.dump(metadata, default_flow_style=False)
+        return f"""---
+{yaml_metadata}
+---
+
+{content}
+"""
+
+    def create_document(self, title, doc_type, content="", **metadata_kwargs):
+        """Create a new document with proper metadata and structure."""
+        filename = self.generate_filename(title, doc_type)
+        metadata = self.create_metadata(title, doc_type, **metadata_kwargs)
+        doc_dir = self.get_directory_for_type(doc_type)
+        full_content = self.format_document(metadata, content)
+        
+        file_path = doc_dir / filename
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(full_content)
+            
+        return file_path
+
+    def update_document(self, file_path, new_content=None, **metadata_updates):
+        """Update an existing document's content and/or metadata."""
+        file_path = Path(file_path)
+        if not file_path.exists():
+            raise FileNotFoundError(f"Document not found: {file_path}")
+
+        content = file_path.read_text()
+        parts = content.split("---\n", 2)
+        if len(parts) < 3:
+            raise ValueError("Invalid document format")
+
+        metadata = yaml.safe_load(parts[1])
+        metadata.update(metadata_updates)
+        metadata["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        updated_content = self.format_document(
+            metadata,
+            new_content if new_content is not None else parts[2]
+        )
+
+        file_path.write_text(updated_content)
+
+    def list_documents(self, doc_type=None):
+        """List all documents, optionally filtered by type."""
+        docs = []
+        for path in self.root_dir.rglob("*.md"):
+            if path.name.startswith("."):
+                continue
+                
+            try:
+                content = path.read_text()
+                parts = content.split("---\n", 2)
+                if len(parts) >= 2:
+                    metadata = yaml.safe_load(parts[1])
+                    if doc_type is None or metadata.get("type") == doc_type:
+                        docs.append({
+                            "path": path,
+                            "metadata": metadata
+                        })
+            except Exception as e:
+                print(f"Error reading {path}: {e}")
+                
+        return docs
+
+    def create_index(self):
+        """Create an index of all documents."""
+        docs = self.list_documents()
+        index_content = "# Documentation Index\n\n"
+        
+        docs_by_type = {}
+        for doc in docs:
+            doc_type = doc["metadata"].get("type", "uncategorized")
+            if doc_type not in docs_by_type:
+                docs_by_type[doc_type] = []
+            docs_by_type[doc_type].append(doc)
+
+        for doc_type, type_docs in docs_by_type.items():
+            index_content += f"\n## {doc_type.title()}\n\n"
+            for doc in sorted(type_docs, key=lambda x: x["metadata"]["title"]):
+                metadata = doc["metadata"]
+                rel_path = doc["path"].relative_to(self.root_dir)
+                index_content += f"- [{metadata['title']}]({rel_path}) "
+                index_content += f"(v{metadata['version']}, {metadata['status']})\n"
+
+        index_path = self.root_dir / "INDEX.md"
+        index_path.write_text(index_content)
+
+
+class DocumentationCLI:
+    def __init__(self):
+        self.doc_manager = DocManager()
+        self.editor = 'nano'  # Using nano as the default editor
+
+    def main_menu(self):
+        while True:
+            action = questionary.select(
+                "What would you like to do?",
+                choices=[
+                    "Create New Document",
+                    "List Documents",
+                    "Update Document",
+                    "Update Index",
+                    "Exit"
+                ]
+            ).ask()
+
+            if action == "Create New Document":
+                self.create_document_menu()
+            elif action == "List Documents":
+                self.list_documents_menu()
+            elif action == "Update Document":
+                self.update_document_menu()
+            elif action == "Update Index":
+                self.doc_manager.create_index()
+                click.echo("Documentation index updated!")
+            else:
+                click.echo("Goodbye!")
+                sys.exit(0)
+
+    def create_document_menu(self):
+        doc_type = questionary.select(
+            "What type of document would you like to create?",
+            choices=[
+                "Technical Specification",
+                "API Documentation",
+                "Protocol Specification",
+                "Guide",
+                "Tutorial",
+                "Back to Main Menu"
+            ]
+        ).ask()
+
+        if doc_type == "Back to Main Menu":
+            return
+
+        title = questionary.text("Enter document title:").ask()
+        author = questionary.text("Enter author name:").ask()
+        reviewer = questionary.text("Enter reviewer name (optional):").skip_if_empty().ask()
+
+        try:
+            doc_path = self.doc_manager.create_document(
+                title=title,
+                doc_type=doc_type.lower().replace(" ", "-"),
+                authors=[author],
+                reviewers=[reviewer] if reviewer else []
+            )
+
+            click.echo(f"\nCreated document: {doc_path}")
+            
+            if questionary.confirm("Would you like to open it in nano?").ask():
+                os.system(f"{self.editor} {doc_path}")
+
+        except Exception as e:
+            click.echo(f"Error creating document: {e}", err=True)
+
+    def list_documents_menu(self):
+        doc_type = questionary.select(
+            "Which type of documents would you like to list?",
+            choices=[
+                "All Documents",
+                "Technical Specifications",
+                "API Documentation",
+                "Guides",
+                "Tutorials",
+                "Back to Main Menu"
+            ]
+        ).ask()
+
+        if doc_type == "Back to Main Menu":
+            return
+
+        type_filter = None if doc_type == "All Documents" else doc_type.lower()
+        docs = self.doc_manager.list_documents(doc_type=type_filter)
+
+        if not docs:
+            click.echo("No documents found.")
+            return
+
+        click.echo("\nFound Documents:")
+        click.echo("-" * 80)
+        for doc in docs:
+            metadata = doc["metadata"]
+            click.echo(f"Title: {metadata['title']}")
+            click.echo(f"Type: {metadata.get('type', 'N/A')}")
+            click.echo(f"Version: {metadata.get('version', '1.0.0')}")
+            click.echo(f"Status: {metadata.get('status', 'draft')}")
+            click.echo(f"Path: {doc['path']}")
+            click.echo("-" * 80)
+
+        if questionary.confirm("Would you like to open a document?").ask():
+            doc_titles = [d["metadata"]["title"] for d in docs]
+            selected = questionary.select(
+                "Select a document to open:",
+                choices=doc_titles + ["Back"]
+            ).ask()
+
+            if selected != "Back":
+                doc_path = next(d["path"] for d in docs if d["metadata"]["title"] == selected)
+                os.system(f"{self.editor} {doc_path}")
+
+    def update_document_menu(self):
+        docs = self.doc_manager.list_documents()
+        if not docs:
+            click.echo("No documents found to update.")
+            return
+
+        doc_titles = [d["metadata"]["title"] for d in docs]
+        selected = questionary.select(
+            "Select a document to update:",
+            choices=doc_titles + ["Back to Main Menu"]
+        ).ask()
+
+        if selected == "Back to Main Menu":
+            return
+
+        doc = next(d for d in docs if d["metadata"]["title"] == selected)
+        
+        update_type = questionary.select(
+            "What would you like to update?",
+            choices=[
+                "Open in Editor",
+                "Update Status",
+                "Update Version",
+                "Add Reviewer",
+                "Back"
+            ]
+        ).ask()
+
+        if update_type == "Open in Editor":
+            os.system(f"{self.editor} {doc['path']}")
+        elif update_type == "Update Status":
+            new_status = questionary.select(
+                "Select new status:",
+                choices=["draft", "review", "approved", "deprecated"]
+            ).ask()
+            self.doc_manager.update_document(doc["path"], status=new_status)
+        elif update_type == "Update Version":
+            new_version = questionary.text("Enter new version:").ask()
+            self.doc_manager.update_document(doc["path"], version=new_version)
+        elif update_type == "Add Reviewer":
+            reviewer = questionary.text("Enter reviewer name:").ask()
+            current_reviewers = doc["metadata"].get("reviewers", [])
+            current_reviewers.append(reviewer)
+            self.doc_manager.update_document(doc["path"], reviewers=current_reviewers)
+
+@click.command()
+def cli():
+    """Interactive Documentation Management CLI"""
+    cli_tool = DocumentationCLI()
+    try:
+        cli_tool.main_menu()
+    except KeyboardInterrupt:
+        click.echo("\nGoodbye!")
+        sys.exit(0)
+
+if __name__ == "__main__":
+    cli()
