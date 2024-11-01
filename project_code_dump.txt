@@ -1,0 +1,1158 @@
+Project Code Dump - Generated Thu Oct 31 08:33:55 PM UTC 2024
+======================================
+
+Project Tree:
+=============
+.
+├── backend
+│   ├── Cargo.lock
+│   ├── Cargo.toml
+│   ├── src
+│   │   ├── api
+│   │   ├── blockchain
+│   │   │   ├── mod.rs
+│   │   │   └── transaction.rs
+│   │   ├── config
+│   │   ├── governance
+│   │   │   └── mod.rs
+│   │   ├── identity
+│   │   │   ├── did.rs
+│   │   │   └── mod.rs
+│   │   ├── main.rs
+│   │   ├── reputation
+│   │   │   └── mod.rs
+│   │   ├── utils
+│   │   │   ├── mod.rs
+│   │   │   └── notifications.rs
+│   │   └── vm
+│   │       └── mod.rs
+│   └── target
+│       ├── CACHEDIR.TAG
+│       └── debug
+│           ├── build
+│           ├── deps
+│           ├── examples
+│           ├── icn-backend
+│           ├── icn-backend.d
+│           └── incremental
+├── contracts
+│   ├── cooperative
+│   └── governance
+├── docker
+│   ├── backend.Dockerfile
+│   ├── docker-compose.yml
+│   └── frontend.Dockerfile
+├── docs
+│   ├── api
+│   ├── architecture
+│   └── guides
+├── frontend
+│   ├── package.json
+│   ├── src
+│   │   ├── app
+│   │   ├── components
+│   │   │   ├── cooperative
+│   │   │   ├── governance
+│   │   │   ├── identity
+│   │   │   └── ui
+│   │   ├── contexts
+│   │   ├── hooks
+│   │   ├── lib
+│   │   └── styles
+│   └── tsconfig.json
+├── generate_code_dump.sh
+└── project_code_dump.txt
+
+37 directories, 22 files
+
+
+===================
+File: ./backend/src/identity/did.rs
+===================
+use secp256k1::{Secp256k1, SecretKey, PublicKey};
+use serde::Serialize;
+
+/// Struct representing a decentralized identifier (DID)
+#[derive(Debug, Clone)]
+pub struct DID {
+    pub id: String,
+    pub public_key: PublicKey,
+}
+
+impl DID {
+    /// Creates a new DID with a specified identifier and an existing secret key.
+    pub fn new(id: String, secret_key: &SecretKey) -> Self {
+        let secp = Secp256k1::new();
+        let public_key = PublicKey::from_secret_key(&secp, secret_key);
+
+        DID { id, public_key }
+    }
+
+    /// Generates a new random DID and secret key pair.
+    pub fn generate_random(id: String) -> (Self, SecretKey) {
+        let secp = Secp256k1::new();
+        let secret_key = SecretKey::from_slice(&rand::random::<[u8; 32]>()).expect("32 bytes, within curve order");
+        let public_key = PublicKey::from_secret_key(&secp, &secret_key);
+
+        let did = DID { id, public_key };
+        (did, secret_key)
+    }
+}
+
+// Custom serialization for DID
+impl Serialize for DID {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("DID", 2)?;
+        state.serialize_field("id", &self.id)?;
+        state.serialize_field("public_key", &self.public_key.to_string())?;
+        state.end()
+    }
+}
+
+===================
+File: ./backend/src/identity/mod.rs
+===================
+pub mod did;
+
+pub use did::DID;
+
+===================
+File: ./backend/src/utils/notifications.rs
+===================
+use chrono::{DateTime, Utc};
+
+#[derive(Debug, Clone)]
+pub struct Notification {
+    pub proposal_id: u64,
+    pub message: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+impl Notification {
+    /// Creates a new notification with the current timestamp.
+    pub fn new(proposal_id: u64, message: String) -> Self {
+        Notification {
+            proposal_id,
+            message,
+            timestamp: Utc::now(),
+        }
+    }
+
+    /// Displays a formatted message for the notification.
+    pub fn display(&self) {
+        println!(
+            "[{}] Proposal ID {}: {}",
+            self.timestamp, self.proposal_id, self.message
+        );
+    }
+}
+
+===================
+File: ./backend/src/utils/mod.rs
+===================
+pub mod notifications;
+
+pub use notifications::Notification;
+
+===================
+File: ./backend/src/vm/mod.rs
+===================
+// src/vm/mod.rs
+
+use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum OpCode {
+    PUSH,
+    POP,
+    ADD,
+    SUB,
+    STORE,
+    LOAD,
+    CALL,
+    RETURN,
+    COOPERATIVE_ACTION,  // New opcode for cooperative-specific actions
+}
+
+#[derive(Debug)]
+pub struct VM {
+    stack: Vec<i64>,
+    memory: HashMap<String, i64>,
+    program_counter: usize,
+    contribution_credits: u64,  // Renamed from gas
+    reputation_context: HashMap<String, i64>,  // Added reputation context
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Contract {
+    pub code: Vec<(OpCode, Option<i64>)>,
+    pub state: HashMap<String, i64>,
+    pub required_reputation: i64,  // Minimum reputation required to execute
+    pub cooperative_metadata: CooperativeMetadata,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CooperativeMetadata {
+    pub creator_did: String,
+    pub cooperative_id: String,
+    pub purpose: String,
+    pub resource_impact: ResourceImpact,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceImpact {
+    pub cpu_intensity: u32,
+    pub memory_usage: u32,
+    pub network_usage: u32,
+}
+
+impl VM {
+    pub fn new(contribution_limit: u64, reputation_context: HashMap<String, i64>) -> Self {
+        VM {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            program_counter: 0,
+            contribution_credits: contribution_limit,
+            reputation_context,
+        }
+    }
+
+    pub fn execute_contract(&mut self, contract: &Contract, executor_did: &str) -> Result<i64, String> {
+        // Check reputation requirements
+        let executor_reputation = self.reputation_context.get(executor_did)
+            .ok_or("Executor not found in reputation context")?;
+        
+        if *executor_reputation < contract.required_reputation {
+            return Err("Insufficient reputation to execute contract".to_string());
+        }
+
+        // Calculate credit cost based on resource impact
+        let credit_cost = self.calculate_credit_cost(&contract.cooperative_metadata.resource_impact);
+        if credit_cost > self.contribution_credits {
+            return Err("Insufficient contribution credits".to_string());
+        }
+
+        let mut code = contract.code.clone();
+        self.memory = contract.state.clone();
+
+        while self.program_counter < code.len() && self.contribution_credits >= credit_cost {
+            let (op, value) = &code[self.program_counter];
+            self.execute_instruction(op, value.clone(), &contract.cooperative_metadata)?;
+            self.contribution_credits -= credit_cost;
+            self.program_counter += 1;
+        }
+
+        if self.contribution_credits < credit_cost {
+            return Err("Out of contribution credits".to_string());
+        }
+
+        Ok(self.stack.pop().unwrap_or(0))
+    }
+
+    fn calculate_credit_cost(&self, impact: &ResourceImpact) -> u64 {
+        // Calculate based on resource impact
+        let base_cost = 1;
+        let cpu_factor = (impact.cpu_intensity as f64 / 100.0) + 1.0;
+        let memory_factor = (impact.memory_usage as f64 / 100.0) + 1.0;
+        let network_factor = (impact.network_usage as f64 / 100.0) + 1.0;
+
+        (base_cost as f64 * cpu_factor * memory_factor * network_factor) as u64
+    }
+
+    fn execute_instruction(
+        &mut self, 
+        op: &OpCode, 
+        value: Option<i64>,
+        metadata: &CooperativeMetadata
+    ) -> Result<(), String> {
+        match op {
+            OpCode::PUSH => {
+                if let Some(v) = value {
+                    self.stack.push(v);
+                }
+            }
+            OpCode::POP => {
+                self.stack.pop().ok_or("Stack underflow")?;
+            }
+            OpCode::ADD => {
+                let b = self.stack.pop().ok_or("Stack underflow")?;
+                let a = self.stack.pop().ok_or("Stack underflow")?;
+                self.stack.push(a + b);
+            }
+            OpCode::SUB => {
+                let b = self.stack.pop().ok_or("Stack underflow")?;
+                let a = self.stack.pop().ok_or("Stack underflow")?;
+                self.stack.push(a - b);
+            }
+            OpCode::STORE => {
+                let value = self.stack.pop().ok_or("Stack underflow")?;
+                let key = format!("var_{}", value);
+                self.memory.insert(key, value);
+            }
+            OpCode::LOAD => {
+                if let Some(v) = value {
+                    let key = format!("var_{}", v);
+                    if let Some(&stored) = self.memory.get(&key) {
+                        self.stack.push(stored);
+                    }
+                }
+            }
+            OpCode::COOPERATIVE_ACTION => {
+                // Handle cooperative-specific actions
+                // This could include resource allocation, voting weight calculation, etc.
+                self.handle_cooperative_action(value, metadata)?;
+            }
+            OpCode::CALL => {
+                // Implement contract calls with cooperative context
+                self.handle_contract_call(value, metadata)?;
+            }
+            OpCode::RETURN => {
+                return Ok(());
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_cooperative_action(
+        &mut self,
+        action_id: Option<i64>,
+        metadata: &CooperativeMetadata
+    ) -> Result<(), String> {
+        match action_id {
+            Some(1) => {
+                // Resource allocation action
+                // Implementation here
+                Ok(())
+            }
+            Some(2) => {
+                // Voting weight calculation
+                // Implementation here
+                Ok(())
+            }
+            // Add more cooperative actions as needed
+            _ => Err("Unknown cooperative action".to_string())
+        }
+    }
+
+    fn handle_contract_call(
+        &mut self,
+        contract_id: Option<i64>,
+        metadata: &CooperativeMetadata
+    ) -> Result<(), String> {
+        // Implement cross-contract calls within the cooperative context
+        Ok(())
+    }
+}
+
+// Test module
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cooperative_contract() {
+        let mut reputation_context = HashMap::new();
+        reputation_context.insert("did:icn:test".to_string(), 100);
+
+        let mut vm = VM::new(100, reputation_context);
+        
+        let metadata = CooperativeMetadata {
+            creator_did: "did:icn:creator".to_string(),
+            cooperative_id: "coop1".to_string(),
+            purpose: "Test contract".to_string(),
+            resource_impact: ResourceImpact {
+                cpu_intensity: 10,
+                memory_usage: 10,
+                network_usage: 10,
+            },
+        };
+
+        let contract = Contract {
+            code: vec![
+                (OpCode::PUSH, Some(5)),
+                (OpCode::PUSH, Some(3)),
+                (OpCode::ADD, None),
+                (OpCode::COOPERATIVE_ACTION, Some(1)),
+                (OpCode::RETURN, None),
+            ],
+            state: HashMap::new(),
+            required_reputation: 50,
+            cooperative_metadata: metadata,
+        };
+
+        let result = vm.execute_contract(&contract, "did:icn:test");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 8);
+    }
+}
+
+===================
+File: ./backend/src/blockchain/mod.rs
+===================
+pub mod transaction;
+
+use serde::{Serialize, Deserialize};
+use sha2::{Sha256, Digest};
+use chrono::Utc;
+use self::transaction::Transaction;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Block {
+    pub index: u64,
+    pub previous_hash: String,
+    pub timestamp: u128,
+    pub transactions: Vec<Transaction>, // Vector to hold transactions
+    pub hash: String,
+}
+
+impl Block {
+    /// Creates a new block with a list of transactions and calculates its hash.
+    pub fn new(index: u64, previous_hash: String, transactions: Vec<Transaction>) -> Self {
+        let timestamp = Utc::now().timestamp_millis() as u128;
+        let hash = calculate_hash(index, &previous_hash, timestamp, &transactions);
+
+        Block {
+            index,
+            previous_hash,
+            timestamp,
+            transactions,
+            hash,
+        }
+    }
+}
+
+/// Calculates a hash for the block based on its contents.
+fn calculate_hash(index: u64, previous_hash: &str, timestamp: u128, transactions: &Vec<Transaction>) -> String {
+    let mut hasher = Sha256::new();
+    let transaction_data = serde_json::to_string(transactions).expect("Failed to serialize transactions");
+    hasher.update(format!("{}{}{}{}", index, previous_hash, timestamp, transaction_data));
+    let result = hasher.finalize();
+    format!("{:x}", result)
+}
+
+pub struct Blockchain {
+    pub chain: Vec<Block>,
+    pub pending_transactions: Vec<Transaction>,
+    pub difficulty: usize,
+}
+
+impl Blockchain {
+    /// Initializes a new blockchain with a genesis block.
+    pub fn new() -> Self {
+        let genesis_block = Block::new(0, String::from("0"), vec![]);
+        Blockchain {
+            chain: vec![genesis_block],
+            pending_transactions: vec![],
+            difficulty: 2,
+        }
+    }
+
+    /// Adds a new transaction to the list of pending transactions.
+    pub fn add_transaction(&mut self, transaction: Transaction) {
+        self.pending_transactions.push(transaction);
+    }
+
+    /// Finalizes a new block with pending transactions.
+    pub fn finalize_block(&mut self) {
+        let previous_hash = self.chain.last().unwrap().hash.clone();
+        let new_block = Block::new(
+            self.chain.len() as u64,
+            previous_hash,
+            self.pending_transactions.clone(),
+        );
+
+        self.chain.push(new_block);
+        self.pending_transactions.clear();
+    }
+}
+
+===================
+File: ./backend/src/blockchain/transaction.rs
+===================
+use serde::{Serialize, Deserialize};
+use sha2::{Sha256, Digest};
+use chrono::Utc;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Transaction {
+    pub sender: String,       // DID of sender
+    pub receiver: String,     // DID of receiver
+    pub amount: u64,          // Amount/value exchanged
+    pub timestamp: u128,      // Transaction timestamp
+    pub hash: String,         // Hash to secure transaction
+}
+
+impl Transaction {
+    /// Creates a new transaction and calculates its hash
+    pub fn new(sender: String, receiver: String, amount: u64) -> Self {
+        let timestamp = Utc::now().timestamp_millis() as u128;
+        let hash = calculate_transaction_hash(&sender, &receiver, amount, timestamp);
+
+        Transaction {
+            sender,
+            receiver,
+            amount,
+            timestamp,
+            hash,
+        }
+    }
+}
+
+/// Calculate the transaction hash based on transaction details
+fn calculate_transaction_hash(sender: &str, receiver: &str, amount: u64, timestamp: u128) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(format!("{}{}{}{}", sender, receiver, amount, timestamp));
+    let result = hasher.finalize();
+    format!("{:x}", result)
+}
+
+===================
+File: ./backend/src/reputation/mod.rs
+===================
+use std::collections::HashMap;
+
+pub struct ReputationSystem {
+    pub scores: HashMap<String, i64>,
+}
+
+impl ReputationSystem {
+    /// Initializes a new Reputation System.
+    pub fn new() -> Self {
+        ReputationSystem {
+            scores: HashMap::new(),
+        }
+    }
+
+    /// Increases the reputation for a specific DID by a given amount.
+    pub fn increase_reputation(&mut self, did: &str, amount: i64) {
+        *self.scores.entry(did.to_string()).or_insert(0) += amount;
+    }
+
+    /// Decreases the reputation for a specific DID by a given amount.
+    pub fn decrease_reputation(&mut self, did: &str, amount: i64) {
+        *self.scores.entry(did.to_string()).or_insert(0) -= amount;
+    }
+
+    /// Retrieves the reputation score for a given DID. Defaults to 0 if no score exists.
+    pub fn get_reputation(&self, did: &str) -> i64 {
+        *self.scores.get(did).unwrap_or(&0)
+    }
+
+    /// Rewards a user for voting participation by increasing their reputation score.
+    pub fn reward_voting(&mut self, did: &str, reward_points: i64) {
+        self.increase_reputation(did, reward_points);
+        println!(
+            "Reputation for {} increased by {} points for voting participation.",
+            did, reward_points
+        );
+    }
+}
+
+===================
+File: ./backend/src/governance/mod.rs
+===================
+use chrono::Utc;
+use std::collections::VecDeque;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProposalType {
+    Funding,
+    PolicyChange,
+    ResourceAllocation,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProposalStatus {
+    Open,
+    Closed,
+}
+
+#[derive(Debug, Clone)]
+pub struct Proposal {
+    pub id: u64,
+    pub proposal_type: ProposalType,
+    pub description: String,
+    pub resource_amount: Option<u64>,
+    pub duration: u64,
+    pub status: ProposalStatus,
+    votes: Vec<(String, i64)>, // Tuple of voter ID and vote weight
+}
+
+impl Proposal {
+    /// Initializes a new proposal with the given parameters.
+    pub fn new(id: u64, proposal_type: ProposalType, description: String) -> Self {
+        Proposal {
+            id,
+            proposal_type,
+            description,
+            resource_amount: None,
+            duration: 60,
+            status: ProposalStatus::Open,
+            votes: Vec::new(),
+        }
+    }
+
+    /// Validates the proposal type and ensures it's still open for voting.
+    pub fn validate(&self, expected_type: ProposalType) -> bool {
+        self.status == ProposalStatus::Open && self.proposal_type == expected_type
+    }
+
+    /// Registers a vote with the given voter ID and weight.
+    pub fn vote(&mut self, voter_id: &str, weight: i64) {
+        self.votes.push((voter_id.to_string(), weight));
+    }
+
+    /// Calculates the total votes based on weight.
+    pub fn total_votes(&self) -> i64 {
+        self.votes.iter().map(|(_, weight)| weight).sum()
+    }
+
+    /// Closes the proposal, preventing further voting.
+    pub fn close(&mut self) {
+        self.status = ProposalStatus::Closed;
+    }
+
+    /// Checks if the proposal is nearing its closing time and sends a notification.
+    pub fn check_and_notify(&self, time_remaining: u64) {
+        if time_remaining <= 15 && self.status == ProposalStatus::Open {
+            println!(
+                "Notification: Proposal '{}' is nearing its end. Time remaining: {} minutes.",
+                self.description, time_remaining
+            );
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ProposalHistory {
+    pub proposals: VecDeque<Proposal>,
+    pub notifications: VecDeque<String>,
+}
+
+impl ProposalHistory {
+    /// Initializes a new proposal history tracker.
+    pub fn new() -> Self {
+        ProposalHistory {
+            proposals: VecDeque::new(),
+            notifications: VecDeque::new(),
+        }
+    }
+
+    /// Adds a proposal to the history, generating a notification.
+    pub fn add_proposal(&mut self, proposal: Proposal) {
+        self.proposals.push_back(proposal);
+        self.notifications.push_back("New proposal created.".to_string());
+    }
+
+    /// Closes a specific proposal by ID and notifies of closure.
+    pub fn close_proposal(&mut self, proposal_id: u64) {
+        if let Some(proposal) = self.proposals.iter_mut().find(|p| p.id == proposal_id) {
+            proposal.close();
+            self.notifications.push_back(format!(
+                "Proposal '{}' has closed for voting",
+                proposal.description
+            ));
+        }
+    }
+
+    /// Sends reminders for open proposals.
+    pub fn send_voting_reminder(&mut self) {
+        for proposal in self.proposals.iter() {
+            if proposal.status == ProposalStatus::Open {
+                self.notifications.push_back(format!(
+                    "Reminder: Proposal '{}' is still open for voting!",
+                    proposal.description
+                ));
+            }
+        }
+    }
+
+    /// Displays the proposal history with current vote counts.
+    pub fn display_history(&self) {
+        for proposal in &self.proposals {
+            println!(
+                "Proposal ID: {}, Description: '{}', Status: {:?}, Total Votes: {}",
+                proposal.id,
+                proposal.description,
+                proposal.status,
+                proposal.total_votes()
+            );
+        }
+    }
+}
+
+===================
+File: ./backend/src/main.rs
+===================
+mod blockchain;
+mod identity;
+mod reputation;
+mod governance;
+mod utils;
+mod vm;
+
+use blockchain::{Blockchain, transaction::Transaction};
+use identity::DID;
+use reputation::ReputationSystem;
+use governance::{Proposal, ProposalType, ProposalHistory};
+
+fn main() {
+    let mut blockchain = Blockchain::new();
+    let mut reputation_system = ReputationSystem::new();
+    let mut proposal_history = ProposalHistory::new();
+
+    let (sender_did, _) = DID::generate_random(String::from("did:icn:001"));
+    let (receiver_did, _) = DID::generate_random(String::from("did:icn:002"));
+
+    // Create and add transactions
+    let transaction1 = Transaction::new(sender_did.id.clone(), receiver_did.id.clone(), 100);
+    blockchain.add_transaction(transaction1.clone());
+    reputation_system.increase_reputation(&sender_did.id, 10);
+
+    let transaction2 = Transaction::new(receiver_did.id.clone(), sender_did.id.clone(), 50);
+    blockchain.add_transaction(transaction2.clone());
+    reputation_system.decrease_reputation(&receiver_did.id, 5);
+
+    // Finalize the block
+    blockchain.finalize_block();
+
+    // Create proposals
+    let mut funding_proposal = Proposal::new(
+        1,
+        ProposalType::Funding,
+        String::from("Increase community funding"),
+    );
+
+    let mut policy_proposal = Proposal::new(
+        2,
+        ProposalType::PolicyChange,
+        String::from("Amend community policy"),
+    );
+
+    let mut allocation_proposal = Proposal::new(
+        3,
+        ProposalType::ResourceAllocation,
+        String::from("Allocate 500 units for community project"),
+    );
+
+    // Fetch reputations for DID holders
+    let sender_reputation = reputation_system.get_reputation(&sender_did.id);
+    let receiver_reputation = reputation_system.get_reputation(&receiver_did.id);
+
+    // Voting on proposals
+    if funding_proposal.validate(ProposalType::Funding) {
+        funding_proposal.vote(&sender_did.id, sender_reputation);
+        reputation_system.reward_voting(&sender_did.id, 2);
+    }
+
+    if policy_proposal.validate(ProposalType::PolicyChange) {
+        policy_proposal.vote(&receiver_did.id, receiver_reputation);
+        reputation_system.reward_voting(&receiver_did.id, 2);
+    }
+
+    if allocation_proposal.validate(ProposalType::ResourceAllocation) {
+        allocation_proposal.vote(&sender_did.id, sender_reputation);
+        allocation_proposal.vote(&receiver_did.id, receiver_reputation);
+        reputation_system.reward_voting(&sender_did.id, 2);
+        reputation_system.reward_voting(&receiver_did.id, 2);
+    }
+
+    // Add proposals to history
+    proposal_history.add_proposal(funding_proposal);
+    proposal_history.add_proposal(policy_proposal);
+    proposal_history.add_proposal(allocation_proposal);
+
+    // Send voting reminders
+    proposal_history.send_voting_reminder();
+
+    // Display results
+    println!("\n=== Proposal History ===");
+    proposal_history.display_history();
+
+    println!("\n=== Blockchain Status ===");
+    println!("Chain length: {}", blockchain.chain.len());
+    println!("Pending transactions: {}", blockchain.pending_transactions.len());
+
+    println!("\n=== Reputation Scores ===");
+    println!("Sender ({}) reputation: {}", 
+        sender_did.id,
+        reputation_system.get_reputation(&sender_did.id)
+    );
+    println!("Receiver ({}) reputation: {}", 
+        receiver_did.id,
+        reputation_system.get_reputation(&receiver_did.id)
+    );
+}
+
+===================
+File: ./frontend/src/components/governance/GovernanceDashboard.tsx
+===================
+import React, { useState, useEffect } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Progress } from '@/components/ui/progress'
+import { AlertCircle, ChevronRight, Users, TrendingUp } from 'lucide-react'
+
+type Proposal = {
+  id: string
+  title: string
+  description: string
+  status: 'active' | 'passed' | 'rejected'
+  votesFor: number
+  votesAgainst: number
+  quorum: number
+  createdBy: string
+  endsAt: string
+  totalVoters: number
+  delegatedVotes: number
+}
+
+type VotingStats = {
+  totalProposals: number
+  activeProposals: number
+  participationRate: number
+  monthlyVotes: Array<{ month: string; votes: number }>
+}
+
+const GovernanceDashboard = () => {
+  const [proposals, setProposals] = useState<Proposal[]>([])
+  const [votingStats, setVotingStats] = useState<VotingStats>({
+    totalProposals: 0,
+    activeProposals: 0,
+    participationRate: 0,
+    monthlyVotes: []
+  })
+  const [selectedTab, setSelectedTab] = useState('active')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    // Mock data - replace with actual API calls
+    const mockProposals: Proposal[] = [
+      {
+        id: '1',
+        title: 'Community Resource Allocation Q3',
+        description: 'Proposal to allocate community resources for Q3 projects',
+        status: 'active',
+        votesFor: 750,
+        votesAgainst: 250,
+        quorum: 1000,
+        createdBy: 'did:icn:alice',
+        endsAt: '2024-11-01',
+        totalVoters: 1500,
+        delegatedVotes: 200
+      },
+      {
+        id: '2',
+        title: 'New Cooperation Guidelines',
+        description: 'Updated guidelines for inter-cooperative collaboration',
+        status: 'passed',
+        votesFor: 800,
+        votesAgainst: 100,
+        quorum: 1000,
+        createdBy: 'did:icn:bob',
+        endsAt: '2024-10-15',
+        totalVoters: 1200,
+        delegatedVotes: 150
+      }
+    ]
+
+    const mockStats = {
+      totalProposals: 45,
+      activeProposals: 3,
+      participationRate: 78.5,
+      monthlyVotes: [
+        { month: 'Jan', votes: 120 },
+        { month: 'Feb', votes: 150 },
+        { month: 'Mar', votes: 180 },
+        { month: 'Apr', votes: 220 }
+      ]
+    }
+
+    setProposals(mockProposals)
+    setVotingStats(mockStats)
+    setLoading(false)
+  }, [])
+
+  const calculateProgress = (votesFor: number, votesAgainst: number) => {
+    const total = votesFor + votesAgainst
+    return total > 0 ? (votesFor / total) * 100 : 0
+  }
+
+  const ProposalCard = ({ proposal }: { proposal: Proposal }) => (
+    <Card className="p-4">
+      <div className="flex justify-between items-start mb-4">
+        <div>
+          <h3 className="text-lg font-semibold">{proposal.title}</h3>
+          <p className="text-sm text-gray-600">{proposal.description}</p>
+        </div>
+        <span className={`px-2 py-1 rounded text-sm ${
+          proposal.status === 'active' ? 'bg-blue-100 text-blue-800' :
+          proposal.status === 'passed' ? 'bg-green-100 text-green-800' :
+          'bg-red-100 text-red-800'
+        }`}>
+          {proposal.status.charAt(0).toUpperCase() + proposal.status.slice(1)}
+        </span>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex justify-between text-sm">
+          <span>Progress</span>
+          <span>{calculateProgress(proposal.votesFor, proposal.votesAgainst).toFixed(1)}%</span>
+        </div>
+        <Progress 
+          value={calculateProgress(proposal.votesFor, proposal.votesAgainst)} 
+          className="h-2"
+        />
+        
+        <div className="flex justify-between text-sm text-gray-600">
+          <span>For: {proposal.votesFor}</span>
+          <span>Against: {proposal.votesAgainst}</span>
+        </div>
+
+        <div className="flex justify-between items-center mt-4">
+          <div className="text-sm text-gray-600">
+            <p>Created by: {proposal.createdBy}</p>
+            <p>Ends: {new Date(proposal.endsAt).toLocaleDateString()}</p>
+          </div>
+          {proposal.status === 'active' && (
+            <Button className="space-x-2">
+              <span>Vote Now</span>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </div>
+    </Card>
+  )
+
+  return (
+    <div className="container mx-auto p-4 space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Active Proposals</p>
+                <h3 className="text-2xl font-bold">{votingStats.activeProposals}</h3>
+              </div>
+              <AlertCircle className="h-8 w-8 text-blue-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Participation Rate</p>
+                <h3 className="text-2xl font-bold">{votingStats.participationRate}%</h3>
+              </div>
+              <Users className="h-8 w-8 text-green-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Total Proposals</p>
+                <h3 className="text-2xl font-bold">{votingStats.totalProposals}</h3>
+              </div>
+              <TrendingUp className="h-8 w-8 text-purple-500" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Voting Activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={votingStats.monthlyVotes}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line 
+                  type="monotone" 
+                  dataKey="votes" 
+                  stroke="#8884d8"
+                  strokeWidth={2}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Proposals</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Tabs value={selectedTab} onValueChange={setSelectedTab}>
+            <TabsList>
+              <TabsTrigger value="active">Active</TabsTrigger>
+              <TabsTrigger value="passed">Passed</TabsTrigger>
+              <TabsTrigger value="rejected">Rejected</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="active" className="space-y-4">
+              {proposals
+                .filter(p => p.status === 'active')
+                .map(proposal => (
+                  <ProposalCard key={proposal.id} proposal={proposal} />
+                ))}
+            </TabsContent>
+
+            <TabsContent value="passed" className="space-y-4">
+              {proposals
+                .filter(p => p.status === 'passed')
+                .map(proposal => (
+                  <ProposalCard key={proposal.id} proposal={proposal} />
+                ))}
+            </TabsContent>
+
+            <TabsContent value="rejected" className="space-y-4">
+              {proposals
+                .filter(p => p.status === 'rejected')
+                .map(proposal => (
+                  <ProposalCard key={proposal.id} proposal={proposal} />
+                ))}
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+
+      <Alert>
+        <AlertDescription>
+          You currently have {proposals[0]?.delegatedVotes || 0} votes delegated to you. 
+          Visit the delegation page to manage your voting power.
+        </AlertDescription>
+      </Alert>
+    </div>
+  )
+}
+
+export default GovernanceDashboard
+
+===================
+File: ./backend/Cargo.toml
+===================
+[package]
+name = "icn-backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.28", features = ["full"] }
+axum = "0.6"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+secp256k1 = { version = "0.22.2", features = ["rand"] }
+sha2 = "0.10"
+rand = "0.8"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+===================
+File: ./frontend/package.json
+===================
+
+
+===================
+File: ./frontend/tsconfig.json
+===================
+
+
+===================
+File: ./docker/docker-compose.yml
+===================
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../docker/frontend.Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../docker/backend.Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - RUST_LOG=debug
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/icn
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=icn
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:
+
+
+===================
+File: ./docker/backend.Dockerfile
+===================
+FROM rust:1.70 as builder
+WORKDIR /usr/src/app
+COPY . .
+RUN cargo build --release
+
+FROM debian:bullseye-slim
+COPY --from=builder /usr/src/app/target/release/icn-backend /usr/local/bin/
+EXPOSE 8000
+CMD ["icn-backend"]
+
+
+===================
+File: ./docker/frontend.Dockerfile
+===================
+FROM node:18-alpine AS builder
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:18-alpine AS runner
+WORKDIR /app
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+CMD ["npm", "start"]
+
+
