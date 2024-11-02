@@ -19,3 +19,6 @@ _build/
 
 # Python virtual environments
 tools/.env/
+
+# Python virtual environments
+tools/.env/

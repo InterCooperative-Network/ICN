@@ -1,40 +1,27 @@
 version: '3.8'
 
 services:
-  frontend:
-    build:
-      context: ../frontend
-      dockerfile: ../docker/frontend.Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://backend:8000
-    depends_on:
-      - backend
-
   backend:
     build:
-      context: ../backend
-      dockerfile: ../docker/backend.Dockerfile
+      context: .
+      dockerfile: backend.Dockerfile
+    volumes:
+      - .:/app
+    ports:
+      - "8080:8080"
+    command: ["cargo", "run", "--release"]
+
+  test:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    command: ["cargo", "test", "--release"]
+
+  docs:
+    image: squidfunk/mkdocs-material:latest
+    volumes:
+      - ../docs:/docs                    # Maps the correct docs directory
     ports:
       - "8000:8000"
-    environment:
-      - RUST_LOG=debug
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/icn
-    depends_on:
-      - db
-
-  db:
-    image: postgres:15
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=icn
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-
-volumes:
-  postgres_data:
+    working_dir: /docs                   # Set the working directory to /docs inside the container
+    command: serve -a 0.0.0.0:8000       # Run MkDocs without prefixing `mkdocs`
