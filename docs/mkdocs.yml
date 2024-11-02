@@ -1,0 +1,17 @@
+site_name: "ICN Documentation"
+theme:
+  name: material
+
+nav:
+  - Home: index.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - Backend: architecture/backend.md
+      - Diagrams:
+          - Component Diagram: architecture/diagrams/component.md
+  - Specifications:
+      - Reputation System: specifications/core/2024-11-01-reputation-system.md
+  - Development:
+      - Documentation Standards: development/guides/documentation-standards.md
+  - User:
+      - User Guide: user/guides/
