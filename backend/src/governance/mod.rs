@@ -1,6 +1,5 @@
-use chrono::Utc;
 use std::collections::VecDeque;
-
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProposalType {
     Funding,
