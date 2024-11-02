@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Notification {
     pub proposal_id: u64,

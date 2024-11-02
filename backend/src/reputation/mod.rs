@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-
+#[allow(dead_code)]
 pub struct ReputationSystem {
     pub scores: HashMap<String, i64>,
 }

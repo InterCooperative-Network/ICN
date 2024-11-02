@@ -67,7 +67,7 @@ fn main() {
         resource_allocation: HashMap::new(),
     };
 
-    let contract = Contract {
+    let _contract = Contract {
         code: vec![
             (OpCode::AllocateResource, Some(1)),
             (OpCode::CalculateVotingWeight, None),
