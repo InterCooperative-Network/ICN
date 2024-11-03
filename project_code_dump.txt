@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sat Nov  2 02:25:38 AM UTC 2024
+Project Code Dump - Generated Sun Nov  3 12:30:46 AM UTC 2024
 ======================================
 
 Project Tree:
@@ -52,6 +52,7 @@ Project Tree:
 ├── docker
 │   ├── backend.Dockerfile
 │   ├── docker-compose.yml
+│   ├── docs
 │   └── frontend.Dockerfile
 ├── docs
 │   ├── INDEX.md
@@ -59,18 +60,25 @@ Project Tree:
 │   ├── api
 │   ├── architecture
 │   │   ├── backend
+│   │   ├── backend.md
 │   │   ├── diagrams
 │   │   │   ├── component
+│   │   │   ├── component.md
 │   │   │   ├── sequence
 │   │   │   └── system
 │   │   ├── frontend
-│   │   └── overview
+│   │   ├── overview
+│   │   └── overview.md
 │   ├── development
 │   │   ├── guides
 │   │   │   └── documentation-standards.md
 │   │   ├── plans
 │   │   └── setup
+│   ├── docs
+│   │   └── index.md
 │   ├── guides
+│   │   └── index.md
+│   ├── mkdocs.yml
 │   ├── specifications
 │   │   ├── api
 │   │   ├── core
@@ -82,6 +90,7 @@ Project Tree:
 │   │   └── protocol-template.md
 │   └── user
 │       ├── guides
+│       │   └── index.md
 │       └── tutorials
 ├── frontend
 │   ├── package.json
@@ -116,7 +125,7 @@ Project Tree:
     ├── install_docsctl.sh
     └── requirements.txt
 
-63 directories, 49 files
+65 directories, 56 files
 
 
 ===================
@@ -1686,6 +1695,15 @@ services:
       dockerfile: backend.Dockerfile
     command: ["cargo", "test", "--release"]
 
+  docs:
+    image: squidfunk/mkdocs-material:latest
+    volumes:
+      - ../docs:/docs                    # Maps the correct docs directory
+    ports:
+      - "8000:8000"
+    working_dir: /docs                   # Set the working directory to /docs inside the container
+    command: serve -a 0.0.0.0:8000       # Run MkDocs without prefixing `mkdocs`
+
 
 ===================
 File: ./docker/backend.Dockerfile
@@ -1728,6 +1746,43 @@ CMD ["npm", "start"]
 
 
 ===================
+File: ./docs/docs/index.md
+===================
+# Welcome to MkDocs
+
+For full documentation visit [mkdocs.org](https://www.mkdocs.org).
+
+## Commands
+
+* `mkdocs new [dir-name]` - Create a new project.
+* `mkdocs serve` - Start the live-reloading docs server.
+* `mkdocs build` - Build the documentation site.
+* `mkdocs -h` - Print help message and exit.
+
+## Project layout
+
+    mkdocs.yml    # The configuration file.
+    docs/
+        index.md  # The documentation homepage.
+        ...       # Other markdown pages, images and other files.
+
+
+===================
+File: ./docs/guides/index.md
+===================
+# User Guides
+
+The following guides provide step-by-step instructions for using the ICN platform effectively.
+
+## Contents
+- [Getting Started](getting-started.md): Introduction to accessing and navigating the ICN platform.
+- [Governance Guide](governance-guide.md): Detailed steps on participating in cooperative governance.
+- [Reputation Management](reputation-management.md): Overview of how reputation influences roles and decision-making.
+
+Additional guides will cover specific ICN features and best practices.
+
+
+===================
 File: ./docs/INDEX.md
 ===================
 # Documentation Index
@@ -1736,6 +1791,11 @@ File: ./docs/INDEX.md
 ## Specification
 
 - [Reputation System](specifications/core/2024-11-01-reputation-system.md) (v1.0.0, draft)
+
+
+===================
+File: ./docs/user/guides/index.md
+===================
 
 
 ===================
@@ -1928,5 +1988,75 @@ version: 1.0.0
 
 ## 6. Future Considerations
 
+
+
+===================
+File: ./docs/architecture/backend.md
+===================
+# Backend Architecture
+
+The ICN backend handles core blockchain operations, transaction processing, and governance functionalities.
+
+## Modules
+1. **Blockchain Module**: Manages the decentralized ledger for recording transactions.
+2. **Identity and DID Module**: Handles DID (Decentralized Identifiers) for secure, pseudonymous interactions.
+3. **Reputation System**: Tracks and manages reputation scores, influencing governance roles and decision-making.
+
+## Data Flow
+- **Transaction Lifecycle**: Transactions are submitted, validated, and recorded in the blockchain, with reputation updates.
+- **Reputation Tracking**: User actions affect their reputation score, impacting cooperative influence.
+
+
+===================
+File: ./docs/architecture/overview.md
+===================
+# Architecture Overview
+
+The ICN (Inter-Cooperative Network) platform is designed to support decentralized and cooperative governance, resource allocation, and community-based decision-making. This document outlines the overarching architecture that powers the ICN platform.
+
+## Key Components
+- **Backend Services**: Provides core functionality, including blockchain operations, identity management, and governance processes.
+- **Frontend Interface**: User-facing applications, including the Governance Dashboard and Cooperative Management.
+- **Smart Contracts**: Custom cooperative-specific contracts handled by a virtual machine (VM).
+
+## Interaction Flow
+1. **User Actions**: Users initiate requests through the frontend.
+2. **API Processing**: Requests are routed to backend services via secure API endpoints.
+3. **Blockchain and VM**: Transactions are validated, and cooperative actions are processed on-chain.
+# Architecture Overview
+
+The ICN (Inter-Cooperative Network) platform is designed to support decentralized and cooperative governance, resource allocation, and community-based decision-making. This document outlines the overarching architecture that powers the ICN platform.
+
+## Key Components
+- **Backend Services**: Provides core functionality, including blockchain operations, identity management, and governance processes.
+- **Frontend Interface**: User-facing applications, including the Governance Dashboard and Cooperative Management.
+- **Smart Contracts**: Custom cooperative-specific contracts handled by a virtual machine (VM).
+
+## Interaction Flow
+1. **User Actions**: Users initiate requests through the frontend.
+2. **API Processing**: Requests are routed to backend services via secure API endpoints.
+3. **Blockchain and VM**: Transactions are validated, and cooperative actions are processed on-chain.
+
+
+===================
+File: ./docs/architecture/diagrams/component/component.md
+===================
+# Component Diagram
+
+This section provides a visual overview of the ICN's architectural components.
+
+## Diagram
+![Component Diagram](../images/component-diagram.png)
+
+## Description
+The ICN architecture is modular, allowing each component to function independently but interconnect to support cooperative and governance functionalities.
+1. **Frontend Modules**: User interfaces for governance and cooperative management.
+2. **API Gateway**: Manages communication between frontend and backend.
+3. **Blockchain & VM**: Ensures secure transaction processing and execution of smart contracts.
+
+
+===================
+File: ./docs/architecture/diagrams/component.md
+===================
 
 
