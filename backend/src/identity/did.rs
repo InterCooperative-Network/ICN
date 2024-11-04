@@ -1,43 +1,52 @@
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
+use rand::{thread_rng, RngCore};
+use std::str::FromStr;
 
-/// Struct representing a decentralized identifier (DID)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DID {
     pub id: String,
+    #[serde(serialize_with = "serialize_public_key")]
+    #[serde(deserialize_with = "deserialize_public_key")]
     pub public_key: PublicKey,
 }
 
 impl DID {
-    /// Creates a new DID with a specified identifier and an existing secret key.
     pub fn new(id: String, secret_key: &SecretKey) -> Self {
         let secp = Secp256k1::new();
         let public_key = PublicKey::from_secret_key(&secp, secret_key);
-
         DID { id, public_key }
     }
 
-    /// Generates a new random DID and secret key pair.
     pub fn generate_random(id: String) -> (Self, SecretKey) {
         let secp = Secp256k1::new();
-        let secret_key = SecretKey::from_slice(&rand::random::<[u8; 32]>()).expect("32 bytes, within curve order");
+        let mut rng = thread_rng();
+        
+        // Generate random bytes for the secret key
+        let mut secret_key_bytes = [0u8; 32];
+        rng.fill_bytes(&mut secret_key_bytes);
+        
+        // Create secret key from the random bytes
+        let secret_key = SecretKey::from_slice(&secret_key_bytes)
+            .expect("Random bytes should produce valid key");
+            
         let public_key = PublicKey::from_secret_key(&secp, &secret_key);
-
         let did = DID { id, public_key };
         (did, secret_key)
     }
 }
 
-// Custom serialization for DID
-impl Serialize for DID {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("DID", 2)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("public_key", &self.public_key.to_string())?;
-        state.end()
-    }
+fn serialize_public_key<S>(key: &PublicKey, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&key.to_string())
+}
+
+fn deserialize_public_key<'de, D>(deserializer: D) -> Result<PublicKey, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let key_str = String::deserialize(deserializer)?;
+    PublicKey::from_str(&key_str).map_err(serde::de::Error::custom)
 }

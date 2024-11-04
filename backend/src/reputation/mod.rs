@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct ReputationSystem {
     pub scores: HashMap<String, i64>,
 }
@@ -34,5 +35,17 @@ impl ReputationSystem {
             "Reputation for {} increased by {} points for voting participation.",
             did, reward_points
         );
+    }
+
+    /// Returns a clone of the reputation context
+    pub fn get_reputation_context(&self) -> HashMap<String, i64> {
+        self.scores.clone()
+    }
+
+    /// Updates the reputation context with changes from the VM execution
+    pub fn update_reputations(&mut self, updated_reputations: &HashMap<String, i64>) {
+        for (did, reputation) in updated_reputations {
+            self.scores.insert(did.clone(), *reputation);
+        }
     }
 }

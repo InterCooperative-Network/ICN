@@ -1,16 +1,20 @@
 [package]
 name = "icn-backend"
 version = "0.1.0"
+authors = ["Your Name <you@example.com>"]
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.28", features = ["full"] }
-axum = "0.6"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
-secp256k1 = { version = "0.22.2", features = ["rand"] }
+tokio = { version = "1.14", features = ["full"] }
+warp = "0.3"
+uuid = { version = "1.0", features = ["v4"] }
+log = "0.4"
+env_logger = "0.9"
 sha2 = "0.10"
+chrono = { version = "0.4", features = ["serde"] }
+secp256k1 = "0.24"
 rand = "0.8"
-tracing = "0.1"
-tracing-subscriber = "0.3"
+
+# Include any other dependencies you are using
