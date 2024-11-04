@@ -3,6 +3,18 @@ name = "icn-backend"
 version = "0.1.0"
 edition = "2021"
 
+[[example]]
+name = "blockchain_test"
+path = "examples/blockchain_test.rs"
+
+[[example]]
+name = "ws_client"
+path = "examples/ws_client.rs"
+
+[[example]]
+name = "ws_client2"
+path = "examples/ws_client2.rs"
+
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
 warp = "0.3"
@@ -15,3 +27,9 @@ secp256k1 = "0.24"
 sha2 = "0.10"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4"] }
+tokio-tungstenite = "0.20"
+url = "2.4"
+
+[dev-dependencies]
+tokio-tungstenite = "0.20"
+url = "2.4"
