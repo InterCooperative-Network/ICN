@@ -1,26 +1,29 @@
-pub mod transaction;
+// backend/src/blockchain/mod.rs
 
+pub mod transaction;
+use transaction::{Transaction, TransactionType};
+
+use std::sync::{Arc, Mutex};
 use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest};
 use chrono::Utc;
-use self::transaction::{Transaction, TransactionType};
 use std::collections::HashMap;
 
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
 use crate::vm::{VM, Contract, ExecutionContext};
+use crate::consensus::{ProofOfCooperation, ConsensusConfig};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
     pub index: u64,
     pub previous_hash: String,
     pub timestamp: u128,
-    pub transactions: Vec<Transaction>, // Vector to hold transactions
+    pub transactions: Vec<Transaction>,
     pub hash: String,
 }
 
 impl Block {
-    /// Creates a new block with a list of transactions and calculates its hash.
     pub fn new(index: u64, previous_hash: String, transactions: Vec<Transaction>) -> Self {
         let timestamp = Utc::now().timestamp_millis() as u128;
         let hash = Self::calculate_hash(index, &previous_hash, timestamp, &transactions);
@@ -34,7 +37,6 @@ impl Block {
         }
     }
 
-    /// Calculates a hash for the block based on its contents.
     fn calculate_hash(index: u64, previous_hash: &str, timestamp: u128, transactions: &Vec<Transaction>) -> String {
         let mut hasher = Sha256::new();
         let transaction_data = serde_json::to_string(transactions).expect("Failed to serialize transactions");
@@ -47,35 +49,49 @@ impl Block {
 pub struct Blockchain {
     pub chain: Vec<Block>,
     pub pending_transactions: Vec<Transaction>,
-    pub difficulty: usize,
-    pub identity_system: IdentitySystem,
-    pub reputation_system: ReputationSystem,
     pub contracts: HashMap<String, Contract>,
+    pub identity_system: Arc<Mutex<IdentitySystem>>,
+    pub reputation_system: Arc<Mutex<ReputationSystem>>,
+    pub consensus: ProofOfCooperation,
     pub current_block_number: u64,
 }
 
 impl Blockchain {
-    /// Initializes a new blockchain with a genesis block.
-    pub fn new(identity_system: IdentitySystem, reputation_system: ReputationSystem) -> Self {
-        let genesis_block = Block::new(0, String::from("0"), vec![]);
+    pub fn new(identity_system: Arc<Mutex<IdentitySystem>>, 
+               reputation_system: Arc<Mutex<ReputationSystem>>) -> Self {
+        let consensus_config = ConsensusConfig::default();
+
         Blockchain {
-            chain: vec![genesis_block],
+            chain: vec![Block::new(0, String::from("0"), vec![])],
             pending_transactions: vec![],
-            difficulty: 2,
+            contracts: HashMap::new(),
             identity_system,
             reputation_system,
-            contracts: HashMap::new(),
+            consensus: ProofOfCooperation::new(consensus_config),
             current_block_number: 1,
         }
     }
 
-    /// Adds a new transaction to the list of pending transactions.
-    pub fn add_transaction(&mut self, transaction: Transaction) {
+    pub fn add_transaction(&mut self, transaction: Transaction) -> Result<(), String> {
+        // Verify transaction
+        self.verify_transaction(&transaction)?;
+        
+        // Add to pending transactions
         self.pending_transactions.push(transaction);
+        
+        // If we have enough transactions, try to finalize a block
+        if self.pending_transactions.len() >= 10 {
+            self.finalize_block()?;
+        }
+        
+        Ok(())
     }
 
-    /// Finalizes a new block with pending transactions.
-    pub fn finalize_block(&mut self) {
+    pub fn finalize_block(&mut self) -> Result<(), String> {
+        // Start consensus round
+        self.consensus.start_round()?;
+
+        // Create new block with pending transactions
         let previous_hash = self.chain.last().unwrap().hash.clone();
         let new_block = Block::new(
             self.chain.len() as u64,
@@ -83,30 +99,77 @@ impl Blockchain {
             self.pending_transactions.clone(),
         );
 
-        self.chain.push(new_block);
-        self.pending_transactions.clear();
-        self.current_block_number += 1;
+        // Get the active validators
+        let validators = self.get_active_validators();
+        if validators.is_empty() {
+            return Err("No active validators available".to_string());
+        }
+
+        // Propose the block using the first validator as coordinator
+        self.consensus.propose_block(&validators[0], new_block.clone())?;
+
+        // Simulate votes from validators
+        for validator in validators {
+            self.consensus.submit_vote(&validator, true)?;
+        }
+
+        // Finalize the round and get the block
+        match self.consensus.finalize_round() {
+            Ok(finalized_block) => {
+                // Add the finalized block to the chain
+                self.chain.push(finalized_block);
+                
+                // Clear pending transactions
+                self.pending_transactions.clear();
+                
+                // Update reputation scores based on consensus participation
+                let reputation_updates = self.consensus.get_reputation_updates();
+                let mut reputation_system = self.reputation_system.lock().unwrap();
+                for (ref did, change) in reputation_updates {
+                    reputation_system.increase_reputation(did, *change);
+                }
+
+                self.current_block_number += 1;
+                Ok(())
+            },
+            Err(e) => Err(e)
+        }
     }
 
-    /// Processes a transaction
-    pub fn process_transaction(&mut self, transaction: &Transaction) -> Result<(), String> {
+    fn verify_transaction(&self, transaction: &Transaction) -> Result<(), String> {
+        // Verify sender's DID
+        let identity_system = self.identity_system.lock().unwrap();
+        if !identity_system.is_registered(&transaction.sender) {
+            return Err("Invalid sender DID".to_string());
+        }
+
+        // Verify sender has sufficient reputation for the transaction
+        let reputation_system = self.reputation_system.lock().unwrap();
+        let sender_reputation = reputation_system.get_reputation(&transaction.sender);
+        
+        // Require minimum reputation for transactions
+        if sender_reputation < 10 {
+            return Err("Insufficient reputation".to_string());
+        }
+
+        // Process transaction based on type
         match &transaction.transaction_type {
             TransactionType::Transfer { receiver, amount } => {
-                // Handle transfer logic (simplified for this example)
+                // Handle transfer logic
                 println!(
-                    "Processed transfer of {} from {} to {}",
+                    "Processing transfer of {} from {} to {}",
                     amount, transaction.sender, receiver
                 );
                 Ok(())
             }
-            TransactionType::ContractExecution { contract_id, input_data } => {
-                // Fetch the contract
+            TransactionType::ContractExecution { contract_id, input_data: _ } => {
+                // Fetch and validate the contract
                 let contract = self.get_contract(contract_id)?;
                 
                 // Set up the VM
                 let mut vm = VM::new(
                     1000, // Instruction limit
-                    self.reputation_system.get_reputation_context(),
+                    reputation_system.get_reputation_context(),
                 );
 
                 // Create ExecutionContext
@@ -115,53 +178,53 @@ impl Blockchain {
                     cooperative_id: contract.cooperative_metadata.cooperative_id.clone(),
                     timestamp: transaction.timestamp as u64,
                     block_number: self.current_block_number,
-                    reputation_score: self.reputation_system.get_reputation(&transaction.sender),
-                    permissions: self.identity_system.get_permissions(&transaction.sender),
+                    reputation_score: sender_reputation,
+                    permissions: identity_system.get_permissions(&transaction.sender),
                 };
 
                 vm.set_execution_context(execution_context);
-
+                
                 // Execute the contract
-                let result = vm.execute_contract(&contract);
-
-                // Handle result
-                match result {
-                    Ok(_) => {
-                        // Update state based on vm.memory or vm.events
-                        self.handle_vm_events(vm.get_events());
-                        self.reputation_system.update_reputations(vm.get_reputation_context());
-                        Ok(())
-                    }
-                    Err(e) => Err(format!("Contract execution failed: {}", e)),
-                }
-            }
-            // ... handle other transaction types
-        }
-    }
-
-    /// Handle VM events emitted during contract execution
-    fn handle_vm_events(&mut self, events: &Vec<crate::vm::Event>) {
-        for event in events {
-            match event.event_type.as_str() {
-                "CooperativeCreated" => {
-                    // Update blockchain state to include the new cooperative
-                    println!("Event: CooperativeCreated - {}", event.data.get("creator").unwrap());
-                }
-                "ProposalCreated" => {
-                    // Add the proposal to the governance module
-                    println!("Event: ProposalCreated");
-                }
-                // Handle other event types...
-                _ => {
-                    // Log or ignore unknown events
-                    println!("Unknown event type: {}", event.event_type);
-                }
+                vm.execute_contract(&contract)
             }
         }
     }
 
-    /// Get a contract by ID
+    pub fn get_block(&self, index: u64) -> Option<&Block> {
+        self.chain.get(index as usize)
+    }
+
+    pub fn get_latest_block(&self) -> &Block {
+        self.chain.last().unwrap()
+    }
+
     fn get_contract(&self, contract_id: &str) -> Result<&Contract, String> {
-        self.contracts.get(contract_id).ok_or_else(|| "Contract not found".to_string())
+        self.contracts
+            .get(contract_id)
+            .ok_or_else(|| format!("Contract {} not found", contract_id))
+    }
+
+    pub fn deploy_contract(&mut self, contract: Contract) -> Result<(), String> {
+        if self.contracts.contains_key(&contract.id) {
+            return Err("Contract ID already exists".to_string());
+        }
+        self.contracts.insert(contract.id.clone(), contract);
+        Ok(())
+    }
+
+    fn get_active_validators(&self) -> Vec<String> {
+        vec![
+            "did:icn:1".to_string(),
+            "did:icn:2".to_string(),
+            "did:icn:3".to_string(),
+        ]
+    }
+
+    pub fn get_transaction_count(&self) -> usize {
+        self.chain.iter().map(|block| block.transactions.len()).sum()
+    }
+
+    pub fn get_block_count(&self) -> usize {
+        self.chain.len()
     }
 }

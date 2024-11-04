@@ -1,4 +1,4 @@
-Project Code Dump - Generated Mon Nov  4 05:21:31 AM UTC 2024
+Project Code Dump - Generated Mon Nov  4 12:04:26 PM UTC 2024
 ======================================
 
 Project Tree:
@@ -17,6 +17,11 @@ Project Tree:
 │   │   │   ├── mod.rs
 │   │   │   └── transaction.rs
 │   │   ├── config
+│   │   ├── consensus
+│   │   │   ├── mod.rs
+│   │   │   ├── proof_of_cooperation.rs
+│   │   │   ├── tests.rs
+│   │   │   └── types.rs
 │   │   ├── cooperative
 │   │   │   └── mod.rs
 │   │   ├── governance
@@ -149,7 +154,7 @@ Project Tree:
     ├── install_docsctl.sh
     └── requirements.txt
 
-65 directories, 80 files
+66 directories, 84 files
 
 
 ===================
@@ -2393,6 +2398,829 @@ pub mod governance;
 pub mod utils;
 pub mod vm;
 
+
+===================
+File: ./backend/src/consensus/tests.rs
+===================
+# File: ./backend/src/consensus/tests.rs
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::blockchain::Blockchain;
+    use crate::identity::IdentitySystem;
+    use crate::reputation::ReputationSystem;
+
+    fn setup_test_blockchain() -> Blockchain {
+        let identity_system = IdentitySystem::new();
+        let reputation_system = ReputationSystem::new();
+        let mut blockchain = Blockchain::new(identity_system, reputation_system);
+        
+        // Register test validators
+        blockchain.consensus.register_validator("did:icn:1".to_string(), 100).unwrap();
+        blockchain.consensus.register_validator("did:icn:2".to_string(), 100).unwrap();
+        blockchain.consensus.register_validator("did:icn:3".to_string(), 100).unwrap();
+        
+        blockchain
+    }
+
+    #[test]
+    fn test_consensus_integration() {
+        let mut blockchain = setup_test_blockchain();
+        
+        // Add some test transactions
+        let transaction = Transaction::new(
+            "did:icn:1".to_string(),
+            TransactionType::Transfer {
+                receiver: "did:icn:2".to_string(),
+                amount: 100,
+            },
+        );
+        blockchain.add_transaction(transaction);
+
+        // Try to finalize block through consensus
+        assert!(blockchain.finalize_block().is_ok());
+        
+        // Verify block was added
+        assert_eq!(blockchain.chain.len(), 2);
+        
+        // Verify reputation updates were applied
+        let reputation_updates = blockchain.consensus.get_reputation_updates();
+        assert!(!reputation_updates.is_empty());
+    }
+
+    #[test]
+    fn test_consensus_failure_recovery() {
+        let mut blockchain = setup_test_blockchain();
+        
+        // Simulate a failed consensus round
+        blockchain.consensus.start_round().unwrap();
+        blockchain.consensus.check_timeout();
+        
+        // Verify we can start a new round after failure
+        assert!(blockchain.finalize_block().is_ok());
+    }
+}
+
+===================
+File: ./backend/src/consensus/types.rs
+===================
+use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
+use crate::blockchain::Block;
+
+/// Represents a validator node in the network
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Validator {
+    /// The validator's DID
+    pub did: String,
+    
+    /// Current reputation score
+    pub reputation: i64,
+    
+    /// Block number of the last block this validator proposed
+    pub last_block_proposed: u64,
+    
+    /// Number of consecutive validation rounds missed
+    pub consecutive_missed_validations: u32,
+    
+    /// Whether the validator is currently active
+    pub is_active: bool,
+    
+    /// The validator's voting power in the current round
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voting_power: Option<f64>,
+}
+
+impl Validator {
+    pub fn new(did: String, initial_reputation: i64) -> Self {
+        Self {
+            did,
+            reputation: initial_reputation,
+            last_block_proposed: 0,
+            consecutive_missed_validations: 0,
+            is_active: true,
+            voting_power: None,
+        }
+    }
+
+    pub fn calculate_voting_power(&mut self, total_reputation: i64) {
+        self.voting_power = Some(self.reputation as f64 / total_reputation as f64);
+    }
+
+    pub fn is_eligible(&self, min_reputation: i64) -> bool {
+        self.is_active && self.reputation >= min_reputation
+    }
+}
+
+/// Represents the type of consensus message being sent
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ConsensusMessage {
+    /// Proposal for a new block
+    BlockProposal(Block),
+    
+    /// Vote for a proposed block
+    Vote {
+        /// The voting validator's DID
+        validator: String,
+        
+        /// The hash of the block being voted on
+        block_hash: String,
+        
+        /// Whether the validator approves the block
+        approve: bool,
+    },
+    
+    /// Request to start a new round
+    StartRound {
+        round_number: u64,
+    },
+    
+    /// Notification that a round has been finalized
+    RoundFinalized {
+        round_number: u64,
+        block_hash: String,
+    },
+}
+
+/// Status of a consensus round
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum RoundStatus {
+    /// Block is being proposed by coordinator
+    Proposing,
+    
+    /// Validators are voting on proposed block
+    Voting,
+    
+    /// Round is being finalized
+    Finalizing,
+    
+    /// Round completed successfully
+    Completed,
+    
+    /// Round failed (timeout or other error)
+    Failed,
+}
+
+/// Represents a single round of consensus
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsensusRound {
+    /// Unique round number
+    pub round_number: u64,
+    
+    /// DID of the round's coordinator
+    pub coordinator: String,
+    
+    /// The block being proposed (if any)
+    pub proposed_block: Option<Block>,
+    
+    /// Map of validator DIDs to their votes
+    pub votes: HashMap<String, bool>,
+    
+    /// Current status of the round
+    pub status: RoundStatus,
+    
+    /// Timestamp when the round started
+    pub start_time: u64,
+    
+    /// Maximum duration for the round in seconds
+    pub timeout: u64,
+}
+
+impl ConsensusRound {
+    pub fn new(round_number: u64, coordinator: String, timeout: u64, start_time: u64) -> Self {
+        Self {
+            round_number,
+            coordinator,
+            proposed_block: None,
+            votes: HashMap::new(),
+            status: RoundStatus::Proposing,
+            start_time,
+            timeout,
+        }
+    }
+
+    pub fn has_voted(&self, validator_did: &str) -> bool {
+        self.votes.contains_key(validator_did)
+    }
+
+    pub fn add_vote(&mut self, validator_did: String, approve: bool) {
+        self.votes.insert(validator_did, approve);
+    }
+
+    pub fn get_approval_rate(&self) -> f64 {
+        if self.votes.is_empty() {
+            return 0.0;
+        }
+        
+        let approve_count = self.votes.values().filter(|&&approve| approve).count();
+        approve_count as f64 / self.votes.len() as f64
+    }
+
+    pub fn is_timed_out(&self, current_time: u64) -> bool {
+        current_time - self.start_time > self.timeout
+    }
+}
+
+/// Configuration for the consensus mechanism
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsensusConfig {
+    /// Minimum number of validators required for consensus
+    pub min_validators: usize,
+    
+    /// Threshold of votes required to approve a block (0.0 - 1.0)
+    pub vote_threshold: f64,
+    
+    /// Round timeout in seconds
+    pub round_timeout: u64,
+    
+    /// Minimum reputation required to be a validator
+    pub min_reputation: i64,
+    
+    /// Base reward for participating in consensus
+    pub participation_reward: i64,
+    
+    /// Extra reward for being the coordinator
+    pub coordinator_reward: i64,
+    
+    /// Penalty for missing validation
+    pub missed_validation_penalty: i64,
+}
+
+impl Default for ConsensusConfig {
+    fn default() -> Self {
+        Self {
+            min_validators: 3,
+            vote_threshold: 0.66,  // 66% approval required
+            round_timeout: 60,     // 60 seconds
+            min_reputation: 50,
+            participation_reward: 1,
+            coordinator_reward: 2,
+            missed_validation_penalty: -1,
+        }
+    }
+}
+
+/// Result of a consensus round
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoundResult {
+    pub round_number: u64,
+    pub successful: bool,
+    pub finalized_block: Option<Block>,
+    pub reputation_updates: Vec<(String, i64)>,
+    pub participating_validators: Vec<String>,
+}
+
+/// Error types specific to consensus operations
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ConsensusError {
+    InsufficientValidators,
+    InvalidCoordinator,
+    RoundInProgress,
+    NoActiveRound,
+    InvalidRoundState,
+    TimedOut,
+    ValidationFailed,
+    NotValidator,
+    InsufficientReputation,
+    Custom(String),
+}
+
+impl std::fmt::Display for ConsensusError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConsensusError::InsufficientValidators => 
+                write!(f, "Insufficient number of active validators"),
+            ConsensusError::InvalidCoordinator => 
+                write!(f, "Invalid coordinator for this round"),
+            ConsensusError::RoundInProgress => 
+                write!(f, "Consensus round already in progress"),
+            ConsensusError::NoActiveRound => 
+                write!(f, "No active consensus round"),
+            ConsensusError::InvalidRoundState => 
+                write!(f, "Invalid round state for requested operation"),
+            ConsensusError::TimedOut => 
+                write!(f, "Consensus round timed out"),
+            ConsensusError::ValidationFailed => 
+                write!(f, "Block validation failed"),
+            ConsensusError::NotValidator => 
+                write!(f, "Not a registered validator"),
+            ConsensusError::InsufficientReputation => 
+                write!(f, "Insufficient reputation for operation"),
+            ConsensusError::Custom(msg) => 
+                write!(f, "{}", msg),
+        }
+    }
+}
+
+impl std::error::Error for ConsensusError {}
+
+===================
+File: ./backend/src/consensus/mod.rs
+===================
+# File: ./backend/src/consensus/mod.rs
+mod proof_of_cooperation;
+mod types;
+
+pub use proof_of_cooperation::ProofOfCooperation;
+pub use types::{ConsensusRound, RoundStatus, Validator};
+
+# File: ./backend/src/consensus/types.rs
+use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Validator {
+    pub did: String,
+    pub reputation: i64,
+    pub last_block_proposed: u64,
+    pub consecutive_missed_validations: u32,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsensusRound {
+    pub round_number: u64,
+    pub coordinator: String,
+    pub proposed_block: Option<crate::blockchain::Block>,
+    pub votes: HashMap<String, bool>,
+    pub status: RoundStatus,
+    pub start_time: u64,
+    pub timeout: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum RoundStatus {
+    Proposing,
+    Voting,
+    Finalizing,
+    Completed,
+    Failed,
+}
+
+# File: ./backend/src/consensus/proof_of_cooperation.rs
+// Copy the entire ProofOfCooperation implementation from the previous artifact here
+
+# File: ./backend/src/blockchain/mod.rs
+// Add this to the existing mod.rs
+use crate::consensus::ProofOfCooperation;
+
+pub struct Blockchain {
+    // Add these fields to the existing Blockchain struct
+    pub consensus: ProofOfCooperation,
+    pub current_block_number: u64,
+    // ... existing fields ...
+}
+
+impl Blockchain {
+    pub fn new(identity_system: IdentitySystem, reputation_system: ReputationSystem) -> Self {
+        Blockchain {
+            chain: vec![Block::new(0, String::from("0"), vec![])],
+            pending_transactions: vec![],
+            difficulty: 2,
+            identity_system,
+            reputation_system,
+            contracts: HashMap::new(),
+            current_block_number: 1,
+            // Initialize consensus with desired parameters
+            consensus: ProofOfCooperation::new(
+                3,      // min_validators
+                0.66,   // vote_threshold (66%)
+                60,     // round_timeout in seconds
+                50,     // min_reputation
+            ),
+        }
+    }
+
+    // Add this method to handle block finalization through consensus
+    pub fn finalize_block(&mut self) -> Result<(), String> {
+        // Start a new consensus round
+        self.consensus.start_round()?;
+
+        // Create a new block with pending transactions
+        let previous_hash = self.chain.last().unwrap().hash.clone();
+        let new_block = Block::new(
+            self.chain.len() as u64,
+            previous_hash,
+            self.pending_transactions.clone(),
+        );
+
+        // Get the current round status and coordinator
+        if let Some(round) = &self.consensus.current_round {
+            // Propose the block (only coordinator can do this)
+            self.consensus.propose_block(&round.coordinator, new_block)?;
+
+            // In a real implementation, we would wait for votes here
+            // For now, we'll assume the block is accepted
+
+            // Finalize the round and get the accepted block
+            let finalized_block = self.consensus.finalize_round()?;
+            
+            // Add the block to the chain
+            self.chain.push(finalized_block);
+            
+            // Clear pending transactions
+            self.pending_transactions.clear();
+            
+            // Update reputation based on consensus round
+            let reputation_updates = self.consensus.get_reputation_updates();
+            for (did, change) in reputation_updates {
+                self.reputation_system.update_reputation(did, *change);
+            }
+
+            self.current_block_number += 1;
+            Ok(())
+        } else {
+            Err("No active consensus round".to_string())
+        }
+    }
+}
+
+===================
+File: ./backend/src/consensus/proof_of_cooperation.rs
+===================
+use std::collections::{HashMap, HashSet};
+use std::time::{SystemTime, UNIX_EPOCH};
+use serde::{Serialize, Deserialize};
+use sha2::{Sha256, Digest};
+
+// Validator represents a node participating in consensus
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Validator {
+    pub did: String,
+    pub reputation: i64,
+    pub last_block_proposed: u64,
+    pub consecutive_missed_validations: u32,
+    pub is_active: bool,
+}
+
+// ConsensusRound represents a single round of the PoC consensus
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsensusRound {
+    pub round_number: u64,
+    pub coordinator: String,  // DID of the coordinator
+    pub proposed_block: Option<Block>,
+    pub votes: HashMap<String, bool>,  // DID -> vote
+    pub status: RoundStatus,
+    pub start_time: u64,
+    pub timeout: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum RoundStatus {
+    Proposing,
+    Voting,
+    Finalizing,
+    Completed,
+    Failed,
+}
+
+#[derive(Debug)]
+pub struct ProofOfCooperation {
+    // Core consensus state
+    validators: HashMap<String, Validator>,
+    current_round: Option<ConsensusRound>,
+    finalized_blocks: Vec<Block>,
+    
+    // Configuration
+    min_validators: usize,
+    vote_threshold: f64,
+    round_timeout: u64,
+    min_reputation: i64,
+    
+    // Reputation tracking
+    reputation_updates: Vec<(String, i64)>,  // (DID, reputation change)
+}
+
+impl ProofOfCooperation {
+    pub fn new(min_validators: usize, vote_threshold: f64, round_timeout: u64, min_reputation: i64) -> Self {
+        ProofOfCooperation {
+            validators: HashMap::new(),
+            current_round: None,
+            finalized_blocks: Vec::new(),
+            min_validators,
+            vote_threshold,
+            round_timeout,
+            min_reputation,
+            reputation_updates: Vec::new(),
+        }
+    }
+
+    // Register a new validator
+    pub fn register_validator(&mut self, did: String, initial_reputation: i64) -> Result<(), String> {
+        if initial_reputation < self.min_reputation {
+            return Err("Insufficient reputation to become validator".to_string());
+        }
+
+        let validator = Validator {
+            did: did.clone(),
+            reputation: initial_reputation,
+            last_block_proposed: 0,
+            consecutive_missed_validations: 0,
+            is_active: true,
+        };
+
+        self.validators.insert(did, validator);
+        Ok(())
+    }
+
+    // Select the coordinator for the next round using reputation-weighted selection
+    fn select_coordinator(&self) -> Option<String> {
+        let active_validators: Vec<_> = self.validators
+            .values()
+            .filter(|v| v.is_active && v.reputation >= self.min_reputation)
+            .collect();
+
+        if active_validators.len() < self.min_validators {
+            return None;
+        }
+
+        // Calculate total reputation of active validators
+        let total_reputation: i64 = active_validators.iter().map(|v| v.reputation).sum();
+        
+        // Generate random number between 0 and total_reputation
+        let mut rng = rand::thread_rng();
+        let selection_point = rng.gen_range(0..total_reputation);
+        
+        // Select coordinator based on reputation weight
+        let mut cumulative_reputation = 0;
+        for validator in active_validators {
+            cumulative_reputation += validator.reputation;
+            if cumulative_reputation > selection_point {
+                return Some(validator.did.clone());
+            }
+        }
+        
+        None
+    }
+
+    // Start a new consensus round
+    pub fn start_round(&mut self) -> Result<(), String> {
+        if self.current_round.is_some() {
+            return Err("Consensus round already in progress".to_string());
+        }
+
+        let coordinator = self.select_coordinator()
+            .ok_or("Unable to select coordinator")?;
+
+        let round = ConsensusRound {
+            round_number: self.finalized_blocks.len() as u64 + 1,
+            coordinator,
+            proposed_block: None,
+            votes: HashMap::new(),
+            status: RoundStatus::Proposing,
+            start_time: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            timeout: self.round_timeout,
+        };
+
+        self.current_round = Some(round);
+        Ok(())
+    }
+
+    // Propose a block (called by coordinator)
+    pub fn propose_block(&mut self, proposer_did: &str, block: Block) -> Result<(), String> {
+        let round = self.current_round.as_mut()
+            .ok_or("No active consensus round")?;
+
+        if round.status != RoundStatus::Proposing {
+            return Err("Round not in proposing state".to_string());
+        }
+
+        if round.coordinator != proposer_did {
+            return Err("Only the coordinator can propose blocks".to_string());
+        }
+
+        round.proposed_block = Some(block);
+        round.status = RoundStatus::Voting;
+        Ok(())
+    }
+
+    // Submit a vote for the proposed block
+    pub fn submit_vote(&mut self, validator_did: &str, vote: bool) -> Result<(), String> {
+        let round = self.current_round.as_mut()
+            .ok_or("No active consensus round")?;
+
+        if round.status != RoundStatus::Voting {
+            return Err("Round not in voting state".to_string());
+        }
+
+        if !self.validators.contains_key(validator_did) {
+            return Err("Not a registered validator".to_string());
+        }
+
+        round.votes.insert(validator_did.to_string(), vote);
+
+        // Check if we have enough votes to finalize
+        if self.can_finalize_round() {
+            round.status = RoundStatus::Finalizing;
+        }
+
+        Ok(())
+    }
+
+    // Check if we can finalize the current round
+    fn can_finalize_round(&self) -> bool {
+        if let Some(round) = &self.current_round {
+            let total_reputation: i64 = self.validators
+                .values()
+                .filter(|v| v.is_active)
+                .map(|v| v.reputation)
+                .sum();
+
+            let voting_reputation: i64 = round.votes.keys()
+                .filter_map(|did| self.validators.get(did))
+                .map(|v| v.reputation)
+                .sum();
+
+            let participation_ratio = voting_reputation as f64 / total_reputation as f64;
+            let approval_reputation: i64 = round.votes.iter()
+                .filter(|(_, &vote)| vote)
+                .filter_map(|(did, _)| self.validators.get(did))
+                .map(|v| v.reputation)
+                .sum();
+
+            let approval_ratio = approval_reputation as f64 / voting_reputation as f64;
+
+            participation_ratio >= self.vote_threshold && approval_ratio >= self.vote_threshold
+        } else {
+            false
+        }
+    }
+
+    // Finalize the current round
+    pub fn finalize_round(&mut self) -> Result<Block, String> {
+        let round = self.current_round.as_ref()
+            .ok_or("No active consensus round")?;
+
+        if round.status != RoundStatus::Finalizing {
+            return Err("Round not ready for finalization".to_string());
+        }
+
+        let block = round.proposed_block.as_ref()
+            .ok_or("No proposed block")?
+            .clone();
+
+        // Update validator reputations based on participation
+        self.update_reputations(&round);
+
+        // Add block to finalized blocks
+        self.finalized_blocks.push(block.clone());
+
+        // Reset current round
+        self.current_round = None;
+
+        Ok(block)
+    }
+
+    // Update validator reputations based on round participation
+    fn update_reputations(&mut self, round: &ConsensusRound) {
+        let active_validators: HashSet<_> = self.validators
+            .values()
+            .filter(|v| v.is_active)
+            .map(|v| v.did.clone())
+            .collect();
+
+        // Reward validators who voted
+        for voter_did in round.votes.keys() {
+            if let Some(validator) = self.validators.get_mut(voter_did) {
+                validator.reputation += 1;
+                validator.consecutive_missed_validations = 0;
+                self.reputation_updates.push((voter_did.clone(), 1));
+            }
+        }
+
+        // Penalize validators who didn't vote
+        for did in active_validators {
+            if !round.votes.contains_key(&did) {
+                if let Some(validator) = self.validators.get_mut(&did) {
+                    validator.consecutive_missed_validations += 1;
+                    
+                    // Larger penalty for consecutive misses
+                    let penalty = -(validator.consecutive_missed_validations as i64);
+                    validator.reputation += penalty;
+                    self.reputation_updates.push((did.clone(), penalty));
+
+                    // Deactivate validator if reputation drops too low
+                    if validator.reputation < self.min_reputation {
+                        validator.is_active = false;
+                    }
+                }
+            }
+        }
+
+        // Extra reward for the coordinator if round was successful
+        if let Some(validator) = self.validators.get_mut(&round.coordinator) {
+            validator.reputation += 2;
+            self.reputation_updates.push((round.coordinator.clone(), 2));
+        }
+    }
+
+    // Get the current round status
+    pub fn get_round_status(&self) -> Option<RoundStatus> {
+        self.current_round.as_ref().map(|r| r.status.clone())
+    }
+
+    // Get the list of reputation updates from the last round
+    pub fn get_reputation_updates(&self) -> &Vec<(String, i64)> {
+        &self.reputation_updates
+    }
+
+    // Check if a round has timed out
+    pub fn check_timeout(&mut self) -> bool {
+        if let Some(round) = &self.current_round {
+            let current_time = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            
+            if current_time - round.start_time > round.timeout {
+                // Handle timeout by failing the round
+                self.handle_timeout();
+                return true;
+            }
+        }
+        false
+    }
+
+    // Handle a round timeout
+    fn handle_timeout(&mut self) {
+        if let Some(round) = &mut self.current_round {
+            round.status = RoundStatus::Failed;
+            
+            // Penalize the coordinator for timeout
+            if let Some(validator) = self.validators.get_mut(&round.coordinator) {
+                validator.reputation -= 3;
+                self.reputation_updates.push((round.coordinator.clone(), -3));
+            }
+        }
+        
+        // Reset the round
+        self.current_round = None;
+    }
+}
+
+// Helper functions for tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_consensus() -> ProofOfCooperation {
+        ProofOfCooperation::new(3, 0.66, 60, 50)
+    }
+
+    #[test]
+    fn test_validator_registration() {
+        let mut consensus = setup_consensus();
+        
+        // Test successful registration
+        assert!(consensus.register_validator("did:icn:1".to_string(), 100).is_ok());
+        
+        // Test registration with insufficient reputation
+        assert!(consensus.register_validator("did:icn:2".to_string(), 40).is_err());
+    }
+
+    #[test]
+    fn test_round_lifecycle() {
+        let mut consensus = setup_consensus();
+        
+        // Register validators
+        consensus.register_validator("did:icn:1".to_string(), 100).unwrap();
+        consensus.register_validator("did:icn:2".to_string(), 100).unwrap();
+        consensus.register_validator("did:icn:3".to_string(), 100).unwrap();
+        
+        // Start round
+        assert!(consensus.start_round().is_ok());
+        
+        // Verify round status
+        assert_eq!(consensus.get_round_status(), Some(RoundStatus::Proposing));
+    }
+
+    #[test]
+    fn test_reputation_updates() {
+        let mut consensus = setup_consensus();
+        
+        // Register validators
+        consensus.register_validator("did:icn:1".to_string(), 100).unwrap();
+        consensus.register_validator("did:icn:2".to_string(), 100).unwrap();
+        
+        // Start round and submit votes
+        consensus.start_round().unwrap();
+        if let Some(round) = &consensus.current_round {
+            let coordinator = round.coordinator.clone();
+            let block = Block::new(1, "prev_hash".to_string(), vec![]); // Create dummy block
+            consensus.propose_block(&coordinator, block).unwrap();
+            consensus.submit_vote("did:icn:1", true).unwrap();
+            consensus.submit_vote("did:icn:2", true).unwrap();
+        }
+        
+        // Check reputation updates
+        let updates = consensus.get_reputation_updates();
+        assert!(!updates.is_empty());
+    }
+}
 
 ===================
 File: ./frontend/src/components/cooperative/CooperativeDashboard.tsx
