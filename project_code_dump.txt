@@ -1,4 +1,4 @@
-Project Code Dump - Generated Mon Nov  4 03:30:47 AM UTC 2024
+Project Code Dump - Generated Mon Nov  4 05:10:53 AM UTC 2024
 ======================================
 
 Project Tree:
@@ -13,6 +13,7 @@ Project Tree:
 │   │   │   ├── cooperative.rs
 │   │   │   └── mod.rs
 │   │   ├── blockchain
+│   │   │   ├── blockchain.rs
 │   │   │   ├── mod.rs
 │   │   │   └── transaction.rs
 │   │   ├── config
@@ -21,27 +22,40 @@ Project Tree:
 │   │   ├── governance
 │   │   │   └── mod.rs
 │   │   ├── identity
+│   │   │   ├── authentication.rs
 │   │   │   ├── did.rs
+│   │   │   ├── identity_manager.rs
+│   │   │   ├── identity_system.rs
+│   │   │   ├── key_pair.rs
 │   │   │   └── mod.rs
 │   │   ├── lib.rs
 │   │   ├── main.rs
 │   │   ├── reputation
-│   │   │   └── mod.rs
+│   │   │   ├── mod.rs
+│   │   │   └── reputation_system.rs
 │   │   ├── utils
 │   │   │   ├── mod.rs
 │   │   │   └── notifications.rs
 │   │   └── vm
-│   │       └── mod.rs
+│   │       ├── contract.rs
+│   │       ├── cooperative_metadata.rs
+│   │       ├── event.rs
+│   │       ├── execution_context.rs
+│   │       ├── mod.rs
+│   │       ├── opcode.rs
+│   │       ├── tests
+│   │       └── vm.rs
 │   ├── target
 │   │   ├── CACHEDIR.TAG
-│   │   ├── debug
-│   │   │   ├── build
-│   │   │   ├── deps
-│   │   │   ├── examples
-│   │   │   ├── icn-backend
-│   │   │   ├── icn-backend.d
-│   │   │   └── incremental
-│   │   └── tmp
+│   │   └── debug
+│   │       ├── build
+│   │       ├── deps
+│   │       ├── examples
+│   │       ├── icn-backend
+│   │       ├── icn-backend.d
+│   │       ├── incremental
+│   │       ├── libicn_backend.d
+│   │       └── libicn_backend.rlib
 │   └── tests
 │       └── integration_test.rs
 ├── contracts
@@ -87,7 +101,9 @@ Project Tree:
 │   │   │   ├── blockchain-system.md
 │   │   │   ├── governance-system.md
 │   │   │   ├── identity-system.md
+│   │   │   ├── proof-of-cooperation.md
 │   │   │   ├── reputation-system.md
+│   │   │   ├── transaction-system.md
 │   │   │   └── vm-system.md
 │   │   └── protocols
 │   ├── templates
@@ -133,62 +149,167 @@ Project Tree:
     ├── install_docsctl.sh
     └── requirements.txt
 
-65 directories, 64 files
+65 directories, 80 files
+
+
+===================
+File: ./backend/src/identity/authentication.rs
+===================
+// src/identity/authentication.rs
+
+pub struct Authentication {
+    // Fields and methods for authentication
+}
 
 
 ===================
 File: ./backend/src/identity/did.rs
 ===================
 use secp256k1::{Secp256k1, SecretKey, PublicKey};
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
+use rand::{thread_rng, RngCore};
+use std::str::FromStr;
 
-/// Struct representing a decentralized identifier (DID)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DID {
     pub id: String,
+    #[serde(serialize_with = "serialize_public_key")]
+    #[serde(deserialize_with = "deserialize_public_key")]
     pub public_key: PublicKey,
 }
 
 impl DID {
-    /// Creates a new DID with a specified identifier and an existing secret key.
     pub fn new(id: String, secret_key: &SecretKey) -> Self {
         let secp = Secp256k1::new();
         let public_key = PublicKey::from_secret_key(&secp, secret_key);
-
         DID { id, public_key }
     }
 
-    /// Generates a new random DID and secret key pair.
     pub fn generate_random(id: String) -> (Self, SecretKey) {
         let secp = Secp256k1::new();
-        let secret_key = SecretKey::from_slice(&rand::random::<[u8; 32]>()).expect("32 bytes, within curve order");
+        let mut rng = thread_rng();
+        
+        // Generate random bytes for the secret key
+        let mut secret_key_bytes = [0u8; 32];
+        rng.fill_bytes(&mut secret_key_bytes);
+        
+        // Create secret key from the random bytes
+        let secret_key = SecretKey::from_slice(&secret_key_bytes)
+            .expect("Random bytes should produce valid key");
+            
         let public_key = PublicKey::from_secret_key(&secp, &secret_key);
-
         let did = DID { id, public_key };
         (did, secret_key)
     }
 }
 
-// Custom serialization for DID
-impl Serialize for DID {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("DID", 2)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("public_key", &self.public_key.to_string())?;
-        state.end()
+fn serialize_public_key<S>(key: &PublicKey, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&key.to_string())
+}
+
+fn deserialize_public_key<'de, D>(deserializer: D) -> Result<PublicKey, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let key_str = String::deserialize(deserializer)?;
+    PublicKey::from_str(&key_str).map_err(serde::de::Error::custom)
+}
+
+===================
+File: ./backend/src/identity/identity_system.rs
+===================
+use std::collections::HashMap;
+use crate::identity::DID;
+
+#[derive(Clone)]
+pub struct IdentitySystem {
+    permissions: HashMap<String, Vec<String>>,
+    registered_dids: HashMap<String, DID>,
+}
+
+impl IdentitySystem {
+    pub fn new() -> Self {
+        IdentitySystem {
+            permissions: HashMap::new(),
+            registered_dids: HashMap::new(),
+        }
+    }
+
+    pub fn get_permissions(&self, did: &str) -> Vec<String> {
+        self.permissions.get(did)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub fn register_did(&mut self, did: DID, permissions: Vec<String>) {
+        self.permissions.insert(did.id.clone(), permissions);
+        self.registered_dids.insert(did.id.clone(), did);
+    }
+
+    pub fn is_registered(&self, did: &str) -> bool {
+        self.registered_dids.contains_key(did)
+    }
+
+    pub fn add_permission(&mut self, did: &str, permission: String) {
+        if let Some(perms) = self.permissions.get_mut(did) {
+            if !perms.contains(&permission) {
+                perms.push(permission);
+            }
+        }
+    }
+
+    pub fn remove_permission(&mut self, did: &str, permission: &str) {
+        if let Some(perms) = self.permissions.get_mut(did) {
+            perms.retain(|p| p != permission);
+        }
+    }
+
+    pub fn get_did(&self, did: &str) -> Option<&DID> {
+        self.registered_dids.get(did)
     }
 }
 
 ===================
+File: ./backend/src/identity/key_pair.rs
+===================
+// src/identity/key_pair.rs
+
+pub struct KeyPair {
+    pub public_key: Vec<u8>,
+    pub private_key: Vec<u8>,
+}
+
+
+===================
 File: ./backend/src/identity/mod.rs
 ===================
+// src/identity/mod.rs
+
 pub mod did;
+// pub mod key_pair;
+// pub mod identity_manager;
+// pub mod authentication;
+pub mod identity_system;
 
 pub use did::DID;
+// pub use key_pair::KeyPair;
+// pub use identity_manager::IdentityManager;
+// pub use authentication::Authentication;
+pub use identity_system::IdentitySystem;
+
+
+===================
+File: ./backend/src/identity/identity_manager.rs
+===================
+// src/identity/identity_manager.rs
+
+pub struct IdentityManager {
+    // Fields and methods for managing identities
+}
+
 
 ===================
 File: ./backend/src/cooperative/mod.rs
@@ -234,128 +355,17 @@ pub mod notifications;
 
 
 ===================
-File: ./backend/src/vm/mod.rs
+File: ./backend/src/vm/contract.rs
 ===================
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum OpCode {
-    // Stack Operations
-    Push,
-    Pop,
-    Dup,      
-    Swap,     
-    
-    // Arithmetic Operations
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    
-    // Memory Operations
-    Store,    
-    Load,     
-    
-    // Control Flow
-    Call,     
-    Return,   
-    Jump,     
-    JumpIf,   
-    
-    // Cooperative Operations
-    CooperativeAction,
-    CreateCooperative,
-    JoinCooperative,
-    LeaveCooperative,
-    AllocateResource,
-    TransferResource,
-    UpdateCooperativeMetadata,
-    AddCooperativeMember,
-    RemoveCooperativeMember,
-    SetMemberRole,
-    
-    // Resource Management
-    CreateResource,
-    AssignResource,
-    RevokeResource,
-    ShareResource,
-    CheckResourceAvailability,
-    
-    // Governance Operations
-    CreateProposal,
-    CastVote,
-    DelegateVotes,
-    ExecuteProposal,
-    CalculateVotingWeight,
-    CancelProposal,
-    ExtendVotingPeriod,
-    UpdateQuorum,
-    
-    // Reputation Operations
-    UpdateReputation,
-    GetReputation,
-    TransferReputation,
-    BurnReputation,
-    MintReputation,
-    SetReputationContext,
-    MergeReputationContexts,
-    
-    // Identity Operations
-    VerifyDID,
-    UpdateDIDDocument,
-    CreateCredential,
-    VerifyCredential,
-    RevokeCredential,
-    
-    // Federation Operations
-    InitiateFederation,
-    JoinFederation,
-    LeaveFederation,
-    SyncFederationState,
-    ValidateFederationAction,
-    
-    // Transaction Operations
-    CreateTransaction,
-    ValidateTransaction,
-    SignTransaction,
-    BroadcastTransaction,
-    
-    // System Operations
-    Log,      
-    Halt,     
-    EmitEvent,
-    GetBlockNumber,
-    GetTimestamp,
-    GetCaller,
-}
+use super::opcode::OpCode;
+use super::cooperative_metadata::CooperativeMetadata;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceImpact {
-    pub cpu_intensity: u32,
-    pub memory_usage: u32,
-    pub network_usage: u32,
-    pub storage_usage: u32,
-    pub bandwidth_usage: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CooperativeMetadata {
-    pub creator_did: String,
-    pub cooperative_id: String,
-    pub purpose: String,
-    pub resource_impact: ResourceImpact,
-    pub federation_id: Option<String>,
-    pub creation_timestamp: u64,
-    pub last_updated: u64,
-    pub member_count: u32,
-    pub resource_allocation: HashMap<String, u64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Contract {
-    pub code: Vec<(OpCode, Option<i64>)>,
+    pub id: String,
+    pub code: Vec<OpCode>,
     pub state: HashMap<String, i64>,
     pub required_reputation: i64,
     pub cooperative_metadata: CooperativeMetadata,
@@ -364,115 +374,145 @@ pub struct Contract {
     pub permissions: Vec<String>,
 }
 
-#[derive(Debug)]
-pub struct ExecutionContext {
-    pub caller_did: String,
-    pub cooperative_id: String,
-    pub block_number: u64,
-    pub timestamp: u64,
-    pub federation_context: Option<String>,
+
+===================
+File: ./backend/src/vm/cooperative_metadata.rs
+===================
+use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ResourceImpact {
+    pub cpu_intensity: u8,
+    pub memory_usage: u8,
+    pub network_usage: u8,
+    pub storage_usage: u8,
+    pub bandwidth_usage: u8,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Event {
-    pub event_type: String,
+#[derive(Clone, Serialize, Deserialize)]
+pub struct CooperativeMetadata {
+    pub creator_did: String,
     pub cooperative_id: String,
-    pub data: HashMap<String, String>,
-    pub timestamp: u64,
+    pub purpose: String,
+    pub resource_impact: ResourceImpact,
+    pub federation_id: Option<String>,
+    pub creation_timestamp: u64,
+    pub last_updated: u64,
+    pub member_count: u64,
+    pub resource_allocation: HashMap<String, u64>,
 }
 
-#[derive(Debug)]
+
+===================
+File: ./backend/src/vm/vm.rs
+===================
+use std::collections::HashMap;
+use super::opcode::OpCode;
+use super::contract::Contract;
+use super::execution_context::ExecutionContext;
+use super::cooperative_metadata::CooperativeMetadata;
+use super::event::Event;
+
 pub struct VM {
     stack: Vec<i64>,
     memory: HashMap<String, i64>,
-    program_counter: usize,
-    contribution_credits: u64,
-    reputation_context: HashMap<String, i64>,
     execution_context: Option<ExecutionContext>,
-    logs: Vec<String>,
     events: Vec<Event>,
-    state: HashMap<String, Vec<u8>>,
+    logs: Vec<String>,
+    pub reputation_context: HashMap<String, i64>,
+    instruction_limit: usize,
+    instruction_pointer: usize,
 }
 
 impl VM {
-    pub fn new(contribution_limit: u64, reputation_context: HashMap<String, i64>) -> Self {
+    pub fn new(instruction_limit: usize, reputation_context: HashMap<String, i64>) -> Self {
         VM {
             stack: Vec::new(),
             memory: HashMap::new(),
-            program_counter: 0,
-            contribution_credits: contribution_limit,
-            reputation_context,
             execution_context: None,
-            logs: Vec::new(),
             events: Vec::new(),
-            state: HashMap::new(),
+            logs: Vec::new(),
+            reputation_context,
+            instruction_limit,
+            instruction_pointer: 0,
         }
+    }
+
+    pub fn get_reputation_context(&self) -> &HashMap<String, i64> {
+        &self.reputation_context
     }
 
     pub fn set_execution_context(&mut self, context: ExecutionContext) {
         self.execution_context = Some(context);
     }
 
-    pub fn execute_contract(&mut self, contract: &Contract) -> Result<i64, String> {
-        // Verify reputation requirements
-        if let Some(context) = &self.execution_context {
-            let caller_reputation = self.reputation_context
-                .get(&context.caller_did)
-                .copied()
-                .unwrap_or(0);
-            
-            if caller_reputation < contract.required_reputation {
-                return Err("Insufficient reputation to execute contract".to_string());
+    pub fn execute_contract(&mut self, contract: &Contract) -> Result<(), String> {
+        // Check execution context
+        let context = self.execution_context.as_ref().ok_or("No execution context".to_string())?;
+
+        // Check caller reputation
+        let caller_reputation = self
+            .reputation_context
+            .get(&context.caller_did)
+            .copied()
+            .unwrap_or(0);
+        if caller_reputation < contract.required_reputation {
+            return Err("Insufficient reputation to execute contract".to_string());
+        }
+
+        // Check permissions
+        for permission in &contract.permissions {
+            if !context.permissions.contains(permission) {
+                return Err(format!("Missing permission: {}", permission));
             }
         }
 
-        while self.program_counter < contract.code.len() {
-            let (op, value) = &contract.code[self.program_counter];
-            self.execute_instruction(op, *value, &contract.cooperative_metadata)?;
-            self.program_counter += 1;
+        // Execute instructions
+        let code_len = contract.code.len();
+        self.instruction_pointer = 0;
 
-            // Check contribution credits
-            if self.contribution_credits == 0 {
-                return Err("Out of contribution credits".to_string());
+        while self.instruction_pointer < code_len {
+            if self.instruction_pointer >= self.instruction_limit {
+                return Err("Instruction limit exceeded".to_string());
             }
-            self.contribution_credits -= 1;
+
+            let op = &contract.code[self.instruction_pointer];
+            self.execute_instruction(op, &contract.cooperative_metadata)?;
+
+            self.instruction_pointer += 1;
         }
 
-        Ok(self.stack.pop().unwrap_or(0))
+        Ok(())
     }
 
-    pub fn execute_instruction(&mut self, op: &OpCode, value: Option<i64>, metadata: &CooperativeMetadata) -> Result<(), String> {
+    pub fn execute_instruction(
+        &mut self,
+        op: &OpCode,
+        metadata: &CooperativeMetadata,
+    ) -> Result<(), String> {
         match op {
-            // Stack Operations
-            OpCode::Push => {
-                if let Some(v) = value {
-                    self.stack.push(v);
-                }
+            OpCode::Push(val) => {
+                self.stack.push(*val);
                 Ok(())
             }
             OpCode::Pop => {
-                self.stack.pop().ok_or("Stack underflow")?;
+                self.stack.pop().ok_or("Stack underflow".to_string())?;
                 Ok(())
             }
             OpCode::Dup => {
-                if let Some(&v) = self.stack.last() {
-                    self.stack.push(v);
-                    Ok(())
-                } else {
-                    Err("Stack underflow".to_string())
-                }
+                let val = *self.stack.last().ok_or("Stack underflow")?;
+                self.stack.push(val);
+                Ok(())
             }
             OpCode::Swap => {
-                if self.stack.len() >= 2 {
-                    let len = self.stack.len();
-                    self.stack.swap(len - 1, len - 2);
-                    Ok(())
-                } else {
-                    Err("Stack underflow".to_string())
+                let len = self.stack.len();
+                if len < 2 {
+                    return Err("Not enough values on the stack to swap".to_string());
                 }
+                self.stack.swap(len - 1, len - 2);
+                Ok(())
             }
-
-            // Arithmetic Operations
             OpCode::Add => {
                 let b = self.stack.pop().ok_or("Stack underflow")?;
                 let a = self.stack.pop().ok_or("Stack underflow")?;
@@ -493,291 +533,531 @@ impl VM {
             }
             OpCode::Div => {
                 let b = self.stack.pop().ok_or("Stack underflow")?;
-                let a = self.stack.pop().ok_or("Stack underflow")?;
                 if b == 0 {
                     return Err("Division by zero".to_string());
                 }
+                let a = self.stack.pop().ok_or("Stack underflow")?;
                 self.stack.push(a / b);
                 Ok(())
             }
             OpCode::Mod => {
                 let b = self.stack.pop().ok_or("Stack underflow")?;
-                let a = self.stack.pop().ok_or("Stack underflow")?;
                 if b == 0 {
                     return Err("Modulo by zero".to_string());
                 }
+                let a = self.stack.pop().ok_or("Stack underflow")?;
                 self.stack.push(a % b);
                 Ok(())
             }
-
-            // Memory Operations
-            OpCode::Store => {
+            OpCode::Store(key) => {
                 let value = self.stack.pop().ok_or("Stack underflow")?;
-                let key = self.stack.pop().ok_or("Stack underflow")?;
-                self.memory.insert(key.to_string(), value);
+                self.memory.insert(key.clone(), value);
                 Ok(())
             }
-            OpCode::Load => {
-                let key = self.stack.pop().ok_or("Stack underflow")?;
-                let value = self.memory.get(&key.to_string()).copied().unwrap_or(0);
+            OpCode::Load(key) => {
+                let value = self
+                    .memory
+                    .get(key)
+                    .copied()
+                    .ok_or("Key not found in memory".to_string())?;
                 self.stack.push(value);
                 Ok(())
             }
-
-            // Cooperative Operations
-            OpCode::CreateCooperative => self.handle_create_cooperative(metadata),
-            OpCode::JoinCooperative => self.handle_join_cooperative(metadata),
-            OpCode::AllocateResource => self.handle_allocate_resource(value, metadata),
-            OpCode::LeaveCooperative => self.handle_leave_cooperative(metadata),
-
-            // Governance Operations
-            OpCode::CreateProposal => self.handle_create_proposal(metadata),
-            OpCode::CastVote => self.handle_cast_vote(value, metadata),
-            OpCode::CalculateVotingWeight => self.handle_calculate_voting_weight(value, metadata),
-
-            // Federation Operations
-            OpCode::InitiateFederation => self.handle_federation_operation(op, metadata),
-            OpCode::JoinFederation => self.handle_federation_operation(op, metadata),
-
-            // Resource Operations
-            OpCode::CreateResource => self.handle_resource_operation(op, value, metadata),
-            OpCode::ShareResource => self.handle_resource_operation(op, value, metadata),
-
-            // System Operations
-            OpCode::Log => {
-                let value = self.stack.pop().ok_or("Stack underflow")?;
-                self.logs.push(format!("Log: {}", value));
+            OpCode::Jump(target) => {
+                if *target >= self.instruction_limit {
+                    return Err("Jump target out of bounds".to_string());
+                }
+                self.instruction_pointer = *target;
                 Ok(())
             }
-            OpCode::Halt => Ok(()),
-            OpCode::EmitEvent => {
-                let value = self.stack.pop().ok_or("Stack underflow")?;
-                self.emit_event("CustomEvent", metadata.cooperative_id.clone(), 
-                    HashMap::from([("value".to_string(), value.to_string())]));
+            OpCode::JumpIf(target) => {
+                let condition = self.stack.pop().ok_or("Stack underflow")?;
+                if condition != 0 {
+                    if *target >= self.instruction_limit {
+                        return Err("Jump target out of bounds".to_string());
+                    }
+                    self.instruction_pointer = *target;
+                }
                 Ok(())
             }
-
-            _ => Err(format!("Opcode {:?} not implemented", op)),
-        }
-    }
-
-    fn handle_create_cooperative(&mut self, metadata: &CooperativeMetadata) -> Result<(), String> {
-        if let Some(context) = &self.execution_context {
-            self.emit_event(
-                "CooperativeCreated",
-                metadata.cooperative_id.clone(),
-                HashMap::from([
-                    ("creator".to_string(), context.caller_did.clone()),
-                    ("purpose".to_string(), metadata.purpose.clone()),
-                ])
-            );
-            Ok(())
-        } else {
-            Err("No execution context".to_string())
-        }
-    }
-
-    fn handle_join_cooperative(&mut self, metadata: &CooperativeMetadata) -> Result<(), String> {
-        if let Some(context) = &self.execution_context {
-            self.emit_event(
-                "CooperativeJoined",
-                metadata.cooperative_id.clone(),
-                HashMap::from([
-                    ("member".to_string(), context.caller_did.clone()),
-                ])
-            );
-            Ok(())
-        } else {
-            Err("No execution context".to_string())
-        }
-    }
-
-    fn handle_leave_cooperative(&mut self, metadata: &CooperativeMetadata) -> Result<(), String> {
-        if let Some(context) = &self.execution_context {
-            self.emit_event(
-                "CooperativeLeft",
-                metadata.cooperative_id.clone(),
-                HashMap::from([
-                    ("member".to_string(), context.caller_did.clone()),
-                ])
-            );
-            Ok(())
-        } else {
-            Err("No execution context".to_string())
-        }
-    }
-
-    fn handle_allocate_resource(&mut self, resource_id: Option<i64>, metadata: &CooperativeMetadata) -> Result<(), String> {
-        if let Some(id) = resource_id {
-            // Check resource impact
-            if metadata.resource_impact.cpu_intensity > 80 || 
-               metadata.resource_impact.memory_usage > 80 || 
-               metadata.resource_impact.network_usage > 80 {
-                return Err("Resource impact too high".to_string());
+            OpCode::CreateCooperative => {
+                let context = self.execution_context.as_ref()
+                    .ok_or("No execution context".to_string())?;
+                if !context.permissions.contains(&"cooperative.create".to_string()) {
+                    return Err("Permission denied: cooperative.create".to_string());
+                }
+                let reputation = self.reputation_context
+                    .get(&context.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+                if reputation < 100 {
+                    return Err("Insufficient reputation to create cooperative".to_string());
+                }
+                self.emit_event(
+                    "CooperativeCreated",
+                    metadata.cooperative_id.clone(),
+                    HashMap::new(),
+                );
+                Ok(())
             }
-
-            self.emit_event(
-                "ResourceAllocated",
-                metadata.cooperative_id.clone(),
-                HashMap::from([
-                    ("resource_id".to_string(), id.to_string()),
-                ])
-            );
-            self.memory.insert(format!("resource_{}", id), 1);
-            Ok(())
-        } else {
-            Err("Missing resource ID".to_string())
-        }
-    }
-
-    fn handle_create_proposal(&mut self, metadata: &CooperativeMetadata) -> Result<(), String> {
-        if let Some(context) = &self.execution_context {
-            let caller_reputation = self.reputation_context
-                .get(&context.caller_did)
-                .copied()
-                .unwrap_or(0);
-            
-            if caller_reputation < 100 {
-                return Err("Insufficient reputation to create proposal".to_string());
+            OpCode::JoinCooperative => {
+                let _context = self.execution_context.as_ref()
+                    .ok_or("No execution context".to_string())?;
+                self.emit_event(
+                    "CooperativeJoined",
+                    metadata.cooperative_id.clone(),
+                    HashMap::new(),
+                );
+                Ok(())
             }
-
-            self.emit_event(
-                "ProposalCreated",
-                metadata.cooperative_id.clone(),
-                HashMap::from([
-                    ("creator".to_string(), context.caller_did.clone()),
-                ])
-            );
-            Ok(())
-        } else {
-            Err("No execution context".to_string())
-        }
-    }
-
-    fn handle_cast_vote(&mut self, vote_value: Option<i64>, metadata: &CooperativeMetadata) -> Result<(), String> {
-        if let Some(context) = &self.execution_context {
-            if let Some(value) = vote_value {
+            OpCode::LeaveCooperative => {
+                let _context = self.execution_context.as_ref()
+                    .ok_or("No execution context".to_string())?;
+                self.emit_event(
+                    "CooperativeLeft",
+                    metadata.cooperative_id.clone(),
+                    HashMap::new(),
+                );
+                Ok(())
+            }
+            OpCode::AllocateResource => {
+                let resource_amount = self.stack.pop().ok_or("Stack underflow")?;
+                self.emit_event(
+                    "ResourceAllocated",
+                    metadata.cooperative_id.clone(),
+                    [("amount".to_string(), resource_amount.to_string())]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                );
+                Ok(())
+            }
+            OpCode::TransferResource => {
+                let resource_amount = self.stack.pop().ok_or("Stack underflow")?;
+                let to_member_id = self.stack.pop().ok_or("Stack underflow")?;
+                self.emit_event(
+                    "ResourceTransferred",
+                    metadata.cooperative_id.clone(),
+                    [
+                        ("amount".to_string(), resource_amount.to_string()),
+                        ("to_member".to_string(), to_member_id.to_string()),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                );
+                Ok(())
+            }
+            OpCode::UpdateCooperativeMetadata => {
+                Ok(())
+            }
+            OpCode::AddCooperativeMember => {
+                let member_id = self.stack.pop().ok_or("Stack underflow")?;
+                self.emit_event(
+                    "CooperativeMemberAdded",
+                    metadata.cooperative_id.clone(),
+                    [("member_id".to_string(), member_id.to_string())]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                );
+                Ok(())
+            }
+            OpCode::RemoveCooperativeMember => {
+                let member_id = self.stack.pop().ok_or("Stack underflow")?;
+                self.emit_event(
+                    "CooperativeMemberRemoved",
+                    metadata.cooperative_id.clone(),
+                    [("member_id".to_string(), member_id.to_string())]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                );
+                Ok(())
+            }
+            OpCode::SetMemberRole => {
+                let role = self.stack.pop().ok_or("Stack underflow")?;
+                let member_id = self.stack.pop().ok_or("Stack underflow")?;
+                self.emit_event(
+                    "MemberRoleSet",
+                    metadata.cooperative_id.clone(),
+                    [
+                        ("member_id".to_string(), member_id.to_string()),
+                        ("role".to_string(), role.to_string()),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                );
+                Ok(())
+            }
+            OpCode::CreateProposal => {
+                let context = self.execution_context.as_ref()
+                    .ok_or("No execution context".to_string())?;
+                if !context.permissions.contains(&"proposal.create".to_string()) {
+                    return Err("Permission denied: proposal.create".to_string());
+                }
+                self.emit_event(
+                    "ProposalCreated",
+                    metadata.cooperative_id.clone(),
+                    HashMap::new(),
+                );
+                Ok(())
+            }
+            OpCode::CastVote => {
+                let vote_value = self.stack.pop().ok_or("Stack underflow")?;
+                let proposal_id = self.stack.pop().ok_or("Stack underflow")?;
                 self.emit_event(
                     "VoteCast",
                     metadata.cooperative_id.clone(),
-                    HashMap::from([
-                        ("voter".to_string(), context.caller_did.clone()),
-                        ("vote".to_string(), value.to_string()),
-                    ])
+                    [
+                        ("proposal_id".to_string(), proposal_id.to_string()),
+                        ("vote_value".to_string(), vote_value.to_string()),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
                 );
                 Ok(())
-            } else {
-                Err("Missing vote value".to_string())
             }
-        } else {
-            Err("No execution context".to_string())
-        }
-    }
+            OpCode::DelegateVotes => {
+                let delegate_to_id = self.stack.pop().ok_or("Stack underflow")?;
+                self.emit_event(
+                    "VotesDelegated",
+                    metadata.cooperative_id.clone(),
+                    [("delegate_to".to_string(), delegate_to_id.to_string())]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                );
+                Ok(())
+            }
+            OpCode::ExecuteProposal => {
+                let proposal_id = self.stack.pop().ok_or("Stack underflow")?;
+                self.emit_event(
+                    "ProposalExecuted",
+                    metadata.cooperative_id.clone(),
+                    [("proposal_id".to_string(), proposal_id.to_string())]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                );
+                Ok(())
+            }
+            OpCode::CancelProposal => {
+                let proposal_id = self.stack.pop().ok_or("Stack underflow")?;
+                self.emit_event(
+                    "ProposalCancelled",
+                    metadata.cooperative_id.clone(),
+                    [("proposal_id".to_string(), proposal_id.to_string())]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                );
+                Ok(())
+            }
+            OpCode::ExtendVotingPeriod => {
+                let proposal_id = self.stack.pop().ok_or("Stack underflow")?;
+                let additional_time = self.stack.pop().ok_or("Stack underflow")?;
+                self.emit_event(
+                    "VotingPeriodExtended",
+                    metadata.cooperative_id.clone(),
+                    [
+                        ("proposal_id".to_string(), proposal_id.to_string()),
+                        ("additional_time".to_string(), additional_time.to_string()),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                );
+                Ok(())
+            }
+            OpCode::UpdateQuorum => {
+                let new_quorum = self.stack.pop().ok_or("Stack underflow")?;
+                self.emit_event(
+                    "QuorumUpdated",
+                    metadata.cooperative_id.clone(),
+                    [("new_quorum".to_string(), new_quorum.to_string())]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                );
+                Ok(())
+            }
+            OpCode::CalculateVotingWeight => {
+                let context = self.execution_context.as_ref()
+                    .ok_or("No execution context".to_string())?;
+                let reputation = self.reputation_context
+                    .get(&context.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+                self.stack.push(reputation);
+                Ok(())
+            }
+            OpCode::UpdateReputation(amount) => {
+                let context = self.execution_context.as_ref()
+                    .ok_or("No execution context".to_string())?;
+                let reputation = self.reputation_context
+                    .entry(context.caller_did.clone())
+                    .or_insert(0);
+                *reputation += *amount;
+                self.emit_event(
+                    "ReputationUpdated",
+                    metadata.cooperative_id.clone(),
+                    [("amount".to_string(), amount.to_string())]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                );
+                Ok(())
+            }
+            OpCode::GetReputation => {
+                let context = self.execution_context.as_ref()
+                    .ok_or("No execution context".to_string())?;
+                let reputation = self.reputation_context
+                    .get(&context.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+                self.stack.push(reputation);
+                Ok(())
+            }
+            OpCode::TransferReputation => {
+                let amount = self.stack.pop().ok_or("Stack underflow")?;
+                let to_did_hash = self.stack.pop().ok_or("Stack underflow")?;
+                let to_did = self.reverse_hash_did(to_did_hash);
+                let from_context = self.execution_context.as_ref()
+                    .ok_or("No execution context".to_string())?;
 
-    fn handle_calculate_voting_weight(&mut self, _weight_id: Option<i64>, metadata: &CooperativeMetadata) -> Result<(), String> {
-        if let Some(context) = &self.execution_context {
-            let reputation = self.reputation_context
-                .get(&context.caller_did)
-                .copied()
-                .unwrap_or(0);
-            
-            let weight = (reputation as f64 * 0.7 + 100.0) as i64;
-            
-            self.stack.push(weight);
-            self.emit_event(
-                "VotingWeightCalculated",
-                metadata.cooperative_id.clone(),
-                HashMap::from([
-                    ("member".to_string(), context.caller_did.clone()),
-                    ("weight".to_string(), weight.to_string()),
-                ])
-            );
-            Ok(())
-        } else {
-            Err("No execution context".to_string())
-        }
-    }
+                    let from_reputation = self
+                    .reputation_context
+                    .entry(from_context.caller_did.clone())
+                    .or_insert(0);
+                if *from_reputation < amount {
+                    return Err("Insufficient reputation to transfer".to_string());
+                }
 
-    fn handle_federation_operation(&mut self, op: &OpCode, metadata: &CooperativeMetadata) -> Result<(), String> {
-        match op {
+                *from_reputation -= amount;
+                let to_reputation = self.reputation_context.entry(to_did).or_insert(0);
+                *to_reputation += amount;
+
+                self.emit_event(
+                    "ReputationTransferred",
+                    metadata.cooperative_id.clone(),
+                    [("amount".to_string(), amount.to_string())]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                );
+                Ok(())
+            }
+            OpCode::BurnReputation => {
+                let amount = self.stack.pop().ok_or("Stack underflow")?;
+                let context = self.execution_context.as_ref()
+                    .ok_or("No execution context".to_string())?;
+                let reputation = self.reputation_context
+                    .entry(context.caller_did.clone())
+                    .or_insert(0);
+                if *reputation < amount {
+                    return Err("Insufficient reputation to burn".to_string());
+                }
+                *reputation -= amount;
+                self.emit_event(
+                    "ReputationBurned",
+                    metadata.cooperative_id.clone(),
+                    [("amount".to_string(), amount.to_string())]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                );
+                Ok(())
+            }
+            OpCode::MintReputation => {
+                let amount = self.stack.pop().ok_or("Stack underflow")?;
+                let to_did_hash = self.stack.pop().ok_or("Stack underflow")?;
+                let to_did = self.reverse_hash_did(to_did_hash);
+                let to_reputation = self.reputation_context.entry(to_did).or_insert(0);
+                *to_reputation += amount;
+                self.emit_event(
+                    "ReputationMinted",
+                    metadata.cooperative_id.clone(),
+                    [("amount".to_string(), amount.to_string())]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                );
+                Ok(())
+            }
+            OpCode::VerifyDID => {
+                self.stack.push(1); // 1 for true
+                Ok(())
+            }
+            OpCode::UpdateDIDDocument => {
+                self.emit_event(
+                    "DIDDocumentUpdated",
+                    metadata.cooperative_id.clone(),
+                    HashMap::new(),
+                );
+                Ok(())
+            }
+            OpCode::CreateCredential => {
+                self.emit_event(
+                    "CredentialCreated",
+                    metadata.cooperative_id.clone(),
+                    HashMap::new(),
+                );
+                Ok(())
+            }
+            OpCode::VerifyCredential => {
+                self.stack.push(1); // Assume credential is valid
+                Ok(())
+            }
+            OpCode::RevokeCredential => {
+                self.emit_event(
+                    "CredentialRevoked",
+                    metadata.cooperative_id.clone(),
+                    HashMap::new(),
+                );
+                Ok(())
+            }
             OpCode::InitiateFederation => {
-                if let Some(context) = &self.execution_context {
-                    self.emit_event(
-                        "FederationInitiated",
-                        metadata.cooperative_id.clone(),
-                        HashMap::from([
-                            ("initiator".to_string(), context.caller_did.clone()),
-                        ])
-                    );
-                    Ok(())
-                } else {
-                    Err("No execution context".to_string())
-                }
-            },
+                self.emit_event(
+                    "FederationInitiated",
+                    metadata.cooperative_id.clone(),
+                    HashMap::new(),
+                );
+                Ok(())
+            }
             OpCode::JoinFederation => {
-                if let Some(fed_id) = &metadata.federation_id {
-                    if let Some(context) = &self.execution_context {
-                        self.emit_event(
-                            "FederationJoined",
-                            metadata.cooperative_id.clone(),
-                            HashMap::from([
-                                ("federation_id".to_string(), fed_id.clone()),
-                                ("member".to_string(), context.caller_did.clone()),
-                            ])
-                        );
-                        Ok(())
-                    } else {
-                        Err("No execution context".to_string())
-                    }
-                } else {
-                    Err("No federation ID specified".to_string())
-                }
-            },
-            _ => Err("Federation operation not implemented".to_string())
-        }
-    }
-
-    fn handle_resource_operation(&mut self, op: &OpCode, value: Option<i64>, metadata: &CooperativeMetadata) -> Result<(), String> {
-        match op {
-            OpCode::CreateResource => {
-                if let Some(resource_id) = value {
-                    if metadata.resource_impact.cpu_intensity > 80 || 
-                       metadata.resource_impact.memory_usage > 80 {
-                        return Err("Resource impact too high".to_string());
-                    }
-                    
-                    self.emit_event(
-                        "ResourceCreated",
-                        metadata.cooperative_id.clone(),
-                        HashMap::from([
-                            ("resource_id".to_string(), resource_id.to_string()),
-                        ])
-                    );
-                    Ok(())
-                } else {
-                    Err("Missing resource ID".to_string())
-                }
-            },
-            OpCode::ShareResource => {
-                if let Some(resource_id) = value {
-                    if let Some(context) = &self.execution_context {
-                        self.emit_event(
-                            "ResourceShared",
-                            metadata.cooperative_id.clone(),
-                            HashMap::from([
-                                ("resource_id".to_string(), resource_id.to_string()),
-                                ("shared_by".to_string(), context.caller_did.clone()),
-                            ])
-                        );
-                        Ok(())
-                    } else {
-                        Err("No execution context".to_string())
-                    }
-                } else {
-                    Err("Missing resource ID".to_string())
-                }
-            },
-            _ => Err("Resource operation not implemented".to_string())
+                self.emit_event(
+                    "FederationJoined",
+                    metadata.cooperative_id.clone(),
+                    HashMap::new(),
+                );
+                Ok(())
+            }
+            OpCode::LeaveFederation => {
+                self.emit_event(
+                    "FederationLeft",
+                    metadata.cooperative_id.clone(),
+                    HashMap::new(),
+                );
+                Ok(())
+            }
+            OpCode::SyncFederationState => {
+                self.emit_event(
+                    "FederationStateSynced",
+                    metadata.cooperative_id.clone(),
+                    HashMap::new(),
+                );
+                Ok(())
+            }
+            OpCode::ValidateFederationAction => {
+                self.stack.push(1); // Assume action is valid
+                Ok(())
+            }
+            OpCode::CreateTransaction => {
+                self.emit_event(
+                    "TransactionCreated",
+                    metadata.cooperative_id.clone(),
+                    HashMap::new(),
+                );
+                Ok(())
+            }
+            OpCode::ValidateTransaction => {
+                self.stack.push(1); // Assume transaction is valid
+                Ok(())
+            }
+            OpCode::SignTransaction => {
+                self.emit_event(
+                    "TransactionSigned",
+                    metadata.cooperative_id.clone(),
+                    HashMap::new(),
+                );
+                Ok(())
+            }
+            OpCode::BroadcastTransaction => {
+                self.emit_event(
+                    "TransactionBroadcasted",
+                    metadata.cooperative_id.clone(),
+                    HashMap::new(),
+                );
+                Ok(())
+            }
+            OpCode::Log(message) => {
+                self.logs.push(format!("Log: {}", message));
+                Ok(())
+            }
+            OpCode::Halt => {
+                self.instruction_pointer = self.instruction_limit;
+                Ok(())
+            }
+            OpCode::EmitEvent(event_type) => {
+                self.emit_event(event_type, metadata.cooperative_id.clone(), HashMap::new());
+                Ok(())
+            }
+            OpCode::GetBlockNumber => {
+                let context = self.execution_context.as_ref()
+                    .ok_or("No execution context".to_string())?;
+                self.stack.push(context.block_number as i64);
+                Ok(())
+            }
+            OpCode::GetTimestamp => {
+                let context = self.execution_context.as_ref()
+                    .ok_or("No execution context".to_string())?;
+                self.stack.push(context.timestamp as i64);
+                Ok(())
+            }
+                // Add the GetCaller implementation here:
+            OpCode::GetCaller => {
+                let context = self.execution_context.as_ref()
+                    .ok_or("No execution context".to_string())?;
+                let caller_id_hash = self.hash_did(&context.caller_did);
+                self.stack.push(caller_id_hash);
+                Ok(())
+            }
+            
+            OpCode::Equal => {
+                let b = self.stack.pop().ok_or("Stack underflow")?;
+                let a = self.stack.pop().ok_or("Stack underflow")?;
+                self.stack.push(if a == b { 1 } else { 0 });
+                Ok(())
+            }
+            OpCode::NotEqual => {
+                let b = self.stack.pop().ok_or("Stack underflow")?;
+                let a = self.stack.pop().ok_or("Stack underflow")?;
+                self.stack.push(if a != b { 1 } else { 0 });
+                Ok(())
+            }
+            OpCode::GreaterThan => {
+                let b = self.stack.pop().ok_or("Stack underflow")?;
+                let a = self.stack.pop().ok_or("Stack underflow")?;
+                self.stack.push(if a > b { 1 } else { 0 });
+                Ok(())
+            }
+            OpCode::LessThan => {
+                let b = self.stack.pop().ok_or("Stack underflow")?;
+                let a = self.stack.pop().ok_or("Stack underflow")?;
+                self.stack.push(if a < b { 1 } else { 0 });
+                Ok(())
+            }
+            OpCode::And => {
+                let b = self.stack.pop().ok_or("Stack underflow")?;
+                let a = self.stack.pop().ok_or("Stack underflow")?;
+                self.stack.push(a & b);
+                Ok(())
+            }
+            OpCode::Or => {
+                let b = self.stack.pop().ok_or("Stack underflow")?;
+                let a = self.stack.pop().ok_or("Stack underflow")?;
+                self.stack.push(a | b);
+                Ok(())
+            }
+            OpCode::Not => {
+                let a = self.stack.pop().ok_or("Stack underflow")?;
+                self.stack.push(!a);
+                Ok(())
+            }
+            OpCode::Nop => Ok(()),
         }
     }
 
@@ -791,6 +1071,15 @@ impl VM {
             };
             self.events.push(event);
         }
+    }
+
+    fn hash_did(&self, did: &str) -> i64 {
+        // Simple hash function for example purposes
+        did.bytes().fold(0, |acc, b| acc + b as i64)
+    }
+
+    fn reverse_hash_did(&self, hash: i64) -> String {
+        format!("did:placeholder:{}", hash)
     }
 
     pub fn get_logs(&self) -> &Vec<String> {
@@ -810,163 +1099,536 @@ impl VM {
     }
 }
 
+===================
+File: ./backend/src/vm/tests/vm_tests.rs
+===================
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::super::*;
+    use std::collections::HashMap;
 
-    fn create_test_metadata() -> CooperativeMetadata {
+    fn setup_vm() -> VM {
+        let instruction_limit = 1000;
+        let reputation_context = HashMap::new();
+        VM::new(instruction_limit, reputation_context)
+    }
+
+    fn default_execution_context() -> ExecutionContext {
+        ExecutionContext {
+            caller_did: "did:icn:12345".to_string(),
+            cooperative_id: "coop-1".to_string(),
+            timestamp: 1620000000,
+            block_number: 1,
+            reputation_score: 100,
+            permissions: vec!["cooperative.create".to_string(), "proposal.create".to_string()],
+        }
+    }
+
+    fn default_cooperative_metadata() -> CooperativeMetadata {
         CooperativeMetadata {
-            creator_did: "did:icn:test".to_string(),
-            cooperative_id: "test-coop".to_string(),
+            creator_did: "did:icn:12345".to_string(),
+            cooperative_id: "coop-1".to_string(),
             purpose: "Test Cooperative".to_string(),
             resource_impact: ResourceImpact {
-                cpu_intensity: 10,
-                memory_usage: 10,
-                network_usage: 10,
-                storage_usage: 10,
-                bandwidth_usage: 10,
+                cpu_intensity: 1,
+                memory_usage: 1,
+                network_usage: 1,
+                storage_usage: 1,
+                bandwidth_usage: 1,
             },
             federation_id: None,
-            creation_timestamp: 1635724800,
-            last_updated: 1635724800,
+            creation_timestamp: 1620000000,
+            last_updated: 1620000000,
             member_count: 1,
             resource_allocation: HashMap::new(),
         }
     }
 
-    fn create_test_context() -> ExecutionContext {
-        ExecutionContext {
-            caller_did: "did:icn:test".to_string(),
-            cooperative_id: "test-coop".to_string(),
-            block_number: 1,
-            timestamp: 1635724800,
-            federation_context: None,
-        }
-    }
-
     #[test]
-    fn test_stack_operations() {
-        let mut vm = VM::new(100, HashMap::new());
-        let metadata = create_test_metadata();
+    fn test_push_pop() {
+        let mut vm = setup_vm();
+        vm.set_execution_context(default_execution_context());
 
-        // Test Push and Pop
-        vm.execute_instruction(&OpCode::Push, Some(42), &metadata).unwrap();
-        assert_eq!(vm.get_stack().last(), Some(&42));
+        let contract = Contract {
+            id: "test_contract".to_string(),
+            code: vec![
+                OpCode::Push(10),
+                OpCode::Push(20),
+                OpCode::Pop,
+                OpCode::Push(30),
+                OpCode::Halt,
+            ],
+            state: HashMap::new(),
+            required_reputation: 0,
+            cooperative_metadata: default_cooperative_metadata(),
+            version: "1.0.0".to_string(),
+            dependencies: vec![],
+            permissions: vec![],
+        };
 
-        // Test Dup
-        vm.execute_instruction(&OpCode::Dup, None, &metadata).unwrap();
-        assert_eq!(vm.get_stack().len(), 2);
-        assert_eq!(vm.get_stack().last(), Some(&42));
-
-        // Test Swap
-        vm.execute_instruction(&OpCode::Push, Some(24), &metadata).unwrap();
-        vm.execute_instruction(&OpCode::Swap, None, &metadata).unwrap();
-        assert_eq!(vm.get_stack().len(), 3);
-        assert_eq!(vm.get_stack()[vm.get_stack().len() - 1], 42);
-        assert_eq!(vm.get_stack()[vm.get_stack().len() - 2], 24);
+        let result = vm.execute_contract(&contract);
+        assert!(result.is_ok());
+        let stack = vm.get_stack();
+        assert_eq!(stack.len(), 2);
+        assert_eq!(stack[0], 10);
+        assert_eq!(stack[1], 30);
     }
 
     #[test]
     fn test_arithmetic_operations() {
-        let mut vm = VM::new(100, HashMap::new());
-        let metadata = create_test_metadata();
+        let mut vm = setup_vm();
+        vm.set_execution_context(default_execution_context());
 
-        // Setup stack for arithmetic
-        vm.execute_instruction(&OpCode::Push, Some(10), &metadata).unwrap();
-        vm.execute_instruction(&OpCode::Push, Some(5), &metadata).unwrap();
+        let contract = Contract {
+            id: "arithmetic_contract".to_string(),
+            code: vec![
+                OpCode::Push(10),
+                OpCode::Push(5),
+                OpCode::Add,
+                OpCode::Push(2),
+                OpCode::Mul,
+                OpCode::Halt,
+            ],
+            state: HashMap::new(),
+            required_reputation: 0,
+            cooperative_metadata: default_cooperative_metadata(),
+            version: "1.0.0".to_string(),
+            dependencies: vec![],
+            permissions: vec![],
+        };
 
-        // Test Add
-        vm.execute_instruction(&OpCode::Add, None, &metadata).unwrap();
-        assert_eq!(vm.get_stack().last(), Some(&15));
+        let result = vm.execute_contract(&contract);
+        assert!(result.is_ok());
+        let stack = vm.get_stack();
+        assert_eq!(stack.len(), 1);
+        assert_eq!(stack[0], 30); // (10 + 5) * 2 = 30
+    }
 
-        // Test Sub
-        vm.execute_instruction(&OpCode::Push, Some(3), &metadata).unwrap();
-        vm.execute_instruction(&OpCode::Sub, None, &metadata).unwrap();
-        assert_eq!(vm.get_stack().last(), Some(&12));
+    #[test]
+    fn test_memory_operations() {
+        let mut vm = setup_vm();
+        vm.set_execution_context(default_execution_context());
 
-        // Test Mul
-        vm.execute_instruction(&OpCode::Push, Some(4), &metadata).unwrap();
-        vm.execute_instruction(&OpCode::Mul, None, &metadata).unwrap();
-        assert_eq!(vm.get_stack().last(), Some(&48));
+        let contract = Contract {
+            id: "memory_contract".to_string(),
+            code: vec![
+                OpCode::Push(42),
+                OpCode::Store("answer".to_string()),
+                OpCode::Load("answer".to_string()),
+                OpCode::Halt,
+            ],
+            state: HashMap::new(),
+            required_reputation: 0,
+            cooperative_metadata: default_cooperative_metadata(),
+            version: "1.0.0".to_string(),
+            dependencies: vec![],
+            permissions: vec![],
+        };
 
-        // Test Div
-        vm.execute_instruction(&OpCode::Push, Some(6), &metadata).unwrap();
-        vm.execute_instruction(&OpCode::Div, None, &metadata).unwrap();
-        assert_eq!(vm.get_stack().last(), Some(&8));
+        let result = vm.execute_contract(&contract);
+        assert!(result.is_ok());
+        let stack = vm.get_stack();
+        assert_eq!(stack.len(), 1);
+        assert_eq!(stack[0], 42);
+    }
+
+    #[test]
+    fn test_control_flow_jump() {
+        let mut vm = setup_vm();
+        vm.set_execution_context(default_execution_context());
+
+        let contract = Contract {
+            id: "control_flow_contract".to_string(),
+            code: vec![
+                OpCode::Push(1),             // 0
+                OpCode::Jump(4),             // 1
+                OpCode::Push(999),           // 2 (should be skipped)
+                OpCode::Halt,                // 3 (should be skipped)
+                OpCode::Push(2),             // 4
+                OpCode::Halt,                // 5
+            ],
+            state: HashMap::new(),
+            required_reputation: 0,
+            cooperative_metadata: default_cooperative_metadata(),
+            version: "1.0.0".to_string(),
+            dependencies: vec![],
+            permissions: vec![],
+        };
+
+        let result = vm.execute_contract(&contract);
+        assert!(result.is_ok());
+        let stack = vm.get_stack();
+        assert_eq!(stack.len(), 2);
+        assert_eq!(stack[0], 1);
+        assert_eq!(stack[1], 2);
+    }
+
+    #[test]
+    fn test_control_flow_jumpif() {
+        let mut vm = setup_vm();
+        vm.set_execution_context(default_execution_context());
+
+        let contract = Contract {
+            id: "control_flow_jumpif_contract".to_string(),
+            code: vec![
+                OpCode::Push(0),             // 0
+                OpCode::JumpIf(4),           // 1 (should not jump)
+                OpCode::Push(1),             // 2
+                OpCode::Halt,                // 3
+                OpCode::Push(2),             // 4
+                OpCode::Halt,                // 5
+            ],
+            state: HashMap::new(),
+            required_reputation: 0,
+            cooperative_metadata: default_cooperative_metadata(),
+            version: "1.0.0".to_string(),
+            dependencies: vec![],
+            permissions: vec![],
+        };
+
+        let result = vm.execute_contract(&contract);
+        assert!(result.is_ok());
+        let stack = vm.get_stack();
+        assert_eq!(stack.len(), 1);
+        assert_eq!(stack[0], 1);
+    }
+
+    #[test]
+    fn test_comparison_operations() {
+        let mut vm = setup_vm();
+        vm.set_execution_context(default_execution_context());
+
+        let contract = Contract {
+            id: "comparison_contract".to_string(),
+            code: vec![
+                OpCode::Push(10),
+                OpCode::Push(10),
+                OpCode::Equal,
+                OpCode::Halt,
+            ],
+            state: HashMap::new(),
+            required_reputation: 0,
+            cooperative_metadata: default_cooperative_metadata(),
+            version: "1.0.0".to_string(),
+            dependencies: vec![],
+            permissions: vec![],
+        };
+
+        let result = vm.execute_contract(&contract);
+        assert!(result.is_ok());
+        let stack = vm.get_stack();
+        assert_eq!(stack.len(), 1);
+        assert_eq!(stack[0], 1); // 1 for true
     }
 
     #[test]
     fn test_cooperative_operations() {
-        let mut vm = VM::new(100, HashMap::new());
-        let metadata = create_test_metadata();
-        vm.set_execution_context(create_test_context());
+        let mut vm = setup_vm();
+        vm.set_execution_context(default_execution_context());
 
-        // Test CreateCooperative
-        vm.execute_instruction(&OpCode::CreateCooperative, None, &metadata).unwrap();
-        assert!(!vm.get_events().is_empty());
-        assert_eq!(vm.get_events()[0].event_type, "CooperativeCreated");
+        let contract = Contract {
+            id: "cooperative_contract".to_string(),
+            code: vec![
+                OpCode::CreateCooperative,
+                OpCode::Halt,
+            ],
+            state: HashMap::new(),
+            required_reputation: 100,
+            cooperative_metadata: default_cooperative_metadata(),
+            version: "1.0.0".to_string(),
+            dependencies: vec![],
+            permissions: vec!["cooperative.create".to_string()],
+        };
 
-        // Test JoinCooperative
-        vm.execute_instruction(&OpCode::JoinCooperative, None, &metadata).unwrap();
-        assert_eq!(vm.get_events()[1].event_type, "CooperativeJoined");
+        let result = vm.execute_contract(&contract);
+        assert!(result.is_ok());
+
+        let events = vm.get_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "CooperativeCreated");
     }
 
     #[test]
-    fn test_resource_operations() {
-        let mut vm = VM::new(100, HashMap::new());
-        let metadata = create_test_metadata();
-        vm.set_execution_context(create_test_context());
-
-        // Test CreateResource
-        vm.execute_instruction(&OpCode::CreateResource, Some(1), &metadata).unwrap();
-        assert!(!vm.get_events().is_empty());
-        assert_eq!(vm.get_events()[0].event_type, "ResourceCreated");
-
-        // Test ShareResource
-        vm.execute_instruction(&OpCode::ShareResource, Some(1), &metadata).unwrap();
-        assert_eq!(vm.get_events()[1].event_type, "ResourceShared");
-    }
-
-    #[test]
-    fn test_federation_operations() {
-        let mut vm = VM::new(100, HashMap::new());
-        let mut metadata = create_test_metadata();
-        metadata.federation_id = Some("fed1".to_string());
-        vm.set_execution_context(create_test_context());
-
-        // Test InitiateFederation
-        vm.execute_instruction(&OpCode::InitiateFederation, None, &metadata).unwrap();
-        assert!(!vm.get_events().is_empty());
-        assert_eq!(vm.get_events()[0].event_type, "FederationInitiated");
-
-        // Test JoinFederation
-        vm.execute_instruction(&OpCode::JoinFederation, None, &metadata).unwrap();
-        assert_eq!(vm.get_events()[1].event_type, "FederationJoined");
-    }
-
-    #[test]
-    fn test_governance_operations() {
-        let mut vm = VM::new(100, HashMap::new());
-        let metadata = create_test_metadata();
+    fn test_reputation_operations() {
         let mut reputation_context = HashMap::new();
-        reputation_context.insert("did:icn:test".to_string(), 150);
-        vm = VM::new(100, reputation_context);
-        vm.set_execution_context(create_test_context());
+        reputation_context.insert("did:icn:12345".to_string(), 50);
 
-        // Test CreateProposal
-        vm.execute_instruction(&OpCode::CreateProposal, None, &metadata).unwrap();
-        assert!(!vm.get_events().is_empty());
-        assert_eq!(vm.get_events()[0].event_type, "ProposalCreated");
+        let mut vm = VM::new(1000, reputation_context);
+        vm.set_execution_context(default_execution_context());
 
-        // Test CastVote
-        vm.execute_instruction(&OpCode::CastVote, Some(1), &metadata).unwrap();
-        assert_eq!(vm.get_events()[1].event_type, "VoteCast");
+        let contract = Contract {
+            id: "reputation_contract".to_string(),
+            code: vec![
+                OpCode::UpdateReputation(25),
+                OpCode::GetReputation,
+                OpCode::Halt,
+            ],
+            state: HashMap::new(),
+            required_reputation: 0,
+            cooperative_metadata: default_cooperative_metadata(),
+            version: "1.0.0".to_string(),
+            dependencies: vec![],
+            permissions: vec![],
+        };
 
-        // Test CalculateVotingWeight
-        vm.execute_instruction(&OpCode::CalculateVotingWeight, None, &metadata).unwrap();
-        assert_eq!(vm.get_events()[2].event_type, "VotingWeightCalculated");
+        let result = vm.execute_contract(&contract);
+        assert!(result.is_ok());
+
+        let stack = vm.get_stack();
+        assert_eq!(stack.len(), 1);
+        assert_eq!(stack[0], 75);
+
+        let updated_reputation = vm.reputation_context.get("did:icn:12345").copied().unwrap_or(0);
+        assert_eq!(updated_reputation, 75);
+    }
+
+    #[test]
+    fn test_error_handling_division_by_zero() {
+        let mut vm = setup_vm();
+        vm.set_execution_context(default_execution_context());
+
+        let contract = Contract {
+            id: "error_contract".to_string(),
+            code: vec![
+                OpCode::Push(10),
+                OpCode::Push(0),
+                OpCode::Div,
+                OpCode::Halt,
+            ],
+            state: HashMap::new(),
+            required_reputation: 0,
+            cooperative_metadata: default_cooperative_metadata(),
+            version: "1.0.0".to_string(),
+            dependencies: vec![],
+            permissions: vec![],
+        };
+
+        let result = vm.execute_contract(&contract);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Division by zero".to_string());
+    }
+
+    #[test]
+    fn test_event_emission() {
+        let mut vm = setup_vm();
+        vm.set_execution_context(default_execution_context());
+
+        let contract = Contract {
+            id: "event_contract".to_string(),
+            code: vec![
+                OpCode::EmitEvent("CustomEvent".to_string()),
+                OpCode::Halt,
+            ],
+            state: HashMap::new(),
+            required_reputation: 0,
+            cooperative_metadata: default_cooperative_metadata(),
+            version: "1.0.0".to_string(),
+            dependencies: vec![],
+            permissions: vec![],
+        };
+
+        let result = vm.execute_contract(&contract);
+        assert!(result.is_ok());
+
+        let events = vm.get_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "CustomEvent");
+    }
+
+    #[test]
+    fn test_insufficient_reputation() {
+        let mut vm = setup_vm();
+        vm.set_execution_context(default_execution_context());
+
+        let contract = Contract {
+            id: "high_reputation_contract".to_string(),
+            code: vec![
+                OpCode::Push(1),
+                OpCode::Halt,
+            ],
+            state: HashMap::new(),
+            required_reputation: 200,
+            cooperative_metadata: default_cooperative_metadata(),
+            version: "1.0.0".to_string(),
+            dependencies: vec![],
+            permissions: vec![],
+        };
+
+        let result = vm.execute_contract(&contract);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Insufficient reputation to execute contract".to_string());
+    }
+
+    #[test]
+    fn test_missing_permission() {
+        let mut vm = setup_vm();
+        let mut context = default_execution_context();
+        context.permissions = vec![]; // No permissions
+        vm.set_execution_context(context);
+
+        let contract = Contract {
+            id: "permission_contract".to_string(),
+            code: vec![
+                OpCode::CreateCooperative,
+                OpCode::Halt,
+            ],
+            state: HashMap::new(),
+            required_reputation: 0,
+            cooperative_metadata: default_cooperative_metadata(),
+            version: "1.0.0".to_string(),
+            dependencies: vec![],
+            permissions: vec!["cooperative.create".to_string()],
+        };
+
+        let result = vm.execute_contract(&contract);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Missing permission: cooperative.create".to_string());
     }
 }
+
+
+===================
+File: ./backend/src/vm/mod.rs
+===================
+pub mod opcode;
+pub mod contract;
+pub mod vm;
+pub mod execution_context;
+pub mod cooperative_metadata;
+pub mod event;
+
+pub use opcode::OpCode;
+pub use contract::Contract;
+pub use vm::VM;
+pub use execution_context::ExecutionContext;
+pub use cooperative_metadata::{CooperativeMetadata, ResourceImpact};
+pub use event::Event;
+
+
+===================
+File: ./backend/src/vm/opcode.rs
+===================
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OpCode {
+    // Stack Operations
+    Push(i64),        // Push a value onto the stack
+    Pop,              // Pop the top value from the stack
+    Dup,              // Duplicate the top value on the stack
+    Swap,             // Swap the top two values on the stack
+
+    // Arithmetic Operations
+    Add,              // Add top two values
+    Sub,              // Subtract top two values
+    Mul,              // Multiply top two values
+    Div,              // Divide top two values
+    Mod,              // Modulo of top two values
+
+    // Memory Operations
+    Store(String),    // Store a value in memory with a key
+    Load(String),     // Load a value from memory with a key
+
+    // Control Flow Operations
+    Jump(usize),      // Unconditional jump to instruction index
+    JumpIf(usize),    // Conditional jump if top of stack is non-zero
+
+    // Cooperative Operations
+    CreateCooperative,
+    JoinCooperative,
+    LeaveCooperative,
+    AllocateResource,
+    TransferResource,
+    UpdateCooperativeMetadata,
+    AddCooperativeMember,
+    RemoveCooperativeMember,
+    SetMemberRole,
+
+    // Governance Operations
+    CreateProposal,
+    CastVote,
+    DelegateVotes,
+    ExecuteProposal,
+    UpdateQuorum,
+    CancelProposal,
+    ExtendVotingPeriod,
+    CalculateVotingWeight,
+
+    // Reputation Operations
+    UpdateReputation(i64),
+    GetReputation,
+    TransferReputation,
+    BurnReputation,
+    MintReputation,
+
+    // Identity Operations
+    VerifyDID,
+    UpdateDIDDocument,
+    CreateCredential,
+    VerifyCredential,
+    RevokeCredential,
+
+    // Federation Operations
+    InitiateFederation,
+    JoinFederation,
+    LeaveFederation,
+    SyncFederationState,
+    ValidateFederationAction,
+
+    // Transaction Operations
+    CreateTransaction,
+    ValidateTransaction,
+    SignTransaction,
+    BroadcastTransaction,
+
+    // System Operations
+    Log(String),
+    Halt,
+    EmitEvent(String),
+    GetBlockNumber,
+    GetTimestamp,
+    GetCaller,
+
+    // Comparison Operations
+    Equal,
+    NotEqual,
+    GreaterThan,
+    LessThan,
+
+    // Logical Operations
+    And,
+    Or,
+    Not,
+
+    // No Operation
+    Nop,
+}
+
+===================
+File: ./backend/src/vm/event.rs
+===================
+use std::collections::HashMap;
+
+pub struct Event {
+    pub event_type: String,
+    pub cooperative_id: String,
+    pub data: HashMap<String, String>,
+    pub timestamp: u64,
+}
+
+
+===================
+File: ./backend/src/vm/execution_context.rs
+===================
+pub struct ExecutionContext {
+    pub caller_did: String,
+    pub cooperative_id: String,
+    pub timestamp: u64,
+    pub block_number: u64,
+    pub reputation_score: i64,
+    pub permissions: Vec<String>,
+}
+
 
 ===================
 File: ./backend/src/api/cooperative.rs
@@ -986,7 +1648,12 @@ pub mod transaction;
 use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest};
 use chrono::Utc;
-use self::transaction::Transaction;
+use self::transaction::{Transaction, TransactionType};
+use std::collections::HashMap;
+
+use crate::identity::IdentitySystem;
+use crate::reputation::ReputationSystem;
+use crate::vm::{VM, Contract, ExecutionContext};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
@@ -1001,7 +1668,7 @@ impl Block {
     /// Creates a new block with a list of transactions and calculates its hash.
     pub fn new(index: u64, previous_hash: String, transactions: Vec<Transaction>) -> Self {
         let timestamp = Utc::now().timestamp_millis() as u128;
-        let hash = calculate_hash(index, &previous_hash, timestamp, &transactions);
+        let hash = Self::calculate_hash(index, &previous_hash, timestamp, &transactions);
 
         Block {
             index,
@@ -1011,31 +1678,39 @@ impl Block {
             hash,
         }
     }
-}
 
-/// Calculates a hash for the block based on its contents.
-fn calculate_hash(index: u64, previous_hash: &str, timestamp: u128, transactions: &Vec<Transaction>) -> String {
-    let mut hasher = Sha256::new();
-    let transaction_data = serde_json::to_string(transactions).expect("Failed to serialize transactions");
-    hasher.update(format!("{}{}{}{}", index, previous_hash, timestamp, transaction_data));
-    let result = hasher.finalize();
-    format!("{:x}", result)
+    /// Calculates a hash for the block based on its contents.
+    fn calculate_hash(index: u64, previous_hash: &str, timestamp: u128, transactions: &Vec<Transaction>) -> String {
+        let mut hasher = Sha256::new();
+        let transaction_data = serde_json::to_string(transactions).expect("Failed to serialize transactions");
+        hasher.update(format!("{}{}{}{}", index, previous_hash, timestamp, transaction_data));
+        let result = hasher.finalize();
+        format!("{:x}", result)
+    }
 }
 
 pub struct Blockchain {
     pub chain: Vec<Block>,
     pub pending_transactions: Vec<Transaction>,
     pub difficulty: usize,
+    pub identity_system: IdentitySystem,
+    pub reputation_system: ReputationSystem,
+    pub contracts: HashMap<String, Contract>,
+    pub current_block_number: u64,
 }
 
 impl Blockchain {
     /// Initializes a new blockchain with a genesis block.
-    pub fn new() -> Self {
+    pub fn new(identity_system: IdentitySystem, reputation_system: ReputationSystem) -> Self {
         let genesis_block = Block::new(0, String::from("0"), vec![]);
         Blockchain {
             chain: vec![genesis_block],
             pending_transactions: vec![],
             difficulty: 2,
+            identity_system,
+            reputation_system,
+            contracts: HashMap::new(),
+            current_block_number: 1,
         }
     }
 
@@ -1055,8 +1730,87 @@ impl Blockchain {
 
         self.chain.push(new_block);
         self.pending_transactions.clear();
+        self.current_block_number += 1;
+    }
+
+    /// Processes a transaction
+    pub fn process_transaction(&mut self, transaction: &Transaction) -> Result<(), String> {
+        match &transaction.transaction_type {
+            TransactionType::Transfer { receiver, amount } => {
+                // Handle transfer logic (simplified for this example)
+                println!(
+                    "Processed transfer of {} from {} to {}",
+                    amount, transaction.sender, receiver
+                );
+                Ok(())
+            }
+            TransactionType::ContractExecution { contract_id, input_data } => {
+                // Fetch the contract
+                let contract = self.get_contract(contract_id)?;
+                
+                // Set up the VM
+                let mut vm = VM::new(
+                    1000, // Instruction limit
+                    self.reputation_system.get_reputation_context(),
+                );
+
+                // Create ExecutionContext
+                let execution_context = ExecutionContext {
+                    caller_did: transaction.sender.clone(),
+                    cooperative_id: contract.cooperative_metadata.cooperative_id.clone(),
+                    timestamp: transaction.timestamp as u64,
+                    block_number: self.current_block_number,
+                    reputation_score: self.reputation_system.get_reputation(&transaction.sender),
+                    permissions: self.identity_system.get_permissions(&transaction.sender),
+                };
+
+                vm.set_execution_context(execution_context);
+
+                // Execute the contract
+                let result = vm.execute_contract(&contract);
+
+                // Handle result
+                match result {
+                    Ok(_) => {
+                        // Update state based on vm.memory or vm.events
+                        self.handle_vm_events(vm.get_events());
+                        self.reputation_system.update_reputations(vm.get_reputation_context());
+                        Ok(())
+                    }
+                    Err(e) => Err(format!("Contract execution failed: {}", e)),
+                }
+            }
+            // ... handle other transaction types
+        }
+    }
+
+    /// Handle VM events emitted during contract execution
+    fn handle_vm_events(&mut self, events: &Vec<crate::vm::Event>) {
+        for event in events {
+            match event.event_type.as_str() {
+                "CooperativeCreated" => {
+                    // Update blockchain state to include the new cooperative
+                    println!("Event: CooperativeCreated - {}", event.data.get("creator").unwrap());
+                }
+                "ProposalCreated" => {
+                    // Add the proposal to the governance module
+                    println!("Event: ProposalCreated");
+                }
+                // Handle other event types...
+                _ => {
+                    // Log or ignore unknown events
+                    println!("Unknown event type: {}", event.event_type);
+                }
+            }
+        }
+    }
+
+    /// Get a contract by ID
+    fn get_contract(&self, contract_id: &str) -> Result<&Contract, String> {
+        self.contracts.get(contract_id).ok_or_else(|| "Contract not found".to_string())
     }
 }
+
 
 ===================
 File: ./backend/src/blockchain/transaction.rs
@@ -1064,45 +1818,224 @@ File: ./backend/src/blockchain/transaction.rs
 use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest};
 use chrono::Utc;
+use std::collections::HashMap;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum TransactionType {
+    Transfer {
+        receiver: String,
+        amount: u64,
+    },
+    ContractExecution {
+        contract_id: String,
+        input_data: HashMap<String, i64>, // Optional input data for the contract
+    },
+    // ... other transaction types
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Transaction {
     pub sender: String,       // DID of sender
-    pub receiver: String,     // DID of receiver
-    pub amount: u64,          // Amount/value exchanged
+    pub transaction_type: TransactionType,
     pub timestamp: u128,      // Transaction timestamp
     pub hash: String,         // Hash to secure transaction
 }
 
 impl Transaction {
     /// Creates a new transaction and calculates its hash
-    pub fn new(sender: String, receiver: String, amount: u64) -> Self {
+    pub fn new(sender: String, transaction_type: TransactionType) -> Self {
         let timestamp = Utc::now().timestamp_millis() as u128;
-        let hash = calculate_transaction_hash(&sender, &receiver, amount, timestamp);
+        let hash = Self::calculate_transaction_hash(&sender, &transaction_type, timestamp);
 
         Transaction {
             sender,
-            receiver,
-            amount,
+            transaction_type,
             timestamp,
             hash,
         }
     }
+
+    /// Calculate the transaction hash based on transaction details
+    fn calculate_transaction_hash(sender: &str, transaction_type: &TransactionType, timestamp: u128) -> String {
+        let mut hasher = Sha256::new();
+        let transaction_data = match transaction_type {
+            TransactionType::Transfer { receiver, amount } => {
+                format!("Transfer:{}:{}:{}", sender, receiver, amount)
+            }
+            TransactionType::ContractExecution { contract_id, input_data } => {
+                format!("ContractExecution:{}:{:?}", contract_id, input_data)
+            }
+            // Handle other transaction types
+        };
+        hasher.update(format!("{}{}{}", sender, transaction_data, timestamp));
+        let result = hasher.finalize();
+        format!("{:x}", result)
+    }
 }
 
-/// Calculate the transaction hash based on transaction details
-fn calculate_transaction_hash(sender: &str, receiver: &str, amount: u64, timestamp: u128) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(format!("{}{}{}{}", sender, receiver, amount, timestamp));
-    let result = hasher.finalize();
-    format!("{:x}", result)
+
+===================
+File: ./backend/src/blockchain/blockchain.rs
+===================
+use super::transaction::{Transaction, TransactionType};
+use super::block::Block;
+use crate::identity::IdentitySystem;
+use crate::reputation::ReputationSystem;
+use crate::vm::{VM, ExecutionContext};
+use crate::vm::contract::Contract;
+use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+pub struct Blockchain {
+    pub chain: Vec<Block>,
+    pub pending_transactions: Vec<Transaction>,
+    pub contracts: HashMap<String, Contract>,
+    pub identity_system: Arc<Mutex<IdentitySystem>>,
+    pub reputation_system: Arc<Mutex<ReputationSystem>>,
+    pub current_block_number: u64,
 }
+
+impl Blockchain {
+    pub fn new(
+        identity_system: Arc<Mutex<IdentitySystem>>,
+        reputation_system: Arc<Mutex<ReputationSystem>>,
+    ) -> Self {
+        Blockchain {
+            chain: vec![],
+            pending_transactions: vec![],
+            contracts: HashMap::new(),
+            identity_system,
+            reputation_system,
+            current_block_number: 0,
+        }
+    }
+
+    pub fn process_transaction(&mut self, transaction: &Transaction) -> Result<(), String> {
+        match &transaction.transaction_type {
+            TransactionType::Transfer { amount, receiver } => {
+                // Handle standard transfer transaction
+                self.validate_transaction(transaction)?;
+                // Update balances, etc.
+                self.pending_transactions.push(transaction.clone());
+                Ok(())
+            }
+            TransactionType::ContractExecution { contract_id, input_data } => {
+                // Fetch the contract
+                let contract = self.get_contract(contract_id)?;
+                // Set up the VM
+                let reputation_context = self.reputation_system.lock().unwrap().get_reputation_context();
+                let mut vm = VM::new(1000, reputation_context);
+
+                // Create ExecutionContext
+                let identity_system = self.identity_system.lock().unwrap();
+                let permissions = identity_system.get_permissions(&transaction.sender);
+                let reputation_score = self.reputation_system.lock().unwrap().get_reputation(&transaction.sender);
+
+                let execution_context = ExecutionContext {
+                    caller_did: transaction.sender.clone(),
+                    cooperative_id: contract.cooperative_metadata.cooperative_id.clone(),
+                    timestamp: transaction.timestamp,
+                    block_number: self.current_block_number,
+                    reputation_score,
+                    permissions,
+                };
+
+                vm.set_execution_context(execution_context);
+
+                // Execute the contract
+                let result = vm.execute_contract(&contract);
+
+                // Handle result
+                match result {
+                    Ok(_) => {
+                        // Update state based on vm.memory or vm.events
+                        self.handle_vm_events(vm.get_events());
+                        self.reputation_system.lock().unwrap().update_reputations(vm.reputation_context);
+                        self.pending_transactions.push(transaction.clone());
+                        Ok(())
+                    }
+                    Err(e) => Err(format!("Contract execution failed: {}", e)),
+                }
+            }
+            // Handle other transaction types...
+        }
+    }
+
+    fn validate_transaction(&self, transaction: &Transaction) -> Result<(), String> {
+        // Validate transaction signature, balances, etc.
+        Ok(())
+    }
+
+    fn get_contract(&self, contract_id: &str) -> Result<Contract, String> {
+        self.contracts.get(contract_id).cloned().ok_or(format!("Contract {} not found", contract_id))
+    }
+
+    fn handle_vm_events(&mut self, events: &Vec<crate::vm::event::Event>) {
+        for event in events {
+            match event.event_type.as_str() {
+                "CooperativeCreated" => {
+                    // Update blockchain state to include the new cooperative
+                    println!("Cooperative created: {:?}", event.data);
+                }
+                "ProposalCreated" => {
+                    // Add the proposal to the governance module
+                    println!("Proposal created: {:?}", event.data);
+                }
+                // Handle other event types...
+                _ => {
+                    // Log or ignore unknown events
+                    println!("Unknown event: {:?}", event);
+                }
+            }
+        }
+    }
+
+    pub fn create_contract(&mut self, contract: Contract) {
+        self.contracts.insert(contract.id.clone(), contract);
+    }
+}
+
+
+===================
+File: ./backend/src/reputation/reputation_system.rs
+===================
+use std::collections::HashMap;
+
+pub struct ReputationSystem {
+    reputations: HashMap<String, i64>, // DID -> Reputation Score
+}
+
+impl ReputationSystem {
+    pub fn new() -> Self {
+        ReputationSystem {
+            reputations: HashMap::new(),
+        }
+    }
+
+    pub fn get_reputation_context(&self) -> HashMap<String, i64> {
+        self.reputations.clone()
+    }
+
+    pub fn update_reputations(&mut self, updated_reputations: HashMap<String, i64>) {
+        for (did, score) in updated_reputations {
+            self.reputations.insert(did, score);
+        }
+    }
+
+    pub fn get_reputation(&self, did: &str) -> i64 {
+        self.reputations.get(did).copied().unwrap_or(0)
+    }
+
+    // Additional methods for reputation management...
+}
+
 
 ===================
 File: ./backend/src/reputation/mod.rs
 ===================
 use std::collections::HashMap;
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct ReputationSystem {
     pub scores: HashMap<String, i64>,
 }
@@ -1138,7 +2071,20 @@ impl ReputationSystem {
             did, reward_points
         );
     }
+
+    /// Returns a clone of the reputation context
+    pub fn get_reputation_context(&self) -> HashMap<String, i64> {
+        self.scores.clone()
+    }
+
+    /// Updates the reputation context with changes from the VM execution
+    pub fn update_reputations(&mut self, updated_reputations: &HashMap<String, i64>) {
+        for (did, reputation) in updated_reputations {
+            self.scores.insert(did.clone(), *reputation);
+        }
+    }
 }
+
 
 ===================
 File: ./backend/src/governance/mod.rs
@@ -1283,51 +2229,102 @@ mod utils;
 mod vm;
 
 use std::collections::HashMap;
-use blockchain::{Blockchain, transaction::Transaction};
-use identity::DID;
+use blockchain::{Blockchain, transaction::{Transaction, TransactionType}};
+use identity::{DID, IdentitySystem};
 use reputation::ReputationSystem;
 use governance::{Proposal, ProposalType, ProposalHistory};
-use vm::{VM, Contract, CooperativeMetadata, OpCode, ResourceImpact};
+use vm::{Contract, CooperativeMetadata, OpCode, ResourceImpact};
 
 fn main() {
-    let mut blockchain = Blockchain::new();
+    // Initialize systems
+    let mut identity_system = IdentitySystem::new();
     let mut reputation_system = ReputationSystem::new();
+
+    // Initialize Blockchain with IdentitySystem and ReputationSystem
+    let mut blockchain = Blockchain::new(identity_system.clone(), reputation_system.clone());
     let mut proposal_history = ProposalHistory::new();
 
+    // Generate DIDs
     let (sender_did, _) = DID::generate_random(String::from("did:icn:001"));
     let (receiver_did, _) = DID::generate_random(String::from("did:icn:002"));
 
-    // Create and add transactions
-    let transaction1 = Transaction::new(sender_did.id.clone(), receiver_did.id.clone(), 100);
-    blockchain.add_transaction(transaction1.clone());
-    reputation_system.increase_reputation(&sender_did.id, 10);
+    // Register DIDs in IdentitySystem with permissions
+    identity_system.register_did(
+        sender_did.clone(),
+        vec![
+            "cooperative.create".to_string(),
+            "proposal.create".to_string(),
+            "resource.allocate".to_string()
+        ]
+    );
+    identity_system.register_did(receiver_did.clone(), vec![]);
 
-    let transaction2 = Transaction::new(receiver_did.id.clone(), sender_did.id.clone(), 50);
-    blockchain.add_transaction(transaction2.clone());
-    reputation_system.decrease_reputation(&receiver_did.id, 5);
+    // Set initial reputation for sender (important for contract execution)
+    reputation_system.increase_reputation(&sender_did.id, 100);  // Ensure enough reputation for contract execution
+
+    // Create transactions
+    let transaction1 = Transaction::new(
+        sender_did.id.clone(),
+        TransactionType::Transfer {
+            receiver: receiver_did.id.clone(),
+            amount: 100,
+        },
+    );
+    blockchain.add_transaction(transaction1);
+
+    let transaction2 = Transaction::new(
+        receiver_did.id.clone(),
+        TransactionType::Transfer {
+            receiver: sender_did.id.clone(),
+            amount: 50,
+        },
+    );
+    blockchain.add_transaction(transaction2);
 
     // Finalize the block
     blockchain.finalize_block();
 
-    // Create proposals for governance
-    let proposal1 = Proposal::new(1, ProposalType::Funding, String::from("Proposal for funding development."));
+    // Process transactions
+    let transactions_to_process: Vec<Transaction> = blockchain.chain.last()
+        .map(|block| block.transactions.clone())
+        .unwrap_or_default();
+    
+    for transaction in transactions_to_process {
+        blockchain.process_transaction(&transaction)
+            .unwrap_or_else(|e| println!("{}", e));
+    }
+
+    // Create and manage proposals
+    let proposal1 = Proposal::new(
+        1,
+        ProposalType::Funding,
+        String::from("Proposal for funding development."),
+    );
     proposal_history.add_proposal(proposal1);
 
-    let proposal2 = Proposal::new(2, ProposalType::PolicyChange, String::from("Proposal for changing cooperative policy."));
+    let proposal2 = Proposal::new(
+        2,
+        ProposalType::PolicyChange,
+        String::from("Proposal for changing cooperative policy."),
+    );
     proposal_history.add_proposal(proposal2);
 
-    // Vote on proposals
+    // Vote and manage proposals
     proposal_history.send_voting_reminder();
-    proposal_history.proposals[0].vote(&sender_did.id, 10);
-    proposal_history.proposals[1].vote(&receiver_did.id, 5);
-    proposal_history.proposals[0].close();
+    if let Some(proposal) = proposal_history.proposals.get_mut(0) {
+        proposal.vote(&sender_did.id, 10);
+        proposal.close();
+    }
+    if let Some(proposal) = proposal_history.proposals.get_mut(1) {
+        proposal.vote(&receiver_did.id, 5);
+    }
 
     // Display proposal history
     proposal_history.display_history();
 
-    // Create and execute a contract with the new opcode
+    // Create and setup a test contract
     let metadata = CooperativeMetadata {
-        creator_did: "did:icn:creator".to_string(),
+        creator_did: sender_did.id.clone(),
         cooperative_id: "coop1".to_string(),
         purpose: "Allocate resources for development".to_string(),
         resource_impact: ResourceImpact {
@@ -1344,33 +2341,46 @@ fn main() {
         resource_allocation: HashMap::new(),
     };
 
-    let _contract = Contract {
+    let contract = Contract {
+        id: "contract1".to_string(),
         code: vec![
-            (OpCode::AllocateResource, Some(1)),
-            (OpCode::CalculateVotingWeight, None),
-            (OpCode::Return, None),
+            OpCode::Push(1),
+            OpCode::AllocateResource,
+            OpCode::Halt,
         ],
         state: HashMap::new(),
-        required_reputation: 50,
+        required_reputation: 50,  // This should now be less than sender's reputation
         cooperative_metadata: metadata.clone(),
         version: "1.0.0".to_string(),
         dependencies: Vec::new(),
-        permissions: vec!["resource.allocate".to_string(), "voting.calculate".to_string()],
+        permissions: vec!["resource.allocate".to_string()],
     };
 
-    let mut vm = VM::new(100, reputation_system.scores.clone());
-    let execution_context = vm::ExecutionContext {
-        caller_did: "did:icn:creator".to_string(),
-        cooperative_id: "coop1".to_string(),
-        block_number: 1,
-        timestamp: 1635724800,
-        federation_context: None,
-    };
-    vm.set_execution_context(execution_context);
+    // Register contract and create transaction
+    blockchain.contracts.insert(contract.id.clone(), contract.clone());
+
+    let contract_transaction = Transaction::new(
+        sender_did.id.clone(),
+        TransactionType::ContractExecution {
+            contract_id: contract.id.clone(),
+            input_data: HashMap::new(),
+        },
+    );
+
+    blockchain.add_transaction(contract_transaction);
+    blockchain.finalize_block();
+
+    // Process the new block's transactions
+    let transactions_to_process: Vec<Transaction> = blockchain.chain.last()
+        .map(|block| block.transactions.clone())
+        .unwrap_or_default();
     
-    let result = vm.execute_instruction(&OpCode::AllocateResource, Some(1), &metadata);
-    assert!(result.is_ok());
-    println!("VM executed contract successfully.");
+    for transaction in transactions_to_process {
+        blockchain.process_transaction(&transaction)
+            .unwrap_or_else(|e| println!("{}", e));
+    }
+
+    println!("Blockchain and VM integration completed.");
 }
 
 ===================
@@ -1657,19 +2667,24 @@ File: ./backend/Cargo.toml
 [package]
 name = "icn-backend"
 version = "0.1.0"
+authors = ["Your Name <you@example.com>"]
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.28", features = ["full"] }
-axum = "0.6"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
-secp256k1 = { version = "0.22.2", features = ["rand"] }
+tokio = { version = "1.14", features = ["full"] }
+warp = "0.3"
+uuid = { version = "1.0", features = ["v4"] }
+log = "0.4"
+env_logger = "0.9"
 sha2 = "0.10"
+chrono = { version = "0.4", features = ["serde"] }
+secp256k1 = "0.24"
 rand = "0.8"
-tracing = "0.1"
-tracing-subscriber = "0.3"
+
+# Include any other dependencies you are using
+
 
 ===================
 File: ./frontend/package.json
@@ -2049,64 +3064,415 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
 
 
 ===================
-File: ./docs/specifications/core/vm-system.md
+File: ./docs/specifications/core/transaction-system.md
 ===================
 ---
 authors:
 - Matt Faherty
-date: '2024-11-03'
+date: '2024-11-04'
 status: draft
-title: Virtual Machine (VM)
+title: Transaction Lifecycle System
 type: specification
 version: 1.0.0
 ---
 
-# Virtual Machine (VM)
+# Transaction Lifecycle System
 
 ## Overview
-The Virtual Machine (VM) is a core component of the ICN, responsible for executing cooperative-specific contracts. It interprets a set of predefined OpCodes, allowing for a range of operations that support governance, resource allocation, and cooperative management.
+The Transaction Lifecycle System provides a secure, traceable, and immutable process for handling all cooperative transactions within the ICN. This document details the lifecycle of a transaction, from initiation and validation to finalization and storage in the blockchain. The system is designed to ensure consistency, security, and transparency in all cooperative actions.
 
 ### Purpose
-- **Contract Execution**: Execute cooperative contracts securely within ICN.
-- **Reputation Validation**: Enforce reputation-based permissions for contract execution.
-- **Event Emission**: Generate events to log contract activity and state changes.
+- **Immutability**: Maintain a secure and unalterable record of all transactions.
+- **Traceability**: Allow cooperatives to track resource allocation, proposal voting, and other actions.
+- **Accountability**: Ensure all actions align with ICN's governance standards through DID and reputation validation.
 
-## Data Structures
+### Components Involved
+- **Blockchain Module**: Manages the chain of blocks where transactions are stored.
+- **DID System**: Verifies the identities of transaction participants.
+- **Reputation System**: Validates that users have the necessary reputation to execute actions.
 
-### OpCode
-Defines actions supported by the VM, categorized by function:
-- **Arithmetic Operations**: `Add`, `Sub`, `Mul`, `Div`, `Mod`
-- **Stack Operations**: `Push`, `Pop`, `Dup`, `Swap`
-- **Memory Operations**: `Store`, `Load`
-- **Cooperative Operations**: `CreateCooperative`, `JoinCooperative`, `AllocateResource`
-- **Governance Operations**: `CreateProposal`, `CastVote`, `UpdateQuorum`
+---
 
-### Contract
-Defines contract structure, including:
-- **code**: `Vec<(OpCode, Option<i64>)>` - List of OpCodes and optional arguments.
-- **state**: `HashMap<String, i64>` - Contract-specific state.
-- **required_reputation**: `i64` - Minimum reputation required to execute.
-- **cooperative_metadata**: `CooperativeMetadata` - Metadata defining cooperative context.
+## 1. Transaction Lifecycle
 
-## Methods
+### 1.1 Transaction Initiation
 
-### Execute Contract
-Runs a contract step-by-step, processing each OpCode based on available reputation and context.
+1. **Process**:
+   - A transaction is created with the following attributes: `sender`, `receiver`, `amount`, `timestamp`, and `purpose`.
+   - A unique transaction hash is generated using `SHA-256` to prevent duplicates.
 
-### Execute Instruction
-Processes individual OpCodes and modifies stack, memory, or contract state as needed.
+2. **Validation**:
+   - The transaction undergoes an initial validation to confirm that the `sender` has a valid DID and that the specified `amount` respects the cooperative’s resource allocation limits.
 
-### Event Emission
-Generates events for actions like `ResourceAllocated`, `ProposalCreated`, allowing tracking and auditing.
+3. **Attributes**:
+   - **Sender**: The DID of the transaction initiator.
+   - **Receiver**: The DID of the transaction recipient.
+   - **Amount**: The value/resource quantity being transferred.
+   - **Timestamp**: Millisecond timestamp of transaction initiation.
+   - **Purpose**: A brief description of the transaction’s intent.
 
-## Implementation Guidelines
-- **Stack Management**: Ensure consistent stack state for predictable operations.
-- **Error Handling**: Implement clear error messages, especially for common issues like stack underflow.
+### 1.2 Transaction Validation
 
-## Monitoring and Metrics
-- **Execution Logs**: Track each contract’s OpCode flow for debugging.
-- **Event Audits**: Maintain event history for accountability.
+1. **DID Verification**:
+   - Ensure that both the `sender` and `receiver` have valid DIDs. Invalid or nonexistent DIDs will cause the transaction to fail validation.
+   
+2. **Reputation Check**:
+   - Confirm that the `sender` meets any minimum reputation thresholds required by the transaction type.
+   - If the reputation requirement is not met, the transaction is rejected with an error.
 
+3. **Signature Verification**:
+   - The transaction must be signed by the `sender`’s key, verified using ECC (secp256k1) or, when specified, quantum-resistant keys (CRYSTALS-Dilithium).
+   
+4. **Timestamp Verification**:
+   - Check that the `timestamp` is valid and aligns with recent blockchain activity to prevent replay attacks.
+
+### 1.3 Transaction Processing
+
+1. **Hashing**:
+   - Calculate a unique hash for the transaction, incorporating attributes like `sender`, `receiver`, `amount`, and `timestamp`.
+   
+2. **Pending Pool**:
+   - Place the validated transaction in the pending transactions pool until a new block is finalized.
+
+### 1.4 Block Finalization
+
+1. **Block Creation**:
+   - At defined intervals or upon reaching a set number of transactions, pending transactions are bundled into a new block.
+   
+2. **Block Hashing**:
+   - A hash of the new block is computed, linking it to the previous block for chain integrity.
+   
+3. **Chain Update**:
+   - The finalized block is added to the blockchain, and the pending transactions pool is cleared.
+
+---
+
+## 2. Data Structures
+
+### 2.1 Transaction Object
+
+```rust
+Transaction {
+    sender: String,
+    receiver: String,
+    amount: u64,
+    timestamp: u128,
+    hash: String,
+}
+
+
+===================
+File: ./docs/specifications/core/vm-system.md
+===================
+Certainly! Here's the expanded documentation for the Virtual Machine (VM), written in Markdown format and enclosed within a code block so you can easily paste it into your documentation folder.
+
+---
+
+**File: `./docs/specifications/core/vm-system.md`**
+
+```markdown
+---
+authors:
+  - Matt Faherty
+date: '2024-11-03'
+status: draft
+title: Virtual Machine (VM)
+type: specification
+version: 1.1.0
+---
+
+# Virtual Machine (VM) Specification
+
+## 1. Overview
+
+### 1.1 Purpose
+
+The Virtual Machine (VM) is a core component of the Inter-Cooperative Network (ICN), responsible for executing cooperative-specific smart contracts. It interprets a set of predefined OpCodes, allowing for a range of operations that support governance, resource allocation, reputation management, and cooperative administration.
+
+### 1.2 Core Components
+
+- **Instruction Set**: A collection of OpCodes defining operations the VM can execute.
+- **Execution Engine**: Processes instructions, manages the stack, memory, and control flow.
+- **Security Mechanisms**: Enforces permissions, reputation requirements, and resource limits.
+- **Event System**: Generates events during execution for logging and auditing.
+
+## 2. Detailed Specifications
+
+### 2.1 Data Structures
+
+#### 2.1.1 OpCode Enumeration
+
+Defines the set of operations supported by the VM, categorized by functionality:
+
+- **Arithmetic Operations**
+  - `Add`, `Sub`, `Mul`, `Div`, `Mod`
+- **Stack Operations**
+  - `Push`, `Pop`, `Dup`, `Swap`
+- **Memory Operations**
+  - `Store`, `Load`
+- **Control Flow Operations**
+  - `Jump`, `JumpIf`, `Call`, `Return`
+- **Cooperative Operations**
+  - `CreateCooperative`, `JoinCooperative`, `LeaveCooperative`, `AllocateResource`, `TransferResource`
+- **Governance Operations**
+  - `CreateProposal`, `CastVote`, `DelegateVotes`, `ExecuteProposal`, `UpdateQuorum`
+- **Reputation Operations**
+  - `UpdateReputation`, `GetReputation`
+- **Identity Operations**
+  - `VerifyDID`, `UpdateDIDDocument`
+- **System Operations**
+  - `Log`, `Halt`, `EmitEvent`, `GetTimestamp`, `GetCaller`
+
+#### 2.1.2 Contract Structure
+
+```rust
+struct Contract {
+    id: String,
+    code: Vec<(OpCode, Option<i64>)>,
+    state: HashMap<String, i64>,
+    required_reputation: i64,
+    cooperative_metadata: CooperativeMetadata,
+    version: String,
+    dependencies: Vec<String>,
+    permissions: Vec<String>,
+}
+```
+
+- **id**: Unique identifier for the contract.
+- **code**: Sequence of OpCodes and optional arguments.
+- **state**: Persistent state specific to the contract.
+- **required_reputation**: Minimum reputation required to execute the contract.
+- **cooperative_metadata**: Metadata providing context for the cooperative.
+- **version**: Contract versioning for updates and compatibility.
+- **dependencies**: List of other contracts or libraries required.
+- **permissions**: Access control permissions required.
+
+#### 2.1.3 Execution Context
+
+```rust
+struct ExecutionContext {
+    caller_did: String,
+    cooperative_id: String,
+    timestamp: u64,
+    block_number: u64,
+    reputation_score: i64,
+    permissions: Vec<String>,
+}
+```
+
+- **caller_did**: DID of the entity invoking the contract.
+- **cooperative_id**: Identifier of the cooperative context.
+- **timestamp**: Current timestamp of execution.
+- **block_number**: Blockchain block number.
+- **reputation_score**: Reputation score of the caller.
+- **permissions**: Permissions of the caller.
+
+### 2.2 Interfaces
+
+#### 2.2.1 VM Methods
+
+##### Execute Contract
+
+- **Purpose**: Executes a contract from start to finish, enforcing all constraints.
+- **Input**: `Contract`, `ExecutionContext`
+- **Process**:
+  1. **Permission Check**: Verify caller has necessary permissions.
+  2. **Reputation Validation**: Ensure caller's reputation meets the requirement.
+  3. **Initialize Stack and Memory**: Set up execution environment.
+  4. **Instruction Execution**: Process OpCodes sequentially.
+  5. **Event Emission**: Generate events as specified.
+  6. **State Update**: Persist any changes to the contract state.
+- **Output**: Execution result, updated state, events generated.
+
+##### Execute Instruction
+
+- **Purpose**: Processes a single OpCode and modifies the VM state accordingly.
+- **Input**: `OpCode`, `Option<i64>`
+- **Process**:
+  - Handle operation based on the type of OpCode.
+  - Update stack, memory, or control flow as needed.
+- **Output**: Updated VM state.
+
+### 2.3 Behaviors
+
+#### 2.3.1 Stack Management
+
+- **Structure**: LIFO (Last-In-First-Out) stack of 64-bit integers.
+- **Operations**:
+  - **Push**: Add value to the top of the stack.
+  - **Pop**: Remove and return the top value.
+  - **Dup**: Duplicate the top value.
+  - **Swap**: Swap the top two values.
+
+#### 2.3.2 Memory Management
+
+- **Structure**: Key-value store (`HashMap<String, i64>`) for temporary storage.
+- **Operations**:
+  - **Store**: Save a value with a specified key.
+  - **Load**: Retrieve a value by key.
+
+#### 2.3.3 Control Flow
+
+- **Jump**: Redirect execution to a specific instruction index.
+- **JumpIf**: Conditional jump based on the top of the stack.
+- **Call**: Invoke a function or subroutine.
+- **Return**: Exit from a function or contract execution.
+
+#### 2.3.4 Error Handling
+
+- **Exception Types**:
+  - **Stack Underflow/Overflow**
+  - **Invalid Opcode**
+  - **Permission Denied**
+  - **Reputation Insufficient**
+  - **Runtime Errors**: Division by zero, invalid memory access.
+
+- **Handling Strategy**:
+  - Execution halts on errors.
+  - Generate error events with detailed messages.
+  - Rollback any state changes made during execution.
+
+### 2.4 Security Model
+
+- **Reputation Enforcement**: Contracts specify minimum reputation; the VM enforces this before execution.
+- **Permission Checks**: Caller permissions are validated against contract requirements.
+- **Resource Limits**:
+  - **Instruction Limit**: Maximum number of instructions per execution to prevent infinite loops.
+  - **Stack Depth Limit**: Prevent stack overflows.
+  - **Memory Usage Limit**: Cap on memory allocation.
+
+- **Isolation**: Each contract execution is sandboxed, preventing interference with other contracts or global state.
+
+## 3. Implementation Guidelines
+
+### 3.1 Performance Requirements
+
+- **Efficiency**: Optimize instruction execution for speed.
+- **Scalability**: Handle multiple concurrent executions.
+- **Lightweight**: Minimize resource consumption.
+
+### 3.2 Security Requirements
+
+- **Determinism**: Ensure contract execution is deterministic across all nodes.
+- **Validation**: Strictly validate all inputs and OpCodes.
+- **Auditability**: Maintain detailed logs and event histories.
+
+### 3.3 Error Handling
+
+- **Graceful Termination**: Contracts should fail safely without crashing the VM.
+- **Clear Messaging**: Provide informative error messages for debugging.
+
+## 4. Testing Requirements
+
+- **Unit Tests**: Cover individual OpCodes and VM operations.
+- **Integration Tests**: Test full contract executions in various scenarios.
+- **Security Tests**: Include tests for permission enforcement and reputation checks.
+- **Performance Tests**: Benchmark execution times and resource usage.
+
+## 5. Monitoring and Metrics
+
+- **Execution Logs**: Record each instruction executed.
+- **Event Logs**: Capture all events emitted during execution.
+- **Error Logs**: Record detailed information about any errors encountered.
+- **Metrics**:
+  - Execution time per contract.
+  - Resource usage statistics.
+  - Frequency of specific OpCodes.
+
+## 6. Future Considerations
+
+- **Extensibility**: Allow for new OpCodes and features to be added.
+- **Language Support**: Develop higher-level languages that compile down to VM bytecode.
+- **Interoperability**: Enable interaction with contracts on other blockchains or VMs.
+- **Optimizations**: Implement Just-In-Time (JIT) compilation or other optimizations.
+
+## Appendix
+
+### A. OpCode Definitions
+
+Provide detailed descriptions of each OpCode, including its function, expected stack state, and any arguments.
+
+#### A.1 Arithmetic Operations
+
+- **Add**
+  - **Function**: Pops two values from the stack, pushes their sum.
+  - **Stack Before**: `[ ... , a, b ]`
+  - **Stack After**: `[ ... , a + b ]`
+- **Sub**
+  - **Function**: Pops two values, pushes the result of `a - b`.
+  - **Stack Before**: `[ ... , a, b ]`
+  - **Stack After**: `[ ... , a - b ]`
+- *(Continue for other arithmetic OpCodes)*
+
+#### A.2 Stack Operations
+
+- *(Define `Push`, `Pop`, `Dup`, `Swap`)*
+
+#### A.3 Memory Operations
+
+- **Store**
+  - **Function**: Stores a value in memory with a specified key.
+  - **Arguments**: Key (from stack or instruction argument).
+  - **Operation**:
+    1. Pop value from stack.
+    2. Use key to store the value in memory.
+
+- **Load**
+  - **Function**: Loads a value from memory onto the stack.
+  - **Arguments**: Key.
+  - **Operation**:
+    1. Retrieve value associated with key.
+    2. Push value onto the stack.
+
+#### A.4 Control Flow Operations
+
+- *(Define `Jump`, `JumpIf`, `Call`, `Return`)*
+
+#### A.5 Cooperative Operations
+
+- **CreateCooperative**
+  - **Function**: Initiates a new cooperative.
+  - **Requirements**: Caller must have sufficient reputation and permissions.
+  - **Effect**: Emits `CooperativeCreated` event.
+
+- *(Continue for other cooperative OpCodes)*
+
+#### A.6 Governance Operations
+
+- *(Define `CreateProposal`, `CastVote`, etc.)*
+
+#### A.7 System Operations
+
+- **Log**
+  - **Function**: Logs a message or value for debugging.
+  - **Operation**:
+    1. Pop value from stack.
+    2. Record value in execution logs.
+
+- **Halt**
+  - **Function**: Stops execution of the contract.
+  - **Effect**: Returns control to the caller.
+
+## References
+
+- **ICN Architecture Overview**
+- **Reputation System Specification**
+- **Governance System Specification**
+
+```
+
+---
+
+You can save this file as `vm-system.md` in your `./docs/specifications/core/` directory.
+
+**Next Steps:**
+
+- **Review the OpCode Definitions:** Ensure that all required operations are defined and that their behaviors align with the needs of your cooperatives.
+- **Expand the Appendix:** Add detailed definitions for each OpCode, especially for custom cooperative and governance operations.
+- **Integrate with Other Systems:** Cross-reference with the Identity System and Reputation System specifications to ensure consistent interactions.
+- **Implement Security Measures:** Consider any additional security requirements specific to your use case.
+
+**Let me know if you'd like to further refine any section or if you have additional components you'd like to develop!**
 
 ===================
 File: ./docs/specifications/core/2024-11-01-reputation-system.md
@@ -2161,9 +3527,16 @@ version: 1.0.0
 ===================
 File: ./docs/specifications/core/identity-system.md
 ===================
+Apologies for the oversight. Here is the complete documentation for the Identity System, entirely within a code block so you can easily copy and paste it into your documentation folder.
+
+---
+
+**File: `./docs/specifications/core/identity-system.md`**
+
+```markdown
 ---
 authors:
-- Matt Faherty
+  - Your Name
 date: '2024-11-03'
 status: draft
 title: Identity System
@@ -2171,43 +3544,362 @@ type: specification
 version: 1.0.0
 ---
 
-# Identity System
+# Identity System Specification
 
-## Overview
-The Identity System manages Decentralized Identifiers (DIDs) for ICN members, cooperatives, and nodes, enabling secure and pseudonymous interactions. It supports both ECC keys and quantum-resistant CRYSTALS-Dilithium and CRYSTALS-Kyber keys for future-proof security.
+## 1. Overview
 
-### Purpose
-- **Unique Identification**: Ensures each member and cooperative has a unique, verifiable identifier.
-- **Secure Interactions**: Supports ECC and post-quantum cryptography for verification and encryption.
-- **Transition to Quantum Resistance**: Gradually shift to quantum-resistant keys where needed.
+### 1.1 Purpose
 
-## Data Structures
+The Identity System is responsible for managing Decentralized Identifiers (DIDs) within the Inter-Cooperative Network (ICN). It ensures secure authentication and authorization for users, cooperatives, and nodes by leveraging cryptographic key pairs. The system supports both Elliptic Curve Cryptography (ECC) and quantum-resistant algorithms to future-proof security.
 
-### DID
-- **id**: `String` - Unique identifier for each entity.
-- **public_key**: `PublicKey` - Public key for DID verification.
-- **metadata** (planned): Optional metadata, including reputation and cooperative membership.
+### 1.2 Core Components
 
-### Key Management
-- **ECC (Secp256k1)**: Standard cryptographic key type, used initially for DID verification.
-- **Quantum-Resistant Keys**: CRYSTALS-Dilithium (signatures) and CRYSTALS-Kyber (key exchange) for higher security.
+- **DID Management**: Creation, retrieval, and update of DIDs.
+- **Authentication Service**: Verifies identities through cryptographic signatures.
+- **Authorization Mechanism**: Controls access to resources based on roles and permissions.
 
-## Methods
+## 2. Detailed Specifications
 
-### DID Generation
-Generates a new DID with a unique identifier and key pair, optionally quantum-resistant.
+### 2.1 Data Structures
 
-### DID Serialization
-Provides secure, limited exposure by serializing only public data (ID, public key).
+#### 2.1.1 DID Document
 
-## Security Model
-- **Hybrid Key Structure**: Supports both ECC and quantum-resistant cryptography.
-- **DID Rotation**: Allows key rotation to prevent unauthorized access after key compromise.
+```json
+{
+  "id": "did:icn:unique_identifier",
+  "publicKey": "base64_encoded_public_key",
+  "authentication": "authentication_method",
+  "created": "timestamp",
+  "updated": "timestamp"
+}
+```
 
-## Future Extensions
-- **DID Metadata Integration**: Add reputation and cooperative affiliation metadata within DIDs.
-- **Cross-Cooperative Verification**: Enables federation of DIDs across cooperative networks.
+- **id**: Unique identifier following the `did:icn:` namespace.
+- **publicKey**: The public key associated with the DID, encoded in base64.
+- **authentication**: Method used for verifying the DID owner.
+- **created**: Timestamp of when the DID was created.
+- **updated**: Timestamp of the last update to the DID document.
 
+### 2.2 Interfaces
+
+#### 2.2.1 API Endpoints
+
+##### Create DID
+
+- **Endpoint**: `POST /api/identity/did`
+- **Description**: Registers a new DID in the network.
+- **Request Body**:
+
+  ```json
+  {
+    "publicKey": "base64_encoded_public_key"
+  }
+  ```
+
+- **Response**:
+
+  ```json
+  {
+    "did": "did:icn:unique_identifier"
+  }
+  ```
+
+##### Resolve DID
+
+- **Endpoint**: `GET /api/identity/did/{did}`
+- **Description**: Retrieves the DID document for the specified DID.
+- **Response**:
+
+  ```json
+  {
+    "didDocument": {
+      "id": "did:icn:unique_identifier",
+      "publicKey": "base64_encoded_public_key",
+      "authentication": "authentication_method",
+      "created": "timestamp",
+      "updated": "timestamp"
+    }
+  }
+  ```
+
+##### Authenticate
+
+- **Endpoint**: `POST /api/identity/authenticate`
+- **Description**: Verifies the identity and issues an authentication token.
+- **Request Body**:
+
+  ```json
+  {
+    "did": "did:icn:unique_identifier",
+    "signature": "base64_encoded_signature",
+    "nonce": "server_provided_nonce"
+  }
+  ```
+
+- **Response**:
+
+  ```json
+  {
+    "token": "jwt_token"
+  }
+  ```
+
+### 2.3 Behaviors
+
+#### 2.3.1 DID Creation Workflow
+
+1. **Key Generation**: The user generates a key pair locally, choosing between ECC or quantum-resistant algorithms.
+2. **Public Key Submission**: The user sends the public key to the Identity System via the `Create DID` endpoint.
+3. **DID Registration**: The system creates a unique DID, stores the DID document, and returns the DID to the user.
+
+#### 2.3.2 Authentication Workflow
+
+1. **Nonce Request**: The user requests a nonce from the server to prevent replay attacks.
+2. **Signature Generation**: The user signs the nonce with their private key.
+3. **Authentication Request**: The user sends the DID, signature, and nonce to the server.
+4. **Verification**: The server verifies the signature using the public key from the DID document.
+5. **Token Issuance**: Upon successful verification, the server issues a JWT token for authenticated sessions.
+
+## 3. Implementation Guidelines
+
+### 3.1 Performance Requirements
+
+- **Scalability**: The system should handle a large number of DID registrations and authentication requests concurrently.
+- **Low Latency**: Authentication and DID resolution should occur with minimal delay to ensure a smooth user experience.
+
+### 3.2 Security Requirements
+
+- **Key Security**: Users must securely store their private keys; the system should never have access to private keys.
+- **Replay Attack Prevention**: Use nonces or timestamps during authentication to prevent replay attacks.
+- **Quantum Resistance**: Support for quantum-resistant algorithms like CRYSTALS-Dilithium and CRYSTALS-Kyber should be implemented to future-proof the system.
+
+### 3.3 Error Handling
+
+- **Detailed Error Messages**: Provide clear and actionable error messages without revealing sensitive information.
+- **Failure Modes**: Gracefully handle failures in DID creation, resolution, and authentication.
+
+## 4. Testing Requirements
+
+- **Unit Tests**: Cover all functions related to DID management and authentication.
+- **Integration Tests**: Test the interaction between the Identity System and other modules like the Reputation System and Governance Module.
+- **Security Tests**: Perform vulnerability assessments and penetration testing to ensure robust security measures are in place.
+
+## 5. Monitoring and Metrics
+
+- **Audit Logs**: Maintain logs for DID creation, updates, and authentication attempts for auditing purposes.
+- **Performance Metrics**: Monitor response times for API endpoints and system load.
+- **Security Alerts**: Implement alerts for suspicious activities, such as repeated failed authentication attempts.
+
+## 6. Future Considerations
+
+- **DID Deactivation**: Provide a mechanism for users to deactivate or revoke their DIDs in case of key compromise.
+- **Metadata Integration**: Include optional metadata in DID documents, such as reputation scores and cooperative affiliations.
+- **Cross-Network Compatibility**: Ensure the Identity System is compatible with other decentralized networks for broader interoperability.
+```
+
+---
+
+You can save this file as `identity-system.md` in your `./docs/specifications/core/` directory.
+
+Would you like me to provide documentation for other components as well? If so, please let me know which one you'd like to work on next, and I'll prepare it accordingly.
+
+===================
+File: ./docs/specifications/core/proof-of-cooperation.md
+===================
+Certainly! Here is the documentation for the **Proof of Cooperation Consensus Mechanism**, focusing on security mechanisms, blockchain components, and efficiency considerations. The documentation is written in Markdown format and enclosed in a code block so you can easily paste it into your documentation folder.
+
+---
+
+**File: `./docs/specifications/core/proof-of-cooperation.md`**
+
+```markdown
+---
+authors:
+  - Matt Faherty
+date: '2024-11-03'
+status: draft
+title: Proof of Cooperation Consensus Mechanism
+type: specification
+version: 1.0.0
+---
+
+# Proof of Cooperation (PoC) Consensus Mechanism
+
+## 1. Overview
+
+### 1.1 Purpose
+
+The Proof of Cooperation (PoC) is a consensus mechanism designed specifically for the Inter-Cooperative Network (ICN) to facilitate secure, efficient, and cooperative blockchain operations. Unlike traditional consensus mechanisms such as Proof of Work (PoW) or Proof of Stake (PoS), PoC emphasizes collaboration, democratic participation, and reputation-based accountability to align with cooperative principles.
+
+### 1.2 Core Principles
+
+- **Democratic Participation**: Ensures inclusive decision-making by allowing each node, representing a cooperative or individual within ICN, to contribute to consensus.
+- **Incentivized Cooperation**: Rewards are based on positive contributions to the cooperative ecosystem rather than computational power or wealth.
+- **Reputation-Driven Accountability**: Reputation scores influence participation and voting power, holding nodes accountable to ethical standards.
+- **Environmental Sustainability**: Eliminates energy-intensive computations, maintaining an energy-efficient model.
+
+## 2. Detailed Specifications
+
+### 2.1 System Components
+
+#### 2.1.1 Node Types and Roles
+
+- **Validator Nodes**: Nodes that meet certain cooperative engagement criteria (e.g., reputation threshold) and participate in validating transactions and blocks.
+- **Observer Nodes**: Nodes that maintain a copy of the blockchain for transparency and auditing but do not participate in validation.
+- **Coordinator Node**: A validator node selected per consensus round to organize and propose blocks. Selection is based on a weighted lottery tied to reputation scores.
+
+#### 2.1.2 Reputation System Integration
+
+- **Reputation-Weighted Voting**: Nodes with higher reputation have slightly increased influence in the consensus process, capped to prevent centralization.
+- **Dynamic Recalibration**: Reputation scores adjust based on ongoing contributions and decay over time to encourage continuous engagement.
+
+### 2.2 Consensus Process
+
+#### 2.2.1 Transaction Verification
+
+1. **Submission**: Nodes submit transactions to the network.
+2. **Preliminary Checks**: The Coordinator Node performs initial validation of transactions.
+3. **Broadcast**: Validated transactions are broadcasted to Validator Nodes for multi-signature approval.
+
+#### 2.2.2 Voting Round Execution
+
+1. **Block Proposal**: The Coordinator Node assembles a candidate block with selected transactions.
+2. **Reputation-Weighted Voting**:
+   - Each Validator Node votes on the proposed block.
+   - Votes are weighted based on reputation scores.
+   - Voting power is capped to prevent undue influence.
+3. **Consensus Threshold**: A supermajority (e.g., 66%) of weighted votes is required for block approval.
+
+#### 2.2.3 Block Finalization
+
+1. **Multi-Signature Collection**: Validator Nodes sign the approved block.
+2. **Block Addition**: The signed block is added to the blockchain and propagated to the network.
+3. **Reputation Adjustment**: Validators gain reputation for participation or lose reputation for misconduct.
+
+### 2.3 Security Mechanisms
+
+#### 2.3.1 Cryptographic Security
+
+- **Asymmetric Encryption**: Utilizes public/private key pairs for secure communication and transaction signing.
+- **Digital Signatures**: Ensures authenticity and non-repudiation of transactions and blocks.
+- **Hash Functions**: Employs secure hash algorithms for data integrity.
+
+#### 2.3.2 Sybil Attack Prevention
+
+- **Reputation Requirements**: High reputation thresholds for Validator Nodes make it difficult for malicious actors to gain influence.
+- **Identity Verification**: DIDs are tied to real-world cooperative entities, adding authenticity.
+
+#### 2.3.3 Byzantine Fault Tolerance
+
+- **Consensus Thresholds**: Requires a supermajority for block approval, tolerating up to one-third faulty or malicious nodes.
+- **Multi-Signature Validation**: Collective block signing prevents unilateral block creation.
+
+#### 2.3.4 Double-Spending Prevention
+
+- **Transaction Finality**: Once confirmed, transactions are immutable.
+- **Sequential Ordering**: Transactions are time-stamped and ordered to prevent conflicts.
+
+#### 2.3.5 Integrity Audits and Penalties
+
+- **Automated Audits**: Regular checks ensure protocol compliance.
+- **Reputation Penalties**: Misconduct results in reputation loss.
+- **Node Exclusion**: Severe violations can lead to temporary or permanent removal.
+
+#### 2.3.6 Quantum-Resistant Cryptography
+
+- **Post-Quantum Algorithms**: Implements CRYSTALS-Kyber and CRYSTALS-Dilithium for future-proof security.
+
+### 2.4 Blockchain Components
+
+#### 2.4.1 Block Structure
+
+- **Block Header**:
+  - **Previous Block Hash**: Links the block to the chain.
+  - **Merkle Root**: Summarizes all transactions.
+  - **Timestamp**: Time of block creation.
+  - **Coordinator Signature**: Validates the Coordinator Node's role.
+- **Block Body**:
+  - **Transactions**: List of validated transactions.
+  - **Validator Signatures**: Multi-signatures from Validator Nodes.
+
+#### 2.4.2 Transactions
+
+- **Standard Transactions**: Asset transfers between participants.
+- **Governance Transactions**: Proposals and votes for network changes.
+- **Metadata**: Additional information for transparency.
+
+#### 2.4.3 State Management
+
+- **State Database**: Maintains current account states.
+- **State Transitions**: Defined by executed transactions.
+
+### 2.5 Efficiency Considerations
+
+#### 2.5.1 Consensus Efficiency
+
+- **Lightweight Process**: Eliminates energy-intensive computations.
+- **Fast Finality**: Quick transaction confirmation due to cooperative agreement.
+
+#### 2.5.2 Scalability Solutions
+
+- **Sharding**: Divides the network into smaller groups processing transactions in parallel.
+- **Layer-2 Solutions**: Off-chain protocols handle transactions to reduce main chain load.
+
+#### 2.5.3 Resource Optimization
+
+- **Minimal Hardware Requirements**: Encourages broader participation.
+- **Bandwidth Management**: Efficient protocols reduce network load.
+
+## 3. Implementation Guidelines
+
+### 3.1 Performance Requirements
+
+- **Transaction Throughput**: Optimize for high throughput suitable for network demands.
+- **Latency Minimization**: Ensure minimal delay in consensus rounds.
+
+### 3.2 Security Requirements
+
+- **Immutable Ledger**: Blocks are immutable once added.
+- **Access Control**: Only authorized nodes can validate and propose blocks.
+- **Data Integrity**: Secure cryptographic practices ensure data integrity.
+
+### 3.3 Error Handling
+
+- **Invalid Transactions**: Provide clear error messages upon rejection.
+- **Fork Handling**: Establish protocols for resolving chain forks.
+
+## 4. Testing Requirements
+
+- **Unit Tests**: Cover consensus mechanisms, transaction validation, and security features.
+- **Integration Tests**: Test interactions with other systems like the Identity and Reputation Systems.
+- **Stress Tests**: Simulate high network load to test scalability.
+
+## 5. Monitoring and Metrics
+
+- **Consensus Monitoring**: Track consensus round performance and validator participation.
+- **Security Audits**: Regular audits to detect and mitigate threats.
+- **Performance Metrics**: Monitor transaction rates and block times.
+
+## 6. Future Considerations
+
+- **Consensus Mechanism Evolution**: Continuously evaluate and improve the PoC mechanism.
+- **Interoperability**: Explore compatibility with other networks.
+- **Smart Contract Integration**: Enhance cooperative functions through smart contracts.
+
+```
+
+---
+
+You can save this file as `proof-of-cooperation.md` in your `./docs/specifications/core/` directory.
+
+**Note:** This document provides a detailed specification of the Proof of Cooperation consensus mechanism, focusing on security mechanisms, blockchain components, and efficiency considerations, as per your request.
+
+**Next Steps:**
+
+- **Review and Edit**: Please review the document and make any necessary adjustments or additions specific to your project's needs.
+- **Integration**: Incorporate this documentation into your project to guide development and ensure alignment with the designed consensus mechanism.
+
+Let me know if you'd like assistance with any other components or further details.
 
 ===================
 File: ./docs/specifications/core/reputation-system.md
