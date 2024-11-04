@@ -6,6 +6,8 @@ use futures_util::{StreamExt, SinkExt};
 use url::Url;
 use std::error::Error;
 use serde_json::json;
+use std::sync::Arc;
+use tokio::sync::mpsc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -22,49 +24,51 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Connected!");
 
     let (mut write, mut read) = ws_stream.split();
+    let (tx, mut rx) = mpsc::channel(32);
+    let tx = Arc::new(tx);
 
     // Spawn message listener
-    let read_task = tokio::spawn(async move {
-        println!("Listening for blockchain events...");
-        while let Some(message) = read.next().await {
-            match message {
-                Ok(msg) => {
-                    println!("\nReceived blockchain event: {}", msg);
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(msg.to_string().as_str()) {
-                        println!("Parsed event: {}", serde_json::to_string_pretty(&json).unwrap());
+    let read_task = {
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            println!("Listening for blockchain events...");
+            while let Some(message) = read.next().await {
+                match message {
+                    Ok(msg) => {
+                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(msg.to_string().as_str()) {
+                            println!("\n🔔 Received event:");
+                            println!("{}", serde_json::to_string_pretty(&parsed).unwrap());
+                            println!("\nPress Enter to show menu...");
+                            let _ = tx.send(()).await;
+                        }
                     }
+                    Err(e) => eprintln!("Error reading message: {}", e),
                 }
-                Err(e) => eprintln!("Error reading message: {}", e),
             }
-        }
-    });
+        })
+    };
+
+    // Print initial menu
+    print_menu();
 
     // Interactive test menu
     loop {
-        println!("\nBlockchain Test Menu:");
-        println!("1. Register as validator");
-        println!("2. Submit transaction");
-        println!("3. Query blockchain status");
-        println!("4. Propose block");
-        println!("5. Submit vote");
-        println!("6. Check reputation");
-        println!("q. Quit");
-
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
 
         match input.trim() {
             "1" => {
                 let msg = json!({
-                    "type": "register_validator",
+                    "type": "RegisterValidator",
                     "did": "did:icn:validator1",
                     "initial_reputation": 100
                 });
                 write.send(Message::Text(msg.to_string())).await?;
+                println!("📤 Sent validator registration request");
             }
             "2" => {
                 let msg = json!({
-                    "type": "submit_transaction",
+                    "type": "SubmitTransaction",
                     "transaction": {
                         "sender": "did:icn:validator1",
                         "receiver": "did:icn:user1",
@@ -73,54 +77,81 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
                 });
                 write.send(Message::Text(msg.to_string())).await?;
+                println!("📤 Sent transaction");
             }
             "3" => {
                 let msg = json!({
-                    "type": "query_status"
+                    "type": "QueryStatus"
                 });
                 write.send(Message::Text(msg.to_string())).await?;
+                println!("📤 Sent status query");
             }
             "4" => {
                 let msg = json!({
-                    "type": "propose_block",
+                    "type": "ProposeBlock",
                     "block": {
                         "transactions": [],
                         "timestamp": chrono::Utc::now().timestamp()
                     }
                 });
                 write.send(Message::Text(msg.to_string())).await?;
+                println!("📤 Sent block proposal");
             }
             "5" => {
                 let msg = json!({
-                    "type": "submit_vote",
+                    "type": "SubmitVote",
                     "vote": {
                         "block_hash": "sample_hash",
                         "approve": true
                     }
                 });
                 write.send(Message::Text(msg.to_string())).await?;
+                println!("📤 Sent vote");
             }
             "6" => {
                 let msg = json!({
-                    "type": "query_reputation",
+                    "type": "QueryReputation",
                     "did": "did:icn:validator1"
                 });
                 write.send(Message::Text(msg.to_string())).await?;
+                println!("📤 Sent reputation query");
             }
             "q" => {
                 break;
             }
-            _ => println!("Invalid option"),
+            "h" => {
+                print_menu();
+            }
+            _ => {
+                println!("Invalid option. Press 'h' for menu");
+            }
         }
 
-        // Small delay to allow for response processing
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        // Wait for a response or timeout
+        tokio::select! {
+            Some(_) = rx.recv() => {
+                // Response was handled by the read task
+            }
+            _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
+                println!("Waiting for response...");
+            }
+        }
     }
 
-    // Wait for the read task to complete
-    if let Err(e) = read_task.await {
-        eprintln!("Error in read task: {}", e);
-    }
-
+    // Cancel the read task
+    read_task.abort();
     Ok(())
+}
+
+fn print_menu() {
+    println!("\n🔷 Blockchain Test Menu:");
+    println!("1. Register as validator");
+    println!("2. Submit transaction");
+    println!("3. Query blockchain status");
+    println!("4. Propose block");
+    println!("5. Submit vote");
+    println!("6. Check reputation");
+    println!("h. Show this menu");
+    println!("q. Quit");
+    println!("\nEnter your choice:");
 }
