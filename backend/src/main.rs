@@ -1,4 +1,4 @@
-// backend/src/main.rs
+// src/main.rs
 
 mod blockchain;
 mod identity;
@@ -10,7 +10,6 @@ mod websocket;
 mod consensus;
 
 use std::sync::{Arc, Mutex};
-use std::convert::Infallible;
 use warp::Filter;
 use crate::websocket::WebSocketHandler;
 use crate::blockchain::Blockchain;
@@ -23,13 +22,14 @@ async fn main() {
     let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
     let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
     
+    // Create WebSocket handler
+    let ws_handler = Arc::new(WebSocketHandler::new());
+    
     let blockchain = Arc::new(Mutex::new(Blockchain::new(
         identity_system.clone(),
-        reputation_system.clone()
+        reputation_system.clone(),
+        ws_handler.clone()
     )));
-
-    // Create WebSocket handler
-    let ws_handler = Arc::new(WebSocketHandler::new(blockchain.clone()));
 
     // WebSocket route
     let ws_handler = ws_handler.clone();
@@ -38,11 +38,8 @@ async fn main() {
         .and(warp::header::<String>("X-DID"))
         .and(warp::any().map(move || ws_handler.clone()))
         .map(|ws: warp::ws::Ws, did: String, handler: Arc<WebSocketHandler>| {
-            ws.on_upgrade(move |socket| {
-                let handler = handler.clone();
-                async move {
-                    handler.handle_connection(socket, did).await;
-                }
+            ws.on_upgrade(move |socket| async move {
+                handler.handle_connection(socket, did).await;
             })
         });
 

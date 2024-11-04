@@ -1,210 +1,119 @@
+// src/consensus/types.rs
+
 use std::collections::HashMap;
+use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use crate::blockchain::Block;
 
-/// Represents a validator node in the network
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Validator {
-    /// The validator's DID
+pub struct ValidatorInfo {
     pub did: String,
-    
-    /// Current reputation score
     pub reputation: i64,
-    
-    /// Block number of the last block this validator proposed
-    pub last_block_proposed: u64,
-    
-    /// Number of consecutive validation rounds missed
-    pub consecutive_missed_validations: u32,
-    
-    /// Whether the validator is currently active
-    pub is_active: bool,
-    
-    /// The validator's voting power in the current round
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub voting_power: Option<f64>,
+    pub voting_power: f64,
+    pub last_active_round: u64,
+    pub consecutive_missed_rounds: u32,
+    pub total_blocks_validated: u64,
+    pub performance_score: f64,
 }
 
-impl Validator {
-    pub fn new(did: String, initial_reputation: i64) -> Self {
-        Self {
-            did,
-            reputation: initial_reputation,
-            last_block_proposed: 0,
-            consecutive_missed_validations: 0,
-            is_active: true,
-            voting_power: None,
-        }
-    }
-
-    pub fn calculate_voting_power(&mut self, total_reputation: i64) {
-        self.voting_power = Some(self.reputation as f64 / total_reputation as f64);
-    }
-
-    pub fn is_eligible(&self, min_reputation: i64) -> bool {
-        self.is_active && self.reputation >= min_reputation
-    }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsensusRoundStats {
+    pub total_voting_power: f64,
+    pub participation_rate: f64,
+    pub approval_rate: f64,
+    pub round_duration_ms: u64,
+    pub validator_count: usize,
 }
 
-/// Represents the type of consensus message being sent
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum ConsensusMessage {
-    /// Proposal for a new block
-    BlockProposal(Block),
-    
-    /// Vote for a proposed block
-    Vote {
-        /// The voting validator's DID
-        validator: String,
-        
-        /// The hash of the block being voted on
-        block_hash: String,
-        
-        /// Whether the validator approves the block
-        approve: bool,
-    },
-    
-    /// Request to start a new round
-    StartRound {
-        round_number: u64,
-    },
-    
-    /// Notification that a round has been finalized
-    RoundFinalized {
-        round_number: u64,
-        block_hash: String,
-    },
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeightedVote {
+    pub validator: String,
+    pub approve: bool,
+    pub voting_power: f64,
+    pub timestamp: DateTime<Utc>,
+    pub signature: String,
 }
 
-/// Status of a consensus round
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum RoundStatus {
-    /// Block is being proposed by coordinator
-    Proposing,
-    
-    /// Validators are voting on proposed block
-    Voting,
-    
-    /// Round is being finalized
-    Finalizing,
-    
-    /// Round completed successfully
-    Completed,
-    
-    /// Round failed (timeout or other error)
-    Failed,
-}
-
-/// Represents a single round of consensus
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConsensusRound {
-    /// Unique round number
     pub round_number: u64,
-    
-    /// DID of the round's coordinator
     pub coordinator: String,
-    
-    /// The block being proposed (if any)
-    pub proposed_block: Option<Block>,
-    
-    /// Map of validator DIDs to their votes
-    pub votes: HashMap<String, bool>,
-    
-    /// Current status of the round
+    pub start_time: DateTime<Utc>,
+    pub timeout: DateTime<Utc>,
     pub status: RoundStatus,
-    
-    /// Timestamp when the round started
-    pub start_time: u64,
-    
-    /// Maximum duration for the round in seconds
-    pub timeout: u64,
+    pub proposed_block: Option<Block>,
+    pub votes: HashMap<String, WeightedVote>,
+    pub stats: ConsensusRoundStats,
 }
 
 impl ConsensusRound {
-    pub fn new(round_number: u64, coordinator: String, timeout: u64, start_time: u64) -> Self {
-        Self {
-            round_number,
-            coordinator,
-            proposed_block: None,
-            votes: HashMap::new(),
-            status: RoundStatus::Proposing,
-            start_time,
-            timeout,
-        }
+    pub fn duration_ms(&self) -> i64 {
+        (Utc::now() - self.start_time).num_milliseconds()
     }
 
-    pub fn has_voted(&self, validator_did: &str) -> bool {
-        self.votes.contains_key(validator_did)
+    pub fn is_timed_out(&self) -> bool {
+        Utc::now() > self.timeout
     }
 
-    pub fn add_vote(&mut self, validator_did: String, approve: bool) {
-        self.votes.insert(validator_did, approve);
+    pub fn get_participation_rate(&self, total_voting_power: f64) -> f64 {
+        let votes_power: f64 = self.votes.values()
+            .map(|v| v.voting_power)
+            .sum();
+        votes_power / total_voting_power
     }
 
     pub fn get_approval_rate(&self) -> f64 {
-        if self.votes.is_empty() {
+        let total_votes_power: f64 = self.votes.values()
+            .map(|v| v.voting_power)
+            .sum();
+        
+        if total_votes_power <= 0.0 {
             return 0.0;
         }
-        
-        let approve_count = self.votes.values().filter(|&&approve| approve).count();
-        approve_count as f64 / self.votes.len() as f64
-    }
 
-    pub fn is_timed_out(&self, current_time: u64) -> bool {
-        current_time - self.start_time > self.timeout
+        let approval_power: f64 = self.votes.values()
+            .filter(|v| v.approve)
+            .map(|v| v.voting_power)
+            .sum();
+
+        approval_power / total_votes_power
     }
 }
 
-/// Configuration for the consensus mechanism
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum RoundStatus {
+    Proposing,
+    Voting,
+    Finalizing,
+    Completed,
+    Failed,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConsensusConfig {
-    /// Minimum number of validators required for consensus
-    pub min_validators: usize,
-    
-    /// Threshold of votes required to approve a block (0.0 - 1.0)
-    pub vote_threshold: f64,
-    
-    /// Round timeout in seconds
-    pub round_timeout: u64,
-    
-    /// Minimum reputation required to be a validator
-    pub min_reputation: i64,
-    
-    /// Base reward for participating in consensus
-    pub participation_reward: i64,
-    
-    /// Extra reward for being the coordinator
-    pub coordinator_reward: i64,
-    
-    /// Penalty for missing validation
-    pub missed_validation_penalty: i64,
+    pub min_validator_reputation: i64,
+    pub max_voting_power: f64,
+    pub min_participation_rate: f64,
+    pub min_approval_rate: f64,
+    pub round_timeout_ms: u64,
+    pub base_reward: i64,
+    pub penalty_factor: f64,
 }
 
 impl Default for ConsensusConfig {
     fn default() -> Self {
-        Self {
-            min_validators: 3,
-            vote_threshold: 0.66,  // 66% approval required
-            round_timeout: 60,     // 60 seconds
-            min_reputation: 50,
-            participation_reward: 1,
-            coordinator_reward: 2,
-            missed_validation_penalty: -1,
+        ConsensusConfig {
+            min_validator_reputation: 100,
+            max_voting_power: 0.1,
+            min_participation_rate: 0.67,
+            min_approval_rate: 0.67,
+            round_timeout_ms: 30_000,
+            base_reward: 10,
+            penalty_factor: 1.5,
         }
     }
 }
 
-/// Result of a consensus round
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RoundResult {
-    pub round_number: u64,
-    pub successful: bool,
-    pub finalized_block: Option<Block>,
-    pub reputation_updates: Vec<(String, i64)>,
-    pub participating_validators: Vec<String>,
-}
-
-/// Error types specific to consensus operations
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ConsensusError {
     InsufficientValidators,
@@ -247,3 +156,21 @@ impl std::fmt::Display for ConsensusError {
 }
 
 impl std::error::Error for ConsensusError {}
+
+impl From<ConsensusError> for String {
+    fn from(error: ConsensusError) -> String {
+        error.to_string()
+    }
+}
+
+// Helper functions for consensus calculations
+pub mod utils {
+    pub fn calculate_voting_power(reputation: i64, total_reputation: i64, max_power: f64) -> f64 {
+        let raw_power = reputation as f64 / total_reputation as f64;
+        raw_power.min(max_power)
+    }
+
+    pub fn calculate_penalty(base_penalty: i64, consecutive_misses: u32, factor: f64) -> i64 {
+        -(base_penalty as f64 * factor * consecutive_misses as f64) as i64
+    }
+}
