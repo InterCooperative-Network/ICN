@@ -4,27 +4,19 @@ pub mod proof_of_cooperation;
 pub mod types;
 
 pub use proof_of_cooperation::ProofOfCooperation;
-pub use types::{
-    ConsensusConfig,
-    RoundStatus,
-    ConsensusRound,
-    ValidatorInfo,
-    ConsensusError
-};
+pub use types::{ConsensusConfig, RoundStatus, ConsensusRound, ValidatorInfo};
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
-use crate::blockchain::{Block, transaction::{Transaction, TransactionType}};
+use crate::blockchain::{Block, Transaction};
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
 use crate::websocket::WebSocketHandler;
-use crate::vm::{Contract, VM, ExecutionContext};
 
 pub struct Blockchain {
     pub chain: Vec<Block>,
     pub pending_transactions: Vec<Transaction>,
-    pub contracts: HashMap<String, Contract>,
-    pub consensus: ProofOfCooperation,
+    pub consensus: Arc<Mutex<ProofOfCooperation>>,
     pub identity_system: Arc<Mutex<IdentitySystem>>,
     pub reputation_system: Arc<Mutex<ReputationSystem>>,
     pub current_block_number: u64,
@@ -34,25 +26,30 @@ impl Blockchain {
     pub fn new(
         identity_system: Arc<Mutex<IdentitySystem>>, 
         reputation_system: Arc<Mutex<ReputationSystem>>,
-        ws_handler: Arc<WebSocketHandler>
+        consensus: Arc<Mutex<ProofOfCooperation>>,
     ) -> Self {
-        let consensus_config = ConsensusConfig::default();
-
         Blockchain {
             chain: vec![Block::new(0, String::from("0"), vec![])],
             pending_transactions: vec![],
-            contracts: HashMap::new(),
-            consensus: ProofOfCooperation::new(consensus_config, ws_handler),
+            consensus,
             identity_system,
             reputation_system,
             current_block_number: 1,
         }
     }
 
-    pub fn finalize_block(&mut self) -> Result<(), String> {
-        self.consensus.start_round()?;
+    pub async fn finalize_block(&mut self) -> Result<(), String> {
+        // Get consensus lock first
+        let mut consensus = self.consensus.lock()
+            .map_err(|_| "Failed to acquire consensus lock".to_string())?;
 
-        let previous_hash = self.chain.last().unwrap().hash.clone();
+        // Start consensus round
+        consensus.start_round().await?;
+
+        let previous_hash = self.chain.last()
+            .map(|block| block.hash.clone())
+            .unwrap_or_default();
+
         let new_block = Block::new(
             self.chain.len() as u64,
             previous_hash,
@@ -64,28 +61,48 @@ impl Blockchain {
             return Err("No active validators available".to_string());
         }
 
-        self.consensus.propose_block(&validators[0], new_block.clone())?;
+        // Drop current consensus lock before proposing block
+        drop(consensus);
 
+        // Propose block with new lock
+        {
+            let mut consensus = self.consensus.lock()
+                .map_err(|_| "Failed to acquire consensus lock".to_string())?;
+            consensus.propose_block(&validators[0], new_block.clone()).await?;
+        }
+
+        // Submit votes
         for validator in validators {
-            self.consensus.submit_vote(&validator, true)?;
+            let signature = String::from("dummy_signature");
+            let mut consensus = self.consensus.lock()
+                .map_err(|_| "Failed to acquire consensus lock".to_string())?;
+            consensus.submit_vote(&validator, true, signature).await?;
         }
 
-        match self.consensus.finalize_round() {
-            Ok(finalized_block) => {
-                self.chain.push(finalized_block);
-                self.pending_transactions.clear();
-                
-                let reputation_updates = self.consensus.get_reputation_updates();
-                let mut reputation_system = self.reputation_system.lock().unwrap();
-                for (ref did, change) in reputation_updates {
-                    reputation_system.increase_reputation(did, *change);
-                }
+        // Finalize round
+        let (finalized_block, reputation_updates) = {
+            let mut consensus = self.consensus.lock()
+                .map_err(|_| "Failed to acquire consensus lock".to_string())?;
+            let block = consensus.finalize_round().await?;
+            let updates = consensus.get_reputation_updates().to_vec();
+            (block, updates)
+        };
 
-                self.current_block_number += 1;
-                Ok(())
-            },
-            Err(e) => Err(e.to_string())
+        // Update state
+        self.chain.push(finalized_block);
+        self.pending_transactions.clear();
+        
+        // Apply reputation updates with proper dereferencing
+        {
+            let mut reputation_system = self.reputation_system.lock()
+                .map_err(|_| "Failed to acquire reputation lock".to_string())?;
+            for (did, change) in reputation_updates {
+                reputation_system.increase_reputation(&did, change); // No longer passing a reference
+            }
         }
+
+        self.current_block_number += 1;
+        Ok(())
     }
 
     fn get_active_validators(&self) -> Vec<String> {
@@ -96,64 +113,12 @@ impl Blockchain {
         ]
     }
 
-    pub fn add_transaction(&mut self, transaction: Transaction) -> Result<(), String> {
-        self.verify_transaction(&transaction)?;
+    pub async fn add_transaction(&mut self, transaction: Transaction) -> Result<(), String> {
         self.pending_transactions.push(transaction);
-        
         if self.pending_transactions.len() >= 10 {
-            self.finalize_block()?;
+            self.finalize_block().await?;
         }
-        
         Ok(())
-    }
-
-    fn verify_transaction(&self, transaction: &Transaction) -> Result<(), String> {
-        let identity_system = self.identity_system.lock()
-            .map_err(|_| "Failed to acquire identity system lock".to_string())?;
-        
-        if !identity_system.is_registered(&transaction.sender) {
-            return Err("Invalid sender DID".to_string());
-        }
-
-        let reputation_system = self.reputation_system.lock()
-            .map_err(|_| "Failed to acquire reputation system lock".to_string())?;
-        
-        let sender_reputation = reputation_system.get_reputation(&transaction.sender);
-        if sender_reputation < 10 {
-            return Err("Insufficient reputation".to_string());
-        }
-
-        match &transaction.transaction_type {
-            TransactionType::Transfer { receiver, amount } => {
-                println!(
-                    "Processing transfer of {} from {} to {}",
-                    amount, transaction.sender, receiver
-                );
-                Ok(())
-            }
-            TransactionType::ContractExecution { contract_id, input_data: _ } => {
-                let contract = self.get_contract(contract_id)?;
-                let permissions = identity_system.get_permissions(&transaction.sender);
-                let execution_context = ExecutionContext {
-                    caller_did: transaction.sender.clone(),
-                    cooperative_id: contract.cooperative_metadata.cooperative_id.clone(),
-                    timestamp: transaction.timestamp as u64,
-                    block_number: self.current_block_number,
-                    reputation_score: sender_reputation,
-                    permissions,
-                };
-
-                let mut vm = VM::new(1000, reputation_system.get_reputation_context());
-                vm.set_execution_context(execution_context);
-                vm.execute_contract(&contract)
-            }
-        }
-    }
-
-    fn get_contract(&self, contract_id: &str) -> Result<&Contract, String> {
-        self.contracts
-            .get(contract_id)
-            .ok_or_else(|| format!("Contract {} not found", contract_id))
     }
 
     pub fn get_block(&self, index: u64) -> Option<&Block> {
@@ -170,5 +135,32 @@ impl Blockchain {
 
     pub fn get_block_count(&self) -> usize {
         self.chain.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_blockchain_new() {
+        let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+        let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+        let ws_handler = Arc::new(WebSocketHandler::new());
+        
+        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
+            ConsensusConfig::default(),
+            ws_handler,
+        )));
+
+        let blockchain = Blockchain::new(
+            identity_system,
+            reputation_system,
+            consensus,
+        );
+
+        assert_eq!(blockchain.current_block_number, 1);
+        assert_eq!(blockchain.chain.len(), 1);
+        assert_eq!(blockchain.pending_transactions.len(), 0);
     }
 }
