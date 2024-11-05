@@ -1,9 +1,8 @@
-// src/consensus/proof_of_cooperation.rs
-
 use std::sync::Arc;
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use rand::{thread_rng, Rng};
+
 use crate::websocket::WebSocketHandler;
 use crate::blockchain::Block;
 use crate::consensus::types::{
@@ -52,10 +51,7 @@ pub struct ProofOfCooperation {
 }
 
 impl ProofOfCooperation {
-    pub fn new(
-        config: ConsensusConfig,
-        ws_handler: Arc<WebSocketHandler>,
-    ) -> Self {
+    pub fn new(config: ConsensusConfig, ws_handler: Arc<WebSocketHandler>) -> Self {
         ProofOfCooperation {
             config,
             validators: HashMap::new(),
@@ -66,6 +62,7 @@ impl ProofOfCooperation {
         }
     }
 
+    /// Starts a new consensus round if one is not already in progress.
     pub async fn start_round(&mut self) -> Result<(), String> {
         if self.current_round.is_some() {
             return Err("Round already in progress".to_string());
@@ -106,12 +103,8 @@ impl ProofOfCooperation {
         Ok(())
     }
 
+    /// Allows the coordinator to propose a block for validation.
     pub async fn propose_block(&mut self, proposer_did: &str, block: Block) -> Result<(), String> {
-        // First validate the proposal
-        if !self.validators.contains_key(proposer_did) {
-            return Err("Proposer is not a validator".to_string());
-        }
-
         let validator = self.validators.get(proposer_did)
             .ok_or("Proposer not found")?;
 
@@ -119,7 +112,6 @@ impl ProofOfCooperation {
             return Err("Insufficient reputation to propose".to_string());
         }
 
-        // Then update the round state
         let mut round = self.current_round.take()
             .ok_or("No active round")?;
 
@@ -134,19 +126,14 @@ impl ProofOfCooperation {
         // Broadcast updates
         let round_type = ConsensusRoundType::from(round.clone());
         self.ws_handler.broadcast_consensus_update(&round_type);
-        self.ws_handler.broadcast_block_finalized(&block, proposer_did.to_string());
+        self.ws_handler.broadcast_block_finalized(&block);
 
         self.current_round = Some(round);
         Ok(())
     }
 
-    pub async fn submit_vote(
-        &mut self,
-        validator_did: &str,
-        approved: bool,
-        signature: String
-    ) -> Result<(), String> {
-        // Validate the vote
+    /// Allows a validator to submit a vote on the proposed block.
+    pub async fn submit_vote(&mut self, validator_did: &str, approved: bool, signature: String) -> Result<(), String> {
         let validator = self.validators.get(validator_did)
             .ok_or("Not a registered validator")?;
 
@@ -154,7 +141,6 @@ impl ProofOfCooperation {
             return Err("Insufficient reputation to vote".to_string());
         }
 
-        // Create the vote
         let vote = WeightedVote {
             validator: validator_did.to_string(),
             approve: approved,
@@ -163,13 +149,11 @@ impl ProofOfCooperation {
             signature,
         };
 
-        // Update round state
         let mut round = self.current_round.take()
             .ok_or("No active round")?;
 
         round.votes.insert(validator_did.to_string(), vote);
 
-        // Calculate updated stats
         let total_power: f64 = self.validators.values()
             .filter(|v| v.reputation >= self.config.min_validator_reputation)
             .map(|v| v.voting_power)
@@ -193,13 +177,11 @@ impl ProofOfCooperation {
             0.0
         };
 
-        // Check for consensus
         if round.stats.participation_rate >= self.config.min_participation_rate
             && round.stats.approval_rate >= self.config.min_approval_rate {
             round.status = RoundStatus::Finalizing;
         }
 
-        // Broadcast updates
         let round_type = ConsensusRoundType::from(round.clone());
         self.ws_handler.broadcast_consensus_update(&round_type);
         self.ws_handler.broadcast_validator_update(
@@ -212,6 +194,7 @@ impl ProofOfCooperation {
         Ok(())
     }
 
+    /// Finalizes the current round if it has reached the finalizing status and returns the block.
     pub async fn finalize_round(&mut self) -> Result<Block, String> {
         let round = self.current_round.take()
             .ok_or("No active round")?;
@@ -264,8 +247,8 @@ impl ProofOfCooperation {
             .num_milliseconds() as u64;
         self.round_history.push(stats);
 
-        // Broadcast completion
-        self.ws_handler.broadcast_block_finalized(&block, round.coordinator);
+        // Broadcast completion - only passing block
+        self.ws_handler.broadcast_block_finalized(&block);
 
         Ok(block)
     }
@@ -311,7 +294,7 @@ mod tests {
     use super::*;
     use crate::consensus::types::ConsensusConfig;
 
-    fn setup_consensus() -> ProofOfCooperation {
+    fn setup_test_consensus() -> ProofOfCooperation {
         let config = ConsensusConfig::default();
         let ws_handler = Arc::new(WebSocketHandler::new());
         ProofOfCooperation::new(config, ws_handler)
@@ -334,7 +317,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_start_round() {
-        let mut consensus = setup_consensus();
+        let mut consensus = setup_test_consensus();
         add_test_validators(&mut consensus);
         
         assert!(consensus.start_round().await.is_ok());
@@ -343,7 +326,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_insufficient_validators() {
-        let mut consensus = setup_consensus();
+        let mut consensus = setup_test_consensus();
         
         let result = consensus.start_round().await;
         assert!(result.is_err());

@@ -1,5 +1,6 @@
-use std::collections::VecDeque;
-#[allow(dead_code)]
+use std::collections::HashMap;
+
+// ProposalType defines different types of proposals
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProposalType {
     Funding,
@@ -7,12 +8,14 @@ pub enum ProposalType {
     ResourceAllocation,
 }
 
+// ProposalStatus represents the current status of a proposal
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProposalStatus {
     Open,
     Closed,
 }
 
+// Proposal struct holds data about each individual proposal
 #[derive(Debug, Clone)]
 pub struct Proposal {
     pub id: u64,
@@ -21,12 +24,13 @@ pub struct Proposal {
     pub resource_amount: Option<u64>,
     pub duration: u64,
     pub status: ProposalStatus,
+    pub required_reputation: i64,
     votes: Vec<(String, i64)>, // Tuple of voter ID and vote weight
 }
 
 impl Proposal {
     /// Initializes a new proposal with the given parameters.
-    pub fn new(id: u64, proposal_type: ProposalType, description: String) -> Self {
+    pub fn new(id: u64, proposal_type: ProposalType, description: String, required_reputation: i64) -> Self {
         Proposal {
             id,
             proposal_type,
@@ -34,6 +38,7 @@ impl Proposal {
             resource_amount: None,
             duration: 60,
             status: ProposalStatus::Open,
+            required_reputation,
             votes: Vec::new(),
         }
     }
@@ -69,32 +74,33 @@ impl Proposal {
     }
 }
 
+// ProposalHistory struct holds a history of proposals and notifications
 #[derive(Debug)]
 pub struct ProposalHistory {
-    pub proposals: VecDeque<Proposal>,
-    pub notifications: VecDeque<String>,
+    pub proposals: HashMap<u64, Proposal>,
+    pub notifications: Vec<String>,
 }
 
 impl ProposalHistory {
     /// Initializes a new proposal history tracker.
     pub fn new() -> Self {
         ProposalHistory {
-            proposals: VecDeque::new(),
-            notifications: VecDeque::new(),
+            proposals: HashMap::new(),
+            notifications: Vec::new(),
         }
     }
 
     /// Adds a proposal to the history, generating a notification.
     pub fn add_proposal(&mut self, proposal: Proposal) {
-        self.proposals.push_back(proposal);
-        self.notifications.push_back("New proposal created.".to_string());
+        self.proposals.insert(proposal.id, proposal);
+        self.notifications.push("New proposal created.".to_string());
     }
 
     /// Closes a specific proposal by ID and notifies of closure.
     pub fn close_proposal(&mut self, proposal_id: u64) {
-        if let Some(proposal) = self.proposals.iter_mut().find(|p| p.id == proposal_id) {
+        if let Some(proposal) = self.proposals.get_mut(&proposal_id) {
             proposal.close();
-            self.notifications.push_back(format!(
+            self.notifications.push(format!(
                 "Proposal '{}' has closed for voting",
                 proposal.description
             ));
@@ -103,9 +109,9 @@ impl ProposalHistory {
 
     /// Sends reminders for open proposals.
     pub fn send_voting_reminder(&mut self) {
-        for proposal in self.proposals.iter() {
+        for proposal in self.proposals.values() {
             if proposal.status == ProposalStatus::Open {
-                self.notifications.push_back(format!(
+                self.notifications.push(format!(
                     "Reminder: Proposal '{}' is still open for voting!",
                     proposal.description
                 ));
@@ -115,7 +121,7 @@ impl ProposalHistory {
 
     /// Displays the proposal history with current vote counts.
     pub fn display_history(&self) {
-        for proposal in &self.proposals {
+        for proposal in self.proposals.values() {
             println!(
                 "Proposal ID: {}, Description: '{}', Status: {:?}, Total Votes: {}",
                 proposal.id,

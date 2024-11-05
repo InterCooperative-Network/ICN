@@ -93,14 +93,12 @@ impl NetworkHandler {
     }
 
     pub async fn start(&mut self) -> Result<(), String> {
-        // Start TCP listener for incoming connections
         let listener = TcpListener::bind(&self.listener_address)
             .await
             .map_err(|e| format!("Failed to bind listener: {}", e))?;
             
         println!("Network handler listening on: {}", self.listener_address);
 
-        // Handle incoming connections
         let peers = self.peers.clone();
         let node_id = self.node_id.clone();
         
@@ -121,7 +119,6 @@ impl NetworkHandler {
             }
         });
 
-        // Start message processing loop
         self.process_messages().await?;
 
         Ok(())
@@ -142,9 +139,7 @@ impl NetworkHandler {
                 NetworkMessage::ConsensusVote { round_number, voter, approved, signature } => {
                     self.broadcast_consensus_vote(round_number, voter, approved, signature).await?;
                 }
-                _ => {
-                    // Handle other message types
-                }
+                _ => {}
             }
         }
         Ok(())
@@ -153,9 +148,8 @@ impl NetworkHandler {
     async fn handle_peer_announcement(&mut self, peer_id: String, address: String) -> Result<(), String> {
         let mut peers = self.peers.lock().unwrap();
         
-        // Connect to the new peer
         if !peers.contains_key(&peer_id) {
-            match self.connect_to_peer(&peer_id, &address).await {
+            match self.connect_to_peer(&address).await {
                 Ok(connection) => {
                     peers.insert(peer_id.clone(), connection);
                     println!("Connected to peer: {}", peer_id);
@@ -169,31 +163,29 @@ impl NetworkHandler {
         Ok(())
     }
 
-    async fn connect_to_peer(&self, peer_id: &str, address: &str) -> Result<PeerConnection, String> {
+    async fn connect_to_peer(&self, address: &str) -> Result<PeerConnection, String> {
         let url = format!("ws://{}", address);
         let (ws_stream, _) = connect_async(&url)
             .await
             .map_err(|e| format!("Failed to connect to peer: {}", e))?;
             
-        let (write, read) = ws_stream.split();
+        let (sink, stream) = ws_stream.split();
         let (tx, mut rx) = mpsc::channel(32);
-        
-        // Handle outgoing messages
-        let write_task = tokio::spawn(async move {
-            let mut write = write;
+
+        tokio::spawn(async move {
+            let mut sink = sink;
             while let Some(message) = rx.recv().await {
-                if let Err(e) = write.send(message).await {
+                if let Err(e) = sink.send(message).await {
                     eprintln!("Failed to send message: {}", e);
                     break;
                 }
             }
         });
 
-        // Handle incoming messages
-        let read_task = tokio::spawn(async move {
-            let mut read = read;
-            while let Some(message) = read.next().await {
-                match message {
+        tokio::spawn(async move {
+            let mut stream = stream;
+            while let Some(result) = stream.next().await {
+                match result {
                     Ok(msg) => {
                         if let Ok(text) = msg.to_text() {
                             println!("Received message from peer: {}", text);
@@ -278,15 +270,13 @@ impl PeerHandler {
             .await
             .map_err(|e| format!("Failed to accept WebSocket connection: {}", e))?;
             
-        let (write, mut read) = ws_stream.split();
+        let (_sink, mut stream) = ws_stream.split();
         
-        // Handle the WebSocket connection
-        while let Some(message) = read.next().await {
+        while let Some(message) = stream.next().await {
             match message {
                 Ok(msg) => {
                     if let Ok(text) = msg.to_text() {
                         if let Ok(network_msg) = serde_json::from_str::<NetworkMessage>(text) {
-                            // Process the network message
                             self.handle_network_message(network_msg).await?;
                         }
                     }
@@ -305,24 +295,34 @@ impl PeerHandler {
         match message {
             NetworkMessage::PeerAnnouncement { node_id, address } => {
                 println!("Received peer announcement from {} at {}", node_id, address);
-                // Handle peer announcement
             }
             NetworkMessage::NewBlock(block) => {
                 println!("Received new block: {}", block.index);
-                // Validate and process new block
             }
-            NetworkMessage::ConsensusProposal { round, block } => {
+            NetworkMessage::ConsensusProposal { round, block: _ } => {
                 println!("Received consensus proposal for round {}", round.round_number);
-                // Handle consensus proposal
             }
-            NetworkMessage::ConsensusVote { round_number, voter, approved, signature } => {
+            NetworkMessage::ConsensusVote { round_number, voter, approved: _, signature: _ } => {
                 println!("Received consensus vote from {} for round {}", voter, round_number);
-                // Process consensus vote
             }
             _ => {
                 println!("Received other network message type");
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_network_handler() {
+        let handler = NetworkHandler::new(
+            "test_node".to_string(),
+            "127.0.0.1:0".to_string(),
+        );
+        assert_eq!(handler.node_id, "test_node");
     }
 }

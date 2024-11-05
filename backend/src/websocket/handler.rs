@@ -1,13 +1,14 @@
 // src/websocket/handler.rs
 
+// Previous imports remain the same
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use tokio::sync::broadcast;
+use tokio::sync::mpsc;
 use warp::ws::{Message, WebSocket};
 use serde::{Serialize, Deserialize};
 use futures_util::{StreamExt, SinkExt, stream::{SplitSink, SplitStream}};
 use serde_json::json;
-use tokio::sync::mpsc;
 
 use crate::consensus::RoundStatus;
 use crate::consensus::types::{ValidatorInfo, ConsensusRound};
@@ -88,7 +89,7 @@ impl WebSocketHandler {
         println!("New WebSocket connection from: {}", did);
         
         let (ws_sink, ws_stream) = ws.split();
-        let (tx, mut rx) = mpsc::channel(32);
+        let (tx, rx) = mpsc::channel(32);
         
         let (broadcast_tx, _) = broadcast::channel(100);
         
@@ -244,7 +245,8 @@ impl WebSocketHandler {
         self.broadcast_message(msg);
     }
 
-    pub fn broadcast_block_finalized(&self, block: &Block, _coordinator: String) {
+    // Removed unused coordinator parameter
+    pub fn broadcast_block_finalized(&self, block: &Block) {
         let msg = WebSocketMessage::BlockFinalized {
             block_number: block.index,
             transactions_count: block.transactions.len(),

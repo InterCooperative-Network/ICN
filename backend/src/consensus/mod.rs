@@ -7,11 +7,9 @@ pub use proof_of_cooperation::ProofOfCooperation;
 pub use types::{ConsensusConfig, RoundStatus, ConsensusRound, ValidatorInfo};
 
 use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
 use crate::blockchain::{Block, Transaction};
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
-use crate::websocket::WebSocketHandler;
 
 pub struct Blockchain {
     pub chain: Vec<Block>,
@@ -97,7 +95,7 @@ impl Blockchain {
             let mut reputation_system = self.reputation_system.lock()
                 .map_err(|_| "Failed to acquire reputation lock".to_string())?;
             for (did, change) in reputation_updates {
-                reputation_system.increase_reputation(&did, change); // No longer passing a reference
+                reputation_system.increase_reputation(&did, change);
             }
         }
 
@@ -141,6 +139,7 @@ impl Blockchain {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::websocket::WebSocketHandler;
 
     #[tokio::test]
     async fn test_blockchain_new() {
