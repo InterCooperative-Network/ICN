@@ -1,4 +1,4 @@
-Project Code Dump - Generated Mon Nov  4 10:44:10 PM UTC 2024
+Project Code Dump - Generated Tue Nov  5 04:45:11 AM UTC 2024
 ======================================
 
 Project Tree:
@@ -7,6 +7,10 @@ Project Tree:
 ├── backend
 │   ├── Cargo.lock
 │   ├── Cargo.toml
+│   ├── examples
+│   │   ├── blockchain_test.rs
+│   │   ├── ws_client.rs
+│   │   └── ws_client2.rs
 │   ├── lib.rs
 │   ├── src
 │   │   ├── api
@@ -158,7 +162,7 @@ Project Tree:
     ├── install_docsctl.sh
     └── requirements.txt
 
-68 directories, 86 files
+69 directories, 89 files
 
 
 ===================
@@ -338,35 +342,27 @@ use std::collections::HashMap;
 use tokio::sync::broadcast;
 use warp::ws::{Message, WebSocket};
 use serde::{Serialize, Deserialize};
-use futures_util::{StreamExt, SinkExt};
-use chrono::{DateTime, Utc};
+use futures_util::{StreamExt, SinkExt, stream::{SplitSink, SplitStream}};
+use serde_json::json;
+use tokio::sync::mpsc;
 
+use crate::consensus::RoundStatus;
+use crate::consensus::types::{ValidatorInfo, ConsensusRound};
 use crate::blockchain::Block;
-use crate::consensus::{RoundStatus, ConsensusRound, ValidatorInfo};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", content = "data")]
+#[serde(tag = "type")]
 pub enum WebSocketMessage {
     ConsensusUpdate {
         round_number: u64,
         status: RoundStatus,
         coordinator: String,
         votes_count: usize,
-        participation_rate: f64,
-        approval_rate: f64,
-        timestamp: DateTime<Utc>,
     },
     BlockFinalized {
         block_number: u64,
-        hash: String,
         transactions_count: usize,
-        timestamp: DateTime<Utc>,
-        proposer: String,
-    },
-    ValidatorUpdate {
-        validator: ValidatorInfo,
-        round_number: u64,
-        update_type: String,
+        timestamp: u64,
     },
     ReputationUpdate {
         did: String,
@@ -374,61 +370,205 @@ pub enum WebSocketMessage {
         new_total: i64,
         reason: String,
     },
+    ValidatorUpdate {
+        did: String,
+        round: u64,
+        status: String,
+        reputation: i64,
+    },
+    CommandResponse {
+        command: String,
+        status: String,
+        message: String,
+        data: Option<serde_json::Value>,
+    },
     Error {
         code: String,
         message: String,
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+pub enum ClientMessage {
+    RegisterValidator {
+        did: String,
+        initial_reputation: i64,
+    },
+    SubmitTransaction {
+        transaction: serde_json::Value,
+    },
+    QueryStatus,
+    ProposeBlock {
+        block: serde_json::Value,
+    },
+    SubmitVote {
+        vote: serde_json::Value,
+    },
+    QueryReputation {
+        did: String,
+    },
+}
+
 pub struct WebSocketHandler {
     connections: Arc<Mutex<HashMap<String, broadcast::Sender<WebSocketMessage>>>>,
-    blockchain: Arc<Mutex<crate::blockchain::Blockchain>>,
 }
 
 impl WebSocketHandler {
-    pub fn new(blockchain: Arc<Mutex<crate::blockchain::Blockchain>>) -> Self {
+    pub fn new() -> Self {
         WebSocketHandler {
             connections: Arc::new(Mutex::new(HashMap::new())),
-            blockchain,
         }
     }
 
     pub async fn handle_connection(&self, ws: WebSocket, did: String) {
-        let (mut tx, mut rx) = ws.split();
+        println!("New WebSocket connection from: {}", did);
         
-        let (broadcast_tx, mut broadcast_rx) = broadcast::channel(100);
+        let (ws_sink, ws_stream) = ws.split();
+        let (tx, mut rx) = mpsc::channel(32);
         
+        let (broadcast_tx, _) = broadcast::channel(100);
+        
+        // Register the connection
         {
             let mut connections = self.connections.lock().unwrap();
             connections.insert(did.clone(), broadcast_tx);
+            println!("Registered connection for: {}", did);
         }
 
-        let did_clone = did.clone();
-        tokio::spawn(async move {
-            while let Some(result) = rx.next().await {
-                match result {
-                    Ok(msg) => {
-                        println!("Received message from {}: {:?}", did_clone, msg);
-                    }
-                    Err(e) => {
-                        eprintln!("WebSocket error: {}", e);
-                        break;
-                    }
-                }
-            }
-        });
+        // Spawn the sender task
+        let sender_task = tokio::spawn(Self::handle_sending(ws_sink, rx));
+        
+        // Spawn the receiver task
+        let receiver_task = tokio::spawn(Self::handle_receiving(ws_stream, did.clone(), tx.clone()));
 
-        while let Ok(msg) = broadcast_rx.recv().await {
-            if let Ok(json) = serde_json::to_string(&msg) {
-                if let Err(e) = tx.send(Message::text(json)).await {
-                    eprintln!("Failed to send message: {}", e);
+        // Send welcome message
+        let welcome_msg = WebSocketMessage::CommandResponse {
+            command: "connect".to_string(),
+            status: "success".to_string(),
+            message: format!("Welcome {}! Connected successfully.", did),
+            data: None,
+        };
+        
+        let _ = tx.send(welcome_msg).await;
+
+        // Wait for either task to finish
+        tokio::select! {
+            _ = sender_task => println!("Sender task completed for {}", did),
+            _ = receiver_task => println!("Receiver task completed for {}", did),
+        }
+
+        // Cleanup
+        let mut connections = self.connections.lock().unwrap();
+        connections.remove(&did);
+        println!("Connection cleaned up for: {}", did);
+    }
+
+    async fn handle_sending(
+        mut ws_sink: SplitSink<WebSocket, Message>,
+        mut rx: mpsc::Receiver<WebSocketMessage>,
+    ) {
+        while let Some(message) = rx.recv().await {
+            if let Ok(json) = serde_json::to_string(&message) {
+                if let Err(e) = ws_sink.send(Message::text(json)).await {
+                    eprintln!("Error sending message: {}", e);
                     break;
                 }
             }
         }
+    }
 
-        let mut connections = self.connections.lock().unwrap();
-        connections.remove(&did);
+    async fn handle_receiving(
+        mut ws_stream: SplitStream<WebSocket>,
+        did: String,
+        tx: mpsc::Sender<WebSocketMessage>,
+    ) {
+        while let Some(result) = ws_stream.next().await {
+            match result {
+                Ok(message) => {
+                    if let Ok(text) = message.to_str() {
+                        println!("Received message from {}: {}", did, text);
+                        
+                        let response = match serde_json::from_str::<ClientMessage>(text) {
+                            Ok(client_msg) => match client_msg {
+                                ClientMessage::RegisterValidator { did, initial_reputation } => {
+                                    WebSocketMessage::CommandResponse {
+                                        command: "register_validator".to_string(),
+                                        status: "success".to_string(),
+                                        message: format!("Validator {} registered with {} reputation", did, initial_reputation),
+                                        data: Some(json!({
+                                            "did": did,
+                                            "reputation": initial_reputation
+                                        })),
+                                    }
+                                },
+                                ClientMessage::SubmitTransaction { transaction } => {
+                                    WebSocketMessage::CommandResponse {
+                                        command: "submit_transaction".to_string(),
+                                        status: "success".to_string(),
+                                        message: "Transaction submitted successfully".to_string(),
+                                        data: Some(transaction),
+                                    }
+                                },
+                                ClientMessage::QueryStatus => {
+                                    WebSocketMessage::CommandResponse {
+                                        command: "query_status".to_string(),
+                                        status: "success".to_string(),
+                                        message: "Current blockchain status".to_string(),
+                                        data: Some(json!({
+                                            "height": 1,
+                                            "validators": 1,
+                                            "pending_transactions": 0
+                                        })),
+                                    }
+                                },
+                                ClientMessage::ProposeBlock { block } => {
+                                    WebSocketMessage::CommandResponse {
+                                        command: "propose_block".to_string(),
+                                        status: "success".to_string(),
+                                        message: "Block proposed successfully".to_string(),
+                                        data: Some(block),
+                                    }
+                                },
+                                ClientMessage::SubmitVote { vote } => {
+                                    WebSocketMessage::CommandResponse {
+                                        command: "submit_vote".to_string(),
+                                        status: "success".to_string(),
+                                        message: "Vote submitted successfully".to_string(),
+                                        data: Some(vote),
+                                    }
+                                },
+                                ClientMessage::QueryReputation { did } => {
+                                    WebSocketMessage::CommandResponse {
+                                        command: "query_reputation".to_string(),
+                                        status: "success".to_string(),
+                                        message: format!("Current reputation for {}", did),
+                                        data: Some(json!({
+                                            "did": did,
+                                            "reputation": 100,
+                                            "last_updated": chrono::Utc::now().timestamp()
+                                        })),
+                                    }
+                                },
+                            },
+                            Err(e) => WebSocketMessage::Error {
+                                code: "INVALID_MESSAGE".to_string(),
+                                message: format!("Failed to parse message: {}", e),
+                            },
+                        };
+
+                        if let Err(e) = tx.send(response).await {
+                            eprintln!("Error sending response through channel: {}", e);
+                            break;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("WebSocket error from {}: {}", did, e);
+                    break;
+                }
+            }
+        }
     }
 
     pub fn broadcast_consensus_update(&self, round: &ConsensusRound) {
@@ -437,29 +577,15 @@ impl WebSocketHandler {
             status: round.status.clone(),
             coordinator: round.coordinator.clone(),
             votes_count: round.votes.len(),
-            participation_rate: round.stats.participation_rate,
-            approval_rate: round.stats.approval_rate,
-            timestamp: Utc::now(),
         };
         self.broadcast_message(msg);
     }
 
-    pub fn broadcast_block_finalized(&self, block: &Block, proposer: String) {
+    pub fn broadcast_block_finalized(&self, block: &Block, _coordinator: String) {
         let msg = WebSocketMessage::BlockFinalized {
             block_number: block.index,
-            hash: block.hash.clone(),
             transactions_count: block.transactions.len(),
-            timestamp: Utc::now(),
-            proposer,
-        };
-        self.broadcast_message(msg);
-    }
-
-    pub fn broadcast_validator_update(&self, validator: ValidatorInfo, round_number: u64, update_type: String) {
-        let msg = WebSocketMessage::ValidatorUpdate {
-            validator,
-            round_number,
-            update_type,
+            timestamp: block.timestamp as u64,
         };
         self.broadcast_message(msg);
     }
@@ -474,19 +600,49 @@ impl WebSocketHandler {
         self.broadcast_message(msg);
     }
 
-    pub fn broadcast_error(&self, code: String, message: String) {
-        let msg = WebSocketMessage::Error {
-            code,
-            message,
+    pub fn broadcast_validator_update(&self, validator: ValidatorInfo, round: u64, status: String) {
+        let msg = WebSocketMessage::ValidatorUpdate {
+            did: validator.did,
+            round,
+            status,
+            reputation: validator.reputation,
         };
         self.broadcast_message(msg);
     }
 
     fn broadcast_message(&self, msg: WebSocketMessage) {
-        let connections = self.connections.lock().unwrap();
-        for (_, sender) in connections.iter() {
-            let _ = sender.send(msg.clone());
+        if let Ok(connections) = self.connections.lock() {
+            println!("Broadcasting message to {} connections", connections.len());
+            let msg_str = serde_json::to_string(&msg).unwrap_or_default();
+            println!("Broadcast content: {}", msg_str);
+            
+            for (did, sender) in connections.iter() {
+                if let Err(e) = sender.send(msg.clone()) {
+                    eprintln!("Failed to broadcast to {}: {}", did, e);
+                } else {
+                    println!("Successfully broadcast to {}", did);
+                }
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_websocket_message_serialization() {
+        let msg = WebSocketMessage::CommandResponse {
+            command: "test".to_string(),
+            status: "success".to_string(),
+            message: "Test message".to_string(),
+            data: Some(json!({"test": "data"})),
+        };
+
+        let serialized = serde_json::to_string(&msg).unwrap();
+        assert!(!serialized.is_empty());
+        println!("Serialized message: {}", serialized);
     }
 }
 
@@ -1822,22 +1978,18 @@ File: ./backend/src/blockchain/mod.rs
 ===================
 // src/blockchain/mod.rs
 
+use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+use crate::consensus::*;
+use crate::identity::IdentitySystem;
+use crate::reputation::ReputationSystem;
+use crate::websocket::WebSocketHandler;
+use crate::vm::{VM, Contract, ExecutionContext};
+
 pub mod transaction;
 use transaction::{Transaction, TransactionType};
 
-use std::sync::{Arc, Mutex};
-use serde::{Serialize, Deserialize};
-use sha2::{Sha256, Digest};
-use chrono::Utc;
-use std::collections::HashMap;
-
-use crate::identity::IdentitySystem;
-use crate::reputation::ReputationSystem;
-use crate::vm::{VM, Contract, ExecutionContext};
-use crate::consensus::{ProofOfCooperation, ConsensusConfig};
-use crate::websocket::WebSocketHandler;
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Block {
     pub index: u64,
     pub previous_hash: String,
@@ -1848,8 +2000,17 @@ pub struct Block {
 
 impl Block {
     pub fn new(index: u64, previous_hash: String, transactions: Vec<Transaction>) -> Self {
-        let timestamp = Utc::now().timestamp_millis() as u128;
-        let hash = Self::calculate_hash(index, &previous_hash, timestamp, &transactions);
+        use sha2::{Sha256, Digest};
+        
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        
+        let mut hasher = Sha256::new();
+        let transaction_data = serde_json::to_string(&transactions).unwrap_or_default();
+        hasher.update(format!("{}{}{}{}", index, previous_hash, timestamp, transaction_data));
+        let hash = format!("{:x}", hasher.finalize());
 
         Block {
             index,
@@ -1858,14 +2019,6 @@ impl Block {
             transactions,
             hash,
         }
-    }
-
-    fn calculate_hash(index: u64, previous_hash: &str, timestamp: u128, transactions: &Vec<Transaction>) -> String {
-        let mut hasher = Sha256::new();
-        let transaction_data = serde_json::to_string(transactions).expect("Failed to serialize transactions");
-        hasher.update(format!("{}{}{}{}", index, previous_hash, timestamp, transaction_data));
-        let result = hasher.finalize();
-        format!("{:x}", result)
     }
 }
 
@@ -1881,12 +2034,12 @@ pub struct Blockchain {
 
 impl Blockchain {
     pub fn new(
-        identity_system: Arc<Mutex<IdentitySystem>>, 
+        identity_system: Arc<Mutex<IdentitySystem>>,
         reputation_system: Arc<Mutex<ReputationSystem>>,
         ws_handler: Arc<WebSocketHandler>
     ) -> Self {
         let consensus_config = ConsensusConfig::default();
-
+        
         Blockchain {
             chain: vec![Block::new(0, String::from("0"), vec![])],
             pending_transactions: vec![],
@@ -1895,6 +2048,51 @@ impl Blockchain {
             reputation_system,
             consensus: ProofOfCooperation::new(consensus_config, ws_handler),
             current_block_number: 1,
+        }
+    }
+
+    fn verify_transaction(&self, transaction: &Transaction) -> Result<(), String> {
+        let identity_system = self.identity_system.lock()
+            .map_err(|_| "Failed to acquire identity system lock".to_string())?;
+        
+        if !identity_system.is_registered(&transaction.sender) {
+            return Err("Invalid sender DID".to_string());
+        }
+
+        let reputation_system = self.reputation_system.lock()
+            .map_err(|_| "Failed to acquire reputation system lock".to_string())?;
+        
+        let sender_reputation = reputation_system.get_reputation(&transaction.sender);
+        if sender_reputation < 10 {
+            return Err("Insufficient reputation".to_string());
+        }
+
+        match &transaction.transaction_type {
+            TransactionType::Transfer { receiver, amount } => {
+                println!(
+                    "Processing transfer of {} from {} to {}",
+                    amount, transaction.sender, receiver
+                );
+                Ok(())
+            }
+            TransactionType::ContractExecution { contract_id, input_data: _ } => {
+                let contract = self.contracts.get(contract_id)
+                    .ok_or_else(|| format!("Contract {} not found", contract_id))?;
+
+                let permissions = identity_system.get_permissions(&transaction.sender);
+                let execution_context = ExecutionContext {
+                    caller_did: transaction.sender.clone(),
+                    cooperative_id: contract.cooperative_metadata.cooperative_id.clone(),
+                    timestamp: transaction.timestamp as u64,
+                    block_number: self.current_block_number,
+                    reputation_score: sender_reputation,
+                    permissions,
+                };
+
+                let mut vm = VM::new(1000, reputation_system.get_reputation_context());
+                vm.set_execution_context(execution_context);
+                vm.execute_contract(contract)
+            }
         }
     }
 
@@ -1912,7 +2110,10 @@ impl Blockchain {
     pub fn finalize_block(&mut self) -> Result<(), String> {
         self.consensus.start_round()?;
 
-        let previous_hash = self.chain.last().unwrap().hash.clone();
+        let previous_hash = self.chain.last()
+            .map(|block| block.hash.clone())
+            .unwrap_or_default();
+
         let new_block = Block::new(
             self.chain.len() as u64,
             previous_hash,
@@ -1936,9 +2137,10 @@ impl Blockchain {
                 self.pending_transactions.clear();
                 
                 let reputation_updates = self.consensus.get_reputation_updates();
-                let mut reputation_system = self.reputation_system.lock().unwrap();
-                for (ref did, change) in reputation_updates {
-                    reputation_system.increase_reputation(did, *change);
+                if let Ok(mut reputation_system) = self.reputation_system.lock() {
+                    for (did, change) in reputation_updates {
+                        reputation_system.increase_reputation(did, *change);
+                    }
                 }
 
                 self.current_block_number += 1;
@@ -1948,48 +2150,12 @@ impl Blockchain {
         }
     }
 
-    fn verify_transaction(&self, transaction: &Transaction) -> Result<(), String> {
-        let identity_system = self.identity_system.lock().unwrap();
-        if !identity_system.is_registered(&transaction.sender) {
-            return Err("Invalid sender DID".to_string());
-        }
-
-        let reputation_system = self.reputation_system.lock().unwrap();
-        let sender_reputation = reputation_system.get_reputation(&transaction.sender);
-        
-        if sender_reputation < 10 {
-            return Err("Insufficient reputation".to_string());
-        }
-
-        match &transaction.transaction_type {
-            TransactionType::Transfer { receiver, amount } => {
-                println!(
-                    "Processing transfer of {} from {} to {}",
-                    amount, transaction.sender, receiver
-                );
-                Ok(())
-            }
-            TransactionType::ContractExecution { contract_id, input_data } => {
-                let contract = self.get_contract(contract_id)?;
-                
-                let mut vm = VM::new(
-                    1000,
-                    reputation_system.get_reputation_context(),
-                );
-
-                let execution_context = ExecutionContext {
-                    caller_did: transaction.sender.clone(),
-                    cooperative_id: contract.cooperative_metadata.cooperative_id.clone(),
-                    timestamp: transaction.timestamp as u64,
-                    block_number: self.current_block_number,
-                    reputation_score: sender_reputation,
-                    permissions: identity_system.get_permissions(&transaction.sender),
-                };
-
-                vm.set_execution_context(execution_context);
-                vm.execute_contract(&contract)
-            }
-        }
+    fn get_active_validators(&self) -> Vec<String> {
+        vec![
+            "did:icn:1".to_string(),
+            "did:icn:2".to_string(),
+            "did:icn:3".to_string(),
+        ]
     }
 
     pub fn get_block(&self, index: u64) -> Option<&Block> {
@@ -1998,28 +2164,6 @@ impl Blockchain {
 
     pub fn get_latest_block(&self) -> &Block {
         self.chain.last().unwrap()
-    }
-
-    fn get_contract(&self, contract_id: &str) -> Result<&Contract, String> {
-        self.contracts
-            .get(contract_id)
-            .ok_or_else(|| format!("Contract {} not found", contract_id))
-    }
-
-    pub fn deploy_contract(&mut self, contract: Contract) -> Result<(), String> {
-        if self.contracts.contains_key(&contract.id) {
-            return Err("Contract ID already exists".to_string());
-        }
-        self.contracts.insert(contract.id.clone(), contract);
-        Ok(())
-    }
-
-    fn get_active_validators(&self) -> Vec<String> {
-        vec![
-            "did:icn:1".to_string(),
-            "did:icn:2".to_string(),
-            "did:icn:3".to_string(),
-        ]
     }
 
     pub fn get_transaction_count(&self) -> usize {
@@ -2440,7 +2584,7 @@ impl ProposalHistory {
 ===================
 File: ./backend/src/main.rs
 ===================
-// backend/src/main.rs
+// src/main.rs
 
 mod blockchain;
 mod identity;
@@ -2452,7 +2596,6 @@ mod websocket;
 mod consensus;
 
 use std::sync::{Arc, Mutex};
-use std::convert::Infallible;
 use warp::Filter;
 use crate::websocket::WebSocketHandler;
 use crate::blockchain::Blockchain;
@@ -2465,13 +2608,14 @@ async fn main() {
     let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
     let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
     
+    // Create WebSocket handler
+    let ws_handler = Arc::new(WebSocketHandler::new());
+    
     let blockchain = Arc::new(Mutex::new(Blockchain::new(
         identity_system.clone(),
-        reputation_system.clone()
+        reputation_system.clone(),
+        ws_handler.clone()
     )));
-
-    // Create WebSocket handler
-    let ws_handler = Arc::new(WebSocketHandler::new(blockchain.clone()));
 
     // WebSocket route
     let ws_handler = ws_handler.clone();
@@ -2480,11 +2624,8 @@ async fn main() {
         .and(warp::header::<String>("X-DID"))
         .and(warp::any().map(move || ws_handler.clone()))
         .map(|ws: warp::ws::Ws, did: String, handler: Arc<WebSocketHandler>| {
-            ws.on_upgrade(move |socket| {
-                let handler = handler.clone();
-                async move {
-                    handler.handle_connection(socket, did).await;
-                }
+            ws.on_upgrade(move |socket| async move {
+                handler.handle_connection(socket, did).await;
             })
         });
 
@@ -2578,7 +2719,7 @@ File: ./backend/src/consensus/types.rs
 // src/consensus/types.rs
 
 use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration};
+use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use crate::blockchain::Block;
 
@@ -2627,6 +2768,34 @@ impl ConsensusRound {
     pub fn duration_ms(&self) -> i64 {
         (Utc::now() - self.start_time).num_milliseconds()
     }
+
+    pub fn is_timed_out(&self) -> bool {
+        Utc::now() > self.timeout
+    }
+
+    pub fn get_participation_rate(&self, total_voting_power: f64) -> f64 {
+        let votes_power: f64 = self.votes.values()
+            .map(|v| v.voting_power)
+            .sum();
+        votes_power / total_voting_power
+    }
+
+    pub fn get_approval_rate(&self) -> f64 {
+        let total_votes_power: f64 = self.votes.values()
+            .map(|v| v.voting_power)
+            .sum();
+        
+        if total_votes_power <= 0.0 {
+            return 0.0;
+        }
+
+        let approval_power: f64 = self.votes.values()
+            .filter(|v| v.approve)
+            .map(|v| v.voting_power)
+            .sum();
+
+        approval_power / total_votes_power
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -2649,20 +2818,6 @@ pub struct ConsensusConfig {
     pub penalty_factor: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum ConsensusError {
-    InsufficientValidators,
-    InvalidCoordinator,
-    RoundInProgress,
-    NoActiveRound,
-    InvalidRoundState,
-    TimedOut,
-    ValidationFailed,
-    NotValidator,
-    InsufficientReputation,
-    Custom(String),
-}
-
 impl Default for ConsensusConfig {
     fn default() -> Self {
         ConsensusConfig {
@@ -2675,6 +2830,20 @@ impl Default for ConsensusConfig {
             penalty_factor: 1.5,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ConsensusError {
+    InsufficientValidators,
+    InvalidCoordinator,
+    RoundInProgress,
+    NoActiveRound,
+    InvalidRoundState,
+    TimedOut,
+    ValidationFailed,
+    NotValidator,
+    InsufficientReputation,
+    Custom(String),
 }
 
 impl std::fmt::Display for ConsensusError {
@@ -2706,6 +2875,24 @@ impl std::fmt::Display for ConsensusError {
 
 impl std::error::Error for ConsensusError {}
 
+impl From<ConsensusError> for String {
+    fn from(error: ConsensusError) -> String {
+        error.to_string()
+    }
+}
+
+// Helper functions for consensus calculations
+pub mod utils {
+    pub fn calculate_voting_power(reputation: i64, total_reputation: i64, max_power: f64) -> f64 {
+        let raw_power = reputation as f64 / total_reputation as f64;
+        raw_power.min(max_power)
+    }
+
+    pub fn calculate_penalty(base_penalty: i64, consecutive_misses: u32, factor: f64) -> i64 {
+        -(base_penalty as f64 * factor * consecutive_misses as f64) as i64
+    }
+}
+
 ===================
 File: ./backend/src/consensus/mod.rs
 ===================
@@ -2718,22 +2905,23 @@ pub use proof_of_cooperation::ProofOfCooperation;
 pub use types::{
     ConsensusConfig,
     RoundStatus,
-    ConsensusError,
     ConsensusRound,
-    ConsensusRoundStats,
     ValidatorInfo,
-    WeightedVote
+    ConsensusError
 };
 
 use std::sync::{Arc, Mutex};
-use crate::blockchain::{Block, transaction::Transaction};
+use std::collections::HashMap;
+use crate::blockchain::{Block, transaction::{Transaction, TransactionType}};
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
 use crate::websocket::WebSocketHandler;
+use crate::vm::{Contract, VM, ExecutionContext};
 
 pub struct Blockchain {
     pub chain: Vec<Block>,
     pub pending_transactions: Vec<Transaction>,
+    pub contracts: HashMap<String, Contract>,
     pub consensus: ProofOfCooperation,
     pub identity_system: Arc<Mutex<IdentitySystem>>,
     pub reputation_system: Arc<Mutex<ReputationSystem>>,
@@ -2751,6 +2939,7 @@ impl Blockchain {
         Blockchain {
             chain: vec![Block::new(0, String::from("0"), vec![])],
             pending_transactions: vec![],
+            contracts: HashMap::new(),
             consensus: ProofOfCooperation::new(consensus_config, ws_handler),
             identity_system,
             reputation_system,
@@ -2803,6 +2992,82 @@ impl Blockchain {
             "did:icn:2".to_string(),
             "did:icn:3".to_string(),
         ]
+    }
+
+    pub fn add_transaction(&mut self, transaction: Transaction) -> Result<(), String> {
+        self.verify_transaction(&transaction)?;
+        self.pending_transactions.push(transaction);
+        
+        if self.pending_transactions.len() >= 10 {
+            self.finalize_block()?;
+        }
+        
+        Ok(())
+    }
+
+    fn verify_transaction(&self, transaction: &Transaction) -> Result<(), String> {
+        let identity_system = self.identity_system.lock()
+            .map_err(|_| "Failed to acquire identity system lock".to_string())?;
+        
+        if !identity_system.is_registered(&transaction.sender) {
+            return Err("Invalid sender DID".to_string());
+        }
+
+        let reputation_system = self.reputation_system.lock()
+            .map_err(|_| "Failed to acquire reputation system lock".to_string())?;
+        
+        let sender_reputation = reputation_system.get_reputation(&transaction.sender);
+        if sender_reputation < 10 {
+            return Err("Insufficient reputation".to_string());
+        }
+
+        match &transaction.transaction_type {
+            TransactionType::Transfer { receiver, amount } => {
+                println!(
+                    "Processing transfer of {} from {} to {}",
+                    amount, transaction.sender, receiver
+                );
+                Ok(())
+            }
+            TransactionType::ContractExecution { contract_id, input_data: _ } => {
+                let contract = self.get_contract(contract_id)?;
+                let permissions = identity_system.get_permissions(&transaction.sender);
+                let execution_context = ExecutionContext {
+                    caller_did: transaction.sender.clone(),
+                    cooperative_id: contract.cooperative_metadata.cooperative_id.clone(),
+                    timestamp: transaction.timestamp as u64,
+                    block_number: self.current_block_number,
+                    reputation_score: sender_reputation,
+                    permissions,
+                };
+
+                let mut vm = VM::new(1000, reputation_system.get_reputation_context());
+                vm.set_execution_context(execution_context);
+                vm.execute_contract(&contract)
+            }
+        }
+    }
+
+    fn get_contract(&self, contract_id: &str) -> Result<&Contract, String> {
+        self.contracts
+            .get(contract_id)
+            .ok_or_else(|| format!("Contract {} not found", contract_id))
+    }
+
+    pub fn get_block(&self, index: u64) -> Option<&Block> {
+        self.chain.get(index as usize)
+    }
+
+    pub fn get_latest_block(&self) -> &Block {
+        self.chain.last().unwrap()
+    }
+
+    pub fn get_transaction_count(&self) -> usize {
+        self.chain.iter().map(|block| block.transactions.len()).sum()
+    }
+
+    pub fn get_block_count(&self) -> usize {
+        self.chain.len()
     }
 }
 
@@ -2965,68 +3230,68 @@ impl ProofOfCooperation {
     }
 
     pub fn submit_vote(&mut self, validator_did: &str, approve: bool) -> Result<(), ConsensusError> {
-        let round = self.current_round.as_mut()
-            .ok_or(ConsensusError::NoActiveRound)?;
-
-        if round.status != RoundStatus::Voting {
-            return Err(ConsensusError::InvalidRoundState);
-        }
-
-        let validator = self.validators.get(validator_did)
-            .ok_or(ConsensusError::NotValidator)?;
+        // First validate the validator
+        let validator = match self.validators.get(validator_did) {
+            Some(v) => v,
+            None => return Err(ConsensusError::NotValidator),
+        };
 
         if validator.reputation < self.config.min_validator_reputation {
             return Err(ConsensusError::InsufficientReputation);
         }
 
-        let vote = WeightedVote {
-            validator: validator_did.to_string(),
-            approve,
-            voting_power: validator.voting_power,
-            timestamp: Utc::now(),
-            signature: "".to_string(), // Signature verification to be implemented
-        };
+        let voting_power = validator.voting_power;
 
-        round.votes.insert(validator_did.to_string(), vote);
-        
-        self.check_consensus()?;
-        self.ws_handler.broadcast_consensus_update(round);
-        
-        Ok(())
-    }
+        // Then handle the round
+        if let Some(round) = self.current_round.as_mut() {
+            if round.status != RoundStatus::Voting {
+                return Err(ConsensusError::InvalidRoundState);
+            }
 
-    fn check_consensus(&mut self) -> Result<bool, ConsensusError> {
-        let round = self.current_round.as_mut()
-            .ok_or(ConsensusError::NoActiveRound)?;
+            // Create and register the vote
+            let vote = WeightedVote {
+                validator: validator_did.to_string(),
+                approve,
+                voting_power,
+                timestamp: Utc::now(),
+                signature: "".to_string(),
+            };
+            round.votes.insert(validator_did.to_string(), vote);
 
-        let total_voting_power: f64 = self.validators.values()
-            .filter(|v| v.reputation >= self.config.min_validator_reputation)
-            .map(|v| v.voting_power)
-            .sum();
+            // Calculate consensus values
+            let total_voting_power: f64 = self.validators.values()
+                .filter(|v| v.reputation >= self.config.min_validator_reputation)
+                .map(|v| v.voting_power)
+                .sum();
 
-        let votes_power: f64 = round.votes.values()
-            .map(|v| v.voting_power)
-            .sum();
+            let votes_power: f64 = round.votes.values()
+                .map(|v| v.voting_power)
+                .sum();
 
-        let approval_power: f64 = round.votes.values()
-            .filter(|v| v.approve)
-            .map(|v| v.voting_power)
-            .sum();
+            let approval_power: f64 = round.votes.values()
+                .filter(|v| v.approve)
+                .map(|v| v.voting_power)
+                .sum();
 
-        round.stats.participation_rate = votes_power / total_voting_power;
-        round.stats.approval_rate = if votes_power > 0.0 {
-            approval_power / votes_power
+            // Update round statistics
+            round.stats.participation_rate = votes_power / total_voting_power;
+            round.stats.approval_rate = if votes_power > 0.0 {
+                approval_power / votes_power
+            } else {
+                0.0
+            };
+
+            // Check if consensus is reached
+            if round.stats.participation_rate >= self.config.min_participation_rate 
+                && round.stats.approval_rate >= self.config.min_approval_rate {
+                round.status = RoundStatus::Finalizing;
+            }
+
+            self.ws_handler.broadcast_consensus_update(round);
+            Ok(())
         } else {
-            0.0
-        };
-
-        if round.stats.participation_rate >= self.config.min_participation_rate &&
-           round.stats.approval_rate >= self.config.min_approval_rate {
-            round.status = RoundStatus::Finalizing;
-            return Ok(true);
+            Err(ConsensusError::NoActiveRound)
         }
-
-        Ok(false)
     }
 
     pub fn finalize_round(&mut self) -> Result<Block, ConsensusError> {
@@ -3034,6 +3299,7 @@ impl ProofOfCooperation {
             .ok_or(ConsensusError::NoActiveRound)?;
 
         if round.status != RoundStatus::Finalizing {
+            self.current_round = Some(round);  // Restore the round if we're not ready
             return Err(ConsensusError::InvalidRoundState);
         }
 
@@ -3060,6 +3326,7 @@ impl ProofOfCooperation {
             .map(|v| v.did.clone())
             .collect();
 
+        // Update coordinator stats
         if let Some(coordinator) = self.validators.get_mut(&round.coordinator) {
             coordinator.total_blocks_validated += 1;
             let reward = self.config.base_reward * 2;
@@ -3075,6 +3342,7 @@ impl ProofOfCooperation {
             self.reputation_updates.push((round.coordinator.clone(), reward));
         }
 
+        // Update all validator stats
         for validator_did in active_validators {
             let participated = round.votes.contains_key(&validator_did);
             
@@ -3746,6 +4014,18 @@ name = "icn-backend"
 version = "0.1.0"
 edition = "2021"
 
+[[example]]
+name = "blockchain_test"
+path = "examples/blockchain_test.rs"
+
+[[example]]
+name = "ws_client"
+path = "examples/ws_client.rs"
+
+[[example]]
+name = "ws_client2"
+path = "examples/ws_client2.rs"
+
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
 warp = "0.3"
@@ -3758,6 +4038,12 @@ secp256k1 = "0.24"
 sha2 = "0.10"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4"] }
+tokio-tungstenite = "0.20"
+url = "2.4"
+
+[dev-dependencies]
+tokio-tungstenite = "0.20"
+url = "2.4"
 
 ===================
 File: ./frontend/package.json
