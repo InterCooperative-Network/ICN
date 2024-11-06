@@ -1,4 +1,4 @@
-Project Code Dump - Generated Wed Nov  6 08:41:32 PM UTC 2024
+Project Code Dump - Generated Wed Nov  6 09:24:33 PM UTC 2024
 ======================================
 
 Project Tree:
@@ -22,7 +22,6 @@ Project Tree:
 │   │   │   ├── chain.rs
 │   │   │   ├── mod.rs
 │   │   │   └── transaction.rs
-│   │   ├── config
 │   │   ├── consensus
 │   │   │   ├── mod.rs
 │   │   │   ├── proof_of_cooperation.rs
@@ -57,29 +56,16 @@ Project Tree:
 │   │   │   ├── execution_context.rs
 │   │   │   ├── mod.rs
 │   │   │   ├── opcode.rs
-│   │   │   ├── tests
 │   │   │   └── vm.rs
 │   │   └── websocket
 │   │       ├── handler.rs
 │   │       └── mod.rs
-│   ├── target
-│   │   ├── CACHEDIR.TAG
-│   │   └── debug
-│   │       ├── build
-│   │       ├── deps
-│   │       ├── examples
-│   │       ├── icn-backend
-│   │       ├── icn-backend.d
-│   │       ├── incremental
-│   │       ├── libicn_backend.d
-│   │       └── libicn_backend.rlib
 │   └── tests
 │       └── integration_test.rs
 ├── contracts
-│   ├── cooperative
-│   │   └── src
-│   │       └── lib.rs
-│   └── governance
+│   └── cooperative
+│       └── src
+│           └── lib.rs
 ├── docker
 │   ├── backend.Dockerfile
 │   ├── docker-compose.yml
@@ -87,23 +73,14 @@ Project Tree:
 ├── docs
 │   ├── INDEX.md
 │   ├── README.md
-│   ├── api
 │   ├── architecture
-│   │   ├── backend
 │   │   ├── backend.md
 │   │   ├── diagrams
-│   │   │   ├── component
-│   │   │   ├── component.md
-│   │   │   ├── sequence
-│   │   │   └── system
-│   │   ├── frontend
-│   │   ├── overview
+│   │   │   └── component.md
 │   │   └── overview.md
 │   ├── development
-│   │   ├── guides
-│   │   │   └── documentation-standards.md
-│   │   ├── plans
-│   │   └── setup
+│   │   └── guides
+│   │       └── documentation-standards.md
 │   ├── docs
 │   │   └── index.md
 │   ├── guides
@@ -112,40 +89,26 @@ Project Tree:
 │   ├── specifications
 │   │   ├── api
 │   │   │   └── governance-api.md
-│   │   ├── core
-│   │   │   ├── 2024-11-01-reputation-system.md
-│   │   │   ├── blockchain-system.md
-│   │   │   ├── governance-system.md
-│   │   │   ├── identity-system.md
-│   │   │   ├── proof-of-cooperation.md
-│   │   │   ├── reputation-system.md
-│   │   │   ├── transaction-system.md
-│   │   │   └── vm-system.md
-│   │   └── protocols
+│   │   └── core
+│   │       ├── 2024-11-01-reputation-system.md
+│   │       ├── blockchain-system.md
+│   │       ├── governance-system.md
+│   │       ├── identity-system.md
+│   │       ├── proof-of-cooperation.md
+│   │       ├── reputation-system.md
+│   │       ├── transaction-system.md
+│   │       └── vm-system.md
 │   ├── templates
 │   │   ├── api-template.md
 │   │   ├── core-component-template.md
 │   │   └── protocol-template.md
 │   └── user
-│       ├── guides
-│       │   ├── index.md
-│       │   ├── onboarding-guide.md
-│       │   └── resource-management.md
-│       └── tutorials
+│       └── guides
+│           ├── index.md
+│           ├── onboarding-guide.md
+│           └── resource-management.md
 ├── frontend
 │   ├── package.json
-│   ├── src
-│   │   ├── app
-│   │   ├── components
-│   │   │   ├── consensus
-│   │   │   ├── cooperative
-│   │   │   ├── governance
-│   │   │   ├── identity
-│   │   │   └── ui
-│   │   ├── contexts
-│   │   ├── hooks
-│   │   ├── lib
-│   │   └── styles
 │   └── tsconfig.json
 ├── generate_code_dump.sh
 ├── project_code_dump.txt
@@ -166,7 +129,7 @@ Project Tree:
     ├── install_docsctl.sh
     └── requirements.txt
 
-69 directories, 93 files
+37 directories, 88 files
 
 
 ===================
@@ -3734,7 +3697,7 @@ pub mod proof_of_cooperation;
 pub mod types;
 
 pub use proof_of_cooperation::ProofOfCooperation;
-pub use types::{ConsensusRound, RoundStatus, ConsensusConfig};  // Directly re-export from `types`
+pub use types::{ConsensusRound, RoundStatus};  // Directly re-export from `types`
 
 use std::sync::{Arc, Mutex};
 use crate::blockchain::{Block, Transaction};
@@ -3908,7 +3871,7 @@ File: ./backend/src/consensus/proof_of_cooperation.rs
 
 use std::sync::Arc;
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use rand::{thread_rng, Rng};
 
 use crate::websocket::WebSocketHandler;
@@ -4917,12 +4880,23 @@ services:
 File: ./docker/backend.Dockerfile
 ===================
 # backend.Dockerfile
+
 # Stage 1: Build the Rust app
-FROM rust:latest AS builder
+FROM rust:1.71.0 AS builder
 
 WORKDIR /app
 
+# Copy Cargo.toml and Cargo.lock
+COPY Cargo.toml Cargo.lock ./
+
+# Build dependencies
+RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release
+RUN rm -rf src
+
+# Copy the rest of the project
 COPY . .
+
+# Build the project
 RUN cargo build --release
 RUN cargo test --release
 
@@ -4931,7 +4905,6 @@ FROM debian:buster-slim AS runner
 WORKDIR /app
 COPY --from=builder /app/target/release/icn-backend /usr/local/bin/icn-backend
 
-# Expose both HTTP (8080) and WebSocket (8081) ports
 EXPOSE 8080
 EXPOSE 8081
 

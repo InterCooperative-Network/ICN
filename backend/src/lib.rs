@@ -1,12 +1,13 @@
-mod blockchain;
-mod identity;
-mod reputation;
-mod governance;
-mod utils;
-mod vm;
-mod websocket;
-mod consensus;
-mod network;
+// Making specific modules public for accessibility in tests and other modules
+pub mod blockchain;
+pub mod identity;
+pub mod reputation;
+pub mod governance;
+pub mod utils;
+pub mod vm;
+pub mod websocket;
+pub mod consensus;
+pub mod network;
 
 // Re-export types for external use
 pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
@@ -177,8 +178,7 @@ impl ICNCore {
         
         if let Some(round) = blockchain.get_current_round() {
             drop(blockchain);
-            // Fix applied here for type conversion
-            let event = SystemEvent::ConsensusStarted(round.into());
+            let event = SystemEvent::ConsensusStarted(round);
             let _ = self.event_bus.send(event);
         }
 
