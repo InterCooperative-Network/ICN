@@ -174,6 +174,7 @@ impl ICNCore {
             .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
         
         if let Some(round) = blockchain.get_current_round() {
+            // Convert to ConsensusRound from types module
             let consensus_round = ConsensusRound {
                 round_number: round.round_number,
                 coordinator: round.coordinator.clone(),
