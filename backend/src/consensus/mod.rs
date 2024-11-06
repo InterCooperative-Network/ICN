@@ -8,6 +8,8 @@ use std::sync::{Arc, Mutex};
 use crate::blockchain::{Block, Transaction};
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
+use crate::consensus::ConsensusConfig;
+
 
 pub struct Blockchain {
     pub chain: Vec<Block>,
