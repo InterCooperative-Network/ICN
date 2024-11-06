@@ -1,10 +1,8 @@
-// src/consensus/mod.rs
-
 pub mod proof_of_cooperation;
 pub mod types;
 
 pub use proof_of_cooperation::ProofOfCooperation;
-pub use types::{ConsensusConfig, RoundStatus, ConsensusRound, ValidatorInfo};
+pub use types::{ConsensusRound, RoundStatus, ConsensusConfig};  // Directly re-export from `types`
 
 use std::sync::{Arc, Mutex};
 use crate::blockchain::{Block, Transaction};
@@ -90,7 +88,7 @@ impl Blockchain {
         self.chain.push(finalized_block);
         self.pending_transactions.clear();
         
-        // Apply reputation updates with proper dereferencing
+        // Apply reputation updates
         {
             let mut reputation_system = self.reputation_system.lock()
                 .map_err(|_| "Failed to acquire reputation lock".to_string())?;
@@ -133,6 +131,12 @@ impl Blockchain {
 
     pub fn get_block_count(&self) -> usize {
         self.chain.len()
+    }
+
+    pub fn get_current_round(&self) -> Option<ConsensusRound> {
+        self.consensus.try_lock()
+            .ok()
+            .and_then(|consensus| consensus.get_current_round())
     }
 }
 

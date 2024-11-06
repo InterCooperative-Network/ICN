@@ -1,31 +1,30 @@
-// src/lib.rs
+mod blockchain;
+mod identity;
+mod reputation;
+mod governance;
+mod utils;
+mod vm;
+mod websocket;
+mod consensus;
+mod network;
 
-pub mod blockchain;
-pub mod identity;
-pub mod reputation;
-pub mod governance;
-pub mod utils;
-pub mod vm;
-pub mod websocket;
-pub mod consensus;
-pub mod network;
+// Re-export types for external use
+pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
+pub use identity::IdentitySystem;
+pub use reputation::ReputationSystem;
+pub use governance::Proposal;
+pub use consensus::types::ConsensusRound;
+pub use consensus::{ProofOfCooperation, types::ConsensusConfig};
+pub use vm::{VM, Contract, ExecutionContext};
+pub use vm::opcode::OpCode;
+pub use vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
+pub use websocket::WebSocketHandler;
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use tokio::sync::broadcast;
-use chrono;
 use uuid;
-
-use crate::blockchain::{Block, Blockchain, Transaction, TransactionType};
-use crate::identity::IdentitySystem;
-use crate::reputation::ReputationSystem;
-use crate::governance::Proposal;
-use crate::consensus::{ProofOfCooperation, types::ConsensusConfig};
-use crate::consensus::types::ConsensusRound;
-use crate::vm::{VM, Contract, ExecutionContext};
-use crate::vm::opcode::OpCode;
-use crate::vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
-use crate::websocket::WebSocketHandler;
+use chrono;
 
 pub struct ICNCore {
     blockchain: Arc<Mutex<Blockchain>>,
@@ -55,16 +54,10 @@ impl ICNCore {
         let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
         let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
         let ws_handler = Arc::new(WebSocketHandler::new());
-        
-        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
-            ConsensusConfig::default(),
-            ws_handler.clone(),
-        )));
 
         let blockchain = Arc::new(Mutex::new(Blockchain::new(
             identity_system.clone(),
-            reputation_system.clone(),
-            consensus.clone()
+            reputation_system.clone()
         )));
 
         let vm = VM::new(1000, reputation_system.lock().unwrap().get_reputation_context());
@@ -96,12 +89,6 @@ impl ICNCore {
         let reputation_score = reputation.get_reputation(&creator_did);
         drop(reputation);
 
-        let block_number = {
-            let blockchain = self.blockchain.lock()
-                .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
-            blockchain.current_block_number
-        };
-
         let contract = Contract {
             id: uuid::Uuid::new_v4().to_string(),
             code: vec![OpCode::CreateCooperative],
@@ -113,11 +100,15 @@ impl ICNCore {
             permissions: vec!["cooperative.create".to_string()],
         };
 
-        let execution_context = ExecutionContext {
+        let context = ExecutionContext {
             caller_did: creator_did.clone(),
             cooperative_id: contract.id.clone(),
             timestamp: chrono::Utc::now().timestamp() as u64,
-            block_number,
+            block_number: {
+                let blockchain = self.blockchain.lock()
+                    .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
+                blockchain.current_block_number
+            },
             reputation_score,
             permissions: vec!["cooperative.create".to_string()],
         };
@@ -125,7 +116,7 @@ impl ICNCore {
         {
             let mut vm = self.vm.lock()
                 .map_err(|_| "Failed to acquire VM lock".to_string())?;
-            vm.set_execution_context(execution_context);
+            vm.set_execution_context(context);
             vm.execute_contract(&contract)?;
         }
 
@@ -184,27 +175,10 @@ impl ICNCore {
         let blockchain = self.blockchain.lock()
             .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
         
-        let mut consensus = blockchain.consensus.lock()
-            .map_err(|_| "Failed to acquire consensus lock".to_string())?;
-        
-        consensus.start_round().await?;
-        
-        if let Some(poc_round) = consensus.get_current_round() {
-            // Convert to ConsensusRound from types module
-            let round = ConsensusRound {
-                round_number: poc_round.round_number,
-                coordinator: poc_round.coordinator.clone(),
-                start_time: poc_round.start_time,
-                timeout: poc_round.timeout,
-                status: poc_round.status.clone(),
-                proposed_block: poc_round.proposed_block.clone(),
-                votes: poc_round.votes.clone(),
-                stats: poc_round.stats.clone(),
-            };
-            drop(consensus);
+        if let Some(round) = blockchain.get_current_round() {
             drop(blockchain);
-            
-            let event = SystemEvent::ConsensusStarted(round);
+            // Fix applied here for type conversion
+            let event = SystemEvent::ConsensusStarted(round.into());
             let _ = self.event_bus.send(event);
         }
 

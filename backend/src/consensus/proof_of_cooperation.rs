@@ -1,3 +1,5 @@
+// backend/src/consensus/proof_of_cooperation.rs
+
 use std::sync::Arc;
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
@@ -11,35 +13,8 @@ use crate::consensus::types::{
     WeightedVote,
     ValidatorInfo,
     ConsensusRoundStats,
-    ConsensusRound as ConsensusRoundType,
+    ConsensusRound,  // Now directly using ConsensusRound from types
 };
-
-#[derive(Clone, Debug)]
-pub struct ConsensusRound {
-    pub round_number: u64,
-    pub coordinator: String,
-    pub start_time: DateTime<Utc>,
-    pub timeout: DateTime<Utc>,
-    pub status: RoundStatus,
-    pub proposed_block: Option<Block>,
-    pub votes: HashMap<String, WeightedVote>,
-    pub stats: ConsensusRoundStats,
-}
-
-impl From<ConsensusRound> for ConsensusRoundType {
-    fn from(round: ConsensusRound) -> Self {
-        ConsensusRoundType {
-            round_number: round.round_number,
-            coordinator: round.coordinator,
-            start_time: round.start_time,
-            timeout: round.timeout,
-            status: round.status,
-            proposed_block: round.proposed_block,
-            votes: round.votes,
-            stats: round.stats,
-        }
-    }
-}
 
 pub struct ProofOfCooperation {
     config: ConsensusConfig,
@@ -62,7 +37,6 @@ impl ProofOfCooperation {
         }
     }
 
-    /// Starts a new consensus round if one is not already in progress.
     pub async fn start_round(&mut self) -> Result<(), String> {
         if self.current_round.is_some() {
             return Err("Round already in progress".to_string());
@@ -95,15 +69,11 @@ impl ProofOfCooperation {
             },
         };
 
-        // Broadcast start of round
-        let round_type = ConsensusRoundType::from(round.clone());
-        self.ws_handler.broadcast_consensus_update(&round_type);
-
+        self.ws_handler.broadcast_consensus_update(&round);
         self.current_round = Some(round);
         Ok(())
     }
 
-    /// Allows the coordinator to propose a block for validation.
     pub async fn propose_block(&mut self, proposer_did: &str, block: Block) -> Result<(), String> {
         let validator = self.validators.get(proposer_did)
             .ok_or("Proposer not found")?;
@@ -123,16 +93,12 @@ impl ProofOfCooperation {
         round.proposed_block = Some(block.clone());
         round.status = RoundStatus::Voting;
 
-        // Broadcast updates
-        let round_type = ConsensusRoundType::from(round.clone());
-        self.ws_handler.broadcast_consensus_update(&round_type);
+        self.ws_handler.broadcast_consensus_update(&round);
         self.ws_handler.broadcast_block_finalized(&block);
-
         self.current_round = Some(round);
         Ok(())
     }
 
-    /// Allows a validator to submit a vote on the proposed block.
     pub async fn submit_vote(&mut self, validator_did: &str, approved: bool, signature: String) -> Result<(), String> {
         let validator = self.validators.get(validator_did)
             .ok_or("Not a registered validator")?;
@@ -182,8 +148,7 @@ impl ProofOfCooperation {
             round.status = RoundStatus::Finalizing;
         }
 
-        let round_type = ConsensusRoundType::from(round.clone());
-        self.ws_handler.broadcast_consensus_update(&round_type);
+        self.ws_handler.broadcast_consensus_update(&round);
         self.ws_handler.broadcast_validator_update(
             validator.clone(),
             round.round_number,
@@ -194,7 +159,6 @@ impl ProofOfCooperation {
         Ok(())
     }
 
-    /// Finalizes the current round if it has reached the finalizing status and returns the block.
     pub async fn finalize_round(&mut self) -> Result<Block, String> {
         let round = self.current_round.take()
             .ok_or("No active round")?;
@@ -247,7 +211,6 @@ impl ProofOfCooperation {
             .num_milliseconds() as u64;
         self.round_history.push(stats);
 
-        // Broadcast completion - only passing block
         self.ws_handler.broadcast_block_finalized(&block);
 
         Ok(block)
@@ -257,8 +220,8 @@ impl ProofOfCooperation {
         &self.reputation_updates
     }
 
-    pub fn get_current_round(&self) -> Option<&ConsensusRound> {
-        self.current_round.as_ref()
+    pub fn get_current_round(&self) -> Option<ConsensusRound> {
+        self.current_round.clone()
     }
 
     fn select_coordinator<'a>(&self, active_validators: &'a [&ValidatorInfo]) 
@@ -287,12 +250,26 @@ impl ProofOfCooperation {
 
         Err("Failed to select coordinator".to_string())
     }
+
+    pub fn register_validator(&mut self, did: String, initial_reputation: i64) -> Result<(), String> {
+        let validator = ValidatorInfo {
+            did: did.clone(),
+            reputation: initial_reputation,
+            voting_power: 1.0,
+            last_active_round: 0,
+            consecutive_missed_rounds: 0,
+            total_blocks_validated: 0,
+            performance_score: 1.0,
+        };
+
+        self.validators.insert(did, validator);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::types::ConsensusConfig;
 
     fn setup_test_consensus() -> ProofOfCooperation {
         let config = ConsensusConfig::default();

@@ -1,5 +1,3 @@
-// src/lib.rs
-
 pub mod blockchain;
 pub mod identity;
 pub mod reputation;
@@ -20,24 +18,21 @@ use crate::blockchain::{Block, Blockchain, Transaction, TransactionType};
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
 use crate::governance::Proposal;
-use crate::consensus::{ProofOfCooperation, ConsensusConfig, ConsensusRound};
+use crate::consensus::types::ConsensusRound;
 use crate::vm::{VM, Contract, ExecutionContext};
 use crate::vm::opcode::OpCode;
 use crate::vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
 use crate::websocket::WebSocketHandler;
 
-// Core system integration
 pub struct ICNCore {
     blockchain: Arc<Mutex<Blockchain>>,
     identity_system: Arc<Mutex<IdentitySystem>>,
     reputation_system: Arc<Mutex<ReputationSystem>>,
     ws_handler: Arc<WebSocketHandler>,
-    consensus: Arc<Mutex<ProofOfCooperation>>, // Added explicit consensus field
-    vm: VM,
+    vm: Arc<Mutex<VM>>,
     event_bus: broadcast::Sender<SystemEvent>,
 }
 
-// System-wide events
 #[derive(Clone, Debug)]
 pub enum SystemEvent {
     BlockCreated(Block),
@@ -58,20 +53,13 @@ impl ICNCore {
         let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
         let ws_handler = Arc::new(WebSocketHandler::new());
 
-        // First create the consensus
-        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
-            ConsensusConfig::default(),
-            ws_handler.clone()
-        )));
-
-        // Then create blockchain with consensus
         let blockchain = Arc::new(Mutex::new(Blockchain::new(
             identity_system.clone(),
             reputation_system.clone(),
-            consensus // Pass consensus here
         )));
 
         let vm = VM::new(1000, reputation_system.lock().unwrap().get_reputation_context());
+        let vm = Arc::new(Mutex::new(vm));
 
         ICNCore {
             blockchain,
@@ -84,22 +72,21 @@ impl ICNCore {
     }
 
     pub async fn create_cooperative(&self, creator_did: String, metadata: CooperativeMetadata) -> Result<String, String> {
-        // Verify creator's identity
-        let identity = self.identity_system.lock().unwrap();
+        let identity = self.identity_system.lock()
+            .map_err(|_| "Failed to acquire identity lock".to_string())?;
         if !identity.is_registered(&creator_did) {
             return Err("Creator DID not registered".to_string());
         }
         drop(identity);
 
-        // Check reputation requirements
-        let reputation = self.reputation_system.lock().unwrap();
+        let reputation = self.reputation_system.lock()
+            .map_err(|_| "Failed to acquire reputation lock".to_string())?;
         if reputation.get_reputation(&creator_did) < 100 {
             return Err("Insufficient reputation to create cooperative".to_string());
         }
         let reputation_score = reputation.get_reputation(&creator_did);
         drop(reputation);
 
-        // Create cooperative contract
         let contract = Contract {
             id: uuid::Uuid::new_v4().to_string(),
             code: vec![OpCode::CreateCooperative],
@@ -111,20 +98,26 @@ impl ICNCore {
             permissions: vec!["cooperative.create".to_string()],
         };
 
-        // Execute contract in VM
         let context = ExecutionContext {
             caller_did: creator_did.clone(),
             cooperative_id: contract.id.clone(),
             timestamp: chrono::Utc::now().timestamp() as u64,
-            block_number: self.blockchain.lock().unwrap().current_block_number,
+            block_number: {
+                let blockchain = self.blockchain.lock()
+                    .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
+                blockchain.current_block_number
+            },
             reputation_score,
             permissions: vec!["cooperative.create".to_string()],
         };
 
-        self.vm.set_execution_context(context);
-        self.vm.execute_contract(&contract)?;
+        {
+            let mut vm = self.vm.lock()
+                .map_err(|_| "Failed to acquire VM lock".to_string())?;
+            vm.set_execution_context(context);
+            vm.execute_contract(&contract)?;
+        }
 
-        // Create transaction
         let transaction = Transaction::new(
             creator_did.clone(),
             TransactionType::ContractExecution {
@@ -133,12 +126,12 @@ impl ICNCore {
             },
         );
 
-        // Add transaction to blockchain
-        let mut blockchain = self.blockchain.lock().unwrap();
-        blockchain.add_transaction(transaction).await?;
-        drop(blockchain);
+        {
+            let mut blockchain = self.blockchain.lock()
+                .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
+            blockchain.add_transaction(transaction).await?;
+        }
 
-        // Broadcast event
         let event = SystemEvent::CooperativeCreated {
             id: contract.id.clone(),
             creator: creator_did,
@@ -149,7 +142,8 @@ impl ICNCore {
     }
 
     pub async fn submit_proposal(&self, creator_did: String, proposal: Proposal) -> Result<u64, String> {
-        let reputation = self.reputation_system.lock().unwrap();
+        let reputation = self.reputation_system.lock()
+            .map_err(|_| "Failed to acquire reputation lock".to_string())?;
         if reputation.get_reputation(&creator_did) < proposal.required_reputation {
             return Err("Insufficient reputation to create proposal".to_string());
         }
@@ -163,9 +157,11 @@ impl ICNCore {
             },
         );
 
-        let mut blockchain = self.blockchain.lock().unwrap();
-        blockchain.add_transaction(transaction).await?;
-        drop(blockchain);
+        {
+            let mut blockchain = self.blockchain.lock()
+                .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
+            blockchain.add_transaction(transaction).await?;
+        }
 
         let event = SystemEvent::ProposalSubmitted(proposal.clone());
         let _ = self.event_bus.send(event);
@@ -174,16 +170,23 @@ impl ICNCore {
     }
 
     pub async fn start_consensus_round(&self) -> Result<(), String> {
-        let blockchain = self.blockchain.lock().unwrap();
+        let blockchain = self.blockchain.lock()
+            .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
         
-        let mut consensus = blockchain.consensus.lock().unwrap();
-        consensus.start_round().await?;
-        
-        if let Some(round) = consensus.get_current_round().cloned() {
-            drop(consensus);
+        if let Some(round) = blockchain.get_current_round() {
+            let consensus_round = ConsensusRound {
+                round_number: round.round_number,
+                coordinator: round.coordinator.clone(),
+                start_time: round.start_time,
+                timeout: round.timeout,
+                status: round.status.clone(),
+                proposed_block: round.proposed_block.clone(),
+                votes: round.votes.clone(),
+                stats: round.stats.clone(),
+            };
             drop(blockchain);
             
-            let event = SystemEvent::ConsensusStarted(round);
+            let event = SystemEvent::ConsensusStarted(consensus_round);
             let _ = self.event_bus.send(event);
         }
 
@@ -204,7 +207,12 @@ impl CooperativeManager {
         CooperativeManager { core }
     }
 
-    pub async fn create_cooperative(&self, creator_did: String, name: String, purpose: String) -> Result<String, String> {
+    pub async fn create_cooperative(
+        &self, 
+        creator_did: String, 
+        _name: String,
+        purpose: String
+    ) -> Result<String, String> {
         let metadata = CooperativeMetadata {
             creator_did: creator_did.clone(),
             cooperative_id: uuid::Uuid::new_v4().to_string(),
@@ -273,7 +281,9 @@ impl ICNNode {
     }
 
     pub async fn connect_to_peer(&self, peer_id: String, address: String) -> Result<(), String> {
-        self.peers.lock().unwrap().insert(peer_id, address);
+        self.peers.lock()
+            .map_err(|_| "Failed to acquire peers lock".to_string())?
+            .insert(peer_id, address);
         Ok(())
     }
 }
