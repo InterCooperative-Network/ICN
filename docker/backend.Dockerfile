@@ -1,17 +1,30 @@
-# Start from an official Rust image
-FROM rust:latest
+# backend.Dockerfile
 
-# Set the working directory
+# Stage 1: Build the Rust app
+FROM rust:1.71.0 AS builder
+
 WORKDIR /app
 
-# Copy the current directory contents into the container at /app
+# Copy Cargo.toml and Cargo.lock
+COPY Cargo.toml Cargo.lock ./
+
+# Build dependencies
+RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release
+RUN rm -rf src
+
+# Copy the rest of the project
 COPY . .
 
-# Install any needed dependencies
+# Build the project
 RUN cargo build --release
-
-# Add integration tests step to Dockerfile
 RUN cargo test --release
 
-# Run the binary when the container launches
-CMD ["cargo", "run", "--release"]
+# Stage 2: Create a smaller image to run the binary
+FROM debian:buster-slim AS runner
+WORKDIR /app
+COPY --from=builder /app/target/release/icn-backend /usr/local/bin/icn-backend
+
+EXPOSE 8080
+EXPOSE 8081
+
+CMD ["icn-backend"]

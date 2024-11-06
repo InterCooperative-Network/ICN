@@ -3,25 +3,35 @@ version: '3.8'
 services:
   backend:
     build:
-      context: .
-      dockerfile: backend.Dockerfile
-    volumes:
-      - .:/app
+      context: ../backend                        # Path to the backend source with Cargo.toml
+      dockerfile: ../docker/backend.Dockerfile   # Path to backend Dockerfile in `docker`
     ports:
-      - "8080:8080"
-    command: ["cargo", "run", "--release"]
+      - "8080:8080"  # HTTP
+      - "8081:8081"  # WebSocket
+    environment:
+      - DATABASE_URL=postgres://icnuser:icnpass@db:5432/icndb
 
-  test:
+  frontend:
     build:
-      context: .
-      dockerfile: backend.Dockerfile
-    command: ["cargo", "test", "--release"]
+      context: ../frontend                       # Path to frontend source code
+      dockerfile: ../docker/frontend.Dockerfile  # Path to frontend Dockerfile in `docker`
+    ports:
+      - "3000:3000"
+
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: icnuser
+      POSTGRES_PASSWORD: icnpass
+      POSTGRES_DB: icndb
+    ports:
+      - "5432:5432"
 
   docs:
     image: squidfunk/mkdocs-material:latest
     volumes:
-      - ../docs:/docs                    # Maps the correct docs directory
+      - ../docs:/docs
     ports:
       - "8000:8000"
-    working_dir: /docs                   # Set the working directory to /docs inside the container
-    command: serve -a 0.0.0.0:8000       # Run MkDocs without prefixing `mkdocs`
+    working_dir: /docs
+    command: serve -a 0.0.0.0:8000

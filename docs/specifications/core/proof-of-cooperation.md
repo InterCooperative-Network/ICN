@@ -134,9 +134,7 @@ The Proof of Cooperation (PoC) is a consensus mechanism designed specifically fo
 
 #### 2.5.2 Scalability Solutions
 
-- **Sharding**: Divides the network into smaller groups processing transactions in parallel.
-- **Layer-2 Solutions**: Off-chain protocols handle transactions to reduce main chain load.
-
+- **Sharding**: Divides the network into smaller groups process 
 #### 2.5.3 Resource Optimization
 
 - **Minimal Hardware Requirements**: Encourages broader participation.

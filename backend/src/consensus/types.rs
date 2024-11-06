@@ -1,4 +1,4 @@
-// src/consensus/types.rs
+// backend/src/consensus/types.rs
 
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
@@ -34,6 +34,7 @@ pub struct WeightedVote {
     pub signature: String,
 }
 
+// Making ConsensusRound public so it can be accessed from other modules
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConsensusRound {
     pub round_number: u64,
