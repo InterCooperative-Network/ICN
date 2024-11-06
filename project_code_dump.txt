@@ -1,4 +1,4 @@
-Project Code Dump - Generated Tue Nov  5 11:39:42 PM UTC 2024
+Project Code Dump - Generated Wed Nov  6 07:30:26 AM UTC 2024
 ======================================
 
 Project Tree:
@@ -2450,6 +2450,7 @@ impl Blockchain {
                     reputation_system.get_reputation_context()
                 };
                 
+                // Get permissions and reputation score
                 let (permissions, reputation_score) = {
                     let identity_system = self.identity_system.lock()
                         .map_err(|_| "Failed to acquire identity lock".to_string())?;
@@ -2497,20 +2498,25 @@ impl Blockchain {
     }
 
     fn validate_transaction(&self, transaction: &Transaction) -> Result<(), String> {
-        let identity_system = self.identity_system.lock()
-            .map_err(|_| "Failed to acquire identity system lock".to_string())?;
-        
-        if !identity_system.is_registered(&transaction.sender) {
+        // Check DID validity
+        let identity_valid = {
+            let identity_system = self.identity_system.lock()
+                .map_err(|_| "Failed to acquire identity system lock".to_string())?;
+            identity_system.is_registered(&transaction.sender)
+        };
+
+        if !identity_valid {
             return Err("Invalid sender DID".to_string());
         }
-        
-        drop(identity_system);
 
-        let reputation_system = self.reputation_system.lock()
-            .map_err(|_| "Failed to acquire reputation system lock".to_string())?;
-        
-        let sender_reputation = reputation_system.get_reputation(&transaction.sender);
-        if sender_reputation < 10 {
+        // Check reputation
+        let reputation_valid = {
+            let reputation_system = self.reputation_system.lock()
+                .map_err(|_| "Failed to acquire reputation system lock".to_string())?;
+            reputation_system.get_reputation(&transaction.sender) >= 10
+        };
+
+        if !reputation_valid {
             return Err("Insufficient reputation".to_string());
         }
 
@@ -2540,7 +2546,7 @@ impl Blockchain {
 
     pub async fn add_transaction(&mut self, transaction: Transaction) -> Result<(), String> {
         self.validate_transaction(&transaction)?;
-        self.pending_transactions.push(transaction);
+        self.pending_transactions.push(transaction.clone());
         
         if self.pending_transactions.len() >= 10 {
             self.finalize_block().await?;
@@ -2550,14 +2556,6 @@ impl Blockchain {
     }
 
     pub async fn finalize_block(&mut self) -> Result<(), String> {
-        // Start consensus round
-        {
-            let mut consensus = self.consensus.lock()
-                .map_err(|_| "Failed to acquire consensus lock".to_string())?;
-            consensus.start_round().await?;
-        }
-
-        // Prepare block
         let previous_hash = self.chain.last()
             .map(|block| block.hash.clone())
             .unwrap_or_default();
@@ -2568,46 +2566,44 @@ impl Blockchain {
             self.pending_transactions.clone(),
         );
 
+        // Start consensus round
+        let consensus_guard = self.consensus.lock()
+            .map_err(|_| "Failed to acquire consensus lock".to_string())?;
+        let mut consensus = consensus_guard;
+        
+        consensus.start_round().await?;
+        
+        // Get validators
         let validators = self.get_active_validators();
         if validators.is_empty() {
             return Err("No active validators available".to_string());
         }
 
         // Propose block
-        {
-            let mut consensus = self.consensus.lock()
-                .map_err(|_| "Failed to acquire consensus lock".to_string())?;
-            consensus.propose_block(&validators[0], new_block.clone()).await?;
-        }
+        consensus.propose_block(&validators[0], new_block.clone()).await?;
 
         // Collect votes
         for validator in &validators {
             let signature = String::from("dummy_signature");
-            let mut consensus = self.consensus.lock()
-                .map_err(|_| "Failed to acquire consensus lock".to_string())?;
             consensus.submit_vote(validator, true, signature).await?;
         }
 
         // Finalize round
-        let (finalized_block, reputation_updates) = {
-            let mut consensus = self.consensus.lock()
-                .map_err(|_| "Failed to acquire consensus lock".to_string())?;
-            let block = consensus.finalize_round().await?;
-            let updates = consensus.get_reputation_updates().to_vec();
-            (block, updates)
-        };
+        let block = consensus.finalize_round().await?;
+        let updates = consensus.get_reputation_updates().to_vec();
+        
+        // Drop consensus lock before updating other state
+        drop(consensus);
 
         // Update chain
-        self.chain.push(finalized_block);
+        self.chain.push(block);
         self.pending_transactions.clear();
         
         // Apply reputation updates
-        {
-            let mut reputation_system = self.reputation_system.lock()
-                .map_err(|_| "Failed to acquire reputation lock".to_string())?;
-            for (did, change) in reputation_updates {
-                reputation_system.increase_reputation(&did, change);
-            }
+        let mut reputation_system = self.reputation_system.lock()
+            .map_err(|_| "Failed to acquire reputation lock".to_string())?;
+        for (did, change) in updates {
+            reputation_system.increase_reputation(&did, change);
         }
 
         self.current_block_number += 1;
@@ -2643,7 +2639,7 @@ impl Blockchain {
 mod tests {
     use super::*;
     use crate::websocket::WebSocketHandler;
-    use crate::consensus::types::ConsensusConfig;
+    use crate::identity::DID;
 
     fn setup_test_blockchain() -> Blockchain {
         let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
@@ -2677,7 +2673,7 @@ mod tests {
         {
             let mut identity = blockchain.identity_system.lock().unwrap();
             identity.register_did(
-                crate::identity::DID {
+                DID {
                     id: "did:icn:test".to_string(),
                     public_key: vec![],
                 },
@@ -3205,6 +3201,7 @@ use crate::websocket::WebSocketHandler;
 use crate::blockchain::Blockchain;
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
+use crate::consensus::{ProofOfCooperation, types::ConsensusConfig};
 
 #[tokio::main]
 async fn main() {
@@ -3215,10 +3212,17 @@ async fn main() {
     // Create WebSocket handler
     let ws_handler = Arc::new(WebSocketHandler::new());
     
+    // Create consensus system first
+    let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
+        ConsensusConfig::default(),
+        ws_handler.clone(),
+    )));
+
+    // Create blockchain
     let blockchain = Arc::new(Mutex::new(Blockchain::new(
         identity_system.clone(),
         reputation_system.clone(),
-        ws_handler.clone()
+        consensus.clone()
     )));
 
     // WebSocket route
@@ -3234,7 +3238,7 @@ async fn main() {
         });
 
     // Start the server
-    println!("Starting WebSocket server on localhost:8080");
+    println!("Starting WebSocket server on localhost:8081");
     warp::serve(ws_route)
         .run(([127, 0, 0, 1], 8081))
         .await;
@@ -3265,21 +3269,22 @@ use crate::blockchain::{Block, Blockchain, Transaction, TransactionType};
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
 use crate::governance::Proposal;
-use crate::consensus::{ConsensusRound, types::{CooperativeMetadata, ResourceImpact}};
+use crate::consensus::{ProofOfCooperation, types::ConsensusConfig};
+use crate::consensus::types::ConsensusRound;
+use crate::vm::{VM, Contract, ExecutionContext};
+use crate::vm::opcode::OpCode;
+use crate::vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
 use crate::websocket::WebSocketHandler;
-use crate::vm::{VM, Contract, ExecutionContext, OpCode};
 
-// Core system integration
 pub struct ICNCore {
     blockchain: Arc<Mutex<Blockchain>>,
     identity_system: Arc<Mutex<IdentitySystem>>,
     reputation_system: Arc<Mutex<ReputationSystem>>,
     ws_handler: Arc<WebSocketHandler>,
-    vm: VM,
+    vm: Arc<Mutex<VM>>,
     event_bus: broadcast::Sender<SystemEvent>,
 }
 
-// System-wide events
 #[derive(Clone, Debug)]
 pub enum SystemEvent {
     BlockCreated(Block),
@@ -3300,13 +3305,19 @@ impl ICNCore {
         let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
         let ws_handler = Arc::new(WebSocketHandler::new());
         
+        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
+            ConsensusConfig::default(),
+            ws_handler.clone(),
+        )));
+
         let blockchain = Arc::new(Mutex::new(Blockchain::new(
             identity_system.clone(),
             reputation_system.clone(),
-            ws_handler.clone()
+            consensus.clone()
         )));
 
         let vm = VM::new(1000, reputation_system.lock().unwrap().get_reputation_context());
+        let vm = Arc::new(Mutex::new(vm));
 
         ICNCore {
             blockchain,
@@ -3318,21 +3329,28 @@ impl ICNCore {
         }
     }
 
-    // Core functionality for managing cooperatives
     pub async fn create_cooperative(&self, creator_did: String, metadata: CooperativeMetadata) -> Result<String, String> {
-        // Verify creator's identity
-        let identity = self.identity_system.lock().unwrap();
+        let identity = self.identity_system.lock()
+            .map_err(|_| "Failed to acquire identity lock".to_string())?;
         if !identity.is_registered(&creator_did) {
             return Err("Creator DID not registered".to_string());
         }
+        drop(identity);
 
-        // Check reputation requirements
-        let reputation = self.reputation_system.lock().unwrap();
+        let reputation = self.reputation_system.lock()
+            .map_err(|_| "Failed to acquire reputation lock".to_string())?;
         if reputation.get_reputation(&creator_did) < 100 {
             return Err("Insufficient reputation to create cooperative".to_string());
         }
+        let reputation_score = reputation.get_reputation(&creator_did);
+        drop(reputation);
 
-        // Create cooperative contract
+        let block_number = {
+            let blockchain = self.blockchain.lock()
+                .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
+            blockchain.current_block_number
+        };
+
         let contract = Contract {
             id: uuid::Uuid::new_v4().to_string(),
             code: vec![OpCode::CreateCooperative],
@@ -3344,20 +3362,36 @@ impl ICNCore {
             permissions: vec!["cooperative.create".to_string()],
         };
 
-        // Execute contract in VM
-        let mut execution_context = ExecutionContext {
+        let execution_context = ExecutionContext {
             caller_did: creator_did.clone(),
             cooperative_id: contract.id.clone(),
             timestamp: chrono::Utc::now().timestamp() as u64,
-            block_number: self.blockchain.lock().unwrap().current_block_number,
-            reputation_score: reputation.get_reputation(&creator_did),
+            block_number,
+            reputation_score,
             permissions: vec!["cooperative.create".to_string()],
         };
 
-        self.vm.set_execution_context(execution_context);
-        self.vm.execute_contract(&contract)?;
+        {
+            let mut vm = self.vm.lock()
+                .map_err(|_| "Failed to acquire VM lock".to_string())?;
+            vm.set_execution_context(execution_context);
+            vm.execute_contract(&contract)?;
+        }
 
-        // Broadcast event
+        let transaction = Transaction::new(
+            creator_did.clone(),
+            TransactionType::ContractExecution {
+                contract_id: contract.id.clone(),
+                input_data: HashMap::new(),
+            },
+        );
+
+        {
+            let mut blockchain = self.blockchain.lock()
+                .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
+            blockchain.add_transaction(transaction).await?;
+        }
+
         let event = SystemEvent::CooperativeCreated {
             id: contract.id.clone(),
             creator: creator_did,
@@ -3367,14 +3401,14 @@ impl ICNCore {
         Ok(contract.id)
     }
 
-    // Governance functionality
     pub async fn submit_proposal(&self, creator_did: String, proposal: Proposal) -> Result<u64, String> {
-        let reputation = self.reputation_system.lock().unwrap();
+        let reputation = self.reputation_system.lock()
+            .map_err(|_| "Failed to acquire reputation lock".to_string())?;
         if reputation.get_reputation(&creator_did) < proposal.required_reputation {
             return Err("Insufficient reputation to create proposal".to_string());
         }
+        drop(reputation);
 
-        // Create proposal transaction
         let transaction = Transaction::new(
             creator_did,
             TransactionType::ContractExecution {
@@ -3383,39 +3417,54 @@ impl ICNCore {
             },
         );
 
-        // Add to blockchain
-        self.blockchain.lock().unwrap().add_transaction(transaction)?;
+        {
+            let mut blockchain = self.blockchain.lock()
+                .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
+            blockchain.add_transaction(transaction).await?;
+        }
 
-        // Broadcast event
         let event = SystemEvent::ProposalSubmitted(proposal.clone());
         let _ = self.event_bus.send(event);
 
         Ok(proposal.id)
     }
 
-    // Consensus functionality
     pub async fn start_consensus_round(&self) -> Result<(), String> {
-        let mut blockchain = self.blockchain.lock().unwrap();
+        let blockchain = self.blockchain.lock()
+            .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
         
-        // Start new consensus round
-        blockchain.consensus.start_round()?;
+        let mut consensus = blockchain.consensus.lock()
+            .map_err(|_| "Failed to acquire consensus lock".to_string())?;
         
-        if let Some(round) = blockchain.consensus.get_current_round() {
-            // Broadcast event
-            let event = SystemEvent::ConsensusStarted(round.clone());
+        consensus.start_round().await?;
+        
+        if let Some(poc_round) = consensus.get_current_round() {
+            // Convert to ConsensusRound from types module
+            let round = ConsensusRound {
+                round_number: poc_round.round_number,
+                coordinator: poc_round.coordinator.clone(),
+                start_time: poc_round.start_time,
+                timeout: poc_round.timeout,
+                status: poc_round.status.clone(),
+                proposed_block: poc_round.proposed_block.clone(),
+                votes: poc_round.votes.clone(),
+                stats: poc_round.stats.clone(),
+            };
+            drop(consensus);
+            drop(blockchain);
+            
+            let event = SystemEvent::ConsensusStarted(round);
             let _ = self.event_bus.send(event);
         }
 
         Ok(())
     }
 
-    // WebSocket event handling
     pub fn subscribe_to_events(&self) -> broadcast::Receiver<SystemEvent> {
         self.event_bus.subscribe()
     }
 }
 
-// Cooperative management implementation
 pub struct CooperativeManager {
     core: Arc<ICNCore>,
 }
@@ -3425,7 +3474,12 @@ impl CooperativeManager {
         CooperativeManager { core }
     }
 
-    pub async fn create_cooperative(&self, creator_did: String, name: String, purpose: String) -> Result<String, String> {
+    pub async fn create_cooperative(
+        &self, 
+        creator_did: String, 
+        _name: String,
+        purpose: String
+    ) -> Result<String, String> {
         let metadata = CooperativeMetadata {
             creator_did: creator_did.clone(),
             cooperative_id: uuid::Uuid::new_v4().to_string(),
@@ -3457,11 +3511,10 @@ impl CooperativeManager {
     }
 }
 
-// Node implementation for network participation
 pub struct ICNNode {
     core: Arc<ICNCore>,
     node_id: String,
-    peers: Arc<Mutex<HashMap<String, String>>>, // peer_id -> address
+    peers: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl ICNNode {
@@ -3474,18 +3527,13 @@ impl ICNNode {
     }
 
     pub async fn start(&self) -> Result<(), String> {
-        // Subscribe to system events
         let mut event_rx = self.core.subscribe_to_events();
-        
-        // Start consensus participation
         self.core.start_consensus_round().await?;
 
-        // Handle events
         tokio::spawn(async move {
             while let Ok(event) = event_rx.recv().await {
                 match event {
                     SystemEvent::BlockCreated(block) => {
-                        // Propagate block to peers
                         println!("New block created: {}", block.index);
                     }
                     SystemEvent::ConsensusStarted(round) => {
@@ -3500,7 +3548,9 @@ impl ICNNode {
     }
 
     pub async fn connect_to_peer(&self, peer_id: String, address: String) -> Result<(), String> {
-        self.peers.lock().unwrap().insert(peer_id, address);
+        self.peers.lock()
+            .map_err(|_| "Failed to acquire peers lock".to_string())?
+            .insert(peer_id, address);
         Ok(())
     }
 }
@@ -3736,7 +3786,6 @@ impl From<ConsensusError> for String {
     }
 }
 
-// Helper functions for consensus calculations
 pub mod utils {
     pub fn calculate_voting_power(reputation: i64, total_reputation: i64, max_power: f64) -> f64 {
         let raw_power = reputation as f64 / total_reputation as f64;
