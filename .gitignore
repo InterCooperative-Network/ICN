@@ -1,24 +1,103 @@
-# Python
+# Python bytecode and cache files
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Environment
+# Environment and virtual environments
 .env
 .venv
 env/
 venv/
+ENV/
+env.bak/
+*.env
 
-# IDE
+# IDE and editor settings
 .idea/
 .vscode/
 *.swp
 
-# Documentation build
+# Documentation builds
 _build/
+site/
 
-# Python virtual environments
-tools/.env/
+# Distribution / Packaging
+.Python
+build/
+develop-eggs/
+dist/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Python virtual environments
+# PyInstaller
+# Usually these files are written by a Python script from a template
+*.manifest
+*.spec
+
+# C extensions
+*.so
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# pytest
+.cache/
+
+# tox
+.tox/
+.nox/
+
+# coverage reports
+.coverage
+*.cover
+*.py,cover
+htmlcov/
+coverage.xml
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# celery beat schedule file
+celerybeat-schedule
+
+# Django stuff:
+*.log
+*.pot
+*.pyc
+*.pyo
+*.sqlite3
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# pyenv
+.python-version
+
+# mkdocs documentation
+/site
+
+# Other virtual environments
 tools/.env/
