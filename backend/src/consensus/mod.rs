@@ -2,14 +2,12 @@ pub mod proof_of_cooperation;
 pub mod types;
 
 pub use proof_of_cooperation::ProofOfCooperation;
-pub use types::{ConsensusRound, RoundStatus};  // Directly re-export from `types`
+pub use types::{ConsensusRound, ConsensusConfig, RoundStatus}; // Exporting ConsensusConfig here
 
 use std::sync::{Arc, Mutex};
 use crate::blockchain::{Block, Transaction};
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
-use crate::consensus::ConsensusConfig;
-
 
 pub struct Blockchain {
     pub chain: Vec<Block>,
@@ -37,11 +35,9 @@ impl Blockchain {
     }
 
     pub async fn finalize_block(&mut self) -> Result<(), String> {
-        // Get consensus lock first
         let mut consensus = self.consensus.lock()
             .map_err(|_| "Failed to acquire consensus lock".to_string())?;
 
-        // Start consensus round
         consensus.start_round().await?;
 
         let previous_hash = self.chain.last()
@@ -59,17 +55,14 @@ impl Blockchain {
             return Err("No active validators available".to_string());
         }
 
-        // Drop current consensus lock before proposing block
         drop(consensus);
 
-        // Propose block with new lock
         {
             let mut consensus = self.consensus.lock()
                 .map_err(|_| "Failed to acquire consensus lock".to_string())?;
             consensus.propose_block(&validators[0], new_block.clone()).await?;
         }
 
-        // Submit votes
         for validator in validators {
             let signature = String::from("dummy_signature");
             let mut consensus = self.consensus.lock()
@@ -77,7 +70,6 @@ impl Blockchain {
             consensus.submit_vote(&validator, true, signature).await?;
         }
 
-        // Finalize round
         let (finalized_block, reputation_updates) = {
             let mut consensus = self.consensus.lock()
                 .map_err(|_| "Failed to acquire consensus lock".to_string())?;
@@ -86,11 +78,9 @@ impl Blockchain {
             (block, updates)
         };
 
-        // Update state
         self.chain.push(finalized_block);
         self.pending_transactions.clear();
         
-        // Apply reputation updates
         {
             let mut reputation_system = self.reputation_system.lock()
                 .map_err(|_| "Failed to acquire reputation lock".to_string())?;
@@ -146,6 +136,7 @@ impl Blockchain {
 mod tests {
     use super::*;
     use crate::websocket::WebSocketHandler;
+    use crate::consensus::types::ConsensusConfig; // Adjusted path for ConsensusConfig
 
     #[tokio::test]
     async fn test_blockchain_new() {

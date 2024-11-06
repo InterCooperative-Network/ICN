@@ -1,4 +1,4 @@
-Project Code Dump - Generated Wed Nov  6 09:24:33 PM UTC 2024
+Project Code Dump - Generated Wed Nov  6 10:04:01 PM UTC 2024
 ======================================
 
 Project Tree:
@@ -68,6 +68,7 @@ Project Tree:
 │           └── lib.rs
 ├── docker
 │   ├── backend.Dockerfile
+│   ├── backend_new.Dockerfile
 │   ├── docker-compose.yml
 │   └── frontend.Dockerfile
 ├── docs
@@ -129,7 +130,7 @@ Project Tree:
     ├── install_docsctl.sh
     └── requirements.txt
 
-37 directories, 88 files
+37 directories, 89 files
 
 
 ===================
@@ -3163,15 +3164,16 @@ async fn main() {
 ===================
 File: ./backend/src/lib.rs
 ===================
-mod blockchain;
-mod identity;
-mod reputation;
-mod governance;
-mod utils;
-mod vm;
-mod websocket;
-mod consensus;
-mod network;
+// Making specific modules public for accessibility in tests and other modules
+pub mod blockchain;
+pub mod identity;
+pub mod reputation;
+pub mod governance;
+pub mod utils;
+pub mod vm;
+pub mod websocket;
+pub mod consensus;
+pub mod network;
 
 // Re-export types for external use
 pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
@@ -3342,8 +3344,7 @@ impl ICNCore {
         
         if let Some(round) = blockchain.get_current_round() {
             drop(blockchain);
-            // Fix applied here for type conversion
-            let event = SystemEvent::ConsensusStarted(round.into());
+            let event = SystemEvent::ConsensusStarted(round);
             let _ = self.event_bus.send(event);
         }
 
@@ -3697,7 +3698,7 @@ pub mod proof_of_cooperation;
 pub mod types;
 
 pub use proof_of_cooperation::ProofOfCooperation;
-pub use types::{ConsensusRound, RoundStatus};  // Directly re-export from `types`
+pub use types::{ConsensusRound, ConsensusConfig, RoundStatus}; // Exporting ConsensusConfig here
 
 use std::sync::{Arc, Mutex};
 use crate::blockchain::{Block, Transaction};
@@ -3730,11 +3731,9 @@ impl Blockchain {
     }
 
     pub async fn finalize_block(&mut self) -> Result<(), String> {
-        // Get consensus lock first
         let mut consensus = self.consensus.lock()
             .map_err(|_| "Failed to acquire consensus lock".to_string())?;
 
-        // Start consensus round
         consensus.start_round().await?;
 
         let previous_hash = self.chain.last()
@@ -3752,17 +3751,14 @@ impl Blockchain {
             return Err("No active validators available".to_string());
         }
 
-        // Drop current consensus lock before proposing block
         drop(consensus);
 
-        // Propose block with new lock
         {
             let mut consensus = self.consensus.lock()
                 .map_err(|_| "Failed to acquire consensus lock".to_string())?;
             consensus.propose_block(&validators[0], new_block.clone()).await?;
         }
 
-        // Submit votes
         for validator in validators {
             let signature = String::from("dummy_signature");
             let mut consensus = self.consensus.lock()
@@ -3770,7 +3766,6 @@ impl Blockchain {
             consensus.submit_vote(&validator, true, signature).await?;
         }
 
-        // Finalize round
         let (finalized_block, reputation_updates) = {
             let mut consensus = self.consensus.lock()
                 .map_err(|_| "Failed to acquire consensus lock".to_string())?;
@@ -3779,11 +3774,9 @@ impl Blockchain {
             (block, updates)
         };
 
-        // Update state
         self.chain.push(finalized_block);
         self.pending_transactions.clear();
         
-        // Apply reputation updates
         {
             let mut reputation_system = self.reputation_system.lock()
                 .map_err(|_| "Failed to acquire reputation lock".to_string())?;
@@ -3839,6 +3832,7 @@ impl Blockchain {
 mod tests {
     use super::*;
     use crate::websocket::WebSocketHandler;
+    use crate::consensus::types::ConsensusConfig; // Adjusted path for ConsensusConfig
 
     #[tokio::test]
     async fn test_blockchain_new() {
@@ -4845,7 +4839,6 @@ services:
       context: ../backend                        # Path to the backend source with Cargo.toml
       dockerfile: ../docker/backend.Dockerfile   # Path to backend Dockerfile in `docker`
     ports:
-      - "8080:8080"  # HTTP
       - "8081:8081"  # WebSocket
     environment:
       - DATABASE_URL=postgres://icnuser:icnpass@db:5432/icndb
@@ -4875,7 +4868,6 @@ services:
     working_dir: /docs
     command: serve -a 0.0.0.0:8000
 
-
 ===================
 File: ./docker/backend.Dockerfile
 ===================
@@ -4901,11 +4893,10 @@ RUN cargo build --release
 RUN cargo test --release
 
 # Stage 2: Create a smaller image to run the binary
-FROM debian:buster-slim AS runner
+FROM debian:bullseye-slim AS runner
 WORKDIR /app
 COPY --from=builder /app/target/release/icn-backend /usr/local/bin/icn-backend
 
-EXPOSE 8080
 EXPOSE 8081
 
 CMD ["icn-backend"]
