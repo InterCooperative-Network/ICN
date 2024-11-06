@@ -15,6 +15,7 @@ use crate::websocket::WebSocketHandler;
 use crate::blockchain::Blockchain;
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
+use crate::consensus::{ProofOfCooperation, types::ConsensusConfig};
 
 #[tokio::main]
 async fn main() {
@@ -25,10 +26,17 @@ async fn main() {
     // Create WebSocket handler
     let ws_handler = Arc::new(WebSocketHandler::new());
     
+    // Create consensus system first
+    let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
+        ConsensusConfig::default(),
+        ws_handler.clone(),
+    )));
+
+    // Create blockchain
     let blockchain = Arc::new(Mutex::new(Blockchain::new(
         identity_system.clone(),
         reputation_system.clone(),
-        ws_handler.clone()
+        consensus.clone()
     )));
 
     // WebSocket route
@@ -44,7 +52,7 @@ async fn main() {
         });
 
     // Start the server
-    println!("Starting WebSocket server on localhost:8080");
+    println!("Starting WebSocket server on localhost:8081");
     warp::serve(ws_route)
         .run(([127, 0, 0, 1], 8081))
         .await;

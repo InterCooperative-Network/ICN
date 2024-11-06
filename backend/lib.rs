@@ -20,11 +20,11 @@ use crate::blockchain::{Block, Blockchain, Transaction, TransactionType};
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
 use crate::governance::Proposal;
-use crate::consensus::{ConsensusRound};
-use crate::websocket::WebSocketHandler;
+use crate::consensus::{ProofOfCooperation, ConsensusConfig, ConsensusRound};
 use crate::vm::{VM, Contract, ExecutionContext};
-use crate::vm::opcode::OpCode;  // Corrected import for OpCode
-use crate::consensus::types::{CooperativeMetadata, ResourceImpact};  // Corrected imports for CooperativeMetadata and ResourceImpact
+use crate::vm::opcode::OpCode;
+use crate::vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
+use crate::websocket::WebSocketHandler;
 
 // Core system integration
 pub struct ICNCore {
@@ -32,6 +32,7 @@ pub struct ICNCore {
     identity_system: Arc<Mutex<IdentitySystem>>,
     reputation_system: Arc<Mutex<ReputationSystem>>,
     ws_handler: Arc<WebSocketHandler>,
+    consensus: Arc<Mutex<ProofOfCooperation>>, // Added explicit consensus field
     vm: VM,
     event_bus: broadcast::Sender<SystemEvent>,
 }
@@ -56,17 +57,18 @@ impl ICNCore {
         let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
         let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
         let ws_handler = Arc::new(WebSocketHandler::new());
-        
-        // Initialize Blockchain with consensus handling
-        let consensus = Arc::new(Mutex::new(crate::consensus::proof_of_cooperation::ProofOfCooperation::new(
-            crate::consensus::types::ConsensusConfig::default(),
-            ws_handler.clone(),
+
+        // First create the consensus
+        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
+            ConsensusConfig::default(),
+            ws_handler.clone()
         )));
-        
+
+        // Then create blockchain with consensus
         let blockchain = Arc::new(Mutex::new(Blockchain::new(
             identity_system.clone(),
             reputation_system.clone(),
-            consensus,  // Updated to pass consensus
+            consensus // Pass consensus here
         )));
 
         let vm = VM::new(1000, reputation_system.lock().unwrap().get_reputation_context());
@@ -81,19 +83,21 @@ impl ICNCore {
         }
     }
 
-    // Core functionality for managing cooperatives
     pub async fn create_cooperative(&self, creator_did: String, metadata: CooperativeMetadata) -> Result<String, String> {
         // Verify creator's identity
         let identity = self.identity_system.lock().unwrap();
         if !identity.is_registered(&creator_did) {
             return Err("Creator DID not registered".to_string());
         }
+        drop(identity);
 
         // Check reputation requirements
         let reputation = self.reputation_system.lock().unwrap();
         if reputation.get_reputation(&creator_did) < 100 {
             return Err("Insufficient reputation to create cooperative".to_string());
         }
+        let reputation_score = reputation.get_reputation(&creator_did);
+        drop(reputation);
 
         // Create cooperative contract
         let contract = Contract {
@@ -108,17 +112,31 @@ impl ICNCore {
         };
 
         // Execute contract in VM
-        let execution_context = ExecutionContext {
+        let context = ExecutionContext {
             caller_did: creator_did.clone(),
             cooperative_id: contract.id.clone(),
             timestamp: chrono::Utc::now().timestamp() as u64,
             block_number: self.blockchain.lock().unwrap().current_block_number,
-            reputation_score: reputation.get_reputation(&creator_did),
+            reputation_score,
             permissions: vec!["cooperative.create".to_string()],
         };
 
-        self.vm.set_execution_context(execution_context);
+        self.vm.set_execution_context(context);
         self.vm.execute_contract(&contract)?;
+
+        // Create transaction
+        let transaction = Transaction::new(
+            creator_did.clone(),
+            TransactionType::ContractExecution {
+                contract_id: contract.id.clone(),
+                input_data: HashMap::new(),
+            },
+        );
+
+        // Add transaction to blockchain
+        let mut blockchain = self.blockchain.lock().unwrap();
+        blockchain.add_transaction(transaction).await?;
+        drop(blockchain);
 
         // Broadcast event
         let event = SystemEvent::CooperativeCreated {
@@ -130,14 +148,13 @@ impl ICNCore {
         Ok(contract.id)
     }
 
-    // Governance functionality
     pub async fn submit_proposal(&self, creator_did: String, proposal: Proposal) -> Result<u64, String> {
         let reputation = self.reputation_system.lock().unwrap();
-        if reputation.get_reputation(&creator_did) < 100 {
+        if reputation.get_reputation(&creator_did) < proposal.required_reputation {
             return Err("Insufficient reputation to create proposal".to_string());
         }
+        drop(reputation);
 
-        // Create proposal transaction
         let transaction = Transaction::new(
             creator_did,
             TransactionType::ContractExecution {
@@ -146,39 +163,38 @@ impl ICNCore {
             },
         );
 
-        // Add to blockchain
-        self.blockchain.lock().unwrap().add_transaction(transaction).await?;
+        let mut blockchain = self.blockchain.lock().unwrap();
+        blockchain.add_transaction(transaction).await?;
+        drop(blockchain);
 
-        // Broadcast event
         let event = SystemEvent::ProposalSubmitted(proposal.clone());
         let _ = self.event_bus.send(event);
 
         Ok(proposal.id)
     }
 
-    // Consensus functionality
     pub async fn start_consensus_round(&self) -> Result<(), String> {
-        let mut blockchain = self.blockchain.lock().unwrap();
+        let blockchain = self.blockchain.lock().unwrap();
         
-        // Start new consensus round
-        blockchain.consensus.lock().unwrap().start_round().await?;
+        let mut consensus = blockchain.consensus.lock().unwrap();
+        consensus.start_round().await?;
         
-        if let Some(round) = blockchain.consensus.lock().unwrap().get_current_round() {
-            // Broadcast event
-            let event = SystemEvent::ConsensusStarted(round.clone());
+        if let Some(round) = consensus.get_current_round().cloned() {
+            drop(consensus);
+            drop(blockchain);
+            
+            let event = SystemEvent::ConsensusStarted(round);
             let _ = self.event_bus.send(event);
         }
 
         Ok(())
     }
 
-    // WebSocket event handling
     pub fn subscribe_to_events(&self) -> broadcast::Receiver<SystemEvent> {
         self.event_bus.subscribe()
     }
 }
 
-// Cooperative management implementation
 pub struct CooperativeManager {
     core: Arc<ICNCore>,
 }
@@ -220,11 +236,10 @@ impl CooperativeManager {
     }
 }
 
-// Node implementation for network participation
 pub struct ICNNode {
     core: Arc<ICNCore>,
     node_id: String,
-    peers: Arc<Mutex<HashMap<String, String>>>, // peer_id -> address
+    peers: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl ICNNode {
@@ -237,18 +252,13 @@ impl ICNNode {
     }
 
     pub async fn start(&self) -> Result<(), String> {
-        // Subscribe to system events
         let mut event_rx = self.core.subscribe_to_events();
-        
-        // Start consensus participation
         self.core.start_consensus_round().await?;
 
-        // Handle events
         tokio::spawn(async move {
             while let Ok(event) = event_rx.recv().await {
                 match event {
                     SystemEvent::BlockCreated(block) => {
-                        // Propagate block to peers
                         println!("New block created: {}", block.index);
                     }
                     SystemEvent::ConsensusStarted(round) => {
