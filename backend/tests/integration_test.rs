@@ -8,8 +8,10 @@ use icn_backend::{
     vm::opcode::OpCode,
 };
 
+use secp256k1::SecretKey; // Import SecretKey for DID creation
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use rand::thread_rng;
 
 #[tokio::test]
 async fn test_integration() {
@@ -31,12 +33,12 @@ async fn test_integration() {
             amount: 100,
         },
     );
-    
-    // Register test identity
+
+    // Register test identity with a generated SecretKey
     {
         let mut identity = identity_system.lock().unwrap();
         identity.register_did(
-            DID::new("did:icn:test".to_string()),
+            DID::new("did:icn:test".to_string(), &SecretKey::new(&mut thread_rng())),
             vec!["transfer".to_string()],
         );
     }
@@ -47,6 +49,7 @@ async fn test_integration() {
         reputation.increase_reputation("did:icn:test", 100);
     }
 
+    // Verify that the transaction was added and processed correctly
     assert!(blockchain.add_transaction(transaction).await.is_ok());
     assert_eq!(blockchain.pending_transactions.len(), 1);
 }
