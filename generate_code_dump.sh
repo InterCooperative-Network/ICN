@@ -8,10 +8,10 @@ echo "Project Code Dump - Generated $(date)" > $OUTPUT_FILE
 echo "======================================" >> $OUTPUT_FILE
 echo "" >> $OUTPUT_FILE
 
-# Add project tree
+# Add project tree, excluding target and other ignored directories
 echo "Project Tree:" >> $OUTPUT_FILE
 echo "=============" >> $OUTPUT_FILE
-tree -L 4 . >> $OUTPUT_FILE
+tree -L 4 --prune -I "target|node_modules|dist" . >> $OUTPUT_FILE
 echo "" >> $OUTPUT_FILE
 echo "" >> $OUTPUT_FILE
 
@@ -26,15 +26,15 @@ add_file() {
     echo "" >> $OUTPUT_FILE
 }
 
-# Backend Rust files
+# Backend Rust files, excluding target
 echo "Adding backend Rust files..."
-find ./backend/src -name "*.rs" | while read file; do
+find ./backend/src -name "*.rs" -not -path "./backend/target/*" | while read file; do
     add_file "$file"
 done
 
-# Frontend TypeScript/React files
+# Frontend TypeScript/React files, excluding node_modules
 echo "Adding frontend files..."
-find ./frontend/src -name "*.tsx" -o -name "*.ts" | while read file; do
+find ./frontend/src -name "*.tsx" -o -name "*.ts" -not -path "./frontend/node_modules/*" | while read file; do
     add_file "$file"
 done
 
