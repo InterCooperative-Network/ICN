@@ -163,7 +163,6 @@ impl From<ConsensusError> for String {
     }
 }
 
-// Helper functions for consensus calculations
 pub mod utils {
     pub fn calculate_voting_power(reputation: i64, total_reputation: i64, max_power: f64) -> f64 {
         let raw_power = reputation as f64 / total_reputation as f64;
