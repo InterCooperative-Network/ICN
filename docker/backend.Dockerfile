@@ -20,11 +20,10 @@ RUN cargo build --release
 RUN cargo test --release
 
 # Stage 2: Create a smaller image to run the binary
-FROM debian:buster-slim AS runner
+FROM debian:bullseye-slim AS runner
 WORKDIR /app
 COPY --from=builder /app/target/release/icn-backend /usr/local/bin/icn-backend
 
-EXPOSE 8080
 EXPOSE 8081
 
 CMD ["icn-backend"]

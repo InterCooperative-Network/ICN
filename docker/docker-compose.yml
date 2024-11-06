@@ -6,7 +6,6 @@ services:
       context: ../backend                        # Path to the backend source with Cargo.toml
       dockerfile: ../docker/backend.Dockerfile   # Path to backend Dockerfile in `docker`
     ports:
-      - "8080:8080"  # HTTP
       - "8081:8081"  # WebSocket
     environment:
       - DATABASE_URL=postgres://icnuser:icnpass@db:5432/icndb
