@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use rand::{thread_rng, Rng};
 
 use crate::websocket::WebSocketHandler;
