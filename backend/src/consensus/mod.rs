@@ -2,7 +2,7 @@ pub mod proof_of_cooperation;
 pub mod types;
 
 pub use proof_of_cooperation::ProofOfCooperation;
-pub use types::{ConsensusRound, RoundStatus, ConsensusConfig};  // Directly re-export from `types`
+pub use types::{ConsensusRound, RoundStatus};  // Directly re-export from `types`
 
 use std::sync::{Arc, Mutex};
 use crate::blockchain::{Block, Transaction};
