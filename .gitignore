@@ -93,11 +93,26 @@ instance/
 # Sphinx documentation
 docs/_build/
 
-# pyenv
-.python-version
-
 # mkdocs documentation
 /site
+
+# Other virtual environments
+tools/.env/
+
+# Rust build artifacts
+/target/
+/**/target/
+
+# Rust - Cargo and related files
+**/Cargo.lock
+**/Cargo.toml
+*.rlib
+
+# Rust incremental compilation
+**/incremental
+
+# Rust test output
+*.profraw
 
 # Other virtual environments
 tools/.env/
