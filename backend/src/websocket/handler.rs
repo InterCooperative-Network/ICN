@@ -7,16 +7,15 @@ use warp::ws::{Message, WebSocket};
 use futures_util::{StreamExt, SinkExt};
 use serde::{Serialize, Deserialize};
 use chrono::Utc;
+use tokio::sync::mpsc::Sender;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::consensus::types::{ValidatorInfo, ConsensusRound, RoundStatus};
 use crate::blockchain::Block;
-use crate::reputation::ReputationChange;
 
-/// Represents different types of WebSocket messages that can be sent to clients
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum WebSocketMessage {
-    /// Updates about consensus rounds
     ConsensusUpdate {
         round_number: u64,
         status: RoundStatus,
@@ -25,17 +24,12 @@ pub enum WebSocketMessage {
         participation_rate: f64,
         remaining_time_ms: i64,
     },
-
-    /// Notification of block finalization
     BlockFinalized {
         block_number: u64,
         transactions_count: usize,
         timestamp: u64,
         proposer: String,
-        size_bytes: u64,
     },
-
-    /// Updates to reputation scores
     ReputationUpdate {
         did: String,
         change: i64,
@@ -43,8 +37,6 @@ pub enum WebSocketMessage {
         reason: String,
         context: String,
     },
-
-    /// Updates about validator status
     ValidatorUpdate {
         did: String,
         round: u64,
@@ -52,16 +44,12 @@ pub enum WebSocketMessage {
         reputation: i64,
         performance_score: f64,
     },
-
-    /// Generic command responses
     CommandResponse {
         command: String,
         status: String,
         message: String,
         data: Option<serde_json::Value>,
     },
-
-    /// Error messages
     Error {
         code: String,
         message: String,
@@ -69,194 +57,146 @@ pub enum WebSocketMessage {
     },
 }
 
-/// Messages that can be received from clients
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
 pub enum ClientMessage {
-    /// Register as a validator
     RegisterValidator {
         did: String,
         initial_reputation: i64,
     },
-
-    /// Submit a transaction
     SubmitTransaction {
         transaction: serde_json::Value,
     },
-
-    /// Query current network status
     QueryStatus,
-
-    /// Propose a new block
-    ProposeBlock {
-        block: serde_json::Value,
-    },
-
-    /// Submit a vote on current round
-    SubmitVote {
-        vote: serde_json::Value,
-    },
-
-    /// Query reputation for a DID
-    QueryReputation {
-        did: String,
-    },
-
-    /// Subscribe to specific event types
     Subscribe {
         events: Vec<String>,
     },
 }
 
-/// Manages WebSocket connections and message broadcasting
-pub struct WebSocketHandler {
-    /// Active connections mapped by DID
-    connections: Arc<Mutex<HashMap<String, ConnectionInfo>>>,
-    
-    /// Broadcast channel for system-wide messages
-    broadcast_tx: broadcast::Sender<WebSocketMessage>,
-}
-
-/// Information about an active connection
+#[derive(Clone)]
 struct ConnectionInfo {
-    /// Sender for this connection
-    tx: mpsc::Sender<WebSocketMessage>,
-    
-    /// Subscribed event types
+    tx: Sender<WebSocketMessage>,
     subscriptions: Vec<String>,
-    
-    /// Connection timestamp
     connected_at: chrono::DateTime<Utc>,
-    
-    /// Last activity timestamp
     last_active: chrono::DateTime<Utc>,
 }
 
+pub struct WebSocketHandler {
+    connections: Arc<Mutex<HashMap<String, ConnectionInfo>>>,
+    broadcast_tx: broadcast::Sender<WebSocketMessage>,
+    connection_counter: Arc<AtomicU64>,
+}
+
 impl WebSocketHandler {
-    /// Creates a new WebSocket handler
     pub fn new() -> Self {
         let (broadcast_tx, _) = broadcast::channel(100);
-        
         WebSocketHandler {
             connections: Arc::new(Mutex::new(HashMap::new())),
             broadcast_tx,
+            connection_counter: Arc::new(AtomicU64::new(0)),
         }
     }
 
-    /// Handles a new WebSocket connection
     pub async fn handle_connection(&self, ws: WebSocket, did: String) {
         println!("New WebSocket connection from: {}", did);
-
         let (mut ws_sink, mut ws_stream) = ws.split();
         let (tx, mut rx) = mpsc::channel(32);
 
-        // Register the connection
+        let connection_id = self.connection_counter.fetch_add(1, Ordering::SeqCst);
+
+        // Register connection
         {
             let mut connections = self.connections.lock().unwrap();
             connections.insert(did.clone(), ConnectionInfo {
-                tx,
+                tx: tx.clone(),
                 subscriptions: vec!["all".to_string()],
                 connected_at: Utc::now(),
                 last_active: Utc::now(),
             });
-            println!("Registered connection for: {}", did);
         }
 
-        // Clone data for use within async tasks
-        let connections_clone = self.connections.clone();
-        let did_clone = did.clone();
-
         // Handle outgoing messages
+        let connections = Arc::clone(&self.connections);
+        let did_for_cleanup = did.clone();
+        
         let send_task = tokio::spawn(async move {
-            while let Some(message) = rx.recv().await {
-                if let Ok(json) = serde_json::to_string(&message) {
+            while let Some(msg) = rx.recv().await {
+                if let Ok(json) = serde_json::to_string(&msg) {
                     if ws_sink.send(Message::text(json)).await.is_err() {
-                        eprintln!("Error sending message to {}", did_clone);
                         break;
                     }
                 }
             }
-
-            // Clean up connection on exit
-            let mut connections = connections_clone.lock().unwrap();
-            connections.remove(&did_clone);
-            println!("Connection closed for: {}", did_clone);
+            let mut connections = connections.lock().unwrap();
+            connections.remove(&did_for_cleanup);
+            println!("Send task completed for connection {}", connection_id);
         });
 
         // Handle incoming messages
+        let handler = Arc::new(self.clone());
+        let did_for_receive = did.clone();
+
         let receive_task = tokio::spawn(async move {
             while let Some(result) = ws_stream.next().await {
                 match result {
                     Ok(message) => {
                         if let Ok(text) = message.to_str() {
                             if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(text) {
-                                self.handle_client_message(&did, client_msg).await;
+                                if let Err(e) = handle_client_message(handler.clone(), &did_for_receive, client_msg).await {
+                                    println!("Error handling message: {}", e);
+                                }
                             }
                         }
                     }
                     Err(e) => {
-                        eprintln!("WebSocket error from {}: {}", did, e);
+                        println!("WebSocket error from {}: {}", did_for_receive, e);
                         break;
                     }
                 }
             }
         });
 
-        // Wait for either task to complete
         tokio::select! {
             _ = send_task => println!("Send task completed for {}", did),
             _ = receive_task => println!("Receive task completed for {}", did),
         }
     }
 
-    /// Handles messages received from clients
-    async fn handle_client_message(&self, did: &str, message: ClientMessage) {
-        match message {
-            ClientMessage::RegisterValidator { did: validator_did, initial_reputation } => {
-                self.send_to_client(did, WebSocketMessage::CommandResponse {
-                    command: "register_validator".to_string(),
-                    status: "success".to_string(),
-                    message: format!("Validator {} registered", validator_did),
-                    data: Some(serde_json::json!({
-                        "did": validator_did,
-                        "reputation": initial_reputation
-                    })),
-                }).await;
-            }
+    fn broadcast_message(&self, message: WebSocketMessage) {
+        // Create a vector of all transmitters while holding the lock
+        let txs: Vec<_> = {
+            let connections = self.connections.lock().unwrap();
+            connections.values()
+                .map(|info| info.tx.clone())
+                .collect()
+        }; // Lock is dropped here
 
-            ClientMessage::Subscribe { events } => {
-                if let Some(connection) = self.connections.lock().unwrap().get_mut(did) {
-                    connection.subscriptions = events.clone();
-                    self.send_to_client(did, WebSocketMessage::CommandResponse {
-                        command: "subscribe".to_string(),
-                        status: "success".to_string(),
-                        message: format!("Subscribed to {} events", events.len()),
-                        data: Some(serde_json::json!({ "events": events })),
-                    }).await;
+        // Send messages without holding the lock
+        for tx in txs {
+            let message = message.clone();
+            tokio::spawn(async move {
+                if let Err(e) = tx.send(message).await {
+                    println!("Failed to broadcast message: {}", e);
                 }
-            }
-
-            // Handle other message types...
-            _ => {
-                self.send_to_client(did, WebSocketMessage::Error {
-                    code: "UNSUPPORTED".to_string(),
-                    message: "Message type not supported".to_string(),
-                    details: None,
-                }).await;
-            }
+            });
         }
     }
 
-    /// Sends a message to a specific client
-    async fn send_to_client(&self, did: &str, message: WebSocketMessage) {
-        if let Some(connection) = self.connections.lock().unwrap().get(did) {
-            if let Err(e) = connection.tx.send(message).await {
-                eprintln!("Error sending message to {}: {}", did, e);
-            }
+    async fn send_to_client(&self, did: &str, message: WebSocketMessage) -> Result<(), String> {
+        let tx = {
+            let connections = self.connections.lock().unwrap();
+            connections.get(did)
+                .map(|info| info.tx.clone())
+        };
+
+        if let Some(tx) = tx {
+            tx.send(message)
+                .await
+                .map_err(|e| format!("Failed to send message: {}", e))?;
         }
+        Ok(())
     }
 
-    /// Broadcasts consensus updates to all connected clients
     pub fn broadcast_consensus_update(&self, round: &ConsensusRound) {
         let message = WebSocketMessage::ConsensusUpdate {
             round_number: round.round_number,
@@ -264,28 +204,21 @@ impl WebSocketHandler {
             coordinator: round.coordinator.clone(),
             votes_count: round.votes.len(),
             participation_rate: round.stats.participation_rate,
-            remaining_time_ms: (round.timeout - Utc::now())
-                .num_milliseconds()
-                .max(0),
+            remaining_time_ms: (round.timeout - Utc::now()).num_milliseconds().max(0),
         };
-
         self.broadcast_message(message);
     }
 
-    /// Broadcasts block finalization to all connected clients
     pub fn broadcast_block_finalized(&self, block: &Block) {
         let message = WebSocketMessage::BlockFinalized {
             block_number: block.index,
             transactions_count: block.transactions.len(),
             timestamp: block.timestamp,
             proposer: block.proposer.clone(),
-            size_bytes: block.metadata.size,
         };
-
         self.broadcast_message(message);
     }
 
-    /// Broadcasts reputation updates to all connected clients
     pub fn broadcast_reputation_update(
         &self,
         did: String,
@@ -301,11 +234,9 @@ impl WebSocketHandler {
             reason,
             context,
         };
-
         self.broadcast_message(message);
     }
 
-    /// Broadcasts validator updates to all connected clients
     pub fn broadcast_validator_update(
         &self,
         validator: ValidatorInfo,
@@ -313,40 +244,61 @@ impl WebSocketHandler {
         status: String
     ) {
         let message = WebSocketMessage::ValidatorUpdate {
-            did: validator.did,
+            did: validator.did.clone(),
             round,
             status,
             reputation: validator.reputation,
             performance_score: validator.performance_score,
         };
-
         self.broadcast_message(message);
     }
 
-    /// Broadcasts a message to all connected clients
-    fn broadcast_message(&self, message: WebSocketMessage) {
-        if let Ok(connections) = self.connections.lock() {
-            for (did, connection) in connections.iter() {
-                if let Err(e) = connection.tx.try_send(message.clone()) {
-                    eprintln!("Failed to broadcast to {}: {}", did, e);
-                }
-            }
-        }
-    }
-
-    /// Gets the number of active connections
     pub fn connection_count(&self) -> usize {
         self.connections.lock().unwrap().len()
     }
 
-    /// Cleans up inactive connections
     pub fn cleanup_inactive_connections(&self, timeout_seconds: i64) {
         let mut connections = self.connections.lock().unwrap();
         let now = Utc::now();
-        
         connections.retain(|_, info| {
             (now - info.last_active).num_seconds() < timeout_seconds
         });
+    }
+}
+
+async fn handle_client_message(
+    handler: Arc<WebSocketHandler>,
+    did: &str,
+    message: ClientMessage
+) -> Result<(), String> {
+    match message {
+        ClientMessage::Subscribe { events } => {
+            let response = WebSocketMessage::CommandResponse {
+                command: "subscribe".to_string(),
+                status: "success".to_string(),
+                message: format!("Subscribed to {} events", events.len()),
+                data: Some(serde_json::json!({ "events": events })),
+            };
+            handler.send_to_client(did, response).await
+        },
+        _ => {
+            let response = WebSocketMessage::Error {
+                code: "UNSUPPORTED".to_string(),
+                message: "Message type not supported".to_string(),
+                details: None,
+            };
+            handler.send_to_client(did, response).await
+        }
+    }
+}
+
+impl Clone for WebSocketHandler {
+    fn clone(&self) -> Self {
+        WebSocketHandler {
+            connections: Arc::clone(&self.connections),
+            broadcast_tx: self.broadcast_tx.clone(),
+            connection_counter: Arc::clone(&self.connection_counter),
+        }
     }
 }
 
@@ -374,6 +326,4 @@ mod tests {
         let serialized = serde_json::to_string(&message).unwrap();
         assert!(!serialized.is_empty());
     }
-
-    // Additional tests...
 }

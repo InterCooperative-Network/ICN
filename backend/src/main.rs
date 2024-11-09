@@ -1,3 +1,5 @@
+// src/main.rs
+
 mod blockchain;
 mod identity;
 mod reputation;
@@ -17,7 +19,7 @@ use crate::consensus::{ProofOfCooperation, types::ConsensusConfig};
 
 #[tokio::main]
 async fn main() {
-    // Initialize identity and reputation systems
+    // Initialize core systems
     let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
     let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
     
@@ -30,10 +32,11 @@ async fn main() {
         ws_handler.clone(),
     )));
 
-    // Initialize the blockchain with identity and reputation systems
+    // Initialize the blockchain with all required systems
     let blockchain = Arc::new(Mutex::new(Blockchain::new(
         identity_system.clone(),
         reputation_system.clone(),
+        consensus.clone(),
     )));
 
     // Define WebSocket route with DID header for user identification
@@ -48,7 +51,6 @@ async fn main() {
             })
         });
 
-    // Start the WebSocket server
     println!("Starting WebSocket server on localhost:8081");
     warp::serve(ws_route)
         .run(([127, 0, 0, 1], 8081))

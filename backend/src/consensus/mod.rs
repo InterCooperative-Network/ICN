@@ -1,8 +1,10 @@
+// src/consensus/mod.rs
+
 pub mod proof_of_cooperation;
 pub mod types;
 
 pub use proof_of_cooperation::ProofOfCooperation;
-pub use types::{ConsensusRound, ConsensusConfig, RoundStatus}; // Exporting ConsensusConfig here
+pub use types::{ConsensusRound, ConsensusConfig, RoundStatus}; 
 
 use std::sync::{Arc, Mutex};
 use crate::blockchain::{Block, Transaction};
@@ -16,6 +18,7 @@ pub struct Blockchain {
     pub identity_system: Arc<Mutex<IdentitySystem>>,
     pub reputation_system: Arc<Mutex<ReputationSystem>>,
     pub current_block_number: u64,
+    coordinator_did: String,
 }
 
 impl Blockchain {
@@ -24,22 +27,20 @@ impl Blockchain {
         reputation_system: Arc<Mutex<ReputationSystem>>,
         consensus: Arc<Mutex<ProofOfCooperation>>,
     ) -> Self {
+        let coordinator_did = "did:icn:genesis".to_string();
+        
         Blockchain {
-            chain: vec![Block::new(0, String::from("0"), vec![])],
+            chain: vec![Block::genesis()],
             pending_transactions: vec![],
             consensus,
             identity_system,
             reputation_system,
             current_block_number: 1,
+            coordinator_did,
         }
     }
 
     pub async fn finalize_block(&mut self) -> Result<(), String> {
-        let mut consensus = self.consensus.lock()
-            .map_err(|_| "Failed to acquire consensus lock".to_string())?;
-
-        consensus.start_round().await?;
-
         let previous_hash = self.chain.last()
             .map(|block| block.hash.clone())
             .unwrap_or_default();
@@ -48,7 +49,13 @@ impl Blockchain {
             self.chain.len() as u64,
             previous_hash,
             self.pending_transactions.clone(),
+            self.coordinator_did.clone(),
         );
+
+        let mut consensus = self.consensus.lock()
+            .map_err(|_| "Failed to acquire consensus lock".to_string())?;
+        
+        consensus.start_round().await?;
 
         let validators = self.get_active_validators();
         if validators.is_empty() {
@@ -95,34 +102,10 @@ impl Blockchain {
 
     fn get_active_validators(&self) -> Vec<String> {
         vec![
-            "did:icn:1".to_string(),
-            "did:icn:2".to_string(),
-            "did:icn:3".to_string(),
+            "did:icn:validator1".to_string(),
+            "did:icn:validator2".to_string(),
+            "did:icn:validator3".to_string(),
         ]
-    }
-
-    pub async fn add_transaction(&mut self, transaction: Transaction) -> Result<(), String> {
-        self.pending_transactions.push(transaction);
-        if self.pending_transactions.len() >= 10 {
-            self.finalize_block().await?;
-        }
-        Ok(())
-    }
-
-    pub fn get_block(&self, index: u64) -> Option<&Block> {
-        self.chain.get(index as usize)
-    }
-
-    pub fn get_latest_block(&self) -> &Block {
-        self.chain.last().unwrap()
-    }
-
-    pub fn get_transaction_count(&self) -> usize {
-        self.chain.iter().map(|block| block.transactions.len()).sum()
-    }
-
-    pub fn get_block_count(&self) -> usize {
-        self.chain.len()
     }
 
     pub fn get_current_round(&self) -> Option<ConsensusRound> {
@@ -136,7 +119,6 @@ impl Blockchain {
 mod tests {
     use super::*;
     use crate::websocket::WebSocketHandler;
-    use crate::consensus::types::ConsensusConfig; // Adjusted path for ConsensusConfig
 
     #[tokio::test]
     async fn test_blockchain_new() {
@@ -150,13 +132,14 @@ mod tests {
         )));
 
         let blockchain = Blockchain::new(
-            identity_system,
-            reputation_system,
+            identity_system.clone(),
+            reputation_system.clone(),
             consensus,
         );
 
         assert_eq!(blockchain.current_block_number, 1);
         assert_eq!(blockchain.chain.len(), 1);
         assert_eq!(blockchain.pending_transactions.len(), 0);
+        assert_eq!(blockchain.coordinator_did, "did:icn:genesis");
     }
 }

@@ -17,7 +17,7 @@ pub struct Block {
     pub previous_hash: String,
     
     /// Unix timestamp in milliseconds when block was created
-    pub timestamp: u128,
+    pub timestamp: u64,
     
     /// List of transactions included in this block
     pub transactions: Vec<Transaction>,
@@ -76,7 +76,7 @@ impl Block {
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_millis();
+            .as_millis() as u64;
 
         let metadata = BlockMetadata {
             consensus_duration_ms: 0,
@@ -99,6 +99,16 @@ impl Block {
 
         block.hash = block.calculate_hash();
         block
+    }
+
+    /// Creates a genesis block
+    pub fn genesis() -> Self {
+        Block::new(
+            0,
+            String::from("0"),
+            vec![],
+            String::from("genesis")
+        )
     }
 
     /// Calculates the hash of the block's contents
@@ -171,7 +181,7 @@ impl Block {
         let current_time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_millis();
+            .as_millis() as u64;
 
         if self.timestamp > current_time + 5000 { // Allow 5 second drift
             return Err("Block timestamp is in the future".to_string());
@@ -264,9 +274,7 @@ mod tests {
 
     #[test]
     fn test_block_verification() {
-        let mut prev_block = create_test_block();
-        prev_block.index = 0;
-
+        let prev_block = Block::genesis();
         let block = Block::new(
             1,
             prev_block.hash.clone(),
@@ -290,12 +298,12 @@ mod tests {
         assert!(block.verify(Some(&prev_block)).is_err());
     }
 
-    #[test]
-    fn test_metadata_update() {
-        let mut block = create_test_block();
-        block.update_metadata(1000, 1024);
-
-        assert_eq!(block.metadata.consensus_duration_ms, 1000);
-        assert_eq!(block.metadata.size, 1024);
+    #[test] 
+    fn test_genesis_block() {
+        let genesis = Block::genesis();
+        assert_eq!(genesis.index, 0);
+        assert_eq!(genesis.previous_hash, "0");
+        assert!(genesis.transactions.is_empty());
+        assert_eq!(genesis.proposer, "genesis");
     }
 }
