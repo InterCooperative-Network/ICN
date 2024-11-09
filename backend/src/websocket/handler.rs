@@ -147,8 +147,8 @@ impl WebSocketHandler {
     pub async fn handle_connection(&self, ws: WebSocket, did: String) {
         println!("New WebSocket connection from: {}", did);
 
-        let (ws_sink, ws_stream) = ws.split();
-        let (tx, rx) = mpsc::channel(32);
+        let (mut ws_sink, mut ws_stream) = ws.split();
+        let (tx, mut rx) = mpsc::channel(32);
 
         // Register the connection
         {
@@ -162,39 +162,29 @@ impl WebSocketHandler {
             println!("Registered connection for: {}", did);
         }
 
-        // Spawn tasks for sending and receiving
-        let connections = self.connections.clone();
+        // Clone data for use within async tasks
+        let connections_clone = self.connections.clone();
         let did_clone = did.clone();
-        
+
         // Handle outgoing messages
         let send_task = tokio::spawn(async move {
-            let mut rx = rx;
-            let mut ws_sink = ws_sink;
-            
             while let Some(message) = rx.recv().await {
-                match serde_json::to_string(&message) {
-                    Ok(json) => {
-                        if let Err(e) = ws_sink.send(Message::text(json)).await {
-                            eprintln!("Error sending message to {}: {}", did_clone, e);
-                            break;
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Error serializing message: {}", e);
+                if let Ok(json) = serde_json::to_string(&message) {
+                    if ws_sink.send(Message::text(json)).await.is_err() {
+                        eprintln!("Error sending message to {}", did_clone);
+                        break;
                     }
                 }
             }
 
             // Clean up connection on exit
-            let mut connections = connections.lock().unwrap();
+            let mut connections = connections_clone.lock().unwrap();
             connections.remove(&did_clone);
             println!("Connection closed for: {}", did_clone);
         });
 
         // Handle incoming messages
         let receive_task = tokio::spawn(async move {
-            let mut ws_stream = ws_stream;
-            
             while let Some(result) = ws_stream.next().await {
                 match result {
                     Ok(message) => {
