@@ -1,12 +1,13 @@
-use std::collections::HashMap;
+// src/blockchain/chain.rs
+
 use std::sync::{Arc, Mutex};
-use crate::consensus::{ProofOfCooperation, types::ConsensusConfig};
+use std::collections::HashMap;
+use crate::consensus::ProofOfCooperation;
 use crate::consensus::types::ConsensusRound;
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
 use crate::vm::{VM, Contract, ExecutionContext};
 use crate::vm::event::Event;
-use crate::websocket::WebSocketHandler;
 use crate::blockchain::{Block, Transaction, TransactionType};
 
 pub struct Blockchain {
@@ -17,27 +18,26 @@ pub struct Blockchain {
     pub identity_system: Arc<Mutex<IdentitySystem>>,
     pub reputation_system: Arc<Mutex<ReputationSystem>>,
     pub current_block_number: u64,
+    coordinator_did: String,
 }
 
 impl Blockchain {
     pub fn new(
         identity_system: Arc<Mutex<IdentitySystem>>, 
         reputation_system: Arc<Mutex<ReputationSystem>>,
+        consensus: Arc<Mutex<ProofOfCooperation>>,
     ) -> Self {
-        let ws_handler = Arc::new(WebSocketHandler::new());
-        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
-            ConsensusConfig::default(),
-            ws_handler,
-        )));
-
+        let coordinator_did = "did:icn:genesis".to_string();
+        
         Blockchain {
-            chain: vec![Block::new(0, String::from("0"), vec![])],
+            chain: vec![Block::genesis()],
             pending_transactions: vec![],
             contracts: HashMap::new(),
             consensus,
             identity_system,
             reputation_system,
             current_block_number: 1,
+            coordinator_did,
         }
     }
 
@@ -163,14 +163,17 @@ impl Blockchain {
     }
 
     pub async fn finalize_block(&mut self) -> Result<(), String> {
+        // Get the current block's hash
         let previous_hash = self.chain.last()
             .map(|block| block.hash.clone())
             .unwrap_or_default();
 
+        // Create new block with current coordinator
         let new_block = Block::new(
             self.chain.len() as u64,
             previous_hash,
             self.pending_transactions.clone(),
+            self.coordinator_did.clone(),
         );
 
         let consensus_guard = self.consensus.lock()
@@ -184,10 +187,13 @@ impl Blockchain {
             return Err("No active validators available".to_string());
         }
 
-        consensus.propose_block(&validators[0], new_block.clone()).await?;
+        // Select new coordinator from validators
+        self.coordinator_did = validators[0].clone();
+
+        consensus.propose_block(&self.coordinator_did, new_block.clone()).await?;
 
         for validator in &validators {
-            let signature = String::from("dummy_signature");
+            let signature = String::from("dummy_signature"); // TODO: Implement real signatures
             consensus.submit_vote(validator, true, signature).await?;
         }
 
@@ -211,9 +217,9 @@ impl Blockchain {
 
     fn get_active_validators(&self) -> Vec<String> {
         vec![
-            "did:icn:1".to_string(),
-            "did:icn:2".to_string(),
-            "did:icn:3".to_string(),
+            "did:icn:validator1".to_string(),
+            "did:icn:validator2".to_string(),
+            "did:icn:validator3".to_string(),
         ]
     }
 
@@ -248,14 +254,22 @@ mod tests {
     async fn test_blockchain_new() {
         let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
         let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+        let ws_handler = Arc::new(WebSocketHandler::new());
+        
+        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
+            ConsensusConfig::default(),
+            ws_handler,
+        )));
 
         let blockchain = Blockchain::new(
-            identity_system.clone(),
-            reputation_system.clone(),
+            identity_system,
+            reputation_system,
+            consensus,
         );
 
         assert_eq!(blockchain.current_block_number, 1);
         assert_eq!(blockchain.chain.len(), 1);
         assert_eq!(blockchain.pending_transactions.len(), 0);
+        assert_eq!(blockchain.coordinator_did, "did:icn:genesis");
     }
 }

@@ -1,4 +1,5 @@
-// Making specific modules public for accessibility in tests and other modules
+// src/lib.rs
+
 pub mod blockchain;
 pub mod identity;
 pub mod reputation;
@@ -9,7 +10,6 @@ pub mod websocket;
 pub mod consensus;
 pub mod network;
 
-// Re-export types for external use
 pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
 pub use identity::IdentitySystem;
 pub use reputation::ReputationSystem;
@@ -56,12 +56,22 @@ impl ICNCore {
         let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
         let ws_handler = Arc::new(WebSocketHandler::new());
 
-        let blockchain = Arc::new(Mutex::new(Blockchain::new(
-            identity_system.clone(),
-            reputation_system.clone()
+        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
+            ConsensusConfig::default(),
+            ws_handler.clone(),
         )));
 
-        let vm = VM::new(1000, reputation_system.lock().unwrap().get_reputation_context());
+        let blockchain = Arc::new(Mutex::new(Blockchain::new(
+            identity_system.clone(),
+            reputation_system.clone(),
+            consensus.clone()  // Add consensus argument
+        )));
+
+        let reputation_context = reputation_system.lock()
+            .unwrap()
+            .get_reputation_context();
+            
+        let vm = VM::new(1000, reputation_context);
         let vm = Arc::new(Mutex::new(vm));
 
         ICNCore {
@@ -73,6 +83,7 @@ impl ICNCore {
             event_bus: event_tx,
         }
     }
+
 
     pub async fn create_cooperative(&self, creator_did: String, metadata: CooperativeMetadata) -> Result<String, String> {
         let identity = self.identity_system.lock()
