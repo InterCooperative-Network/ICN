@@ -1,9 +1,10 @@
-// backend/src/consensus/proof_of_cooperation.rs
+// src/consensus/proof_of_cooperation.rs
 
 use std::sync::Arc;
 use std::collections::HashMap;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use rand::{thread_rng, Rng};
+use serde::{Serialize, Deserialize};
 
 use crate::websocket::WebSocketHandler;
 use crate::blockchain::Block;
@@ -13,19 +14,45 @@ use crate::consensus::types::{
     WeightedVote,
     ValidatorInfo,
     ConsensusRoundStats,
-    ConsensusRound,  // Now directly using ConsensusRound from types
+    ConsensusRound,
+    ConsensusError,
 };
 
+/// Proof of Cooperation (PoC) consensus mechanism implementation.
+/// 
+/// The PoC system is designed around reputation-weighted consensus where validators
+/// gain influence through positive contributions to the network rather than 
+/// computational power or staked assets.
+///
+/// Key features:
+/// - Reputation-based validator selection
+/// - Multi-phase consensus process
+/// - Real-time status updates via WebSocket
+/// - Built-in penalties for malicious behavior
+/// - Dynamic reputation adjustments
+/// - Protection against Sybil attacks through reputation requirements
 pub struct ProofOfCooperation {
+    /// Configuration parameters for the consensus mechanism
     config: ConsensusConfig,
+    
+    /// Map of validator DIDs to their information/state
     validators: HashMap<String, ValidatorInfo>,
+    
+    /// Current consensus round state
     current_round: Option<ConsensusRound>,
+    
+    /// History of completed rounds' statistics
     round_history: Vec<ConsensusRoundStats>,
+    
+    /// Pending reputation updates to be applied
     reputation_updates: Vec<(String, i64)>,
+    
+    /// WebSocket handler for real-time updates
     ws_handler: Arc<WebSocketHandler>,
 }
 
 impl ProofOfCooperation {
+    /// Creates a new instance of the PoC consensus mechanism
     pub fn new(config: ConsensusConfig, ws_handler: Arc<WebSocketHandler>) -> Self {
         ProofOfCooperation {
             config,
@@ -37,6 +64,17 @@ impl ProofOfCooperation {
         }
     }
 
+    /// Starts a new consensus round
+    ///
+    /// This initiates the consensus process by:
+    /// 1. Checking if there's already an active round
+    /// 2. Validating there are sufficient active validators
+    /// 3. Selecting a coordinator based on reputation-weighted random selection
+    /// 4. Creating and broadcasting the new round state
+    ///
+    /// # Returns
+    /// - Ok(()) if the round starts successfully
+    /// - Err(String) with a description if the round cannot be started
     pub async fn start_round(&mut self) -> Result<(), String> {
         if self.current_round.is_some() {
             return Err("Round already in progress".to_string());
@@ -74,6 +112,15 @@ impl ProofOfCooperation {
         Ok(())
     }
 
+    /// Proposes a new block for the current round
+    ///
+    /// # Arguments
+    /// * `proposer_did` - The DID of the validator proposing the block
+    /// * `block` - The proposed block
+    ///
+    /// # Returns
+    /// - Ok(()) if the proposal is accepted
+    /// - Err(String) describing why the proposal was rejected
     pub async fn propose_block(&mut self, proposer_did: &str, block: Block) -> Result<(), String> {
         let validator = self.validators.get(proposer_did)
             .ok_or("Proposer not found")?;
@@ -99,6 +146,16 @@ impl ProofOfCooperation {
         Ok(())
     }
 
+    /// Submits a vote for the current round
+    ///
+    /// # Arguments
+    /// * `validator_did` - The DID of the voting validator
+    /// * `approved` - Whether the validator approves the proposed block
+    /// * `signature` - Cryptographic signature of the vote
+    ///
+    /// # Returns
+    /// - Ok(()) if the vote is accepted
+    /// - Err(String) describing why the vote was rejected
     pub async fn submit_vote(&mut self, validator_did: &str, approved: bool, signature: String) -> Result<(), String> {
         let validator = self.validators.get(validator_did)
             .ok_or("Not a registered validator")?;
@@ -120,11 +177,13 @@ impl ProofOfCooperation {
 
         round.votes.insert(validator_did.to_string(), vote);
 
+        // Calculate total available voting power
         let total_power: f64 = self.validators.values()
             .filter(|v| v.reputation >= self.config.min_validator_reputation)
             .map(|v| v.voting_power)
             .sum();
 
+        // Calculate actual voting power used
         let votes_power: f64 = round.votes.values()
             .map(|v| v.voting_power)
             .sum();
@@ -132,6 +191,7 @@ impl ProofOfCooperation {
         round.stats.total_voting_power = total_power;
         round.stats.participation_rate = votes_power / total_power;
 
+        // Calculate approval rate
         let approval_power: f64 = round.votes.values()
             .filter(|v| v.approve)
             .map(|v| v.voting_power)
@@ -143,11 +203,13 @@ impl ProofOfCooperation {
             0.0
         };
 
+        // Check if we've reached consensus thresholds
         if round.stats.participation_rate >= self.config.min_participation_rate
             && round.stats.approval_rate >= self.config.min_approval_rate {
             round.status = RoundStatus::Finalizing;
         }
 
+        // Broadcast updates
         self.ws_handler.broadcast_consensus_update(&round);
         self.ws_handler.broadcast_validator_update(
             validator.clone(),
@@ -159,6 +221,17 @@ impl ProofOfCooperation {
         Ok(())
     }
 
+    /// Finalizes the current consensus round
+    ///
+    /// This method:
+    /// 1. Validates the round is ready for finalization
+    /// 2. Updates validator statistics and reputation
+    /// 3. Applies reputation rewards/penalties
+    /// 4. Records round history
+    ///
+    /// # Returns
+    /// - Ok(Block) with the finalized block
+    /// - Err(String) describing why finalization failed
     pub async fn finalize_round(&mut self) -> Result<Block, String> {
         let round = self.current_round.take()
             .ok_or("No active round")?;
@@ -171,13 +244,15 @@ impl ProofOfCooperation {
         let block = round.proposed_block.clone()
             .ok_or("No proposed block")?;
 
-        // Update validator stats
+        // Update validator statistics and reputation
         for (validator_id, validator) in self.validators.iter_mut() {
             if round.votes.contains_key(validator_id) {
+                // Reward participation
                 validator.consecutive_missed_rounds = 0;
                 validator.last_active_round = round.round_number;
                 validator.reputation += self.config.base_reward;
 
+                // Additional reward for coordinator
                 if validator_id == &round.coordinator {
                     validator.reputation += self.config.base_reward;
                 }
@@ -189,6 +264,7 @@ impl ProofOfCooperation {
 
                 validator.performance_score = validator.performance_score * 0.95 + 0.05;
             } else {
+                // Penalize non-participation
                 validator.consecutive_missed_rounds += 1;
                 let penalty = -(self.config.base_reward as f64 *
                     self.config.penalty_factor *
@@ -204,7 +280,7 @@ impl ProofOfCooperation {
             }
         }
 
-        // Update history
+        // Update round history
         let mut stats = round.stats;
         stats.round_duration_ms = round.timeout
             .signed_duration_since(round.start_time)
@@ -216,14 +292,17 @@ impl ProofOfCooperation {
         Ok(block)
     }
 
+    /// Gets the current list of reputation updates
     pub fn get_reputation_updates(&self) -> &[(String, i64)] {
         &self.reputation_updates
     }
 
+    /// Gets the current round state if one exists
     pub fn get_current_round(&self) -> Option<ConsensusRound> {
         self.current_round.clone()
     }
 
+    /// Selects a coordinator for the next round using reputation-weighted random selection
     fn select_coordinator<'a>(&self, active_validators: &'a [&ValidatorInfo]) 
         -> Result<&'a ValidatorInfo, String> 
     {
@@ -251,6 +330,7 @@ impl ProofOfCooperation {
         Err("Failed to select coordinator".to_string())
     }
 
+    /// Registers a new validator with the consensus mechanism
     pub fn register_validator(&mut self, did: String, initial_reputation: i64) -> Result<(), String> {
         let validator = ValidatorInfo {
             did: did.clone(),
@@ -308,5 +388,52 @@ mod tests {
         let result = consensus.start_round().await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "Insufficient validators");
+    }
+
+    #[tokio::test]
+    async fn test_propose_block() {
+        let mut consensus = setup_test_consensus();
+        add_test_validators(&mut consensus);
+        
+        // Start a round first
+        consensus.start_round().await.unwrap();
+        
+        // Get the coordinator's DID
+        let coordinator_did = consensus.current_round.as_ref().unwrap().coordinator.clone();
+        
+        // Create a test block
+        let block = Block::new(
+            1,
+            "previous_hash".to_string(),
+            vec![]
+        );
+        
+        // Test proposal
+        let result = consensus.propose_block(&coordinator_did, block).await;
+        assert!(result.is_ok());
+        
+        // Verify round status changed
+        assert_eq!(
+            consensus.current_round.as_ref().unwrap().status,
+            RoundStatus::Voting
+        );
+    }
+
+    #[tokio::test]
+    async fn test_invalid_proposer() {
+        let mut consensus = setup_test_consensus();
+        add_test_validators(&mut consensus);
+        
+        consensus.start_round().await.unwrap();
+        
+        let block = Block::new(
+            1,
+            "previous_hash".to_string(),
+            vec![]
+        );
+        
+        let result = consensus.propose_block("invalid_did", block).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Proposer not found");
     }
 }
