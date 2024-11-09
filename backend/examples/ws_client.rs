@@ -1,252 +1,353 @@
-// File: ./backend/examples/ws_client.rs
+// examples/ws_client.rs
 
-use futures_util::{Sink, SinkExt, StreamExt};
-use serde::{Serialize, Deserialize};
-use tokio::time::{sleep, Duration};
-use tokio_tungstenite::tungstenite::http::header::HeaderValue;
-use tokio_tungstenite::{connect_async, tungstenite::http::Request, tungstenite::protocol::Message};
+use futures_util::{SinkExt, StreamExt};
+use tokio_tungstenite::{
+   connect_async,
+   tungstenite::{Message, handshake::client::generate_key},
+   MaybeTlsStream, WebSocketStream
+};
+use serde_json::json;
 use url::Url;
 use std::error::Error;
-use std::time::Instant;
+use tokio::sync::mpsc;
+use tokio::time::{sleep, Duration};
+use tokio::io::{self, AsyncBufReadExt};
+use tokio::net::TcpStream;
+use http::Request;
 
-#[derive(Debug, Serialize)]
-enum ClientMessage {
-    RegisterValidator { did: String, initial_reputation: i64 },
-    Subscribe { events: Vec<String> },
-    SubmitTransaction { transaction: TransactionData },
-    QueryStatus,
+type WsBaseStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
+type WriteSink = futures_util::stream::SplitSink<WsBaseStream, Message>;
+type ReadStream = futures_util::stream::SplitStream<WsBaseStream>;
+
+async fn create_websocket_connection(url: &str, did: &str) 
+    -> Result<(WriteSink, ReadStream), Box<dyn Error>> 
+{
+    let url = Url::parse(url)?;
+    let ws_key = generate_key();
+
+    let request = Request::builder()
+        .uri(url.as_str())
+        .header("Host", url.host_str().ok_or("Invalid host")?)
+        .header("Connection", "Upgrade")
+        .header("Upgrade", "websocket")
+        .header("Sec-WebSocket-Version", "13")
+        .header("Sec-WebSocket-Key", ws_key)
+        .header("X-DID", did)
+        .body(())?;
+
+    let (ws_stream, _) = connect_async(request).await?;
+    Ok(ws_stream.split())
 }
 
-#[derive(Debug, Serialize)]
-struct TransactionData {
-    sender: String,
-    receiver: String,
-    amount: u64,
-    timestamp: u64,
+// Handler functions
+async fn handle_create_cooperative(write_tx: &mpsc::Sender<Message>) -> Result<(), Box<dyn Error>> {
+   println!("\n=== Create Cooperative ===");
+   let mut stdin = io::BufReader::new(io::stdin()).lines();
+   
+   println!("Enter cooperative name: ");
+   let name = stdin.next_line().await?.unwrap_or_default();
+   
+   println!("Enter purpose: ");
+   let purpose = stdin.next_line().await?.unwrap_or_default();
+   
+   let msg = json!({
+       "type": "CreateCooperative",
+       "name": name,
+       "purpose": purpose,
+       "initialResources": {
+           "computeUnits": 100,
+           "storageUnits": 100,
+           "networkUnits": 100
+       }
+   });
+
+   write_tx.send(Message::Text(msg.to_string())).await?;
+   println!("Cooperative creation request sent!");
+   Ok(())
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
-enum ServerMessage {
-    ConsensusUpdate {
-        round_number: u64,
-        status: String,
-        coordinator: String,
-        votes_count: usize,
-        participation_rate: f64,
-        remaining_time_ms: i64,
-    },
-    BlockFinalized {
-        block_number: u64,
-        transactions_count: usize,
-        timestamp: u64,
-        proposer: String,
-    },
-    ReputationUpdate {
-        did: String,
-        change: i64,
-        new_total: i64,
-        reason: String,
-    },
-    CommandResponse { command: String, status: String, message: String },
-    Error { code: String, message: String },
+async fn handle_submit_transaction(write_tx: &mpsc::Sender<Message>) -> Result<(), Box<dyn Error>> {
+   println!("\n=== Submit Transaction ===");
+   let mut stdin = io::BufReader::new(io::stdin()).lines();
+   
+   println!("Enter recipient DID: ");
+   let recipient = stdin.next_line().await?.unwrap_or_default();
+   
+   println!("Enter amount: ");
+   let amount: u64 = stdin.next_line().await?.unwrap_or_default().parse().unwrap_or(0);
+   
+   let msg = json!({
+       "type": "SubmitTransaction",
+       "transaction": {
+           "type": "Transfer",
+           "receiver": recipient,
+           "amount": amount
+       }
+   });
+
+   write_tx.send(Message::Text(msg.to_string())).await?;
+   println!("Transaction submitted!");
+   Ok(())
+}
+
+async fn handle_create_proposal(write_tx: &mpsc::Sender<Message>) -> Result<(), Box<dyn Error>> {
+   println!("\n=== Create Proposal ===");
+   let mut stdin = io::BufReader::new(io::stdin()).lines();
+   
+   println!("Select proposal type:");
+   println!("1. Funding");
+   println!("2. Policy Change");
+   println!("3. Resource Allocation");
+   
+   let proposal_type = match stdin.next_line().await?.unwrap_or_default().as_str() {
+       "1" => "Funding",
+       "2" => "PolicyChange",
+       "3" => "ResourceAllocation",
+       _ => return Ok(())
+   };
+   
+   println!("Enter proposal title: ");
+   let title = stdin.next_line().await?.unwrap_or_default();
+   
+   println!("Enter description: ");
+   let description = stdin.next_line().await?.unwrap_or_default();
+   
+   let msg = json!({
+       "type": "CreateProposal",
+       "proposalType": proposal_type,
+       "title": title,
+       "description": description,
+       "duration": 60
+   });
+
+   write_tx.send(Message::Text(msg.to_string())).await?;
+   println!("Proposal created!");
+   Ok(())
+}
+
+async fn handle_vote(write_tx: &mpsc::Sender<Message>) -> Result<(), Box<dyn Error>> {
+   println!("\n=== Vote on Proposal ===");
+   let mut stdin = io::BufReader::new(io::stdin()).lines();
+   
+   println!("Enter proposal ID: ");
+   let proposal_id = stdin.next_line().await?.unwrap_or_default();
+   
+   println!("Vote (yes/no): ");
+   let vote = stdin.next_line().await?.unwrap_or_default().to_lowercase();
+   let approve = vote == "yes" || vote == "y";
+   
+   let msg = json!({
+       "type": "CastVote",
+       "proposalId": proposal_id,
+       "approve": approve
+   });
+
+   write_tx.send(Message::Text(msg.to_string())).await?;
+   println!("Vote cast!");
+   Ok(())
+}
+
+async fn handle_resource_management(write_tx: &mpsc::Sender<Message>) -> Result<(), Box<dyn Error>> {
+   println!("\n=== Resource Management ===");
+   println!("1. View Resources");
+   println!("2. Allocate Resources");
+   println!("3. Transfer Resources");
+   
+   let mut stdin = io::BufReader::new(io::stdin()).lines();
+   let choice = stdin.next_line().await?.unwrap_or_default();
+   
+   let msg = match choice.as_str() {
+       "1" => json!({
+           "type": "QueryResources"
+       }),
+       "2" => {
+           println!("Enter amount to allocate: ");
+           let amount = stdin.next_line().await?.unwrap_or_default().parse::<u64>().unwrap_or(0);
+           json!({
+               "type": "AllocateResources",
+               "amount": amount
+           })
+       },
+       "3" => {
+           println!("Enter recipient DID: ");
+           let recipient = stdin.next_line().await?.unwrap_or_default();
+           println!("Enter amount to transfer: ");
+           let amount = stdin.next_line().await?.unwrap_or_default().parse::<u64>().unwrap_or(0);
+           json!({
+               "type": "TransferResources",
+               "recipient": recipient,
+               "amount": amount
+           })
+       },
+       _ => return Ok(())
+   };
+
+   write_tx.send(Message::Text(msg.to_string())).await?;
+   println!("Resource management request sent!");
+   Ok(())
+}
+
+async fn display_menu() {
+   println!("\n=== ICN Test Client Menu ===");
+   println!("1. Register as Validator");
+   println!("2. Create Cooperative");
+   println!("3. Submit Transaction");
+   println!("4. Create Proposal");
+   println!("5. Vote on Proposal");
+   println!("6. Check Status");
+   println!("7. View Reputation");
+   println!("8. Join Cooperative");
+   println!("9. List Active Proposals");
+   println!("10. Resource Management");
+   println!("h. Help");
+   println!("q. Quit");
+   println!("\nEnter choice: ");
+}
+
+async fn display_help() {
+   println!("\n=== ICN Client Help ===");
+   println!("This client allows you to interact with the ICN network.");
+   println!("\nKey Concepts:");
+   println!("- DIDs: Your identity on the network");
+   println!("- Cooperatives: Groups that share resources");
+   println!("- Proposals: Governance decisions to be voted on");
+   println!("- Resources: Computing, storage, or network capacity");
+   println!("\nBasic Flow:");
+   println!("1. Register as validator");
+   println!("2. Create or join a cooperative");
+   println!("3. Submit proposals or vote on existing ones");
+   println!("4. Manage and transfer resources");
+   println!("\nPress Enter to continue...");
+   let mut stdin = io::BufReader::new(io::stdin()).lines();
+   let _ = stdin.next_line().await;
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    println!("Starting WebSocket test client...");
+   println!("Starting ICN WebSocket test client...");
 
-    // Add "X-DID" header to the WebSocket request
-    let url = Url::parse("ws://localhost:8081/ws")?;
-    let request = Request::builder()
-        .uri(url.as_str())
-        .header("X-DID", HeaderValue::from_str("did:icn:test1")?)
-        .body(())
-        .expect("Failed to build request");
+   let test_did = "did:icn:test".to_string();
+   let (mut write, mut read) = create_websocket_connection("ws://localhost:8081/ws", &test_did).await?;
 
-    let (ws_stream, _) = connect_async(request).await?;
-    println!("✓ WebSocket connected");
+   println!("Connected to ICN server!");
 
-    let (mut write, mut read) = ws_stream.split();
+   let (write_tx, mut write_rx) = mpsc::channel::<Message>(32);
 
-    // Send registration message after connection
-    let register_msg = ClientMessage::RegisterValidator {
-        did: "did:icn:test1".to_string(),
-        initial_reputation: 100,
-    };
-    send_message(&mut write, &register_msg).await?;
-    println!("✓ Sent registration message");
+   // Message writer task
+   let write_to_ws = tokio::spawn(async move {
+       while let Some(msg) = write_rx.recv().await {
+           if let Err(e) = write.send(msg).await {
+               eprintln!("Error sending message: {}", e);
+               break;
+           }
+       }
+   });
 
-    run_tests(&mut write, &mut read).await?;
+   // Message reader task
+   let read_from_ws = tokio::spawn(async move {
+       while let Some(msg) = read.next().await {
+           match msg {
+               Ok(Message::Text(text)) => {
+                   println!("\nReceived message:");
+                   if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                       println!("{}", serde_json::to_string_pretty(&json).unwrap_or(text));
+                   } else {
+                       println!("{}", text);
+                   }
+               }
+               Ok(Message::Close(frame)) => {
+                   println!("\nServer closed connection: {:?}", frame);
+                   break;
+               }
+               Ok(msg) => println!("\nReceived message: {:?}", msg),
+               Err(e) => {
+                   eprintln!("\nError receiving message: {}", e);
+                   break;
+               }
+           }
+       }
+   });
 
-    println!("\nTest client completed!");
-    Ok(())
-}
+   // Register as validator
+   let register_msg = json!({
+       "type": "RegisterValidator",
+       "did": test_did.clone(),
+       "initial_reputation": 100
+   });
+   write_tx.send(Message::Text(register_msg.to_string())).await?;
+   println!("Registered as validator");
+   sleep(Duration::from_millis(100)).await;
 
-async fn run_tests<S, R>(
-    write: &mut S,
-    read: &mut R,
-) -> Result<(), Box<dyn Error>>
-where
-    S: Sink<Message> + Unpin,
-    S::Error: std::error::Error + 'static,
-    R: StreamExt<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
-{
-    subscribe_events(write).await?;
-    submit_transaction(write).await?;
-    query_status(write).await?;
-    listen_for_responses(read).await;
-    Ok(())
-}
+   // Subscribe to events
+   let subscribe_msg = json!({
+       "type": "Subscribe",
+       "events": ["ConsensusUpdate", "BlockFinalized", "ReputationUpdate", "ProposalUpdate"]
+   });
+   write_tx.send(Message::Text(subscribe_msg.to_string())).await?;
+   println!("Subscribed to events");
+   sleep(Duration::from_millis(100)).await;
 
-async fn subscribe_events<S>(write: &mut S) -> Result<(), Box<dyn Error>>
-where
-    S: Sink<Message> + Unpin,
-    S::Error: std::error::Error + 'static,
-{
-    println!("\nSubscribing to events...");
-    let subscribe_msg = ClientMessage::Subscribe {
-        events: vec!["consensus".to_string(), "blocks".to_string(), "reputation".to_string()],
-    };
-    send_message(write, &subscribe_msg).await?;
-    println!("✓ Subscribed to events");
-    Ok(())
-}
+   // Main menu loop
+   loop {
+       display_menu().await;
+       let mut stdin = io::BufReader::new(io::stdin()).lines();
+       
+       match stdin.next_line().await?.unwrap_or_default().as_str() {
+           "1" => {
+               let msg = json!({
+                   "type": "RegisterValidator",
+                   "did": test_did,
+                   "initial_reputation": 100
+               });
+               write_tx.send(Message::Text(msg.to_string())).await?;
+               println!("Registration request sent");
+           },
+           "2" => handle_create_cooperative(&write_tx).await?,
+           "3" => handle_submit_transaction(&write_tx).await?,
+           "4" => handle_create_proposal(&write_tx).await?,
+           "5" => handle_vote(&write_tx).await?,
+           "6" => {
+               let msg = json!({"type": "QueryStatus"});
+               write_tx.send(Message::Text(msg.to_string())).await?;
+               println!("Status query sent");
+           },
+           "7" => {
+               let msg = json!({"type": "QueryReputation"});
+               write_tx.send(Message::Text(msg.to_string())).await?;
+               println!("Reputation query sent");
+           },
+           "8" => {
+               println!("\nEnter cooperative ID to join: ");
+               let coop_id = stdin.next_line().await?.unwrap_or_default();
+               let msg = json!({
+                   "type": "JoinCooperative",
+                   "cooperativeId": coop_id
+               });
+               write_tx.send(Message::Text(msg.to_string())).await?;
+               println!("Join request sent");
+           },
+           "9" => {
+               let msg = json!({"type": "ListProposals"});
+               write_tx.send(Message::Text(msg.to_string())).await?;
+               println!("Proposal list requested");
+           },
+           "10" => handle_resource_management(&write_tx).await?,
+           "h" | "H" => display_help().await,
+           "q" | "Q" => break,
+           _ => println!("Invalid choice, please try again or enter 'h' for help")
+       }
 
-async fn submit_transaction<S>(write: &mut S) -> Result<(), Box<dyn Error>>
-where
-    S: Sink<Message> + Unpin,
-    S::Error: std::error::Error + 'static,
-{
-    println!("\nSubmitting test transaction...");
-    let transaction = TransactionData {
-        sender: "did:icn:test1".to_string(),
-        receiver: "did:icn:test2".to_string(),
-        amount: 50,
-        timestamp: current_timestamp(),
-    };
-    let tx_msg = ClientMessage::SubmitTransaction { transaction };
-    send_message(write, &tx_msg).await?;
-    println!("✓ Sent test transaction");
-    Ok(())
-}
+       sleep(Duration::from_millis(100)).await;
+   }
 
-async fn query_status<S>(write: &mut S) -> Result<(), Box<dyn Error>>
-where
-    S: Sink<Message> + Unpin,
-    S::Error: std::error::Error + 'static,
-{
-    println!("\nQuerying node status...");
-    let status_msg = ClientMessage::QueryStatus;
-    send_message(write, &status_msg).await?;
-    println!("✓ Sent status query");
-    Ok(())
-}
-
-async fn listen_for_responses<R>(read: &mut R)
-where
-    R: StreamExt<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
-{
-    println!("\nListening for events (30 second timeout)...");
-    let timeout = Duration::from_secs(30);
-    let start = Instant::now();
-
-    while let Some(msg) = read.next().await {
-        if start.elapsed() > timeout {
-            println!("Reached timeout period");
-            break;
-        }
-
-        match msg {
-            Ok(Message::Text(text)) => match serde_json::from_str::<ServerMessage>(&text) {
-                Ok(server_msg) => handle_server_message(server_msg),
-                Err(e) => eprintln!("❌ Error parsing message: {}", e),
-            },
-            Ok(Message::Close(..)) => {
-                println!("Server closed connection");
-                break;
-            }
-            Err(e) => eprintln!("❌ Error: {}", e),
-            _ => {}
-        }
-
-        sleep(Duration::from_millis(100)).await;
-    }
-}
-
-async fn send_message<S>(write: &mut S, msg: &ClientMessage) -> Result<(), Box<dyn Error>>
-where
-    S: Sink<Message> + Unpin,
-    S::Error: std::error::Error + 'static,
-{
-    let msg = serde_json::to_string(msg)?;
-    write.send(Message::Text(msg)).await?;
-    Ok(())
-}
-
-fn handle_server_message(message: ServerMessage) {
-    match message {
-        ServerMessage::ConsensusUpdate {
-            round_number,
-            status,
-            coordinator,
-            votes_count,
-            participation_rate,
-            remaining_time_ms,
-        } => {
-            println!("\n📢 Consensus Update:");
-            println!("  Round: {}", round_number);
-            println!("  Status: {}", status);
-            println!("  Coordinator: {}", coordinator);
-            println!("  Votes: {}", votes_count);
-            println!("  Participation: {:.1}%", participation_rate * 100.0);
-            println!("  Time remaining: {}ms", remaining_time_ms);
-        }
-        ServerMessage::BlockFinalized {
-            block_number,
-            transactions_count,
-            timestamp,
-            proposer,
-        } => {
-            println!("\n📦 Block Finalized:");
-            println!("  Block: #{}", block_number);
-            println!("  Transactions: {}", transactions_count);
-            println!("  Proposer: {}", proposer);
-            println!("  Timestamp: {}", timestamp);
-        }
-        ServerMessage::ReputationUpdate {
-            did,
-            change,
-            new_total,
-            reason,
-        } => {
-            println!("\n⭐ Reputation Update:");
-            println!("  DID: {}", did);
-            println!("  Change: {}", change);
-            println!("  New Total: {}", new_total);
-            println!("  Reason: {}", reason);
-        }
-        ServerMessage::CommandResponse {
-            command,
-            status,
-            message,
-        } => {
-            println!("\n✉️ Command Response:");
-            println!("  Command: {}", command);
-            println!("  Status: {}", status);
-            println!("  Message: {}", message);
-        }
-        ServerMessage::Error { code, message } => {
-            println!("\n❌ Error:");
-            println!("  Code: {}", code);
-            println!("  Message: {}", message);
-        }
-    }
-}
-
-fn current_timestamp() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
+   // Cleanup
+   let close_msg = Message::Close(None);
+   write_tx.send(close_msg).await?;
+   
+   sleep(Duration::from_millis(100)).await;
+   write_to_ws.abort();
+   read_from_ws.abort();
+   
+   println!("Client shutting down...");
+   Ok(())
 }

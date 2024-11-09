@@ -12,8 +12,8 @@ name = "ws_client"
 path = "examples/ws_client.rs"
 
 [[example]]
-name = "ws_client2"
-path = "examples/ws_client2.rs"
+name = "integration_test"
+path = "examples/integration_test.rs"
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
@@ -29,7 +29,9 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4"] }
 tokio-tungstenite = "0.20"
 url = "2.4"
+http = "0.2"
 
 [dev-dependencies]
-tokio-tungstenite = "0.20"
+tokio-tungstenite = { version = "0.20", features = ["native-tls"] }
 url = "2.4"
+http = "0.2"
