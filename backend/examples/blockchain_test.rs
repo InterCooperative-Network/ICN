@@ -2,120 +2,103 @@
 
 use std::sync::{Arc, Mutex};
 use tokio;
+
 use icn_backend::{
-    blockchain::{Block, Blockchain, Transaction, TransactionType},
-    consensus::{ProofOfCooperation, types::ConsensusConfig},
-    identity::IdentitySystem,
+    blockchain::{Blockchain, Transaction, TransactionType},
+    identity::{DID, IdentitySystem},
     reputation::ReputationSystem,
+    consensus::{ProofOfCooperation, types::ConsensusConfig},
     websocket::WebSocketHandler,
 };
 
+use secp256k1::Secp256k1;
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Starting blockchain test client...");
+    println!("Starting blockchain integration test...");
 
     // Initialize core systems
     let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
     let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
     let ws_handler = Arc::new(WebSocketHandler::new());
 
-    // Initialize consensus
     let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
         ConsensusConfig::default(),
         ws_handler.clone(),
     )));
 
-    // Create test DIDs
+    // Register test DIDs
     {
         let mut identity = identity_system.lock().unwrap();
-        identity.register_did(
-            "did:icn:test1".to_string(),
-            vec!["transaction.create".to_string()]
-        );
-        identity.register_did(
-            "did:icn:test2".to_string(),
-            vec!["transaction.create".to_string()]
-        );
-        println!("✓ Created test DIDs");
+        let secp = Secp256k1::new();
+
+        // Create validator DID
+        let (validator_did, _) = DID::generate_random("did:icn:validator1".to_string());
+        identity.register_did(validator_did, vec![
+            "validator.propose".to_string(),
+            "validator.vote".to_string()
+        ]);
+
+        // Create test user DID
+        let (user_did, _) = DID::generate_random("did:icn:user1".to_string());
+        identity.register_did(user_did, vec![
+            "transaction.create".to_string()
+        ]);
     }
 
-    // Set initial reputation
+    // Initialize reputation scores
     {
         let mut reputation = reputation_system.lock().unwrap();
-        reputation.increase_reputation("did:icn:test1", 100);
-        reputation.increase_reputation("did:icn:test2", 100);
-        println!("✓ Set initial reputation scores");
+        reputation.increase_reputation("did:icn:validator1", 100);
+        reputation.increase_reputation("did:icn:user1", 50);
     }
 
-    // Initialize blockchain
+    // Create and initialize blockchain
     let mut blockchain = Blockchain::new(
         identity_system.clone(),
         reputation_system.clone(),
         consensus.clone(),
     );
-    println!("✓ Initialized blockchain");
 
-    // Create and add test transactions
-    let transactions = vec![
-        Transaction::new(
-            "did:icn:test1".to_string(),
-            TransactionType::Transfer {
-                receiver: "did:icn:test2".to_string(),
-                amount: 50,
-            },
-        ),
-        Transaction::new(
-            "did:icn:test2".to_string(),
-            TransactionType::Transfer {
-                receiver: "did:icn:test1".to_string(),
-                amount: 30,
-            },
-        ),
-    ];
+    // Test transaction processing
+    println!("\nTesting transaction processing...");
+    
+    let tx = Transaction::new(
+        "did:icn:user1".to_string(),
+        TransactionType::Transfer {
+            receiver: "did:icn:recipient".to_string(),
+            amount: 100,
+        },
+    );
 
-    // Process transactions
-    println!("\nProcessing test transactions...");
-    for (i, tx) in transactions.iter().enumerate() {
-        match blockchain.add_transaction(tx.clone()).await {
-            Ok(_) => println!("✓ Transaction {} added successfully", i + 1),
-            Err(e) => println!("✗ Transaction {} failed: {}", i + 1, e),
-        }
+    match blockchain.process_transaction(&tx).await {
+        Ok(_) => println!("Transaction processed successfully"),
+        Err(e) => eprintln!("Transaction processing failed: {}", e),
     }
 
-    // Force block creation
-    println!("\nFinalizing block...");
+    // Test block finalization
+    println!("\nTesting block finalization...");
     match blockchain.finalize_block().await {
-        Ok(_) => println!("✓ Block finalized successfully"),
-        Err(e) => println!("✗ Block finalization failed: {}", e),
+        Ok(_) => println!("Block finalized successfully"),
+        Err(e) => eprintln!("Block finalization failed: {}", e),
     }
 
     // Print blockchain state
-    println!("\nFinal blockchain state:");
-    println!("Chain length: {}", blockchain.get_block_count());
-    println!("Total transactions: {}", blockchain.get_transaction_count());
-
+    println!("\nCurrent blockchain state:");
+    println!("Block count: {}", blockchain.get_block_count());
+    println!("Latest block height: {}", blockchain.current_block_number);
     if let Some(latest) = blockchain.chain.last() {
-        println!("Latest block: #{}", latest.index);
-        println!("Block hash: {}", latest.hash);
-        println!("Transactions in block: {}", latest.transactions.len());
+        println!("Latest block hash: {}", latest.hash);
+        println!("Transaction count: {}", latest.transactions.len());
     }
 
-    // Check consensus state
-    if let Some(round) = blockchain.get_current_round() {
-        println!("\nConsensus state:");
-        println!("Current round: {}", round.round_number);
-        println!("Round status: {:?}", round.status);
-        println!("Participation rate: {:.1}%", round.stats.participation_rate * 100.0);
-    }
-
-    // Check final reputation scores
+    // Print reputation scores
     {
         let reputation = reputation_system.lock().unwrap();
         println!("\nFinal reputation scores:");
-        println!("test1: {}", reputation.get_reputation("did:icn:test1"));
-        println!("test2: {}", reputation.get_reputation("did:icn:test2"));
+        println!("Validator1: {}", reputation.get_reputation("did:icn:validator1"));
+        println!("User1: {}", reputation.get_reputation("did:icn:user1"));
     }
 
-    println!("\nTest completed successfully!");
     Ok(())
 }
