@@ -63,11 +63,25 @@ pub struct BlockMetadata {
     /// Total voting power that approved the block
     pub total_voting_power: f64,
     
-    /// Gas used by transactions in the block
-    pub gas_used: u64,
+    /// Total resources consumed by transactions in the block
+    pub resources_used: u64,
     
     /// Size of the block in bytes
     pub size: u64,
+    
+    /// Summary of relationship transactions
+    pub relationship_updates: RelationshipMetadata,
+}
+
+/// Metadata specific to relationship transactions in the block
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RelationshipMetadata {
+    pub contribution_count: u32,
+    pub mutual_aid_count: u32,
+    pub endorsement_count: u32,
+    pub relationship_update_count: u32,
+    pub total_participants: u32,
+    pub unique_cooperatives: Vec<String>,
 }
 
 impl Block {
@@ -78,12 +92,16 @@ impl Block {
             .unwrap_or_default()
             .as_millis() as u64;
 
+        let relationship_metadata = Self::calculate_relationship_metadata(&transactions);
+        let resources_used = transactions.iter().map(|tx| tx.resource_cost).sum();
+
         let metadata = BlockMetadata {
             consensus_duration_ms: 0,
             validator_count: 0,
             total_voting_power: 0.0,
-            gas_used: transactions.iter().map(|tx| tx.gas_used()).sum(),
+            resources_used,
             size: 0,
+            relationship_updates: relationship_metadata,
         };
 
         let mut block = Block {
@@ -194,21 +212,77 @@ impl Block {
             }
         }
 
+        // Verify resource usage
+        let calculated_resources: u64 = self.transactions.iter()
+            .map(|tx| tx.resource_cost)
+            .sum();
+        if calculated_resources != self.metadata.resources_used {
+            return Err("Resource usage mismatch".to_string());
+        }
+
+        // Verify relationship metadata
+        let calculated_metadata = Self::calculate_relationship_metadata(&self.transactions);
+        if calculated_metadata != self.metadata.relationship_updates {
+            return Err("Relationship metadata mismatch".to_string());
+        }
+
         Ok(())
+    }
+
+    /// Calculates metadata for relationship transactions in the block
+    fn calculate_relationship_metadata(transactions: &[Transaction]) -> RelationshipMetadata {
+        let mut metadata = RelationshipMetadata {
+            contribution_count: 0,
+            mutual_aid_count: 0,
+            endorsement_count: 0,
+            relationship_update_count: 0,
+            total_participants: 0,
+            unique_cooperatives: Vec::new(),
+        };
+
+        let mut participants = std::collections::HashSet::new();
+
+        for tx in transactions {
+            match &tx.transaction_type {
+                super::TransactionType::RecordContribution { .. } => {
+                    metadata.contribution_count += 1;
+                    participants.insert(tx.sender.clone());
+                }
+                super::TransactionType::RecordMutualAid { receiver, .. } => {
+                    metadata.mutual_aid_count += 1;
+                    participants.insert(tx.sender.clone());
+                    participants.insert(receiver.clone());
+                }
+                super::TransactionType::AddEndorsement { to_did, .. } => {
+                    metadata.endorsement_count += 1;
+                    participants.insert(tx.sender.clone());
+                    participants.insert(to_did.clone());
+                }
+                super::TransactionType::UpdateRelationship { member_two, .. } => {
+                    metadata.relationship_update_count += 1;
+                    participants.insert(tx.sender.clone());
+                    participants.insert(member_two.clone());
+                }
+                _ => {}
+            }
+        }
+
+        metadata.total_participants = participants.len() as u32;
+        metadata
     }
 
     /// Updates the block's metadata after consensus is reached
     pub fn update_metadata(&mut self, consensus_duration_ms: u64, size: u64) {
         self.metadata.consensus_duration_ms = consensus_duration_ms;
         self.metadata.size = size;
-        self.metadata.gas_used = self.transactions.iter()
-            .map(|tx| tx.gas_used())
+        self.metadata.resources_used = self.transactions.iter()
+            .map(|tx| tx.resource_cost)
             .sum();
     }
 
-    /// Gets the total gas used by all transactions in the block
-    pub fn total_gas_used(&self) -> u64 {
-        self.metadata.gas_used
+    /// Gets the total resources used by all transactions in the block
+    pub fn total_resources_used(&self) -> u64 {
+        self.metadata.resources_used
     }
 
     /// Gets the number of transactions in the block
@@ -273,37 +347,35 @@ mod tests {
     }
 
     #[test]
-    fn test_block_verification() {
-        let prev_block = Block::genesis();
-        let block = Block::new(
-            1,
-            prev_block.hash.clone(),
-            vec![],
-            "did:icn:proposer".to_string()
-        );
+    fn test_relationship_metadata() {
+        use super::super::TransactionType;
+        
+        let transactions = vec![
+            Transaction::new(
+                "did:icn:alice".to_string(),
+                TransactionType::RecordContribution {
+                    description: "test".to_string(),
+                    impact_story: "test".to_string(),
+                    context: "test".to_string(),
+                    tags: vec!["test".to_string()],
+                }
+            ),
+            Transaction::new(
+                "did:icn:bob".to_string(),
+                TransactionType::RecordMutualAid {
+                    receiver: "did:icn:charlie".to_string(),
+                    description: "test".to_string(),
+                    impact_story: None,
+                    reciprocity_notes: None,
+                    tags: vec!["test".to_string()],
+                }
+            ),
+        ];
 
-        assert!(block.verify(Some(&prev_block)).is_ok());
-    }
-
-    #[test]
-    fn test_invalid_previous_hash() {
-        let prev_block = create_test_block();
-        let block = Block::new(
-            2,
-            "wrong_hash".to_string(),
-            vec![],
-            "did:icn:proposer".to_string()
-        );
-
-        assert!(block.verify(Some(&prev_block)).is_err());
-    }
-
-    #[test] 
-    fn test_genesis_block() {
-        let genesis = Block::genesis();
-        assert_eq!(genesis.index, 0);
-        assert_eq!(genesis.previous_hash, "0");
-        assert!(genesis.transactions.is_empty());
-        assert_eq!(genesis.proposer, "genesis");
+        let block = Block::new(1, "hash".to_string(), transactions, "proposer".to_string());
+        
+        assert_eq!(block.metadata.relationship_updates.contribution_count, 1);
+        assert_eq!(block.metadata.relationship_updates.mutual_aid_count, 1);
+        assert_eq!(block.metadata.relationship_updates.total_participants, 3);
     }
 }

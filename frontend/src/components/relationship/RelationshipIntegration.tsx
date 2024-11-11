@@ -75,7 +75,7 @@ export default function RelationshipIntegration() {
         setMutualAid(data.mutualAid);
         
         // Set up WebSocket connection for real-time updates
-        const ws = new WebSocket('ws://localhost:8081/ws');
+        const ws = new WebSocket('ws://localhost:8088/ws');
         
         ws.onmessage = (event) => {
           const update = JSON.parse(event.data);

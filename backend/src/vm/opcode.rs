@@ -3,8 +3,7 @@
 use serde::{Serialize, Deserialize};
 
 /// Enum representing the various operations (`OpCode`) that can be executed in the virtual machine.
-/// Each variant is an operation that affects the VM stack, memory, or interacts with other subsystems like
-/// cooperative, governance, reputation, identity, federation, and system operations.
+/// Each variant is an operation that affects the VM stack, memory, or interacts with other subsystems.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OpCode {
     // Stack Operations
@@ -52,7 +51,7 @@ pub enum OpCode {
     AllocateResource,
     /// Transfer resources within or between cooperatives.
     TransferResource,
-    /// Update cooperative metadata (e.g., purpose, mission).
+    /// Update cooperative metadata.
     UpdateCooperativeMetadata,
     /// Add a member to a cooperative.
     AddCooperativeMember,
@@ -76,7 +75,7 @@ pub enum OpCode {
     CancelProposal,
     /// Extend the voting period for a proposal.
     ExtendVotingPeriod,
-    /// Calculate the weight of a vote based on certain metrics.
+    /// Calculate the weight of a vote based on metrics.
     CalculateVotingWeight,
 
     // Reputation Operations
@@ -94,71 +93,117 @@ pub enum OpCode {
     // Identity Operations
     /// Verify a Decentralized Identifier (DID).
     VerifyDID,
-    /// Update a Decentralized Identifier (DID) document.
+    /// Update a DID document.
     UpdateDIDDocument,
-    /// Create a new credential associated with a DID.
+    /// Create a new credential.
     CreateCredential,
-    /// Verify a given credential.
+    /// Verify a credential.
     VerifyCredential,
-    /// Revoke a previously issued credential.
+    /// Revoke a credential.
     RevokeCredential,
 
     // Federation Operations
-    /// Initiate the process of federation.
+    /// Initiate federation process.
     InitiateFederation,
     /// Join an existing federation.
     JoinFederation,
     /// Leave a federation.
     LeaveFederation,
-    /// Synchronize federation state with peers.
+    /// Synchronize federation state.
     SyncFederationState,
-    /// Validate a specific action within the federation.
+    /// Validate federation action.
     ValidateFederationAction,
 
     // Transaction Operations
     /// Create a new transaction.
     CreateTransaction,
-    /// Validate an existing transaction.
+    /// Validate a transaction.
     ValidateTransaction,
-    /// Sign a transaction for verification purposes.
+    /// Sign a transaction.
     SignTransaction,
-    /// Broadcast a transaction to the network.
+    /// Broadcast a transaction.
     BroadcastTransaction,
 
+    // Relationship Operations
+    /// Record a contribution with impact story
+    RecordContribution {
+        description: String,
+        impact_story: String,
+        context: String,
+        tags: Vec<String>,
+    },
+    /// Record mutual aid interaction
+    RecordMutualAid {
+        description: String,
+        receiver: String,
+        impact_story: Option<String>,
+        reciprocity_notes: Option<String>,
+    },
+    /// Update relationship between members
+    UpdateRelationship {
+        member_two: String,
+        relationship_type: String,
+        story: String,
+    },
+    /// Add endorsement to relationship
+    AddEndorsement {
+        to_did: String,
+        content: String,
+        context: String,
+        skills: Vec<String>,
+    },
+    /// Record relationship interaction
+    RecordInteraction {
+        with_did: String,
+        description: String,
+        impact: Option<String>,
+        interaction_type: String,
+    },
+    /// Add witness to contribution
+    AddWitness {
+        contribution_id: String,
+        witness_did: String,
+    },
+    /// Add feedback to contribution
+    AddFeedback {
+        contribution_id: String,
+        content: String,
+        endorsement_type: String,
+    },
+
     // System Operations
-    /// Log a message to the system logs.
+    /// Log a message.
     Log(String),
-    /// Halt the execution of the current process.
+    /// Halt execution.
     Halt,
-    /// Emit an event with a message.
+    /// Emit an event.
     EmitEvent(String),
-    /// Retrieve the current block number.
+    /// Get current block number.
     GetBlockNumber,
-    /// Get the current timestamp.
+    /// Get current timestamp.
     GetTimestamp,
-    /// Retrieve the caller's DID or identity.
+    /// Get caller's DID.
     GetCaller,
 
     // Comparison Operations
-    /// Check if the top two stack values are equal.
+    /// Check if values are equal.
     Equal,
-    /// Check if the top two stack values are not equal.
+    /// Check if values are not equal.
     NotEqual,
-    /// Check if the top value is greater than the second top value.
+    /// Check if greater than.
     GreaterThan,
-    /// Check if the top value is less than the second top value.
+    /// Check if less than.
     LessThan,
 
     // Logical Operations
-    /// Perform logical AND on the top two stack values.
+    /// Logical AND.
     And,
-    /// Perform logical OR on the top two stack values.
+    /// Logical OR.
     Or,
-    /// Perform logical NOT on the top stack value.
+    /// Logical NOT.
     Not,
 
     // No Operation
     /// No operation (used for padding or delays).
     Nop,
 }
-

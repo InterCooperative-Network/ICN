@@ -51,8 +51,8 @@ async fn main() {
             })
         });
 
-    println!("Starting WebSocket server on localhost:8081");
+    println!("Starting WebSocket server on localhost:8088");
     warp::serve(ws_route)
-        .run(([127, 0, 0, 1], 8081))
+        .run(([127, 0, 0, 1], 8088))
         .await;
 }

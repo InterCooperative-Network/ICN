@@ -227,7 +227,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
    println!("Starting ICN WebSocket test client...");
 
    let test_did = "did:icn:test".to_string();
-   let (mut write, mut read) = create_websocket_connection("ws://localhost:8081/ws", &test_did).await?;
+   let (mut write, mut read) = create_websocket_connection("ws://localhost:8088/ws", &test_did).await?;
 
    println!("Connected to ICN server!");
 
