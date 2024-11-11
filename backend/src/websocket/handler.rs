@@ -1,4 +1,4 @@
-// src/websocket/handler.rs
+// backend/src/websocket/handler.rs
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
@@ -12,10 +12,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::consensus::types::{ValidatorInfo, ConsensusRound, RoundStatus};
 use crate::blockchain::Block;
+use crate::relationship::{Contribution, MutualAidInteraction};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum WebSocketMessage {
+    // Existing message types
     ConsensusUpdate {
         round_number: u64,
         status: RoundStatus,
@@ -44,6 +46,18 @@ pub enum WebSocketMessage {
         reputation: i64,
         performance_score: f64,
     },
+    // New relationship message types
+    ContributionRecorded {
+        contribution: Contribution,
+    },
+    MutualAidProvided {
+        interaction: MutualAidInteraction,
+    },
+    RelationshipUpdated {
+        member_one: String,
+        member_two: String,
+        update_type: String,
+    },
     CommandResponse {
         command: String,
         status: String,
@@ -66,6 +80,12 @@ pub enum ClientMessage {
     },
     SubmitTransaction {
         transaction: serde_json::Value,
+    },
+    RecordContribution {
+        contribution: Contribution,
+    },
+    RecordMutualAid {
+        interaction: MutualAidInteraction,
     },
     QueryStatus,
     Subscribe {
@@ -163,15 +183,13 @@ impl WebSocketHandler {
     }
 
     fn broadcast_message(&self, message: WebSocketMessage) {
-        // Create a vector of all transmitters while holding the lock
         let txs: Vec<_> = {
             let connections = self.connections.lock().unwrap();
             connections.values()
                 .map(|info| info.tx.clone())
                 .collect()
-        }; // Lock is dropped here
+        };
 
-        // Send messages without holding the lock
         for tx in txs {
             let message = message.clone();
             tokio::spawn(async move {
@@ -197,6 +215,7 @@ impl WebSocketHandler {
         Ok(())
     }
 
+    // Existing broadcast methods remain unchanged
     pub fn broadcast_consensus_update(&self, round: &ConsensusRound) {
         let message = WebSocketMessage::ConsensusUpdate {
             round_number: round.round_number,
@@ -237,18 +256,31 @@ impl WebSocketHandler {
         self.broadcast_message(message);
     }
 
-    pub fn broadcast_validator_update(
+    // New broadcast methods for relationships
+    pub fn broadcast_contribution_recorded(&self, contribution: Contribution) {
+        let message = WebSocketMessage::ContributionRecorded {
+            contribution
+        };
+        self.broadcast_message(message);
+    }
+
+    pub fn broadcast_mutual_aid_provided(&self, interaction: MutualAidInteraction) {
+        let message = WebSocketMessage::MutualAidProvided {
+            interaction
+        };
+        self.broadcast_message(message);
+    }
+
+    pub fn broadcast_relationship_updated(
         &self,
-        validator: ValidatorInfo,
-        round: u64,
-        status: String
+        member_one: String,
+        member_two: String,
+        update_type: String
     ) {
-        let message = WebSocketMessage::ValidatorUpdate {
-            did: validator.did.clone(),
-            round,
-            status,
-            reputation: validator.reputation,
-            performance_score: validator.performance_score,
+        let message = WebSocketMessage::RelationshipUpdated {
+            member_one,
+            member_two,
+            update_type,
         };
         self.broadcast_message(message);
     }
@@ -278,6 +310,26 @@ async fn handle_client_message(
                 status: "success".to_string(),
                 message: format!("Subscribed to {} events", events.len()),
                 data: Some(serde_json::json!({ "events": events })),
+            };
+            handler.send_to_client(did, response).await
+        },
+        ClientMessage::RecordContribution { contribution } => {
+            handler.broadcast_contribution_recorded(contribution);
+            let response = WebSocketMessage::CommandResponse {
+                command: "record_contribution".to_string(),
+                status: "success".to_string(),
+                message: "Contribution recorded successfully".to_string(),
+                data: None,
+            };
+            handler.send_to_client(did, response).await
+        },
+        ClientMessage::RecordMutualAid { interaction } => {
+            handler.broadcast_mutual_aid_provided(interaction);
+            let response = WebSocketMessage::CommandResponse {
+                command: "record_mutual_aid".to_string(),
+                status: "success".to_string(),
+                message: "Mutual aid interaction recorded successfully".to_string(),
+                data: None,
             };
             handler.send_to_client(did, response).await
         },
@@ -321,6 +373,19 @@ mod tests {
             votes_count: 3,
             participation_rate: 0.75,
             remaining_time_ms: 5000,
+        };
+
+        let serialized = serde_json::to_string(&message).unwrap();
+        assert!(!serialized.is_empty());
+    }
+
+    #[test]
+    fn test_relationship_message_serialization() {
+        // Add test for relationship message serialization
+        let message = WebSocketMessage::RelationshipUpdated {
+            member_one: "did:icn:alice".to_string(),
+            member_two: "did:icn:bob".to_string(),
+            update_type: "collaboration_started".to_string(),
         };
 
         let serialized = serde_json::to_string(&message).unwrap();

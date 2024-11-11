@@ -1,4 +1,4 @@
-Project Code Dump - Generated Mon Nov 11 05:02:13 AM UTC 2024
+Project Code Dump - Generated Mon Nov 11 10:27:43 PM UTC 2024
 ======================================
 
 Project Tree:
@@ -47,6 +47,8 @@ Project Tree:
 │   │   ├── monitoring
 │   │   │   └── energy.rs
 │   │   ├── network
+│   │   │   └── mod.rs
+│   │   ├── relationship
 │   │   │   └── mod.rs
 │   │   ├── reputation
 │   │   │   ├── mod.rs
@@ -135,7 +137,7 @@ Project Tree:
     ├── install_docsctl.sh
     └── requirements.txt
 
-39 directories, 92 files
+40 directories, 93 files
 
 
 ===================
@@ -308,7 +310,7 @@ pub use handler::WebSocketHandler;
 ===================
 File: ./backend/src/websocket/handler.rs
 ===================
-// src/websocket/handler.rs
+// backend/src/websocket/handler.rs
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
@@ -322,10 +324,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::consensus::types::{ValidatorInfo, ConsensusRound, RoundStatus};
 use crate::blockchain::Block;
+use crate::relationship::{Contribution, MutualAidInteraction};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum WebSocketMessage {
+    // Existing message types
     ConsensusUpdate {
         round_number: u64,
         status: RoundStatus,
@@ -354,6 +358,18 @@ pub enum WebSocketMessage {
         reputation: i64,
         performance_score: f64,
     },
+    // New relationship message types
+    ContributionRecorded {
+        contribution: Contribution,
+    },
+    MutualAidProvided {
+        interaction: MutualAidInteraction,
+    },
+    RelationshipUpdated {
+        member_one: String,
+        member_two: String,
+        update_type: String,
+    },
     CommandResponse {
         command: String,
         status: String,
@@ -376,6 +392,12 @@ pub enum ClientMessage {
     },
     SubmitTransaction {
         transaction: serde_json::Value,
+    },
+    RecordContribution {
+        contribution: Contribution,
+    },
+    RecordMutualAid {
+        interaction: MutualAidInteraction,
     },
     QueryStatus,
     Subscribe {
@@ -473,15 +495,13 @@ impl WebSocketHandler {
     }
 
     fn broadcast_message(&self, message: WebSocketMessage) {
-        // Create a vector of all transmitters while holding the lock
         let txs: Vec<_> = {
             let connections = self.connections.lock().unwrap();
             connections.values()
                 .map(|info| info.tx.clone())
                 .collect()
-        }; // Lock is dropped here
+        };
 
-        // Send messages without holding the lock
         for tx in txs {
             let message = message.clone();
             tokio::spawn(async move {
@@ -507,6 +527,7 @@ impl WebSocketHandler {
         Ok(())
     }
 
+    // Existing broadcast methods remain unchanged
     pub fn broadcast_consensus_update(&self, round: &ConsensusRound) {
         let message = WebSocketMessage::ConsensusUpdate {
             round_number: round.round_number,
@@ -547,18 +568,31 @@ impl WebSocketHandler {
         self.broadcast_message(message);
     }
 
-    pub fn broadcast_validator_update(
+    // New broadcast methods for relationships
+    pub fn broadcast_contribution_recorded(&self, contribution: Contribution) {
+        let message = WebSocketMessage::ContributionRecorded {
+            contribution
+        };
+        self.broadcast_message(message);
+    }
+
+    pub fn broadcast_mutual_aid_provided(&self, interaction: MutualAidInteraction) {
+        let message = WebSocketMessage::MutualAidProvided {
+            interaction
+        };
+        self.broadcast_message(message);
+    }
+
+    pub fn broadcast_relationship_updated(
         &self,
-        validator: ValidatorInfo,
-        round: u64,
-        status: String
+        member_one: String,
+        member_two: String,
+        update_type: String
     ) {
-        let message = WebSocketMessage::ValidatorUpdate {
-            did: validator.did.clone(),
-            round,
-            status,
-            reputation: validator.reputation,
-            performance_score: validator.performance_score,
+        let message = WebSocketMessage::RelationshipUpdated {
+            member_one,
+            member_two,
+            update_type,
         };
         self.broadcast_message(message);
     }
@@ -588,6 +622,26 @@ async fn handle_client_message(
                 status: "success".to_string(),
                 message: format!("Subscribed to {} events", events.len()),
                 data: Some(serde_json::json!({ "events": events })),
+            };
+            handler.send_to_client(did, response).await
+        },
+        ClientMessage::RecordContribution { contribution } => {
+            handler.broadcast_contribution_recorded(contribution);
+            let response = WebSocketMessage::CommandResponse {
+                command: "record_contribution".to_string(),
+                status: "success".to_string(),
+                message: "Contribution recorded successfully".to_string(),
+                data: None,
+            };
+            handler.send_to_client(did, response).await
+        },
+        ClientMessage::RecordMutualAid { interaction } => {
+            handler.broadcast_mutual_aid_provided(interaction);
+            let response = WebSocketMessage::CommandResponse {
+                command: "record_mutual_aid".to_string(),
+                status: "success".to_string(),
+                message: "Mutual aid interaction recorded successfully".to_string(),
+                data: None,
             };
             handler.send_to_client(did, response).await
         },
@@ -631,6 +685,19 @@ mod tests {
             votes_count: 3,
             participation_rate: 0.75,
             remaining_time_ms: 5000,
+        };
+
+        let serialized = serde_json::to_string(&message).unwrap();
+        assert!(!serialized.is_empty());
+    }
+
+    #[test]
+    fn test_relationship_message_serialization() {
+        // Add test for relationship message serialization
+        let message = WebSocketMessage::RelationshipUpdated {
+            member_one: "did:icn:alice".to_string(),
+            member_two: "did:icn:bob".to_string(),
+            update_type: "collaboration_started".to_string(),
         };
 
         let serialized = serde_json::to_string(&message).unwrap();
@@ -3087,6 +3154,453 @@ File: ./backend/src/api/mod.rs
 
 
 ===================
+File: ./backend/src/relationship/mod.rs
+===================
+//! Relationship System for Inter-Cooperative Network
+//!
+//! This module implements the core relationship tracking functionality for ICN,
+//! focusing on human connections, mutual aid, and cooperative bonds rather than
+//! purely transactional interactions.
+//!
+//! The system tracks:
+//! - Contributions with their impact stories and peer verification
+//! - Mutual aid interactions and reciprocity
+//! - Ongoing relationships between members and cooperatives
+//! - Endorsements and skill recognition
+//!
+//! Key principles:
+//! - Emphasize qualitative relationships over quantitative metrics
+//! - Support story-based impact documentation
+//! - Enable peer recognition and verification
+//! - Facilitate mutual aid coordination
+
+use std::collections::HashMap;
+use chrono::{DateTime, Utc};
+use serde::{Serialize, Deserialize};
+
+/// Records a concrete contribution made to the cooperative community.
+/// Focuses on capturing both the action and its impact through storytelling.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Contribution {
+    /// DID of the contributing member
+    pub contributor_did: String,
+    
+    /// Brief description of the contribution
+    pub description: String,
+    
+    /// Detailed story about the contribution's impact on the community
+    pub impact_story: String,
+    
+    /// When the contribution occurred
+    pub date: DateTime<Utc>,
+    
+    /// Context or category of the contribution (e.g., "education", "food-security")
+    pub context: String,
+    
+    /// DIDs of members who witnessed or verified the contribution
+    pub witnesses: Vec<String>,
+    
+    /// Feedback and endorsements from other members
+    pub feedback: Vec<Feedback>,
+    
+    /// Tags for categorizing and finding related contributions
+    pub tags: Vec<String>,
+}
+
+/// Qualitative feedback on a contribution from community members
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Feedback {
+    /// DID of the member providing feedback
+    pub from_did: String,
+    
+    /// The actual feedback content
+    pub content: String,
+    
+    /// When the feedback was given
+    pub date: DateTime<Utc>,
+    
+    /// Type of endorsement this feedback represents
+    pub endorsement_type: EndorsementType,
+}
+
+/// Categories of endorsements that can be given
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum EndorsementType {
+    /// Confirms the contribution occurred as described
+    Verification,
+    
+    /// Speaks to the contribution's effect on the community
+    Impact,
+    
+    /// Endorses the contributor's character and reliability
+    Character,
+    
+    /// Validates specific skills demonstrated
+    Skill,
+}
+
+/// Documents mutual aid and resource sharing between members
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MutualAidInteraction {
+    /// When the interaction occurred
+    pub date: DateTime<Utc>,
+    
+    /// DID of the member providing aid
+    pub provider_did: String,
+    
+    /// DID of the member receiving aid
+    pub receiver_did: String,
+    
+    /// Description of what was shared or exchanged
+    pub description: String,
+    
+    /// Story about how this aid impacted the community
+    pub impact_story: Option<String>,
+    
+    /// Notes about reciprocity and relationship building
+    pub reciprocity_notes: Option<String>,
+    
+    /// Tags for categorizing types of mutual aid
+    pub tags: Vec<String>,
+}
+
+/// Represents an ongoing relationship between members
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Relationship {
+    /// DID of the first member
+    pub member_one: String,
+    
+    /// DID of the second member
+    pub member_two: String,
+    
+    /// Type of relationship
+    pub relationship_type: RelationshipType,
+    
+    /// When the relationship began
+    pub started: DateTime<Utc>,
+    
+    /// Story of how the relationship formed and evolved
+    pub story: String,
+    
+    /// History of interactions between members
+    pub interactions: Vec<Interaction>,
+    
+    /// Endorsements members have given each other
+    pub mutual_endorsements: Vec<Endorsement>,
+    
+    /// Notes about the relationship
+    pub notes: Vec<RelationshipNote>,
+}
+
+/// Types of relationships that can exist between members
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum RelationshipType {
+    /// Working together on specific projects
+    Collaboration,
+    
+    /// Knowledge sharing and guidance
+    Mentorship,
+    
+    /// Sharing physical or digital resources
+    ResourceSharing,
+    
+    /// Mutual aid and support
+    MutualAid,
+    
+    /// Formal project partnership
+    ProjectPartnership,
+    
+    /// Other types of relationships
+    Other(String),
+}
+
+/// Records individual interactions within a relationship
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Interaction {
+    /// When the interaction occurred
+    pub date: DateTime<Utc>,
+    
+    /// Description of what happened
+    pub description: String,
+    
+    /// Impact or outcome of the interaction
+    pub impact: Option<String>,
+    
+    /// Type of interaction
+    pub interaction_type: InteractionType,
+}
+
+/// Categories of interactions between members
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum InteractionType {
+    /// Working together
+    Collaboration,
+    
+    /// Providing support
+    Support,
+    
+    /// Exchanging resources
+    ResourceExchange,
+    
+    /// Sharing knowledge
+    KnowledgeSharing,
+    
+    /// Working through challenges
+    ConflictResolution,
+    
+    /// Other types of interactions
+    Other(String),
+}
+
+/// Endorsement of skills or qualities
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Endorsement {
+    /// DID of the endorsing member
+    pub from_did: String,
+    
+    /// Content of the endorsement
+    pub content: String,
+    
+    /// When the endorsement was given
+    pub date: DateTime<Utc>,
+    
+    /// Context in which the skills were demonstrated
+    pub context: String,
+    
+    /// Specific skills being endorsed
+    pub skills: Vec<String>,
+}
+
+/// Notes about a relationship
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelationshipNote {
+    /// DID of the note author
+    pub author_did: String,
+    
+    /// Content of the note
+    pub content: String,
+    
+    /// When the note was written
+    pub date: DateTime<Utc>,
+    
+    /// Who can see this note
+    pub visibility: Visibility,
+}
+
+/// Visibility levels for relationship notes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Visibility {
+    /// Visible to everyone
+    Public,
+    
+    /// Only visible to those in the relationship
+    RelationshipParticipants,
+    
+    /// Visible to all cooperative members
+    CooperativeMembers,
+    
+    /// Only visible to the author
+    Private,
+}
+
+/// Main system for managing cooperative relationships
+pub struct RelationshipSystem {
+    /// Record of all contributions
+    contributions: Vec<Contribution>,
+    
+    /// Record of mutual aid interactions
+    mutual_aid: Vec<MutualAidInteraction>,
+    
+    /// Active relationships between members
+    relationships: HashMap<(String, String), Relationship>,
+    
+    /// Internal trust scores for security validation
+    /// Not exposed to users - used only for system security
+    security_trust_scores: HashMap<String, i64>,
+}
+
+impl RelationshipSystem {
+    /// Creates a new relationship system
+    pub fn new() -> Self {
+        RelationshipSystem {
+            contributions: Vec::new(),
+            mutual_aid: Vec::new(),
+            relationships: HashMap::new(),
+            security_trust_scores: HashMap::new(),
+        }
+    }
+
+    /// Records a new contribution with its story and impact
+    pub fn record_contribution(&mut self, contribution: Contribution) -> Result<(), String> {
+        // Validate contributor exists
+        if !self.is_valid_member(&contribution.contributor_did) {
+            return Err("Contributor not found".to_string());
+        }
+
+        // Update internal security score (not exposed to users)
+        self.update_security_score(&contribution.contributor_did, 1);
+        
+        // Record the contribution
+        self.contributions.push(contribution);
+        Ok(())
+    }
+
+    /// Records mutual aid interaction between members
+    pub fn record_mutual_aid(&mut self, interaction: MutualAidInteraction) -> Result<(), String> {
+        // Validate both parties exist
+        if !self.is_valid_member(&interaction.provider_did) || 
+           !self.is_valid_member(&interaction.receiver_did) {
+            return Err("Invalid member DID".to_string());
+        }
+
+        // Update relationship if it exists
+        self.update_or_create_relationship(
+            &interaction.provider_did,
+            &interaction.receiver_did,
+            &interaction.description,
+        );
+
+        // Record the interaction
+        self.mutual_aid.push(interaction);
+        Ok(())
+    }
+
+    /// Creates or updates a relationship between members
+    pub fn update_relationship(&mut self, relationship: Relationship) -> Result<(), String> {
+        let key = self.make_relationship_key(
+            &relationship.member_one,
+            &relationship.member_two
+        );
+        
+        // Validate both members exist
+        if !self.is_valid_member(&relationship.member_one) || 
+           !self.is_valid_member(&relationship.member_two) {
+            return Err("Invalid member DID".to_string());
+        }
+
+        self.relationships.insert(key, relationship);
+        Ok(())
+    }
+
+    /// Adds an endorsement to an existing relationship
+    pub fn add_endorsement(
+        &mut self,
+        member_one: &str,
+        member_two: &str,
+        endorsement: Endorsement
+    ) -> Result<(), String> {
+        let key = self.make_relationship_key(member_one, member_two);
+        
+        if let Some(relationship) = self.relationships.get_mut(&key) {
+            relationship.mutual_endorsements.push(endorsement);
+            Ok(())
+        } else {
+            Err("Relationship not found".to_string())
+        }
+    }
+
+    /// Gets member's contribution history with impact stories
+    pub fn get_member_contributions(&self, did: &str) -> Vec<&Contribution> {
+        self.contributions
+            .iter()
+            .filter(|c| c.contributor_did == did)
+            .collect()
+    }
+
+    /// Gets mutual aid history for a member
+    pub fn get_mutual_aid_history(&self, did: &str) -> Vec<&MutualAidInteraction> {
+        self.mutual_aid
+            .iter()
+            .filter(|m| m.provider_did == did || m.receiver_did == did)
+            .collect()
+    }
+
+    /// Gets all relationships for a member
+    pub fn get_member_relationships(&self, did: &str) -> Vec<&Relationship> {
+        self.relationships
+            .values()
+            .filter(|r| r.member_one == did || r.member_two == did)
+            .collect()
+    }
+
+    // Internal helper methods
+
+    /// Validates that a member exists in the system
+    fn is_valid_member(&self, did: &str) -> bool {
+        // In a real implementation, this would check against your identity system
+        true // Simplified for example
+    }
+
+    /// Creates a consistent key for relationships regardless of member order
+    fn make_relationship_key(&self, member_one: &str, member_two: &str) -> (String, String) {
+        // Ensure consistent ordering
+        if member_one < member_two {
+            (member_one.to_string(), member_two.to_string())
+        } else {
+            (member_two.to_string(), member_one.to_string())
+        }
+    }
+
+    /// Updates internal security score
+    fn update_security_score(&mut self, did: &str, amount: i64) {
+        let score = self.security_trust_scores.entry(did.to_string()).or_insert(0);
+        *score += amount;
+    }
+
+    /// Creates or updates a relationship based on an interaction
+    fn update_or_create_relationship(
+        &mut self,
+        member_one: &str,
+        member_two: &str,
+        context: &str
+    ) {
+        let key = self.make_relationship_key(member_one, member_two);
+        
+        if let Some(relationship) = self.relationships.get_mut(&key) {
+            relationship.interactions.push(Interaction {
+                date: Utc::now(),
+                description: context.to_string(),
+                impact: None,
+                interaction_type: InteractionType::ResourceExchange,
+            });
+        } else {
+            let new_relationship = Relationship {
+                member_one: member_one.to_string(),
+                member_two: member_two.to_string(),
+                relationship_type: RelationshipType::MutualAid,
+                started: Utc::now(),
+                story: format!("Relationship started with mutual aid: {}", context),
+                interactions: vec![Interaction {
+                    date: Utc::now(),
+                    description: context.to_string(),
+                    impact: None,
+                    interaction_type: InteractionType::ResourceExchange,
+                }],
+                mutual_endorsements: Vec::new(),
+                notes: Vec::new(),
+            };
+            self.relationships.insert(key, new_relationship);
+        }
+    }
+}
+
+// Implement the energy awareness trait
+impl crate::monitoring::energy::EnergyAware for RelationshipSystem {
+    fn record_energy_metrics(&self, monitor: &crate::monitoring::energy::EnergyMonitor) {
+        // Record basic operations
+        monitor.record_instruction();
+        
+        // Record storage based on relationship count
+        let storage_size = (self.relationships.len() * std::mem::size_of::<Relationship>()) as u64;
+        monitor.record_storage_operation(storage_size);
+        
+        // Record contribution operations
+        let contributions_size = (self.contributions.len() * std::mem::size_of::<Contribution>()) as u64;
+        monitor.record_memory_operation(contributions_size);
+    }
+}
+
+===================
 File: ./backend/src/blockchain/chain.rs
 ===================
 // src/blockchain/chain.rs
@@ -4822,9 +5336,9 @@ async fn main() {
             })
         });
 
-    println!("Starting WebSocket server on localhost:8081");
+    println!("Starting WebSocket server on localhost:8088");
     warp::serve(ws_route)
-        .run(([127, 0, 0, 1], 8081))
+        .run(([127, 0, 0, 1], 8088))
         .await;
 }
 
@@ -6393,6 +6907,293 @@ const CooperativeDashboard = () => {
 };
 
 export default CooperativeDashboard;
+
+===================
+File: ./frontend/src/components/relationship/RelationshipIntegration.tsx
+===================
+import React, { useEffect, useState } from 'react';
+import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { HandHeart, MessageCircle, Users } from 'lucide-react';
+
+// Types for our relationship data
+interface Contribution {
+  contributorDid: string;
+  description: string;
+  impactStory: string;
+  date: string;
+  context: string;
+  witnesses: string[];
+  feedback: Array<{
+    fromDid: string;
+    content: string;
+    date: string;
+    endorsementType: 'Verification' | 'Impact' | 'Character' | 'Skill';
+  }>;
+  tags: string[];
+}
+
+interface MutualAidInteraction {
+  date: string;
+  providerDid: string;
+  receiverDid: string;
+  description: string;
+  impactStory?: string;
+  reciprocityNotes?: string;
+  tags: string[];
+}
+
+interface Relationship {
+  memberOne: string;
+  memberTwo: string;
+  relationshipType: string;
+  started: string;
+  story: string;
+  interactions: Array<{
+    date: string;
+    description: string;
+    impact?: string;
+    interactionType: string;
+  }>;
+  mutualEndorsements: Array<{
+    fromDid: string;
+    content: string;
+    date: string;
+    context: string;
+    skills: string[];
+  }>;
+}
+
+export default function RelationshipIntegration() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [contributions, setContributions] = useState<Contribution[]>([]);
+  const [relationships, setRelationships] = useState<Relationship[]>([]);
+  const [mutualAid, setMutualAid] = useState<MutualAidInteraction[]>([]);
+  const [activeTab, setActiveTab] = useState('overview');
+
+  useEffect(() => {
+    // Load initial data
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        
+        // Example of data fetching - replace with actual API endpoints
+        const response = await fetch('/api/relationships/current-user');
+        const data = await response.json();
+        
+        setContributions(data.contributions);
+        setRelationships(data.relationships);
+        setMutualAid(data.mutualAid);
+        
+        // Set up WebSocket connection for real-time updates
+        const ws = new WebSocket('ws://localhost:8088/ws');
+        
+        ws.onmessage = (event) => {
+          const update = JSON.parse(event.data);
+          switch (update.type) {
+            case 'contribution':
+              setContributions(prev => [...prev, update.data]);
+              break;
+            case 'mutualAid':
+              setMutualAid(prev => [...prev, update.data]);
+              break;
+            case 'relationship':
+              setRelationships(prev => 
+                prev.map(r => 
+                  r.memberOne === update.data.memberOne ? update.data : r
+                )
+              );
+              break;
+          }
+        };
+
+        return () => ws.close();
+
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load relationships');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  if (loading) {
+    return <div className="p-4">Loading relationships...</div>;
+  }
+
+  if (error) {
+    return (
+      <Alert>
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <div className="container mx-auto p-4 space-y-8">
+      <Alert>
+        <AlertDescription>
+          Build stronger cooperative bonds through mutual aid, contributions, and shared stories.
+        </AlertDescription>
+      </Alert>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="overview">
+            <Users className="h-4 w-4 mr-2" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="mutual-aid">
+            <HandHeart className="h-4 w-4 mr-2" />
+            Mutual Aid
+          </TabsTrigger>
+          <TabsTrigger value="relationships">
+            <MessageCircle className="h-4 w-4 mr-2" />
+            Relationships
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview">
+          <Card>
+            <CardHeader>
+              <CardTitle>Community Activity</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Recent Activity Overview */}
+                <div className="grid gap-4 md:grid-cols-2">
+                  {/* Latest Contributions */}
+                  <Card className="p-4">
+                    <h3 className="font-medium mb-2">Recent Contributions</h3>
+                    {contributions.slice(-3).map((contribution, i) => (
+                      <div key={i} className="mb-2 text-sm">
+                        <p className="font-medium">{contribution.description}</p>
+                        <p className="text-gray-600">{contribution.impactStory}</p>
+                      </div>
+                    ))}
+                  </Card>
+
+                  {/* Latest Mutual Aid */}
+                  <Card className="p-4">
+                    <h3 className="font-medium mb-2">Recent Mutual Aid</h3>
+                    {mutualAid.slice(-3).map((interaction, i) => (
+                      <div key={i} className="mb-2 text-sm">
+                        <p className="font-medium">{interaction.description}</p>
+                        {interaction.impactStory && (
+                          <p className="text-gray-600">{interaction.impactStory}</p>
+                        )}
+                      </div>
+                    ))}
+                  </Card>
+                </div>
+
+                {/* Active Relationships */}
+                <div>
+                  <h3 className="font-medium mb-2">Active Relationships</h3>
+                  <div className="space-y-2">
+                    {relationships.slice(-3).map((relationship, i) => (
+                      <Card key={i} className="p-4">
+                        <p className="font-medium">
+                          With {relationship.memberTwo}
+                        </p>
+                        <p className="text-sm text-gray-600">{relationship.story}</p>
+                        <div className="mt-2">
+                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                            {relationship.relationshipType}
+                          </span>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="mutual-aid">
+          <Card>
+            <CardHeader>
+              <CardTitle>Mutual Aid Network</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {mutualAid.map((interaction, i) => (
+                  <Card key={i} className="p-4">
+                    <div className="flex items-start gap-4">
+                      <HandHeart className="h-5 w-5 text-green-500 mt-1" />
+                      <div>
+                        <h3 className="font-medium">{interaction.description}</h3>
+                        <p className="text-sm text-gray-500">
+                          {new Date(interaction.date).toLocaleDateString()}
+                        </p>
+                        {interaction.impactStory && (
+                          <p className="mt-2 text-gray-600">{interaction.impactStory}</p>
+                        )}
+                        {interaction.reciprocityNotes && (
+                          <p className="mt-2 text-sm text-gray-600 italic">
+                            {interaction.reciprocityNotes}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="relationships">
+          <Card>
+            <CardHeader>
+              <CardTitle>Your Relationships</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {relationships.map((relationship, i) => (
+                  <Card key={i} className="p-4">
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="font-medium">
+                          Relationship with {relationship.memberTwo}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          Since {new Date(relationship.started).toLocaleDateString()}
+                        </p>
+                      </div>
+                      
+                      <div className="bg-gray-50 p-4 rounded">
+                        <h4 className="text-sm font-medium mb-1">Our Story</h4>
+                        <p className="text-gray-600">{relationship.story}</p>
+                      </div>
+
+                      <div>
+                        <h4 className="text-sm font-medium mb-2">Recent Interactions</h4>
+                        {relationship.interactions.slice(-3).map((interaction, j) => (
+                          <div key={j} className="mb-2 text-sm">
+                            <p className="font-medium">{interaction.description}</p>
+                            <p className="text-gray-600">
+                              {new Date(interaction.date).toLocaleDateString()}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
 
 ===================
 File: ./frontend/src/components/governance/GovernanceDashboard.tsx
