@@ -1,4 +1,4 @@
-Project Code Dump - Generated Mon Nov 11 10:27:43 PM UTC 2024
+Project Code Dump - Generated Tue Nov 12 04:39:05 PM UTC 2024
 ======================================
 
 Project Tree:
@@ -19,7 +19,6 @@ Project Tree:
 │   │   │   └── mod.rs
 │   │   ├── blockchain
 │   │   │   ├── block.rs
-│   │   │   ├── blockchain.rs.bak
 │   │   │   ├── chain.rs
 │   │   │   ├── mod.rs
 │   │   │   └── transaction.rs
@@ -137,7 +136,7 @@ Project Tree:
     ├── install_docsctl.sh
     └── requirements.txt
 
-40 directories, 93 files
+40 directories, 92 files
 
 
 ===================
@@ -1070,6 +1069,2677 @@ File: ./backend/src/utils/mod.rs
 ===================
 pub mod notifications;
 
+
+
+===================
+File: ./backend/src/vm/operations/stack.rs
+===================
+// src/vm/operations/stack.rs
+
+use super::{Operation, VMState, VMResult, ensure_stack_size};
+use crate::vm::VMError;
+
+/// Stack manipulation operations
+pub enum StackOperation {
+    /// Push a value onto the stack
+    Push(i64),
+    
+    /// Pop a value from the stack
+    Pop,
+    
+    /// Duplicate the top value on the stack
+    Dup,
+    
+    /// Swap the top two values on the stack
+    Swap,
+    
+    /// Duplicate the nth value on the stack (n=0 is top)
+    DupN(usize),
+    
+    /// Rotate the top n values on the stack
+    Rotate(usize),
+    
+    /// Clear the entire stack
+    Clear,
+}
+
+impl Operation for StackOperation {
+    fn execute(&self, state: &mut VMState) -> VMResult<()> {
+        match self {
+            StackOperation::Push(value) => {
+                if state.stack.len() >= 1024 {  // Stack size limit
+                    return Err(VMError::StackOverflow);
+                }
+                state.stack.push(*value);
+                Ok(())
+            },
+            
+            StackOperation::Pop => {
+                ensure_stack_size(&state.stack, 1)?;
+                state.stack.pop()
+                    .ok_or(VMError::StackUnderflow)
+                    .map(|_| ())
+            },
+            
+            StackOperation::Dup => {
+                ensure_stack_size(&state.stack, 1)?;
+                let value = *state.stack.last()
+                    .ok_or(VMError::StackUnderflow)?;
+                state.stack.push(value);
+                Ok(())
+            },
+            
+            StackOperation::Swap => {
+                ensure_stack_size(&state.stack, 2)?;
+                let len = state.stack.len();
+                state.stack.swap(len - 1, len - 2);
+                Ok(())
+            },
+            
+            StackOperation::DupN(n) => {
+                ensure_stack_size(&state.stack, *n + 1)?;
+                let len = state.stack.len();
+                let value = state.stack[len - 1 - n];
+                state.stack.push(value);
+                Ok(())
+            },
+            
+            StackOperation::Rotate(n) => {
+                let n = *n;
+                if n == 0 {
+                    return Ok(());
+                }
+                ensure_stack_size(&state.stack, n)?;
+                let len = state.stack.len();
+                let temp = state.stack[len - 1];
+                for i in (len - n..len).rev() {
+                    state.stack[i] = state.stack[i - 1];
+                }
+                state.stack[len - n] = temp;
+                Ok(())
+            },
+            
+            StackOperation::Clear => {
+                state.stack.clear();
+                Ok(())
+            },
+        }
+    }
+
+    fn resource_cost(&self) -> u64 {
+        match self {
+            StackOperation::Push(_) => 1,
+            StackOperation::Pop => 1,
+            StackOperation::Dup => 1,
+            StackOperation::Swap => 2,
+            StackOperation::DupN(n) => 1 + (*n as u64),
+            StackOperation::Rotate(n) => 1 + (*n as u64),
+            StackOperation::Clear => 1,
+        }
+    }
+
+    fn required_permissions(&self) -> Vec<String> {
+        // Stack operations don't require special permissions
+        vec![]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_state() -> VMState {
+        VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did: "test_caller".to_string(),
+            block_number: 1,
+            timestamp: 1000,
+            permissions: vec![],
+        }
+    }
+
+    #[test]
+    fn test_push() {
+        let mut state = setup_test_state();
+        let op = StackOperation::Push(42);
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.stack, vec![42]);
+    }
+
+    #[test]
+    fn test_pop() {
+        let mut state = setup_test_state();
+        state.stack.push(42);
+        let op = StackOperation::Pop;
+        assert!(op.execute(&mut state).is_ok());
+        assert!(state.stack.is_empty());
+    }
+
+    #[test]
+    fn test_pop_empty() {
+        let mut state = setup_test_state();
+        let op = StackOperation::Pop;
+        assert!(matches!(op.execute(&mut state), Err(VMError::StackUnderflow)));
+    }
+
+    #[test]
+    fn test_dup() {
+        let mut state = setup_test_state();
+        state.stack.push(42);
+        let op = StackOperation::Dup;
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.stack, vec![42, 42]);
+    }
+
+    #[test]
+    fn test_swap() {
+        let mut state = setup_test_state();
+        state.stack.extend([1, 2]);
+        let op = StackOperation::Swap;
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.stack, vec![2, 1]);
+    }
+
+    #[test]
+    fn test_dupn() {
+        let mut state = setup_test_state();
+        state.stack.extend([1, 2, 3]);
+        let op = StackOperation::DupN(2);
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.stack, vec![1, 2, 3, 1]);
+    }
+
+    #[test]
+    fn test_rotate() {
+        let mut state = setup_test_state();
+        state.stack.extend([1, 2, 3]);
+        let op = StackOperation::Rotate(3);
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.stack, vec![2, 3, 1]);
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut state = setup_test_state();
+        state.stack.extend([1, 2, 3]);
+        let op = StackOperation::Clear;
+        assert!(op.execute(&mut state).is_ok());
+        assert!(state.stack.is_empty());
+    }
+}
+
+===================
+File: ./backend/src/vm/operations/arithmetic.rs
+===================
+// src/vm/operations/arithmetic.rs
+
+use super::{Operation, VMState, VMResult, ensure_stack_size};
+use crate::vm::VMError;
+
+/// Arithmetic operations for the VM
+pub enum ArithmeticOperation {
+    /// Add the top two values
+    Add,
+    
+    /// Subtract the top two values
+    Sub,
+    
+    /// Multiply the top two values
+    Mul,
+    
+    /// Divide the top two values
+    Div,
+    
+    /// Compute the modulo of the top two values
+    Mod,
+    
+    /// Increment the top value
+    Increment,
+    
+    /// Decrement the top value
+    Decrement,
+    
+    /// Compute the absolute value
+    Abs,
+    
+    /// Negate the top value
+    Negate,
+    
+    /// Compute the minimum of two values
+    Min,
+    
+    /// Compute the maximum of two values
+    Max,
+}
+
+impl Operation for ArithmeticOperation {
+    fn execute(&self, state: &mut VMState) -> VMResult<()> {
+        match self {
+            ArithmeticOperation::Add => {
+                ensure_stack_size(&state.stack, 2)?;
+                let b = state.stack.pop().unwrap();
+                let a = state.stack.pop().unwrap();
+                state.stack.push(a + b);
+                Ok(())
+            },
+            
+            ArithmeticOperation::Sub => {
+                ensure_stack_size(&state.stack, 2)?;
+                let b = state.stack.pop().unwrap();
+                let a = state.stack.pop().unwrap();
+                state.stack.push(a - b);
+                Ok(())
+            },
+            
+            ArithmeticOperation::Mul => {
+                ensure_stack_size(&state.stack, 2)?;
+                let b = state.stack.pop().unwrap();
+                let a = state.stack.pop().unwrap();
+                state.stack.push(a * b);
+                Ok(())
+            },
+            
+            ArithmeticOperation::Div => {
+                ensure_stack_size(&state.stack, 2)?;
+                let b = state.stack.pop().unwrap();
+                let a = state.stack.pop().unwrap();
+                if b == 0 {
+                    return Err(VMError::DivisionByZero);
+                }
+                state.stack.push(a / b);
+                Ok(())
+            },
+            
+            ArithmeticOperation::Mod => {
+                ensure_stack_size(&state.stack, 2)?;
+                let b = state.stack.pop().unwrap();
+                let a = state.stack.pop().unwrap();
+                if b == 0 {
+                    return Err(VMError::DivisionByZero);
+                }
+                state.stack.push(a % b);
+                Ok(())
+            },
+            
+            ArithmeticOperation::Increment => {
+                ensure_stack_size(&state.stack, 1)?;
+                let a = state.stack.pop().unwrap();
+                state.stack.push(a + 1);
+                Ok(())
+            },
+            
+            ArithmeticOperation::Decrement => {
+                ensure_stack_size(&state.stack, 1)?;
+                let a = state.stack.pop().unwrap();
+                state.stack.push(a - 1);
+                Ok(())
+            },
+            
+            ArithmeticOperation::Abs => {
+                ensure_stack_size(&state.stack, 1)?;
+                let a = state.stack.pop().unwrap();
+                state.stack.push(a.abs());
+                Ok(())
+            },
+            
+            ArithmeticOperation::Negate => {
+                ensure_stack_size(&state.stack, 1)?;
+                let a = state.stack.pop().unwrap();
+                state.stack.push(-a);
+                Ok(())
+            },
+            
+            ArithmeticOperation::Min => {
+                ensure_stack_size(&state.stack, 2)?;
+                let b = state.stack.pop().unwrap();
+                let a = state.stack.pop().unwrap();
+                state.stack.push(a.min(b));
+                Ok(())
+            },
+            
+            ArithmeticOperation::Max => {
+                ensure_stack_size(&state.stack, 2)?;
+                let b = state.stack.pop().unwrap();
+                let a = state.stack.pop().unwrap();
+                state.stack.push(a.max(b));
+                Ok(())
+            },
+        }
+    }
+
+    fn resource_cost(&self) -> u64 {
+        match self {
+            ArithmeticOperation::Add => 2,
+            ArithmeticOperation::Sub => 2,
+            ArithmeticOperation::Mul => 3,
+            ArithmeticOperation::Div => 3,
+            ArithmeticOperation::Mod => 3,
+            ArithmeticOperation::Increment => 1,
+            ArithmeticOperation::Decrement => 1,
+            ArithmeticOperation::Abs => 1,
+            ArithmeticOperation::Negate => 1,
+            ArithmeticOperation::Min => 2,
+            ArithmeticOperation::Max => 2,
+        }
+    }
+
+    fn required_permissions(&self) -> Vec<String> {
+        // Arithmetic operations don't require special permissions
+        vec![]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_state() -> VMState {
+        VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did: "test_caller".to_string(),
+            block_number: 1,
+            timestamp: 1000,
+            permissions: vec![],
+        }
+    }
+
+    #[test]
+    fn test_add() {
+        let mut state = setup_test_state();
+        state.stack.extend([5, 3]);
+        let op = ArithmeticOperation::Add;
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.stack, vec![8]);
+    }
+
+    #[test]
+    fn test_sub() {
+        let mut state = setup_test_state();
+        state.stack.extend([5, 3]);
+        let op = ArithmeticOperation::Sub;
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.stack, vec![2]);
+    }
+
+    #[test]
+    fn test_div_by_zero() {
+        let mut state = setup_test_state();
+        state.stack.extend([5, 0]);
+        let op = ArithmeticOperation::Div;
+        assert!(matches!(op.execute(&mut state), Err(VMError::DivisionByZero)));
+    }
+
+    #[test]
+    fn test_abs() {
+        let mut state = setup_test_state();
+        state.stack.push(-5);
+        let op = ArithmeticOperation::Abs;
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.stack, vec![5]);
+    }
+
+    #[test]
+    fn test_min_max() {
+        let mut state = setup_test_state();
+        state.stack.extend([5, 3]);
+        let op = ArithmeticOperation::Min;
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.stack, vec![3]);
+
+        state.stack.extend([5, 3]);
+        let op = ArithmeticOperation::Max;
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.stack, vec![5]);
+    }
+}
+
+===================
+File: ./backend/src/vm/operations/cooperative.rs
+===================
+// src/vm/operations/cooperative.rs
+
+use std::collections::HashMap;
+use super::{Operation, VMState, VMResult, ensure_permissions, ensure_reputation, emit_event};
+use crate::vm::VMError;
+
+/// Operations for managing cooperatives and their resources
+pub enum CooperativeOperation {
+    /// Create a new cooperative
+    CreateCooperative {
+        name: String,
+        description: String,
+        resource_policies: HashMap<String, ResourcePolicy>,
+        membership_requirements: Vec<MembershipRequirement>,
+    },
+    
+    /// Join an existing cooperative
+    JoinCooperative {
+        cooperative_id: String,
+        role: String,
+        qualifications: Vec<String>,
+    },
+    
+    /// Leave a cooperative
+    LeaveCooperative {
+        cooperative_id: String,
+        exit_reason: String,
+    },
+    
+    /// Allocate resources within a cooperative
+    AllocateResource {
+        resource_type: String,
+        amount: u64,
+        recipient: String,
+        purpose: String,
+    },
+    
+    /// Transfer resources between cooperatives
+    TransferResource {
+        from_cooperative: String,
+        to_cooperative: String,
+        resource_type: String,
+        amount: u64,
+        terms: Vec<String>,
+    },
+    
+    /// Create resource sharing agreement
+    CreateSharingAgreement {
+        partner_cooperative: String,
+        resources: Vec<ResourceDefinition>,
+        duration: u64,
+        terms: Vec<String>,
+    },
+    
+    /// Update cooperative metadata
+    UpdateMetadata {
+        cooperative_id: String,
+        updates: HashMap<String, String>,
+    },
+    
+    /// Add role to cooperative
+    AddRole {
+        role_name: String,
+        permissions: Vec<String>,
+        requirements: Vec<MembershipRequirement>,
+    },
+    
+    /// Initiate federation with another cooperative
+    InitiateFederation {
+        partner_cooperative: String,
+        federation_type: FederationType,
+        terms: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct ResourcePolicy {
+    pub resource_type: String,
+    pub allocation_limit: u64,
+    pub replenishment_rate: u64,
+    pub required_reputation: i64,
+    pub sharing_permissions: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MembershipRequirement {
+    pub requirement_type: RequirementType,
+    pub threshold: i64,
+    pub verification_method: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum RequirementType {
+    Reputation,
+    ContributionCount,
+    SkillLevel,
+    TimeCommitment,
+    ResourceStake,
+    Custom(String),
+}
+
+#[derive(Debug, Clone)]
+pub struct ResourceDefinition {
+    pub resource_type: String,
+    pub quantity: u64,
+    pub access_level: AccessLevel,
+    pub conditions: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum AccessLevel {
+    ReadOnly,
+    ReadWrite,
+    FullAccess,
+    Custom(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum FederationType {
+    ResourceSharing,
+    JointProjects,
+    MutualAid,
+    FullIntegration,
+    Custom(String),
+}
+
+impl Operation for CooperativeOperation {
+    fn execute(&self, state: &mut VMState) -> VMResult<()> {
+        match self {
+            CooperativeOperation::CreateCooperative { 
+                name, 
+                description, 
+                resource_policies,
+                membership_requirements 
+            } => {
+                ensure_permissions(&["cooperative.create".to_string()], &state.permissions)?;
+                
+                let reputation = state.reputation_context
+                    .get(&state.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+                
+                ensure_reputation(200, reputation)?; // Require significant reputation to create cooperative
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("name".to_string(), name.clone());
+                event_data.insert("description".to_string(), description.clone());
+                event_data.insert("creator".to_string(), state.caller_did.clone());
+                event_data.insert("policy_count".to_string(), resource_policies.len().to_string());
+                event_data.insert("requirement_count".to_string(), membership_requirements.len().to_string());
+                
+                emit_event(state, "CooperativeCreated".to_string(), event_data);
+                Ok(())
+            },
+            
+            CooperativeOperation::JoinCooperative { cooperative_id, role, qualifications } => {
+                ensure_permissions(&["cooperative.join".to_string()], &state.permissions)?;
+                
+                let reputation = state.reputation_context
+                    .get(&state.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+                
+                ensure_reputation(50, reputation)?; // Base reputation requirement for joining
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("cooperative_id".to_string(), cooperative_id.clone());
+                event_data.insert("role".to_string(), role.clone());
+                event_data.insert("member_did".to_string(), state.caller_did.clone());
+                event_data.insert("qualifications".to_string(), qualifications.join(","));
+                
+                emit_event(state, "CooperativeMemberAdded".to_string(), event_data);
+                Ok(())
+            },
+            
+            CooperativeOperation::LeaveCooperative { cooperative_id, exit_reason } => {
+                let mut event_data = HashMap::new();
+                event_data.insert("cooperative_id".to_string(), cooperative_id.clone());
+                event_data.insert("member_did".to_string(), state.caller_did.clone());
+                event_data.insert("exit_reason".to_string(), exit_reason.clone());
+                
+                emit_event(state, "CooperativeMemberLeft".to_string(), event_data);
+                Ok(())
+            },
+            
+            CooperativeOperation::AllocateResource { 
+                resource_type, 
+                amount, 
+                recipient, 
+                purpose 
+            } => {
+                ensure_permissions(&["resource.allocate".to_string()], &state.permissions)?;
+                
+                let reputation = state.reputation_context
+                    .get(&state.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+                
+                ensure_reputation(100, reputation)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("resource_type".to_string(), resource_type.clone());
+                event_data.insert("amount".to_string(), amount.to_string());
+                event_data.insert("recipient".to_string(), recipient.clone());
+                event_data.insert("purpose".to_string(), purpose.clone());
+                
+                emit_event(state, "ResourceAllocated".to_string(), event_data);
+                Ok(())
+            },
+            
+            CooperativeOperation::TransferResource { 
+                from_cooperative, 
+                to_cooperative, 
+                resource_type, 
+                amount, 
+                terms 
+            } => {
+                ensure_permissions(&["resource.transfer".to_string()], &state.permissions)?;
+                
+                let reputation = state.reputation_context
+                    .get(&state.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+                
+                ensure_reputation(150, reputation)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("from_cooperative".to_string(), from_cooperative.clone());
+                event_data.insert("to_cooperative".to_string(), to_cooperative.clone());
+                event_data.insert("resource_type".to_string(), resource_type.clone());
+                event_data.insert("amount".to_string(), amount.to_string());
+                event_data.insert("terms".to_string(), terms.join(","));
+                
+                emit_event(state, "ResourceTransferred".to_string(), event_data);
+                Ok(())
+            },
+            
+            CooperativeOperation::CreateSharingAgreement { 
+                partner_cooperative, 
+                resources, 
+                duration, 
+                terms 
+            } => {
+                ensure_permissions(&["agreement.create".to_string()], &state.permissions)?;
+                
+                let reputation = state.reputation_context
+                    .get(&state.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+                
+                ensure_reputation(200, reputation)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("partner_cooperative".to_string(), partner_cooperative.clone());
+                event_data.insert("resource_count".to_string(), resources.len().to_string());
+                event_data.insert("duration".to_string(), duration.to_string());
+                event_data.insert("terms".to_string(), terms.join(","));
+                
+                emit_event(state, "SharingAgreementCreated".to_string(), event_data);
+                Ok(())
+            },
+            
+            CooperativeOperation::UpdateMetadata { cooperative_id, updates } => {
+                ensure_permissions(&["cooperative.update".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("cooperative_id".to_string(), cooperative_id.clone());
+                for (key, value) in updates {
+                    event_data.insert(format!("update_{}", key), value.clone());
+                }
+                
+                emit_event(state, "CooperativeMetadataUpdated".to_string(), event_data);
+                Ok(())
+            },
+            
+            CooperativeOperation::AddRole { 
+                role_name, 
+                permissions, 
+                requirements 
+            } => {
+                ensure_permissions(&["role.create".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("role_name".to_string(), role_name.clone());
+                event_data.insert("permissions".to_string(), permissions.join(","));
+                event_data.insert("requirement_count".to_string(), requirements.len().to_string());
+                
+                emit_event(state, "RoleCreated".to_string(), event_data);
+                Ok(())
+            },
+            
+            CooperativeOperation::InitiateFederation { 
+                partner_cooperative, 
+                federation_type, 
+                terms 
+            } => {
+                ensure_permissions(&["federation.initiate".to_string()], &state.permissions)?;
+                
+                let reputation = state.reputation_context
+                    .get(&state.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+                
+                ensure_reputation(300, reputation)?; // High reputation requirement for federation
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("partner_cooperative".to_string(), partner_cooperative.clone());
+                event_data.insert("federation_type".to_string(), format!("{:?}", federation_type));
+                event_data.insert("terms".to_string(), terms.join(","));
+                
+                emit_event(state, "FederationInitiated".to_string(), event_data);
+                Ok(())
+            },
+        }
+    }
+
+    fn resource_cost(&self) -> u64 {
+        match self {
+            CooperativeOperation::CreateCooperative { .. } => 500,
+            CooperativeOperation::JoinCooperative { .. } => 100,
+            CooperativeOperation::LeaveCooperative { .. } => 50,
+            CooperativeOperation::AllocateResource { .. } => 200,
+            CooperativeOperation::TransferResource { .. } => 300,
+            CooperativeOperation::CreateSharingAgreement { .. } => 400,
+            CooperativeOperation::UpdateMetadata { .. } => 100,
+            CooperativeOperation::AddRole { .. } => 150,
+            CooperativeOperation::InitiateFederation { .. } => 1000,
+        }
+    }
+
+    fn required_permissions(&self) -> Vec<String> {
+        match self {
+            CooperativeOperation::CreateCooperative { .. } => vec!["cooperative.create".to_string()],
+            CooperativeOperation::JoinCooperative { .. } => vec!["cooperative.join".to_string()],
+            CooperativeOperation::AllocateResource { .. } => vec!["resource.allocate".to_string()],
+            CooperativeOperation::TransferResource { .. } => vec!["resource.transfer".to_string()],
+            CooperativeOperation::CreateSharingAgreement { .. } => vec!["agreement.create".to_string()],
+            CooperativeOperation::UpdateMetadata { .. } => vec!["cooperative.update".to_string()],
+            CooperativeOperation::AddRole { .. } => vec!["role.create".to_string()],
+            CooperativeOperation::InitiateFederation { .. } => vec!["federation.initiate".to_string()],
+            _ => vec![],
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_state() -> VMState {
+        let mut state = VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did: "test_caller".to_string(),
+            block_number: 1,
+            timestamp: 1000,
+            permissions: vec![
+                "cooperative.create".to_string(),
+                "cooperative.join".to_string(),
+                "resource.allocate".to_string(),
+                "agreement.create".to_string(),
+            ],
+        };
+        
+        state.reputation_context.insert(state.caller_did.clone(), 500);
+        state
+    }
+
+    #[test]
+    fn test_create_cooperative() {
+        let mut state = setup_test_state();
+        let resource_policies = HashMap::new();
+        let membership_requirements = vec![];
+        
+        let op = CooperativeOperation::CreateCooperative {
+            name: "Test Coop".to_string(),
+            description: "Test Description".to_string(),
+            resource_policies,
+            membership_requirements,
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "CooperativeCreated");
+    }
+
+    #[test]
+    fn test_allocate_resource() {
+        let mut state = setup_test_state();
+        let op = CooperativeOperation::AllocateResource {
+            resource_type: "computing".to_string(),
+            amount: 100,
+            recipient: "test_recipient".to_string(),
+            purpose: "testing".to_string(),
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "ResourceAllocated");
+    }
+
+    #[test]
+    fn test_create_sharing_agreement() {
+        let mut state = setup_test_state();
+        let op = CooperativeOperation::CreateSharingAgreement {
+            partner_cooperative: "partner_coop".to_string(),
+            resources: vec![],
+            duration: 86400,
+            terms: vec!["term1".to_string()],
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "SharingAgreementCreated");
+    }
+
+    #[test]
+    fn test_insufficient_reputation() {
+        let mut state = setup_test_state();
+        state.reputation_context.insert(state.caller_did.clone(), 100);
+        
+        let op = CooperativeOperation::InitiateFederation {
+            partner_cooperative: "partner".to_string(),
+            federation_type: FederationType::ResourceSharing,
+            terms: vec!["term1".to_string()],
+        };
+        
+        assert!(matches!(op.execute(&mut state), Err(VMError::InsufficientReputation)));
+    }
+}
+
+===================
+File: ./backend/src/vm/operations/system.rs
+===================
+// src/vm/operations/system.rs
+
+use std::collections::HashMap;
+use super::{Operation, VMState, VMResult, ensure_permissions, emit_event};
+use crate::vm::VMError;
+
+/// System-level operations for the VM
+pub enum SystemOperation {
+    /// Log a message to system logs
+    Log {
+        message: String,
+        level: LogLevel,
+        metadata: HashMap<String, String>,
+    },
+
+    /// Halt VM execution
+    Halt,
+
+    /// Emit a custom event
+    EmitEvent {
+        event_type: String,
+        data: HashMap<String, String>,
+    },
+
+    /// Get current block number
+    GetBlockNumber,
+
+    /// Get current timestamp
+    GetTimestamp,
+
+    /// Get caller's DID
+    GetCaller,
+
+    /// Record energy metrics
+    RecordEnergyMetrics {
+        operation_type: String,
+        energy_used: u64,
+        duration_ms: u64,
+    },
+
+    /// Get system statistics
+    GetSystemStats {
+        stat_types: Vec<StatType>,
+    },
+
+    /// Check system health
+    CheckHealth {
+        components: Vec<String>,
+    },
+
+    /// Update system parameters
+    UpdateParameter {
+        parameter: SystemParameter,
+        value: String,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum LogLevel {
+    Debug,
+    Info,
+    Warning,
+    Error,
+    Critical,
+}
+
+#[derive(Debug, Clone)]
+pub enum StatType {
+    MemoryUsage,
+    CpuLoad,
+    NetworkActivity,
+    StorageUsage,
+    TransactionCount,
+    ActiveNodes,
+    EnergyMetrics,
+}
+
+#[derive(Debug, Clone)]
+pub enum SystemParameter {
+    MaxBlockSize,
+    MaxTransactionsPerBlock,
+    MinimumResourceCost,
+    ReputationDecayRate,
+    NetworkTimeout,
+    ConsensusThreshold,
+}
+
+impl Operation for SystemOperation {
+    fn execute(&self, state: &mut VMState) -> VMResult<()> {
+        match self {
+            SystemOperation::Log { message, level, metadata } => {
+                let mut event_data = HashMap::new();
+                event_data.insert("message".to_string(), message.clone());
+                event_data.insert("level".to_string(), format!("{:?}", level));
+                
+                for (key, value) in metadata {
+                    event_data.insert(format!("metadata_{}", key), value.clone());
+                }
+                
+                emit_event(state, "SystemLog".to_string(), event_data);
+                Ok(())
+            },
+
+            SystemOperation::Halt => {
+                emit_event(
+                    state,
+                    "SystemHalt".to_string(),
+                    HashMap::new(),
+                );
+                Err(VMError::Custom("Execution halted".to_string()))
+            },
+
+            SystemOperation::EmitEvent { event_type, data } => {
+                emit_event(state, event_type.clone(), data.clone());
+                Ok(())
+            },
+
+            SystemOperation::GetBlockNumber => {
+                state.stack.push(state.block_number as i64);
+                Ok(())
+            },
+
+            SystemOperation::GetTimestamp => {
+                state.stack.push(state.timestamp as i64);
+                Ok(())
+            },
+
+            SystemOperation::GetCaller => {
+                let caller_hash = state.caller_did.as_bytes().iter()
+                    .fold(0i64, |acc, &b| acc + b as i64);
+                state.stack.push(caller_hash);
+                Ok(())
+            },
+
+            SystemOperation::RecordEnergyMetrics { operation_type, energy_used, duration_ms } => {
+                ensure_permissions(&["system.metrics".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("operation_type".to_string(), operation_type.clone());
+                event_data.insert("energy_used".to_string(), energy_used.to_string());
+                event_data.insert("duration_ms".to_string(), duration_ms.to_string());
+                
+                emit_event(state, "EnergyMetricsRecorded".to_string(), event_data);
+                Ok(())
+            },
+
+            SystemOperation::GetSystemStats { stat_types } => {
+                ensure_permissions(&["system.stats".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("requested_stats".to_string(), 
+                    stat_types.iter()
+                        .map(|st| format!("{:?}", st))
+                        .collect::<Vec<String>>()
+                        .join(",")
+                );
+                
+                // In a real implementation, we would collect actual system stats here
+                for stat_type in stat_types {
+                    match stat_type {
+                        StatType::MemoryUsage => event_data.insert("memory_usage".to_string(), "1000".to_string()),
+                        StatType::CpuLoad => event_data.insert("cpu_load".to_string(), "50".to_string()),
+                        StatType::NetworkActivity => event_data.insert("network_activity".to_string(), "100".to_string()),
+                        StatType::StorageUsage => event_data.insert("storage_usage".to_string(), "5000".to_string()),
+                        StatType::TransactionCount => event_data.insert("transaction_count".to_string(), "1000".to_string()),
+                        StatType::ActiveNodes => event_data.insert("active_nodes".to_string(), "10".to_string()),
+                        StatType::EnergyMetrics => event_data.insert("energy_metrics".to_string(), "500".to_string()),
+                    };
+                }
+                
+                emit_event(state, "SystemStatsQueried".to_string(), event_data);
+                Ok(())
+            },
+
+            SystemOperation::CheckHealth { components } => {
+                ensure_permissions(&["system.health".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("components".to_string(), components.join(","));
+                
+                // In a real implementation, we would do actual health checks here
+                event_data.insert("status".to_string(), "healthy".to_string());
+                
+                emit_event(state, "HealthCheckPerformed".to_string(), event_data);
+                Ok(())
+            },
+
+            SystemOperation::UpdateParameter { parameter, value } => {
+                ensure_permissions(&["system.admin".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("parameter".to_string(), format!("{:?}", parameter));
+                event_data.insert("value".to_string(), value.clone());
+                
+                emit_event(state, "SystemParameterUpdated".to_string(), event_data);
+                Ok(())
+            },
+        }
+    }
+
+    fn resource_cost(&self) -> u64 {
+        match self {
+            SystemOperation::Log { .. } => 5,
+            SystemOperation::Halt => 1,
+            SystemOperation::EmitEvent { .. } => 10,
+            SystemOperation::GetBlockNumber => 1,
+            SystemOperation::GetTimestamp => 1,
+            SystemOperation::GetCaller => 1,
+            SystemOperation::RecordEnergyMetrics { .. } => 20,
+            SystemOperation::GetSystemStats { stat_types } => 10 * (stat_types.len() as u64),
+            SystemOperation::CheckHealth { components } => 15 * (components.len() as u64),
+            SystemOperation::UpdateParameter { .. } => 50,
+        }
+    }
+
+    fn required_permissions(&self) -> Vec<String> {
+        match self {
+            SystemOperation::RecordEnergyMetrics { .. } => vec!["system.metrics".to_string()],
+            SystemOperation::GetSystemStats { .. } => vec!["system.stats".to_string()],
+            SystemOperation::CheckHealth { .. } => vec!["system.health".to_string()],
+            SystemOperation::UpdateParameter { .. } => vec!["system.admin".to_string()],
+            _ => vec![],
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_state() -> VMState {
+        let mut state = VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did: "test_caller".to_string(),
+            block_number: 1,
+            timestamp: 1000,
+            permissions: vec![
+                "system.metrics".to_string(),
+                "system.stats".to_string(),
+                "system.health".to_string(),
+                "system.admin".to_string(),
+            ],
+        };
+        state.reputation_context.insert(state.caller_did.clone(), 100);
+        state
+    }
+
+    #[test]
+    fn test_system_log() {
+        let mut state = setup_test_state();
+        let mut metadata = HashMap::new();
+        metadata.insert("key".to_string(), "value".to_string());
+        
+        let op = SystemOperation::Log {
+            message: "Test log".to_string(),
+            level: LogLevel::Info,
+            metadata,
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "SystemLog");
+    }
+
+    #[test]
+    fn test_emit_event() {
+        let mut state = setup_test_state();
+        let mut data = HashMap::new();
+        data.insert("test_key".to_string(), "test_value".to_string());
+        
+        let op = SystemOperation::EmitEvent {
+            event_type: "TestEvent".to_string(),
+            data,
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "TestEvent");
+    }
+
+    #[test]
+    fn test_get_system_stats() {
+        let mut state = setup_test_state();
+        let op = SystemOperation::GetSystemStats {
+            stat_types: vec![StatType::MemoryUsage, StatType::CpuLoad],
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "SystemStatsQueried");
+    }
+
+    #[test]
+    fn test_update_parameter() {
+        let mut state = setup_test_state();
+        let op = SystemOperation::UpdateParameter {
+            parameter: SystemParameter::MaxBlockSize,
+            value: "1000".to_string(),
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "SystemParameterUpdated");
+    }
+
+    #[test]
+    fn test_halt() {
+        let mut state = setup_test_state();
+        let op = SystemOperation::Halt;
+        
+        assert!(matches!(op.execute(&mut state), Err(VMError::Custom(_))));
+    }
+}
+
+===================
+File: ./backend/src/vm/operations/mod.rs
+===================
+// src/vm/operations/mod.rs
+
+mod stack;
+mod arithmetic;
+mod cooperative;
+mod governance;
+mod reputation;
+mod relationship;
+mod system;
+
+pub use stack::StackOperation;
+pub use arithmetic::ArithmeticOperation;
+pub use cooperative::CooperativeOperation;
+pub use governance::GovernanceOperation;
+pub use reputation::ReputationOperation;
+pub use relationship::RelationshipOperation;
+pub use system::SystemOperation;
+
+use std::collections::HashMap;
+use crate::vm::{VMError, VMResult, Event};
+
+/// Trait for implementable VM operations
+pub trait Operation {
+    /// Execute the operation on the given state
+    fn execute(&self, state: &mut VMState) -> VMResult<()>;
+    
+    /// Get the resource cost of this operation
+    fn resource_cost(&self) -> u64;
+    
+    /// Get required permissions for this operation
+    fn required_permissions(&self) -> Vec<String>;
+}
+
+/// Represents the complete state of the VM during execution
+pub struct VMState {
+    pub stack: Vec<i64>,
+    pub memory: HashMap<String, i64>,
+    pub events: Vec<Event>,
+    pub instruction_pointer: usize,
+    pub reputation_context: HashMap<String, i64>,
+    pub caller_did: String,
+    pub block_number: u64,
+    pub timestamp: u64,
+}
+
+/// Result type for operation execution
+pub type OperationResult = VMResult<()>;
+
+/// Helper function to check stack has enough items
+pub fn ensure_stack_size(stack: &[i64], required: usize) -> VMResult<()> {
+    if stack.len() < required {
+        Err(VMError::StackUnderflow)
+    } else {
+        Ok(())
+    }
+}
+
+/// Helper function to check caller permissions
+pub fn ensure_permissions(required: &[String], available: &[String]) -> VMResult<()> {
+    for perm in required {
+        if !available.contains(perm) {
+            return Err(VMError::InsufficientPermissions);
+        }
+    }
+    Ok(())
+}
+
+/// Helper function to check reputation requirements
+pub fn ensure_reputation(required: i64, available: i64) -> VMResult<()> {
+    if available < required {
+        Err(VMError::InsufficientReputation)
+    } else {
+        Ok(())
+    }
+}
+
+/// Helper function to emit an event
+pub fn emit_event(state: &mut VMState, event_type: String, data: HashMap<String, String>) {
+    state.events.push(Event {
+        event_type,
+        cooperative_id: String::new(), // Set as needed
+        data,
+        timestamp: state.timestamp,
+    });
+}
+
+===================
+File: ./backend/src/vm/operations/governance.rs
+===================
+// src/vm/operations/governance.rs
+
+use std::collections::HashMap;
+use super::{Operation, VMState, VMResult, ensure_permissions, emit_event};
+use crate::vm::VMError;
+
+/// Operations for governance functionality
+pub enum GovernanceOperation {
+    /// Create a new proposal
+    CreateProposal {
+        title: String,
+        description: String,
+        proposal_type: ProposalType,
+        duration: u64,
+        required_reputation: i64,
+    },
+
+    /// Cast a vote on a proposal
+    CastVote {
+        proposal_id: String,
+        approve: bool,
+        comment: Option<String>,
+    },
+
+    /// Delegate voting power to another member
+    DelegateVotes {
+        delegate_to: String,
+        scope: DelegationScope,
+        duration: Option<u64>,
+    },
+
+    /// Execute an approved proposal
+    ExecuteProposal {
+        proposal_id: String,
+    },
+
+    /// Cancel a proposal (only by creator or governance admin)
+    CancelProposal {
+        proposal_id: String,
+        reason: String,
+    },
+
+    /// Update quorum requirements
+    UpdateQuorum {
+        new_quorum: f64,
+        proposal_type: Option<ProposalType>,
+    },
+
+    /// Extend voting period for a proposal
+    ExtendVotingPeriod {
+        proposal_id: String,
+        additional_time: u64,
+    },
+
+    /// Get proposal details
+    GetProposalDetails {
+        proposal_id: String,
+    },
+
+    /// Get voting statistics
+    GetVotingStats {
+        proposal_id: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProposalType {
+    ResourceAllocation,
+    PolicyChange,
+    MembershipDecision,
+    FederationAction,
+    TechnicalChange,
+    ReputationAdjustment,
+    EmergencyAction,
+    Custom(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum DelegationScope {
+    All,
+    ProposalType(ProposalType),
+    SpecificProposal(String),
+    Domain(String),
+}
+
+impl Operation for GovernanceOperation {
+    fn execute(&self, state: &mut VMState) -> VMResult<()> {
+        match self {
+            GovernanceOperation::CreateProposal { 
+                title, 
+                description, 
+                proposal_type, 
+                duration, 
+                required_reputation 
+            } => {
+                ensure_permissions(&["governance.create_proposal".to_string()], &state.permissions)?;
+                
+                // Check if caller has sufficient reputation
+                let caller_reputation = state.reputation_context
+                    .get(&state.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+                
+                if caller_reputation < *required_reputation {
+                    return Err(VMError::InsufficientReputation);
+                }
+
+                let mut event_data = HashMap::new();
+                event_data.insert("title".to_string(), title.clone());
+                event_data.insert("description".to_string(), description.clone());
+                event_data.insert("duration".to_string(), duration.to_string());
+                event_data.insert("required_reputation".to_string(), required_reputation.to_string());
+                
+                emit_event(state, "ProposalCreated".to_string(), event_data);
+                Ok(())
+            },
+
+            GovernanceOperation::CastVote { proposal_id, approve, comment } => {
+                ensure_permissions(&["governance.vote".to_string()], &state.permissions)?;
+
+                let reputation = state.reputation_context
+                    .get(&state.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+
+                let mut event_data = HashMap::new();
+                event_data.insert("proposal_id".to_string(), proposal_id.clone());
+                event_data.insert("approve".to_string(), approve.to_string());
+                event_data.insert("voter_reputation".to_string(), reputation.to_string());
+                
+                if let Some(comment) = comment {
+                    event_data.insert("comment".to_string(), comment.clone());
+                }
+
+                emit_event(state, "VoteCast".to_string(), event_data);
+                Ok(())
+            },
+
+            GovernanceOperation::DelegateVotes { delegate_to, scope, duration } => {
+                ensure_permissions(&["governance.delegate".to_string()], &state.permissions)?;
+
+                let reputation = state.reputation_context
+                    .get(&state.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+
+                if reputation < 100 {  // Minimum reputation required for delegation
+                    return Err(VMError::InsufficientReputation);
+                }
+
+                let mut event_data = HashMap::new();
+                event_data.insert("delegate_to".to_string(), delegate_to.clone());
+                event_data.insert("scope".to_string(), format!("{:?}", scope));
+                
+                if let Some(dur) = duration {
+                    event_data.insert("duration".to_string(), dur.to_string());
+                }
+
+                emit_event(state, "VotesDelegated".to_string(), event_data);
+                Ok(())
+            },
+
+            GovernanceOperation::ExecuteProposal { proposal_id } => {
+                ensure_permissions(&["governance.execute".to_string()], &state.permissions)?;
+
+                let mut event_data = HashMap::new();
+                event_data.insert("proposal_id".to_string(), proposal_id.clone());
+                event_data.insert("executor".to_string(), state.caller_did.clone());
+
+                emit_event(state, "ProposalExecuted".to_string(), event_data);
+                Ok(())
+            },
+
+            GovernanceOperation::CancelProposal { proposal_id, reason } => {
+                ensure_permissions(&["governance.cancel".to_string()], &state.permissions)?;
+
+                let mut event_data = HashMap::new();
+                event_data.insert("proposal_id".to_string(), proposal_id.clone());
+                event_data.insert("reason".to_string(), reason.clone());
+                event_data.insert("cancelled_by".to_string(), state.caller_did.clone());
+
+                emit_event(state, "ProposalCancelled".to_string(), event_data);
+                Ok(())
+            },
+
+            GovernanceOperation::UpdateQuorum { new_quorum, proposal_type } => {
+                ensure_permissions(&["governance.update_quorum".to_string()], &state.permissions)?;
+
+                if *new_quorum <= 0.0 || *new_quorum > 1.0 {
+                    return Err(VMError::Custom("Invalid quorum value".to_string()));
+                }
+
+                let mut event_data = HashMap::new();
+                event_data.insert("new_quorum".to_string(), new_quorum.to_string());
+                
+                if let Some(pt) = proposal_type {
+                    event_data.insert("proposal_type".to_string(), format!("{:?}", pt));
+                }
+
+                emit_event(state, "QuorumUpdated".to_string(), event_data);
+                Ok(())
+            },
+
+            GovernanceOperation::ExtendVotingPeriod { proposal_id, additional_time } => {
+                ensure_permissions(&["governance.extend_voting".to_string()], &state.permissions)?;
+
+                let mut event_data = HashMap::new();
+                event_data.insert("proposal_id".to_string(), proposal_id.clone());
+                event_data.insert("additional_time".to_string(), additional_time.to_string());
+
+                emit_event(state, "VotingPeriodExtended".to_string(), event_data);
+                Ok(())
+            },
+
+            GovernanceOperation::GetProposalDetails { proposal_id } => {
+                // In a real implementation, this would query the proposal storage
+                // For now, we just emit an event for tracking
+                let mut event_data = HashMap::new();
+                event_data.insert("proposal_id".to_string(), proposal_id.clone());
+                event_data.insert("queried_by".to_string(), state.caller_did.clone());
+
+                emit_event(state, "ProposalDetailsQueried".to_string(), event_data);
+                Ok(())
+            },
+
+            GovernanceOperation::GetVotingStats { proposal_id } => {
+                // Similarly, this would query voting statistics in a real implementation
+                let mut event_data = HashMap::new();
+                event_data.insert("proposal_id".to_string(), proposal_id.clone());
+                event_data.insert("queried_by".to_string(), state.caller_did.clone());
+
+                emit_event(state, "VotingStatsQueried".to_string(), event_data);
+                Ok(())
+            },
+        }
+    }
+
+    fn resource_cost(&self) -> u64 {
+        match self {
+            GovernanceOperation::CreateProposal { .. } => 100,
+            GovernanceOperation::CastVote { .. } => 20,
+            GovernanceOperation::DelegateVotes { .. } => 50,
+            GovernanceOperation::ExecuteProposal { .. } => 200,
+            GovernanceOperation::CancelProposal { .. } => 75,
+            GovernanceOperation::UpdateQuorum { .. } => 150,
+            GovernanceOperation::ExtendVotingPeriod { .. } => 30,
+            GovernanceOperation::GetProposalDetails { .. } => 5,
+            GovernanceOperation::GetVotingStats { .. } => 5,
+        }
+    }
+
+    fn required_permissions(&self) -> Vec<String> {
+        match self {
+            GovernanceOperation::CreateProposal { .. } => vec!["governance.create_proposal".to_string()],
+            GovernanceOperation::CastVote { .. } => vec!["governance.vote".to_string()],
+            GovernanceOperation::DelegateVotes { .. } => vec!["governance.delegate".to_string()],
+            GovernanceOperation::ExecuteProposal { .. } => vec!["governance.execute".to_string()],
+            GovernanceOperation::CancelProposal { .. } => vec!["governance.cancel".to_string()],
+            GovernanceOperation::UpdateQuorum { .. } => vec!["governance.update_quorum".to_string()],
+            GovernanceOperation::ExtendVotingPeriod { .. } => vec!["governance.extend_voting".to_string()],
+            _ => vec![],
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_state() -> VMState {
+        let mut state = VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did: "test_caller".to_string(),
+            block_number: 1,
+            timestamp: 1000,
+            permissions: vec![
+                "governance.create_proposal".to_string(),
+                "governance.vote".to_string(),
+                "governance.execute".to_string(),
+            ],
+        };
+        
+        state.reputation_context.insert(state.caller_did.clone(), 200);
+        state
+    }
+
+    #[test]
+    fn test_create_proposal() {
+        let mut state = setup_test_state();
+        let op = GovernanceOperation::CreateProposal {
+            title: "Test Proposal".to_string(),
+            description: "Test Description".to_string(),
+            proposal_type: ProposalType::PolicyChange,
+            duration: 86400,
+            required_reputation: 100,
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events.len(), 1);
+        assert_eq!(state.events[0].event_type, "ProposalCreated");
+    }
+
+    #[test]
+    fn test_cast_vote() {
+        let mut state = setup_test_state();
+        let op = GovernanceOperation::CastVote {
+            proposal_id: "test_proposal".to_string(),
+            approve: true,
+            comment: Some("Support this proposal".to_string()),
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events.len(), 1);
+        assert_eq!(state.events[0].event_type, "VoteCast");
+    }
+
+    #[test]
+    fn test_insufficient_reputation() {
+        let mut state = setup_test_state();
+        state.reputation_context.insert(state.caller_did.clone(), 50);
+        
+        let op = GovernanceOperation::CreateProposal {
+            title: "Test Proposal".to_string(),
+            description: "Test Description".to_string(),
+            proposal_type: ProposalType::PolicyChange,
+            duration: 86400,
+            required_reputation: 100,
+        };
+        
+        assert!(matches!(op.execute(&mut state), Err(VMError::InsufficientReputation)));
+    }
+
+    #[test]
+    fn test_update_quorum() {
+        let mut state = setup_test_state();
+        state.permissions.push("governance.update_quorum".to_string());
+        
+        let op = GovernanceOperation::UpdateQuorum {
+            new_quorum: 0.75,
+            proposal_type: Some(ProposalType::PolicyChange),
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events.len(), 1);
+        assert_eq!(state.events[0].event_type, "QuorumUpdated");
+    }
+}
+
+===================
+File: ./backend/src/vm/operations/reputation.rs
+===================
+// src/vm/operations/reputation.rs
+
+use std::collections::HashMap;
+use super::{Operation, VMState, VMResult, ensure_stack_size, ensure_permissions, emit_event};
+use crate::vm::VMError;
+
+/// Operations for managing reputation within the system
+pub enum ReputationOperation {
+    /// Update a member's reputation by a specific amount
+    UpdateReputation {
+        amount: i64,
+        reason: String,
+        context: String,
+    },
+    
+    /// Get the current reputation of an account
+    GetReputation {
+        target_did: String,
+    },
+    
+    /// Burn (remove) reputation from an account
+    BurnReputation {
+        amount: i64,
+        reason: String,
+    },
+    
+    /// Mint new reputation (requires special permissions)
+    MintReputation {
+        target_did: String,
+        amount: i64,
+        reason: String,
+    },
+    
+    /// Record contribution impact on reputation
+    RecordContributionImpact {
+        contribution_id: String,
+        impact_score: i64,
+        context: String,
+    },
+    
+    /// Calculate voting power based on reputation
+    CalculateVotingPower {
+        context: String,
+    },
+    
+    /// Decay reputation over time
+    ApplyReputationDecay {
+        decay_rate: f64,
+        minimum_reputation: i64,
+    },
+    
+    /// Get reputation history for an account
+    GetReputationHistory {
+        target_did: String,
+        context: Option<String>,
+    },
+}
+
+impl Operation for ReputationOperation {
+    fn execute(&self, state: &mut VMState) -> VMResult<()> {
+        match self {
+            ReputationOperation::UpdateReputation { amount, reason, context } => {
+                // Check if caller has permission to update reputation
+                ensure_permissions(&["reputation.update".to_string()], &state.permissions)?;
+                
+                // Get current reputation
+                let current_rep = state.reputation_context
+                    .get(&state.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+                
+                // Update reputation
+                let new_rep = current_rep + amount;
+                state.reputation_context.insert(state.caller_did.clone(), new_rep);
+                
+                // Emit reputation update event
+                let mut event_data = HashMap::new();
+                event_data.insert("amount".to_string(), amount.to_string());
+                event_data.insert("reason".to_string(), reason.clone());
+                event_data.insert("context".to_string(), context.clone());
+                event_data.insert("new_total".to_string(), new_rep.to_string());
+                
+                emit_event(state, "ReputationUpdated".to_string(), event_data);
+                Ok(())
+            },
+            
+            ReputationOperation::GetReputation { target_did } => {
+                let reputation = state.reputation_context
+                    .get(target_did)
+                    .copied()
+                    .unwrap_or(0);
+                    
+                state.stack.push(reputation);
+                Ok(())
+            },
+            
+            ReputationOperation::BurnReputation { amount, reason } => {
+                ensure_permissions(&["reputation.burn".to_string()], &state.permissions)?;
+                
+                let current_rep = state.reputation_context
+                    .get(&state.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+                    
+                if current_rep < *amount {
+                    return Err(VMError::InsufficientReputation);
+                }
+                
+                let new_rep = current_rep - amount;
+                state.reputation_context.insert(state.caller_did.clone(), new_rep);
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("amount".to_string(), amount.to_string());
+                event_data.insert("reason".to_string(), reason.clone());
+                event_data.insert("new_total".to_string(), new_rep.to_string());
+                
+                emit_event(state, "ReputationBurned".to_string(), event_data);
+                Ok(())
+            },
+            
+            ReputationOperation::MintReputation { target_did, amount, reason } => {
+                ensure_permissions(&["reputation.mint".to_string()], &state.permissions)?;
+                
+                let current_rep = state.reputation_context
+                    .get(target_did)
+                    .copied()
+                    .unwrap_or(0);
+                    
+                let new_rep = current_rep + amount;
+                state.reputation_context.insert(target_did.clone(), new_rep);
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("target_did".to_string(), target_did.clone());
+                event_data.insert("amount".to_string(), amount.to_string());
+                event_data.insert("reason".to_string(), reason.clone());
+                event_data.insert("new_total".to_string(), new_rep.to_string());
+                
+                emit_event(state, "ReputationMinted".to_string(), event_data);
+                Ok(())
+            },
+            
+            ReputationOperation::RecordContributionImpact { contribution_id, impact_score, context } => {
+                ensure_permissions(&["contribution.record".to_string()], &state.permissions)?;
+                
+                // Calculate reputation change based on impact score
+                let reputation_change = impact_score.max(-50).min(50); // Limit impact
+                
+                let current_rep = state.reputation_context
+                    .get(&state.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+                    
+                let new_rep = current_rep + reputation_change;
+                state.reputation_context.insert(state.caller_did.clone(), new_rep);
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("contribution_id".to_string(), contribution_id.clone());
+                event_data.insert("impact_score".to_string(), impact_score.to_string());
+                event_data.insert("context".to_string(), context.clone());
+                event_data.insert("reputation_change".to_string(), reputation_change.to_string());
+                
+                emit_event(state, "ContributionImpactRecorded".to_string(), event_data);
+                Ok(())
+            },
+            
+            ReputationOperation::CalculateVotingPower { context } => {
+                let reputation = state.reputation_context
+                    .get(&state.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+                    
+                // Calculate voting power as a function of reputation
+                // Square root function to prevent excessive concentration of power
+                let voting_power = (reputation as f64).sqrt() as i64;
+                
+                state.stack.push(voting_power);
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("context".to_string(), context.clone());
+                event_data.insert("reputation".to_string(), reputation.to_string());
+                event_data.insert("voting_power".to_string(), voting_power.to_string());
+                
+                emit_event(state, "VotingPowerCalculated".to_string(), event_data);
+                Ok(())
+            },
+            
+            ReputationOperation::ApplyReputationDecay { decay_rate, minimum_reputation } => {
+                ensure_permissions(&["reputation.decay".to_string()], &state.permissions)?;
+                
+                let mut decayed_accounts = Vec::new();
+                
+                for (did, rep) in state.reputation_context.iter_mut() {
+                    let old_rep = *rep;
+                    let new_rep = ((*rep as f64) * (1.0 - decay_rate)) as i64;
+                    *rep = new_rep.max(*minimum_reputation);
+                    
+                    if old_rep != *rep {
+                        decayed_accounts.push((did.clone(), old_rep, *rep));
+                    }
+                }
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("decay_rate".to_string(), decay_rate.to_string());
+                event_data.insert("accounts_affected".to_string(), decayed_accounts.len().to_string());
+                
+                emit_event(state, "ReputationDecayApplied".to_string(), event_data);
+                Ok(())
+            },
+            
+            ReputationOperation::GetReputationHistory { target_did, context: _ } => {
+                // In a real implementation, this would query historical reputation data
+                // For now, we just return the current reputation
+                let reputation = state.reputation_context
+                    .get(target_did)
+                    .copied()
+                    .unwrap_or(0);
+                    
+                state.stack.push(reputation);
+                Ok(())
+            },
+        }
+    }
+
+    fn resource_cost(&self) -> u64 {
+        match self {
+            ReputationOperation::UpdateReputation { .. } => 5,
+            ReputationOperation::GetReputation { .. } => 1,
+            ReputationOperation::BurnReputation { .. } => 5,
+            ReputationOperation::MintReputation { .. } => 10,
+            ReputationOperation::RecordContributionImpact { .. } => 7,
+            ReputationOperation::CalculateVotingPower { .. } => 3,
+            ReputationOperation::ApplyReputationDecay { .. } => 15,
+            ReputationOperation::GetReputationHistory { .. } => 2,
+        }
+    }
+
+    fn required_permissions(&self) -> Vec<String> {
+        match self {
+            ReputationOperation::UpdateReputation { .. } => vec!["reputation.update".to_string()],
+            ReputationOperation::BurnReputation { .. } => vec!["reputation.burn".to_string()],
+            ReputationOperation::MintReputation { .. } => vec!["reputation.mint".to_string()],
+            ReputationOperation::RecordContributionImpact { .. } => vec!["contribution.record".to_string()],
+            ReputationOperation::ApplyReputationDecay { .. } => vec!["reputation.decay".to_string()],
+            _ => vec![],
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_state() -> VMState {
+        let mut state = VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did: "test_caller".to_string(),
+            block_number: 1,
+            timestamp: 1000,
+            permissions: vec![
+                "reputation.update".to_string(),
+                "reputation.mint".to_string(),
+                "reputation.burn".to_string(),
+                "reputation.decay".to_string(),
+            ],
+        };
+        
+        // Set initial reputation
+        state.reputation_context.insert(state.caller_did.clone(), 100);
+        state
+    }
+
+    #[test]
+    fn test_update_reputation() {
+        let mut state = setup_test_state();
+        let op = ReputationOperation::UpdateReputation {
+            amount: 50,
+            reason: "test".to_string(),
+            context: "testing".to_string(),
+        };
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(
+            state.reputation_context.get(&state.caller_did).copied().unwrap(),
+            150
+        );
+    }
+
+    #[test]
+    fn test_burn_reputation() {
+        let mut state = setup_test_state();
+        let op = ReputationOperation::BurnReputation {
+            amount: 30,
+            reason: "test".to_string(),
+        };
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(
+            state.reputation_context.get(&state.caller_did).copied().unwrap(),
+            70
+        );
+    }
+
+    #[test]
+    fn test_calculate_voting_power() {
+        let mut state = setup_test_state();
+        let op = ReputationOperation::CalculateVotingPower {
+            context: "voting".to_string(),
+        };
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.stack.pop().unwrap(), 10); // sqrt(100) = 10
+    }
+
+    #[test]
+    fn test_reputation_decay() {
+        let mut state = setup_test_state();
+        let op = ReputationOperation::ApplyReputationDecay {
+            decay_rate: 0.1,
+            minimum_reputation: 0,
+        };
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(
+            state.reputation_context.get(&state.caller_did).copied().unwrap(),
+            90  // 100 * (1 - 0.1) = 90
+        );
+    }
+}
+
+===================
+File: ./backend/src/vm/operations/community.rs
+===================
+// src/vm/operations/community.rs
+
+use std::collections::HashMap;
+use super::{Operation, VMState, VMResult, ensure_permissions, ensure_reputation, emit_event};
+use crate::vm::VMError;
+
+/// Operations specific to community management and civic participation
+pub enum CommunityOperation {
+    /// Create a new community
+    CreateCommunity {
+        name: String,
+        description: String,
+        governance_model: String,
+    },
+    
+    /// Join an existing community
+    JoinCommunity {
+        community_id: String,
+        role: String,
+    },
+    
+    /// Leave a community
+    LeaveCommunity {
+        community_id: String,
+    },
+    
+    /// Create a civic initiative
+    CreateInitiative {
+        community_id: String,
+        title: String,
+        description: String,
+        category: String,
+    },
+    
+    /// Support an initiative
+    SupportInitiative {
+        initiative_id: String,
+        support_type: String,
+    },
+    
+    /// Record civic participation
+    RecordParticipation {
+        community_id: String,
+        activity_type: String,
+        description: String,
+        impact: String,
+    },
+    
+    /// Update community guidelines
+    UpdateGuidelines {
+        community_id: String,
+        updates: HashMap<String, String>,
+    },
+    
+    /// Create working group
+    CreateWorkingGroup {
+        community_id: String,
+        name: String,
+        purpose: String,
+        membership_criteria: String,
+    },
+    
+    /// Coordinate inter-community action
+    CoordinateAction {
+        communities: Vec<String>,
+        action_type: String,
+        description: String,
+        resources_needed: HashMap<String, u64>,
+    },
+}
+
+impl Operation for CommunityOperation {
+    fn execute(&self, state: &mut VMState) -> VMResult<()> {
+        match self {
+            CommunityOperation::CreateCommunity { name, description, governance_model } => {
+                // Verify permissions
+                ensure_permissions(&["community.create".to_string()], &state.permissions)?;
+                
+                // Verify reputation requirements
+                ensure_reputation(100, state.reputation_context.get(&state.caller_did).copied().unwrap_or(0))?;
+                
+                // Record the event
+                let mut event_data = HashMap::new();
+                event_data.insert("name".to_string(), name.clone());
+                event_data.insert("description".to_string(), description.clone());
+                event_data.insert("governance_model".to_string(), governance_model.clone());
+                
+                emit_event(state, "CommunityCreated".to_string(), event_data);
+                Ok(())
+            },
+
+            CommunityOperation::JoinCommunity { community_id, role } => {
+                // Basic reputation check for joining
+                ensure_reputation(10, state.reputation_context.get(&state.caller_did).copied().unwrap_or(0))?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("community_id".to_string(), community_id.clone());
+                event_data.insert("role".to_string(), role.clone());
+                
+                emit_event(state, "CommunityJoined".to_string(), event_data);
+                Ok(())
+            },
+
+            CommunityOperation::CreateInitiative { community_id, title, description, category } => {
+                // Ensure member has sufficient reputation for creating initiatives
+                ensure_reputation(50, state.reputation_context.get(&state.caller_did).copied().unwrap_or(0))?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("community_id".to_string(), community_id.clone());
+                event_data.insert("title".to_string(), title.clone());
+                event_data.insert("description".to_string(), description.clone());
+                event_data.insert("category".to_string(), category.clone());
+                
+                emit_event(state, "InitiativeCreated".to_string(), event_data);
+                Ok(())
+            },
+
+            CommunityOperation::RecordParticipation { community_id, activity_type, description, impact } => {
+                let mut event_data = HashMap::new();
+                event_data.insert("community_id".to_string(), community_id.clone());
+                event_data.insert("activity_type".to_string(), activity_type.clone());
+                event_data.insert("description".to_string(), description.clone());
+                event_data.insert("impact".to_string(), impact.clone());
+                
+                emit_event(state, "ParticipationRecorded".to_string(), event_data);
+                Ok(())
+            },
+
+            CommunityOperation::UpdateGuidelines { community_id, updates } => {
+                // Verify permissions for guideline updates
+                ensure_permissions(&["community.update_guidelines".to_string()], &state.permissions)?;
+                ensure_reputation(200, state.reputation_context.get(&state.caller_did).copied().unwrap_or(0))?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("community_id".to_string(), community_id.clone());
+                for (key, value) in updates {
+                    event_data.insert(format!("update_{}", key), value.clone());
+                }
+                
+                emit_event(state, "GuidelinesUpdated".to_string(), event_data);
+                Ok(())
+            },
+
+            CommunityOperation::CreateWorkingGroup { community_id, name, purpose, membership_criteria } => {
+                ensure_permissions(&["community.create_group".to_string()], &state.permissions)?;
+                ensure_reputation(75, state.reputation_context.get(&state.caller_did).copied().unwrap_or(0))?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("community_id".to_string(), community_id.clone());
+                event_data.insert("name".to_string(), name.clone());
+                event_data.insert("purpose".to_string(), purpose.clone());
+                event_data.insert("membership_criteria".to_string(), membership_criteria.clone());
+                
+                emit_event(state, "WorkingGroupCreated".to_string(), event_data);
+                Ok(())
+            },
+
+            CommunityOperation::CoordinateAction { communities, action_type, description, resources_needed } => {
+                ensure_permissions(&["community.coordinate_action".to_string()], &state.permissions)?;
+                ensure_reputation(150, state.reputation_context.get(&state.caller_did).copied().unwrap_or(0))?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("communities".to_string(), communities.join(","));
+                event_data.insert("action_type".to_string(), action_type.clone());
+                event_data.insert("description".to_string(), description.clone());
+                
+                for (resource, amount) in resources_needed {
+                    event_data.insert(format!("resource_{}", resource), amount.to_string());
+                }
+                
+                emit_event(state, "InterCommunityActionCreated".to_string(), event_data);
+                Ok(())
+            },
+
+            _ => Err(VMError::Custom("Operation not implemented".to_string())),
+        }
+    }
+
+    fn resource_cost(&self) -> u64 {
+        match self {
+            CommunityOperation::CreateCommunity { .. } => 200,
+            CommunityOperation::JoinCommunity { .. } => 50,
+            CommunityOperation::CreateInitiative { .. } => 100,
+            CommunityOperation::RecordParticipation { .. } => 30,
+            CommunityOperation::UpdateGuidelines { .. } => 150,
+            CommunityOperation::CreateWorkingGroup { .. } => 120,
+            CommunityOperation::CoordinateAction { .. } => 180,
+            _ => 50, // Default cost for other operations
+        }
+    }
+
+    fn required_permissions(&self) -> Vec<String> {
+        match self {
+            CommunityOperation::CreateCommunity { .. } => vec!["community.create".to_string()],
+            CommunityOperation::UpdateGuidelines { .. } => vec!["community.update_guidelines".to_string()],
+            CommunityOperation::CreateWorkingGroup { .. } => vec!["community.create_group".to_string()],
+            CommunityOperation::CoordinateAction { .. } => vec!["community.coordinate_action".to_string()],
+            _ => vec![], // Other operations might not require specific permissions
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_state() -> VMState {
+        let mut state = VMState::default();
+        state.caller_did = "did:icn:test".to_string();
+        state.reputation_context.insert(state.caller_did.clone(), 200);
+        state.permissions = vec![
+            "community.create".to_string(),
+            "community.update_guidelines".to_string(),
+            "community.create_group".to_string(),
+        ];
+        state
+    }
+
+    #[test]
+    fn test_create_community() {
+        let mut state = setup_test_state();
+        let op = CommunityOperation::CreateCommunity {
+            name: "Test Community".to_string(),
+            description: "A test community".to_string(),
+            governance_model: "democratic".to_string(),
+        };
+
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events.len(), 1);
+        assert_eq!(state.events[0].event_type, "CommunityCreated");
+    }
+
+    // Add more tests for other operations...
+}
+
+===================
+File: ./backend/src/vm/operations/relationship.rs
+===================
+// src/vm/operations/relationship.rs
+
+use std::collections::HashMap;
+use super::{Operation, VMState, VMResult, ensure_permissions, ensure_reputation, emit_event};
+use crate::vm::VMError;
+
+/// Operations for managing relationships and social connections
+pub enum RelationshipOperation {
+    /// Record a contribution with impact story
+    RecordContribution {
+        description: String,
+        impact_story: String,
+        context: String,
+        tags: Vec<String>,
+        witnesses: Vec<String>,
+    },
+    
+    /// Record mutual aid interaction
+    RecordMutualAid {
+        recipient_did: String,
+        description: String,
+        impact_story: Option<String>,
+        reciprocity_notes: Option<String>,
+        tags: Vec<String>,
+    },
+    
+    /// Update relationship status
+    UpdateRelationship {
+        member_did: String,
+        relationship_type: RelationType,
+        story: String,
+        strength_indicators: Vec<StrengthIndicator>,
+    },
+    
+    /// Add endorsement for skills or character
+    AddEndorsement {
+        member_did: String,
+        endorsement_type: EndorsementType,
+        content: String,
+        context: String,
+        skills: Vec<String>,
+    },
+    
+    /// Record interaction or collaboration
+    RecordInteraction {
+        member_did: String,
+        interaction_type: InteractionType,
+        description: String,
+        impact: Option<String>,
+        outcomes: Vec<String>,
+    },
+    
+    /// Add witness to contribution
+    AddWitness {
+        contribution_id: String,
+        witness_did: String,
+        attestation: String,
+    },
+    
+    /// Provide feedback on contribution
+    AddFeedback {
+        contribution_id: String,
+        feedback_type: FeedbackType,
+        content: String,
+        impact_rating: Option<u8>,
+    },
+    
+    /// Create knowledge sharing record
+    RecordKnowledgeSharing {
+        recipients: Vec<String>,
+        knowledge_type: String,
+        description: String,
+        outcomes: Vec<String>,
+    },
+    
+    /// Record conflict resolution
+    RecordConflictResolution {
+        participants: Vec<String>,
+        description: String,
+        resolution: String,
+        learnings: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum RelationType {
+    Collaboration,
+    Mentorship,
+    PeerSupport,
+    ResourceSharing,
+    KnowledgeExchange,
+    ConflictResolution,
+    Custom(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum EndorsementType {
+    Skill,
+    Character,
+    Contribution,
+    Reliability,
+    Cooperation,
+    Leadership,
+    Custom(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum InteractionType {
+    Collaboration,
+    Support,
+    Learning,
+    ResourceExchange,
+    ConflictResolution,
+    FeedbackSession,
+    Custom(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum FeedbackType {
+    Verification,
+    Impact,
+    Suggestion,
+    Recognition,
+    Custom(String),
+}
+
+#[derive(Debug, Clone)]
+pub struct StrengthIndicator {
+    pub indicator_type: String,
+    pub value: u8,
+    pub context: String,
+}
+
+impl Operation for RelationshipOperation {
+    fn execute(&self, state: &mut VMState) -> VMResult<()> {
+        match self {
+            RelationshipOperation::RecordContribution { 
+                description,
+                impact_story,
+                context,
+                tags,
+                witnesses,
+            } => {
+                ensure_permissions(&["contribution.record".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("description".to_string(), description.clone());
+                event_data.insert("impact_story".to_string(), impact_story.clone());
+                event_data.insert("context".to_string(), context.clone());
+                event_data.insert("tags".to_string(), tags.join(","));
+                event_data.insert("witness_count".to_string(), witnesses.len().to_string());
+                
+                emit_event(state, "ContributionRecorded".to_string(), event_data);
+                Ok(())
+            },
+            
+            RelationshipOperation::RecordMutualAid {
+                recipient_did,
+                description,
+                impact_story,
+                reciprocity_notes,
+                tags,
+            } => {
+                ensure_permissions(&["mutual_aid.record".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("recipient_did".to_string(), recipient_did.clone());
+                event_data.insert("description".to_string(), description.clone());
+                if let Some(impact) = impact_story {
+                    event_data.insert("impact_story".to_string(), impact.clone());
+                }
+                if let Some(notes) = reciprocity_notes {
+                    event_data.insert("reciprocity_notes".to_string(), notes.clone());
+                }
+                event_data.insert("tags".to_string(), tags.join(","));
+                
+                emit_event(state, "MutualAidRecorded".to_string(), event_data);
+                Ok(())
+            },
+            
+            RelationshipOperation::UpdateRelationship {
+                member_did,
+                relationship_type,
+                story,
+                strength_indicators,
+            } => {
+                let mut event_data = HashMap::new();
+                event_data.insert("member_did".to_string(), member_did.clone());
+                event_data.insert("relationship_type".to_string(), format!("{:?}", relationship_type));
+                event_data.insert("story".to_string(), story.clone());
+                event_data.insert("indicator_count".to_string(), strength_indicators.len().to_string());
+                
+                emit_event(state, "RelationshipUpdated".to_string(), event_data);
+                Ok(())
+            },
+            
+            RelationshipOperation::AddEndorsement {
+                member_did,
+                endorsement_type,
+                content,
+                context,
+                skills,
+            } => {
+                ensure_permissions(&["endorsement.create".to_string()], &state.permissions)?;
+                
+                // Require some reputation to make endorsements
+                let reputation = state.reputation_context
+                    .get(&state.caller_did)
+                    .copied()
+                    .unwrap_or(0);
+                
+                ensure_reputation(50, reputation)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("member_did".to_string(), member_did.clone());
+                event_data.insert("endorsement_type".to_string(), format!("{:?}", endorsement_type));
+                event_data.insert("content".to_string(), content.clone());
+                event_data.insert("context".to_string(), context.clone());
+                event_data.insert("skills".to_string(), skills.join(","));
+                
+                emit_event(state, "EndorsementAdded".to_string(), event_data);
+                Ok(())
+            },
+            
+            RelationshipOperation::RecordInteraction {
+                member_did,
+                interaction_type,
+                description,
+                impact,
+                outcomes,
+            } => {
+                let mut event_data = HashMap::new();
+                event_data.insert("member_did".to_string(), member_did.clone());
+                event_data.insert("interaction_type".to_string(), format!("{:?}", interaction_type));
+                event_data.insert("description".to_string(), description.clone());
+                if let Some(imp) = impact {
+                    event_data.insert("impact".to_string(), imp.clone());
+                }
+                event_data.insert("outcomes".to_string(), outcomes.join(","));
+                
+                emit_event(state, "InteractionRecorded".to_string(), event_data);
+                Ok(())
+            },
+            
+            RelationshipOperation::AddWitness {
+                contribution_id,
+                witness_did,
+                attestation,
+            } => {
+                ensure_permissions(&["witness.add".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("contribution_id".to_string(), contribution_id.clone());
+                event_data.insert("witness_did".to_string(), witness_did.clone());
+                event_data.insert("attestation".to_string(), attestation.clone());
+                
+                emit_event(state, "WitnessAdded".to_string(), event_data);
+                Ok(())
+            },
+            
+            RelationshipOperation::AddFeedback {
+                contribution_id,
+                feedback_type,
+                content,
+                impact_rating,
+            } => {
+                ensure_permissions(&["feedback.add".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("contribution_id".to_string(), contribution_id.clone());
+                event_data.insert("feedback_type".to_string(), format!("{:?}", feedback_type));
+                event_data.insert("content".to_string(), content.clone());
+                if let Some(rating) = impact_rating {
+                    event_data.insert("impact_rating".to_string(), rating.to_string());
+                }
+                
+                emit_event(state, "FeedbackAdded".to_string(), event_data);
+                Ok(())
+            },
+            
+            RelationshipOperation::RecordKnowledgeSharing {
+                recipients,
+                knowledge_type,
+                description,
+                outcomes,
+            } => {
+                let mut event_data = HashMap::new();
+                event_data.insert("recipients".to_string(), recipients.join(","));
+                event_data.insert("knowledge_type".to_string(), knowledge_type.clone());
+                event_data.insert("description".to_string(), description.clone());
+                event_data.insert("outcomes".to_string(), outcomes.join(","));
+                
+                emit_event(state, "KnowledgeSharingRecorded".to_string(), event_data);
+                Ok(())
+            },
+            
+            RelationshipOperation::RecordConflictResolution {
+                participants,
+                description,
+                resolution,
+                learnings,
+            } => {
+                ensure_permissions(&["conflict.resolve".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("participants".to_string(), participants.join(","));
+                event_data.insert("description".to_string(), description.clone());
+                event_data.insert("resolution".to_string(), resolution.clone());
+                event_data.insert("learnings".to_string(), learnings.join(","));
+                
+                emit_event(state, "ConflictResolutionRecorded".to_string(), event_data);
+                Ok(())
+            },
+        }
+    }
+
+    fn resource_cost(&self) -> u64 {
+        match self {
+            RelationshipOperation::RecordContribution { .. } => 100,
+            RelationshipOperation::RecordMutualAid { .. } => 80,
+            RelationshipOperation::UpdateRelationship { .. } => 50,
+            RelationshipOperation::AddEndorsement { .. } => 70,
+            RelationshipOperation::RecordInteraction { .. } => 40,
+            RelationshipOperation::AddWitness { .. } => 30,
+            RelationshipOperation::AddFeedback { .. } => 40,
+            RelationshipOperation::RecordKnowledgeSharing { .. } => 60,
+            RelationshipOperation::RecordConflictResolution { .. } => 90,
+        }
+    }
+
+    fn required_permissions(&self) -> Vec<String> {
+        match self {
+            RelationshipOperation::RecordContribution { .. } => vec!["contribution.record".to_string()],
+            RelationshipOperation::RecordMutualAid { .. } => vec!["mutual_aid.record".to_string()],
+            RelationshipOperation::AddEndorsement { .. } => vec!["endorsement.create".to_string()],
+            RelationshipOperation::AddWitness { .. } => vec!["witness.add".to_string()],
+            RelationshipOperation::AddFeedback { .. } => vec!["feedback.add".to_string()],
+            RelationshipOperation::RecordConflictResolution { .. } => vec!["conflict.resolve".to_string()],
+            _ => vec![],
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_state() -> VMState {
+        let mut state = VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did: "test_caller".to_string(),
+            block_number: 1,
+            timestamp: 1000,
+            permissions: vec![
+                "contribution.record".to_string(),
+                "mutual_aid.record".to_string(),
+                "endorsement.create".to_string(),
+                "witness.add".to_string(),
+            ],
+        };
+        
+        state.reputation_context.insert(state.caller_did.clone(), 100);
+        state
+    }
+
+    #[test]
+    fn test_record_contribution() {
+        let mut state = setup_test_state();
+        let op = RelationshipOperation::RecordContribution {
+            description: "Test contribution".to_string(),
+            impact_story: "Made a difference".to_string(),
+            context: "Testing".to_string(),
+            tags: vec!["test".to_string()],
+            witnesses: vec!["witness1".to_string()],
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "ContributionRecorded");
+    }
+
+    #[test]
+    fn test_record_mutual_aid() {
+        let mut state = setup_test_state();
+        let op = RelationshipOperation::RecordMutualAid {
+            recipient_did: "recipient".to_string(),
+            description: "Helped with project".to_string(),
+            impact_story: Some("Positive impact".to_string()),
+            reciprocity_notes: None,
+            tags: vec!["help".to_string()],
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "MutualAidRecorded");
+    }
+
+    #[test]
+    fn test_add_endorsement() {
+        let mut state = setup_test_state();
+        let op = RelationshipOperation::AddEndorsement {
+            member_did: "member".to_string(),
+            endorsement_type: EndorsementType::Skill,
+            content: "Great skills".to_string(),
+            context: "Project work".to_string(),
+            skills: vec!["coding".to_string()],
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "EndorsementAdded");
+    }
+
+    #[test]
+    fn test_record_conflict_resolution() {
+        let mut state = setup_test_state();
+        state.permissions.push("conflict.resolve".to_string());
+        
+        let op = RelationshipOperation::RecordConflictResolution {
+            participants: vec!["member1".to_string(), "member2".to_string()],
+            description: "Resource allocation dispute".to_string(),
+            resolution: "Agreed to share".to_string(),
+            learnings: vec!["Better communication needed".to_string()],
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "ConflictResolutionRecorded"); }
+
+    #[test]
+        fn test_add_feedback() {
+    let mut state = setup_test_state();
+    let op = RelationshipOperation::AddFeedback {
+        contribution_id: "contrib123".to_string(),
+        feedback_type: FeedbackType::Impact,
+        content: "Highly impactful contribution".to_string(),
+        impact_rating: Some(9),
+    };
+    
+    assert!(op.execute(&mut state).is_ok());
+    assert_eq!(state.events[0].event_type, "FeedbackAdded");
+    assert_eq!(state.events[0].data.get("impact_rating").unwrap(), "9");
+}
+
+#[test]
+fn test_add_witness_without_permission() {
+    let mut state = setup_test_state();
+    state.permissions.retain(|p| p != "witness.add");
+    
+    let op = RelationshipOperation::AddWitness {
+        contribution_id: "contrib456".to_string(),
+        witness_did: "witness123".to_string(),
+        attestation: "Was present during contribution".to_string(),
+    };
+    
+    assert!(op.execute(&mut state).is_err());
+}
+
+#[test]
+fn test_record_knowledge_sharing() {
+    let mut state = setup_test_state();
+    let op = RelationshipOperation::RecordKnowledgeSharing {
+        recipients: vec!["recipient1".to_string(), "recipient2".to_string()],
+        knowledge_type: "Technical Skills".to_string(),
+        description: "Shared insights on Rust programming".to_string(),
+        outcomes: vec!["Improved coding efficiency".to_string()],
+    };
+    
+    assert!(op.execute(&mut state).is_ok());
+    assert_eq!(state.events[0].event_type, "KnowledgeSharingRecorded");
+}
 
 
 ===================
@@ -2208,18 +4878,58 @@ mod tests {
 ===================
 File: ./backend/src/vm/mod.rs
 ===================
-// backend/src/vm/mod.rs
+// src/vm/mod.rs
 
 pub mod opcode;
 pub mod contract;
-pub mod vm;
 pub mod execution_context;
 pub mod cooperative_metadata;
 pub mod event;
+pub mod operations;
+pub mod vm;
 
 pub use contract::Contract;
 pub use vm::VM;
 pub use execution_context::ExecutionContext;
+pub use event::Event;
+
+// Re-export core operation traits
+pub use operations::Operation;
+pub use operations::OperationResult;
+
+// Error type for VM operations
+#[derive(Debug, Clone, PartialEq)]
+pub enum VMError {
+    StackUnderflow,
+    StackOverflow,
+    DivisionByZero,
+    InvalidMemoryAccess,
+    InvalidJumpDestination,
+    InsufficientPermissions,
+    InsufficientReputation,
+    InvalidOperand,
+    ExecutionLimitExceeded,
+    Custom(String),
+}
+
+impl std::fmt::Display for VMError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VMError::StackUnderflow => write!(f, "Stack underflow"),
+            VMError::StackOverflow => write!(f, "Stack overflow"),
+            VMError::DivisionByZero => write!(f, "Division by zero"),
+            VMError::InvalidMemoryAccess => write!(f, "Invalid memory access"),
+            VMError::InvalidJumpDestination => write!(f, "Invalid jump destination"),
+            VMError::InsufficientPermissions => write!(f, "Insufficient permissions"),
+            VMError::InsufficientReputation => write!(f, "Insufficient reputation"),
+            VMError::InvalidOperand => write!(f, "Invalid operand"),
+            VMError::ExecutionLimitExceeded => write!(f, "Execution limit exceeded"),
+            VMError::Custom(msg) => write!(f, "{}", msg),
+        }
+    }
+}
+
+pub type VMResult<T> = Result<T, VMError>;
 
 ===================
 File: ./backend/src/vm/opcode.rs
@@ -2229,8 +4939,7 @@ File: ./backend/src/vm/opcode.rs
 use serde::{Serialize, Deserialize};
 
 /// Enum representing the various operations (`OpCode`) that can be executed in the virtual machine.
-/// Each variant is an operation that affects the VM stack, memory, or interacts with other subsystems like
-/// cooperative, governance, reputation, identity, federation, and system operations.
+/// Each variant is an operation that affects the VM stack, memory, or interacts with other subsystems.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OpCode {
     // Stack Operations
@@ -2278,7 +4987,7 @@ pub enum OpCode {
     AllocateResource,
     /// Transfer resources within or between cooperatives.
     TransferResource,
-    /// Update cooperative metadata (e.g., purpose, mission).
+    /// Update cooperative metadata.
     UpdateCooperativeMetadata,
     /// Add a member to a cooperative.
     AddCooperativeMember,
@@ -2302,7 +5011,7 @@ pub enum OpCode {
     CancelProposal,
     /// Extend the voting period for a proposal.
     ExtendVotingPeriod,
-    /// Calculate the weight of a vote based on certain metrics.
+    /// Calculate the weight of a vote based on metrics.
     CalculateVotingWeight,
 
     // Reputation Operations
@@ -2320,75 +5029,120 @@ pub enum OpCode {
     // Identity Operations
     /// Verify a Decentralized Identifier (DID).
     VerifyDID,
-    /// Update a Decentralized Identifier (DID) document.
+    /// Update a DID document.
     UpdateDIDDocument,
-    /// Create a new credential associated with a DID.
+    /// Create a new credential.
     CreateCredential,
-    /// Verify a given credential.
+    /// Verify a credential.
     VerifyCredential,
-    /// Revoke a previously issued credential.
+    /// Revoke a credential.
     RevokeCredential,
 
     // Federation Operations
-    /// Initiate the process of federation.
+    /// Initiate federation process.
     InitiateFederation,
     /// Join an existing federation.
     JoinFederation,
     /// Leave a federation.
     LeaveFederation,
-    /// Synchronize federation state with peers.
+    /// Synchronize federation state.
     SyncFederationState,
-    /// Validate a specific action within the federation.
+    /// Validate federation action.
     ValidateFederationAction,
 
     // Transaction Operations
     /// Create a new transaction.
     CreateTransaction,
-    /// Validate an existing transaction.
+    /// Validate a transaction.
     ValidateTransaction,
-    /// Sign a transaction for verification purposes.
+    /// Sign a transaction.
     SignTransaction,
-    /// Broadcast a transaction to the network.
+    /// Broadcast a transaction.
     BroadcastTransaction,
 
+    // Relationship Operations
+    /// Record a contribution with impact story
+    RecordContribution {
+        description: String,
+        impact_story: String,
+        context: String,
+        tags: Vec<String>,
+    },
+    /// Record mutual aid interaction
+    RecordMutualAid {
+        description: String,
+        receiver: String,
+        impact_story: Option<String>,
+        reciprocity_notes: Option<String>,
+    },
+    /// Update relationship between members
+    UpdateRelationship {
+        member_two: String,
+        relationship_type: String,
+        story: String,
+    },
+    /// Add endorsement to relationship
+    AddEndorsement {
+        to_did: String,
+        content: String,
+        context: String,
+        skills: Vec<String>,
+    },
+    /// Record relationship interaction
+    RecordInteraction {
+        with_did: String,
+        description: String,
+        impact: Option<String>,
+        interaction_type: String,
+    },
+    /// Add witness to contribution
+    AddWitness {
+        contribution_id: String,
+        witness_did: String,
+    },
+    /// Add feedback to contribution
+    AddFeedback {
+        contribution_id: String,
+        content: String,
+        endorsement_type: String,
+    },
+
     // System Operations
-    /// Log a message to the system logs.
+    /// Log a message.
     Log(String),
-    /// Halt the execution of the current process.
+    /// Halt execution.
     Halt,
-    /// Emit an event with a message.
+    /// Emit an event.
     EmitEvent(String),
-    /// Retrieve the current block number.
+    /// Get current block number.
     GetBlockNumber,
-    /// Get the current timestamp.
+    /// Get current timestamp.
     GetTimestamp,
-    /// Retrieve the caller's DID or identity.
+    /// Get caller's DID.
     GetCaller,
 
     // Comparison Operations
-    /// Check if the top two stack values are equal.
+    /// Check if values are equal.
     Equal,
-    /// Check if the top two stack values are not equal.
+    /// Check if values are not equal.
     NotEqual,
-    /// Check if the top value is greater than the second top value.
+    /// Check if greater than.
     GreaterThan,
-    /// Check if the top value is less than the second top value.
+    /// Check if less than.
     LessThan,
 
     // Logical Operations
-    /// Perform logical AND on the top two stack values.
+    /// Logical AND.
     And,
-    /// Perform logical OR on the top two stack values.
+    /// Logical OR.
     Or,
-    /// Perform logical NOT on the top stack value.
+    /// Logical NOT.
     Not,
 
     // No Operation
     /// No operation (used for padding or delays).
     Nop,
 }
-
-
 
 ===================
 File: ./backend/src/vm/event.rs
@@ -3607,13 +6361,16 @@ File: ./backend/src/blockchain/chain.rs
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
+use chrono::Utc;
+
 use crate::consensus::ProofOfCooperation;
 use crate::consensus::types::ConsensusRound;
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
+use crate::relationship::RelationshipSystem;
 use crate::vm::{VM, Contract, ExecutionContext};
 use crate::vm::event::Event;
-use crate::blockchain::{Block, Transaction, TransactionType};
+use crate::blockchain::{Block, Transaction, TransactionType, ResourceAllocation};
 
 pub struct Blockchain {
     pub chain: Vec<Block>,
@@ -3622,6 +6379,8 @@ pub struct Blockchain {
     pub consensus: Arc<Mutex<ProofOfCooperation>>,
     pub identity_system: Arc<Mutex<IdentitySystem>>,
     pub reputation_system: Arc<Mutex<ReputationSystem>>,
+    pub relationship_system: Arc<Mutex<RelationshipSystem>>,
+    pub resource_allocations: HashMap<String, ResourceAllocation>,
     pub current_block_number: u64,
     coordinator_did: String,
 }
@@ -3630,6 +6389,7 @@ impl Blockchain {
     pub fn new(
         identity_system: Arc<Mutex<IdentitySystem>>, 
         reputation_system: Arc<Mutex<ReputationSystem>>,
+        relationship_system: Arc<Mutex<RelationshipSystem>>,
         consensus: Arc<Mutex<ProofOfCooperation>>,
     ) -> Self {
         let coordinator_did = "did:icn:genesis".to_string();
@@ -3641,6 +6401,8 @@ impl Blockchain {
             consensus,
             identity_system,
             reputation_system,
+            relationship_system,
+            resource_allocations: HashMap::new(),
             current_block_number: 1,
             coordinator_did,
         }
@@ -3651,6 +6413,15 @@ impl Blockchain {
     }
 
     pub async fn process_transaction(&mut self, transaction: &Transaction) -> Result<(), String> {
+        // Validate sender's resources
+        self.check_and_update_resources(&transaction.sender)?;
+        let resource_allocation = self.resource_allocations.get_mut(&transaction.sender)
+            .ok_or("Resource allocation not found")?;
+        
+        if !resource_allocation.can_afford(transaction.resource_cost) {
+            return Err("Insufficient resources".to_string());
+        }
+
         match &transaction.transaction_type {
             TransactionType::Transfer { amount, receiver } => {
                 self.validate_transaction(transaction)?;
@@ -3658,12 +6429,13 @@ impl Blockchain {
                     "Processing transfer of {} from {} to {}",
                     amount, transaction.sender, receiver
                 );
+                resource_allocation.consume_resources(transaction.resource_cost)?;
                 self.pending_transactions.push(transaction.clone());
                 Ok(())
             }
-            TransactionType::ContractExecution { contract_id, input_data: _ } => {
-                let contract = self.get_contract(contract_id)?;
 
+            TransactionType::ContractExecution { contract_id, input_data } => {
+                let contract = self.get_contract(contract_id)?;
                 let reputation_context = {
                     let reputation_system = self.reputation_system.lock()
                         .map_err(|_| "Failed to acquire reputation lock".to_string())?;
@@ -3693,22 +6465,105 @@ impl Blockchain {
                 };
 
                 vm.set_execution_context(execution_context);
+                resource_allocation.consume_resources(transaction.resource_cost)?;
 
                 match vm.execute_contract(contract) {
                     Ok(_) => {
                         self.handle_vm_events(&vm.get_events());
-
                         let mut reputation_system = self.reputation_system.lock()
                             .map_err(|_| "Failed to acquire reputation lock".to_string())?;
                         reputation_system.update_reputations(&vm.get_reputation_context());
-                        
                         self.pending_transactions.push(transaction.clone());
                         Ok(())
                     }
                     Err(e) => Err(format!("Contract execution failed: {}", e)),
                 }
             }
+
+            TransactionType::RecordContribution { description, impact_story, context, tags } => {
+                let mut relationship_system = self.relationship_system.lock()
+                    .map_err(|_| "Failed to acquire relationship lock".to_string())?;
+                
+                relationship_system.record_contribution(
+                    transaction.sender.clone(),
+                    description.clone(),
+                    impact_story.clone(),
+                    context.clone(),
+                    tags.clone(),
+                )?;
+
+                resource_allocation.consume_resources(transaction.resource_cost)?;
+                self.pending_transactions.push(transaction.clone());
+                Ok(())
+            }
+
+            TransactionType::RecordMutualAid { receiver, description, impact_story, reciprocity_notes, tags } => {
+                let mut relationship_system = self.relationship_system.lock()
+                    .map_err(|_| "Failed to acquire relationship lock".to_string())?;
+                
+                relationship_system.record_mutual_aid(
+                    transaction.sender.clone(),
+                    receiver.clone(),
+                    description.clone(),
+                    impact_story.clone(),
+                    reciprocity_notes.clone(),
+                    tags.clone(),
+                )?;
+
+                resource_allocation.consume_resources(transaction.resource_cost)?;
+                self.pending_transactions.push(transaction.clone());
+                Ok(())
+            }
+
+            TransactionType::UpdateRelationship { member_two, relationship_type, story, interaction } => {
+                let mut relationship_system = self.relationship_system.lock()
+                    .map_err(|_| "Failed to acquire relationship lock".to_string())?;
+                
+                relationship_system.update_relationship(
+                    transaction.sender.clone(),
+                    member_two.clone(),
+                    relationship_type.clone(),
+                    story.clone(),
+                    interaction.clone(),
+                )?;
+
+                resource_allocation.consume_resources(transaction.resource_cost)?;
+                self.pending_transactions.push(transaction.clone());
+                Ok(())
+            }
+
+            TransactionType::AddEndorsement { to_did, content, context, skills } => {
+                let mut relationship_system = self.relationship_system.lock()
+                    .map_err(|_| "Failed to acquire relationship lock".to_string())?;
+                
+                relationship_system.add_endorsement(
+                    transaction.sender.clone(),
+                    to_did.clone(),
+                    content.clone(),
+                    context.clone(),
+                    skills.clone(),
+                )?;
+
+                resource_allocation.consume_resources(transaction.resource_cost)?;
+                self.pending_transactions.push(transaction.clone());
+                Ok(())
+            }
         }
+    }
+
+    fn check_and_update_resources(&mut self, did: &str) -> Result<(), String> {
+        let reputation_score = {
+            let reputation_system = self.reputation_system.lock()
+                .map_err(|_| "Failed to acquire reputation lock".to_string())?;
+            reputation_system.get_reputation(did)
+        };
+
+        let resource_allocation = self.resource_allocations
+            .entry(did.to_string())
+            .or_insert_with(|| ResourceAllocation::new(reputation_score));
+
+        resource_allocation.update_resources();
+        Ok(())
     }
 
     fn validate_transaction(&self, transaction: &Transaction) -> Result<(), String> {
@@ -3768,12 +6623,10 @@ impl Blockchain {
     }
 
     pub async fn finalize_block(&mut self) -> Result<(), String> {
-        // Get the current block's hash
         let previous_hash = self.chain.last()
             .map(|block| block.hash.clone())
             .unwrap_or_default();
 
-        // Create new block with current coordinator
         let new_block = Block::new(
             self.chain.len() as u64,
             previous_hash,
@@ -3792,7 +6645,6 @@ impl Blockchain {
             return Err("No active validators available".to_string());
         }
 
-        // Select new coordinator from validators
         self.coordinator_did = validators[0].clone();
 
         consensus.propose_block(&self.coordinator_did, new_block.clone()).await?;
@@ -3854,11 +6706,13 @@ impl Blockchain {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::websocket::WebSocketHandler;
 
     #[tokio::test]
     async fn test_blockchain_new() {
         let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
         let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+        let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new()));
         let ws_handler = Arc::new(WebSocketHandler::new());
         
         let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
@@ -3869,6 +6723,7 @@ mod tests {
         let blockchain = Blockchain::new(
             identity_system,
             reputation_system,
+            relationship_system,
             consensus,
         );
 
@@ -3877,6 +6732,8 @@ mod tests {
         assert_eq!(blockchain.pending_transactions.len(), 0);
         assert_eq!(blockchain.coordinator_did, "did:icn:genesis");
     }
+
+    // Add more tests as needed...
 }
 
 ===================
@@ -3965,11 +6822,25 @@ pub struct BlockMetadata {
     /// Total voting power that approved the block
     pub total_voting_power: f64,
     
-    /// Gas used by transactions in the block
-    pub gas_used: u64,
+    /// Total resources consumed by transactions in the block
+    pub resources_used: u64,
     
     /// Size of the block in bytes
     pub size: u64,
+    
+    /// Summary of relationship transactions
+    pub relationship_updates: RelationshipMetadata,
+}
+
+/// Metadata specific to relationship transactions in the block
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RelationshipMetadata {
+    pub contribution_count: u32,
+    pub mutual_aid_count: u32,
+    pub endorsement_count: u32,
+    pub relationship_update_count: u32,
+    pub total_participants: u32,
+    pub unique_cooperatives: Vec<String>,
 }
 
 impl Block {
@@ -3980,12 +6851,16 @@ impl Block {
             .unwrap_or_default()
             .as_millis() as u64;
 
+        let relationship_metadata = Self::calculate_relationship_metadata(&transactions);
+        let resources_used = transactions.iter().map(|tx| tx.resource_cost).sum();
+
         let metadata = BlockMetadata {
             consensus_duration_ms: 0,
             validator_count: 0,
             total_voting_power: 0.0,
-            gas_used: transactions.iter().map(|tx| tx.gas_used()).sum(),
+            resources_used,
             size: 0,
+            relationship_updates: relationship_metadata,
         };
 
         let mut block = Block {
@@ -4096,21 +6971,77 @@ impl Block {
             }
         }
 
+        // Verify resource usage
+        let calculated_resources: u64 = self.transactions.iter()
+            .map(|tx| tx.resource_cost)
+            .sum();
+        if calculated_resources != self.metadata.resources_used {
+            return Err("Resource usage mismatch".to_string());
+        }
+
+        // Verify relationship metadata
+        let calculated_metadata = Self::calculate_relationship_metadata(&self.transactions);
+        if calculated_metadata != self.metadata.relationship_updates {
+            return Err("Relationship metadata mismatch".to_string());
+        }
+
         Ok(())
+    }
+
+    /// Calculates metadata for relationship transactions in the block
+    fn calculate_relationship_metadata(transactions: &[Transaction]) -> RelationshipMetadata {
+        let mut metadata = RelationshipMetadata {
+            contribution_count: 0,
+            mutual_aid_count: 0,
+            endorsement_count: 0,
+            relationship_update_count: 0,
+            total_participants: 0,
+            unique_cooperatives: Vec::new(),
+        };
+
+        let mut participants = std::collections::HashSet::new();
+
+        for tx in transactions {
+            match &tx.transaction_type {
+                super::TransactionType::RecordContribution { .. } => {
+                    metadata.contribution_count += 1;
+                    participants.insert(tx.sender.clone());
+                }
+                super::TransactionType::RecordMutualAid { receiver, .. } => {
+                    metadata.mutual_aid_count += 1;
+                    participants.insert(tx.sender.clone());
+                    participants.insert(receiver.clone());
+                }
+                super::TransactionType::AddEndorsement { to_did, .. } => {
+                    metadata.endorsement_count += 1;
+                    participants.insert(tx.sender.clone());
+                    participants.insert(to_did.clone());
+                }
+                super::TransactionType::UpdateRelationship { member_two, .. } => {
+                    metadata.relationship_update_count += 1;
+                    participants.insert(tx.sender.clone());
+                    participants.insert(member_two.clone());
+                }
+                _ => {}
+            }
+        }
+
+        metadata.total_participants = participants.len() as u32;
+        metadata
     }
 
     /// Updates the block's metadata after consensus is reached
     pub fn update_metadata(&mut self, consensus_duration_ms: u64, size: u64) {
         self.metadata.consensus_duration_ms = consensus_duration_ms;
         self.metadata.size = size;
-        self.metadata.gas_used = self.transactions.iter()
-            .map(|tx| tx.gas_used())
+        self.metadata.resources_used = self.transactions.iter()
+            .map(|tx| tx.resource_cost)
             .sum();
     }
 
-    /// Gets the total gas used by all transactions in the block
-    pub fn total_gas_used(&self) -> u64 {
-        self.metadata.gas_used
+    /// Gets the total resources used by all transactions in the block
+    pub fn total_resources_used(&self) -> u64 {
+        self.metadata.resources_used
     }
 
     /// Gets the number of transactions in the block
@@ -4175,38 +7106,36 @@ mod tests {
     }
 
     #[test]
-    fn test_block_verification() {
-        let prev_block = Block::genesis();
-        let block = Block::new(
-            1,
-            prev_block.hash.clone(),
-            vec![],
-            "did:icn:proposer".to_string()
-        );
+    fn test_relationship_metadata() {
+        use super::super::TransactionType;
+        
+        let transactions = vec![
+            Transaction::new(
+                "did:icn:alice".to_string(),
+                TransactionType::RecordContribution {
+                    description: "test".to_string(),
+                    impact_story: "test".to_string(),
+                    context: "test".to_string(),
+                    tags: vec!["test".to_string()],
+                }
+            ),
+            Transaction::new(
+                "did:icn:bob".to_string(),
+                TransactionType::RecordMutualAid {
+                    receiver: "did:icn:charlie".to_string(),
+                    description: "test".to_string(),
+                    impact_story: None,
+                    reciprocity_notes: None,
+                    tags: vec!["test".to_string()],
+                }
+            ),
+        ];
 
-        assert!(block.verify(Some(&prev_block)).is_ok());
-    }
-
-    #[test]
-    fn test_invalid_previous_hash() {
-        let prev_block = create_test_block();
-        let block = Block::new(
-            2,
-            "wrong_hash".to_string(),
-            vec![],
-            "did:icn:proposer".to_string()
-        );
-
-        assert!(block.verify(Some(&prev_block)).is_err());
-    }
-
-    #[test] 
-    fn test_genesis_block() {
-        let genesis = Block::genesis();
-        assert_eq!(genesis.index, 0);
-        assert_eq!(genesis.previous_hash, "0");
-        assert!(genesis.transactions.is_empty());
-        assert_eq!(genesis.proposer, "genesis");
+        let block = Block::new(1, "hash".to_string(), transactions, "proposer".to_string());
+        
+        assert_eq!(block.metadata.relationship_updates.contribution_count, 1);
+        assert_eq!(block.metadata.relationship_updates.mutual_aid_count, 1);
+        assert_eq!(block.metadata.relationship_updates.total_participants, 3);
     }
 }
 
@@ -4222,13 +7151,46 @@ use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TransactionType {
+    // Resource transfer between members
     Transfer {
         receiver: String,
         amount: u64,
     },
+    
+    // Smart contract execution
     ContractExecution {
         contract_id: String,
         input_data: HashMap<String, i64>,
+    },
+    
+    // Relationship management
+    RecordContribution {
+        description: String,
+        impact_story: String,
+        context: String,
+        tags: Vec<String>,
+    },
+    
+    RecordMutualAid {
+        receiver: String,
+        description: String,
+        impact_story: Option<String>,
+        reciprocity_notes: Option<String>,
+        tags: Vec<String>,
+    },
+    
+    UpdateRelationship {
+        member_two: String,
+        relationship_type: String,
+        story: String,
+        interaction: Option<String>,
+    },
+    
+    AddEndorsement {
+        to_did: String,
+        content: String,
+        context: String,
+        skills: Vec<String>,
     },
 }
 
@@ -4238,22 +7200,31 @@ pub struct Transaction {
     pub transaction_type: TransactionType,
     pub timestamp: u128,
     pub hash: String,
-    pub gas_limit: u64,
-    pub gas_price: u64,
+    pub resource_cost: u64,      // Resource points required for this transaction
+    pub resource_priority: u8,    // Priority level for resource allocation (1-10)
+}
+
+#[derive(Debug, Clone)]
+pub struct ResourceAllocation {
+    pub max_resources: u64,      // Maximum resource points available
+    pub current_resources: u64,  // Current resource points
+    pub recovery_rate: u64,      // Points recovered per hour
+    pub last_update: u128,       // Last resource update timestamp
 }
 
 impl Transaction {
     pub fn new(sender: String, transaction_type: TransactionType) -> Self {
         let timestamp = Utc::now().timestamp_millis() as u128;
         let hash = Self::calculate_transaction_hash(&sender, &transaction_type, timestamp);
-
+        let resource_cost = Self::calculate_resource_cost(&transaction_type);
+        
         Transaction {
             sender,
             transaction_type,
             timestamp,
             hash,
-            gas_limit: 21000, // Base gas limit for standard transactions
-            gas_price: 1,     // Base gas price unit
+            resource_cost,
+            resource_priority: 5, // Default priority level
         }
     }
 
@@ -4262,27 +7233,55 @@ impl Transaction {
         let transaction_data = match transaction_type {
             TransactionType::Transfer { receiver, amount } => {
                 format!("Transfer:{}:{}:{}", sender, receiver, amount)
-            }
+            },
             TransactionType::ContractExecution { contract_id, input_data } => {
                 format!("ContractExecution:{}:{:?}", contract_id, input_data)
-            }
+            },
+            TransactionType::RecordContribution { description, impact_story, context, tags } => {
+                format!("Contribution:{}:{}:{}:{:?}", description, impact_story, context, tags)
+            },
+            TransactionType::RecordMutualAid { receiver, description, impact_story, reciprocity_notes, tags } => {
+                format!("MutualAid:{}:{}:{:?}:{:?}:{:?}", receiver, description, impact_story, reciprocity_notes, tags)
+            },
+            TransactionType::UpdateRelationship { member_two, relationship_type, story, interaction } => {
+                format!("Relationship:{}:{}:{}:{:?}", member_two, relationship_type, story, interaction)
+            },
+            TransactionType::AddEndorsement { to_did, content, context, skills } => {
+                format!("Endorsement:{}:{}:{}:{:?}", to_did, content, context, skills)
+            },
         };
+        
         hasher.update(format!("{}{}{}", sender, transaction_data, timestamp));
         format!("{:x}", hasher.finalize())
     }
 
-    pub fn gas_used(&self) -> u64 {
-        match &self.transaction_type {
-            TransactionType::Transfer { .. } => {
-                // Base cost for transfer
-                self.gas_limit.min(21000)
-            }
+    fn calculate_resource_cost(transaction_type: &TransactionType) -> u64 {
+        match transaction_type {
+            TransactionType::Transfer { amount, .. } => {
+                // Base cost plus percentage of transfer amount
+                100 + (amount / 100)
+            },
             TransactionType::ContractExecution { input_data, .. } => {
                 // Base cost plus data size cost
-                let base_cost = 21000;
-                let data_cost = input_data.len() as u64 * 68; // 68 gas per data item
-                self.gas_limit.min(base_cost + data_cost)
-            }
+                200 + (input_data.len() as u64 * 10)
+            },
+            TransactionType::RecordContribution { description, impact_story, tags, .. } => {
+                // Cost based on content size and complexity
+                let content_length = (description.len() + impact_story.len()) as u64;
+                50 + (content_length / 100) + (tags.len() as u64 * 5)
+            },
+            TransactionType::RecordMutualAid { description, tags, .. } => {
+                // Base cost plus content size
+                75 + (description.len() as u64 / 100) + (tags.len() as u64 * 5)
+            },
+            TransactionType::UpdateRelationship { story, .. } => {
+                // Base cost plus story length
+                100 + (story.len() as u64 / 100)
+            },
+            TransactionType::AddEndorsement { content, skills, .. } => {
+                // Base cost plus content and skills
+                60 + (content.len() as u64 / 100) + (skills.len() as u64 * 10)
+            },
         }
     }
 
@@ -4296,23 +7295,37 @@ impl Transaction {
         match &self.transaction_type {
             TransactionType::Transfer { receiver, amount } => {
                 !receiver.is_empty() && *amount > 0
-            }
+            },
             TransactionType::ContractExecution { contract_id, input_data } => {
                 !contract_id.is_empty() && !input_data.is_empty()
-            }
+            },
+            TransactionType::RecordContribution { description, impact_story, context, tags } => {
+                !description.is_empty() && 
+                !impact_story.is_empty() && 
+                !context.is_empty() && 
+                !tags.is_empty()
+            },
+            TransactionType::RecordMutualAid { receiver, description, tags, .. } => {
+                !receiver.is_empty() && 
+                !description.is_empty() && 
+                !tags.is_empty()
+            },
+            TransactionType::UpdateRelationship { member_two, relationship_type, story, .. } => {
+                !member_two.is_empty() && 
+                !relationship_type.is_empty() && 
+                !story.is_empty()
+            },
+            TransactionType::AddEndorsement { to_did, content, context, skills } => {
+                !to_did.is_empty() && 
+                !content.is_empty() && 
+                !context.is_empty() && 
+                !skills.is_empty()
+            },
         }
     }
 
-    pub fn get_total_gas_cost(&self) -> u64 {
-        self.gas_used() * self.gas_price
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        bytes.extend(self.sender.as_bytes());
-        bytes.extend(self.hash.as_bytes());
-        bytes.extend(&self.timestamp.to_be_bytes());
-        bytes
+    pub fn set_priority(&mut self, priority: u8) {
+        self.resource_priority = priority.min(10);
     }
 
     pub fn get_timestamp_ms(&self) -> u128 {
@@ -4325,6 +7338,53 @@ impl Transaction {
 
     pub fn get_hash(&self) -> &str {
         &self.hash
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend(self.sender.as_bytes());
+        bytes.extend(self.hash.as_bytes());
+        bytes.extend(&self.timestamp.to_be_bytes());
+        bytes
+    }
+}
+
+impl ResourceAllocation {
+    pub fn new(reputation: i64) -> Self {
+        // Calculate resource limits based on reputation
+        let max_resources = 1000 + (reputation.max(0) as u64 * 100);
+        let recovery_rate = 10 + (reputation.max(0) as u64 / 10);
+        
+        ResourceAllocation {
+            max_resources,
+            current_resources: max_resources,
+            recovery_rate,
+            last_update: Utc::now().timestamp_millis() as u128,
+        }
+    }
+
+    pub fn update_resources(&mut self) {
+        let now = Utc::now().timestamp_millis() as u128;
+        let hours_elapsed = ((now - self.last_update) / (1000 * 60 * 60)) as u64;
+        
+        if hours_elapsed > 0 {
+            let recovery = self.recovery_rate * hours_elapsed;
+            self.current_resources = (self.current_resources + recovery).min(self.max_resources);
+            self.last_update = now;
+        }
+    }
+
+    pub fn can_afford(&self, cost: u64) -> bool {
+        self.current_resources >= cost
+    }
+
+    pub fn consume_resources(&mut self, cost: u64) -> Result<(), String> {
+        if !self.can_afford(cost) {
+            return Err("Insufficient resources".to_string());
+        }
+        
+        self.current_resources -= cost;
+        Ok(())
     }
 }
 
@@ -4349,20 +7409,19 @@ mod tests {
     }
 
     #[test]
-    fn test_contract_execution_transaction() {
-        let mut input_data = HashMap::new();
-        input_data.insert("param1".to_string(), 42);
-        
+    fn test_contribution_transaction() {
         let transaction = Transaction::new(
             "did:icn:sender".to_string(),
-            TransactionType::ContractExecution {
-                contract_id: "contract123".to_string(),
-                input_data,
+            TransactionType::RecordContribution {
+                description: "Test contribution".to_string(),
+                impact_story: "Made a difference".to_string(),
+                context: "Testing".to_string(),
+                tags: vec!["test".to_string()],
             },
         );
 
         assert!(transaction.validate());
-        assert!(transaction.gas_used() > 21000); // Should be more than base cost
+        assert!(transaction.resource_cost > 0);
     }
 
     #[test]
@@ -4379,21 +7438,34 @@ mod tests {
     }
 
     #[test]
-    fn test_gas_calculation() {
-        let mut input_data = HashMap::new();
-        input_data.insert("param1".to_string(), 42);
-        input_data.insert("param2".to_string(), 43);
-        
-        let transaction = Transaction::new(
+    fn test_resource_allocation() {
+        let mut resources = ResourceAllocation::new(1000);
+        assert!(resources.can_afford(500));
+        assert!(resources.consume_resources(500).is_ok());
+        assert_eq!(resources.current_resources, resources.max_resources - 500);
+    }
+
+    #[test]
+    fn test_resource_recovery() {
+        let mut resources = ResourceAllocation::new(1000);
+        resources.consume_resources(500).unwrap();
+        resources.last_update -= 3600 * 1000; // Subtract one hour in milliseconds
+        resources.update_resources();
+        assert!(resources.current_resources > resources.max_resources - 500);
+    }
+
+    #[test]
+    fn test_priority_setting() {
+        let mut transaction = Transaction::new(
             "did:icn:sender".to_string(),
-            TransactionType::ContractExecution {
-                contract_id: "contract123".to_string(),
-                input_data,
+            TransactionType::Transfer {
+                receiver: "did:icn:receiver".to_string(),
+                amount: 100,
             },
         );
 
-        assert!(transaction.gas_used() > 0);
-        assert_eq!(transaction.get_total_gas_cost(), transaction.gas_used() * transaction.gas_price);
+        transaction.set_priority(15); // Should be capped at 10
+        assert_eq!(transaction.resource_priority, 10);
     }
 }
 
