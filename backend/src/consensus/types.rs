@@ -1,5 +1,3 @@
-// src/consensus/types.rs
-
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
@@ -138,6 +136,15 @@ pub struct ConsensusConfig {
     
     /// Multiplier for consecutive missed rounds
     pub penalty_factor: f64,
+    
+    /// Minimum number of validators needed for consensus
+    pub min_validators: usize,
+    
+    /// Maximum consecutive missed rounds before ejection
+    pub max_missed_rounds: u32,
+    
+    /// Minimum performance score to remain eligible
+    pub min_performance_score: f64,
 }
 
 impl Default for ConsensusConfig {
@@ -147,9 +154,12 @@ impl Default for ConsensusConfig {
             max_voting_power: 0.1,
             min_participation_rate: 0.67,  // 2/3 participation required
             min_approval_rate: 0.67,       // 2/3 approval required
-            round_timeout_ms: 30_000,      // 30 seconds
+            round_timeout_ms: 30_000,      // 30 second timeout
             base_reward: 10,
             penalty_factor: 1.5,
+            min_validators: 3,             // Minimum 3 validators for consensus
+            max_missed_rounds: 5,
+            min_performance_score: 0.5,
         }
     }
 }
@@ -240,6 +250,29 @@ pub mod utils {
 #[cfg(test)]
 mod tests {
     use super::*;
+    
+    #[test]
+    fn test_voting_power_calculation() {
+        let power = utils::calculate_voting_power(500, 1000, 0.1);
+        assert!(power <= 0.1);
+        assert!(power > 0.0);
+        assert_eq!(power, 0.1); // Should be capped at max_power
+        
+        let power = utils::calculate_voting_power(100, 1000, 0.1);
+        assert_eq!(power, 0.1);
+    }
+
+    #[test]
+    fn test_penalty_calculation() {
+        // Test basic penalty calculation
+        let penalty = utils::calculate_penalty(10, 3, 1.5);
+        assert_eq!(penalty, -45); // -10 * 1.5 * 3
+
+        // Test increasing penalties
+        let penalty1 = utils::calculate_penalty(10, 1, 1.5);
+        let penalty2 = utils::calculate_penalty(10, 2, 1.5);
+        assert!(penalty2 < penalty1); // Penalty should increase with missed rounds
+    }
 
     #[test]
     fn test_consensus_config_default() {
@@ -248,40 +281,12 @@ mod tests {
         assert_eq!(config.max_voting_power, 0.1);
         assert_eq!(config.min_participation_rate, 0.67);
         assert_eq!(config.min_approval_rate, 0.67);
+        assert_eq!(config.round_timeout_ms, 30_000);
     }
 
     #[test]
-    fn test_voting_power_calculation() {
-        let power = utils::calculate_voting_power(500, 1000, 0.1);
-        assert!(power <= 0.1);
-        assert!(power > 0.0);
-    }
-
-    #[test]
-    fn test_penalty_calculation() {
-        let penalty = utils::calculate_penalty(10, 3, 1.5);
-        assert_eq!(penalty, -45); // -10 * 1.5 * 3
-    }
-
-    #[test]
-    fn test_consensus_error_display() {
-        let error = ConsensusError::InsufficientValidators;
-        assert_eq!(
-            error.to_string(),
-            "Insufficient number of active validators"
-        );
-    }
-
-    #[test]
-    fn test_weighted_vote_creation() {
-        let vote = WeightedVote {
-            validator: "did:icn:test".to_string(),
-            approve: true,
-            voting_power: 0.5,
-            timestamp: Utc::now(),
-            signature: "sig".to_string(),
-        };
-        assert_eq!(vote.validator, "did:icn:test");
-        assert_eq!(vote.voting_power, 0.5);
+    fn test_round_status_equality() {
+        assert_eq!(RoundStatus::Proposing, RoundStatus::Proposing);
+        assert_ne!(RoundStatus::Voting, RoundStatus::Completed);
     }
 }

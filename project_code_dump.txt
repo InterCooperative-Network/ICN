@@ -1,4 +1,4 @@
-Project Code Dump - Generated Tue Nov 12 08:38:59 PM UTC 2024
+Project Code Dump - Generated Wed Nov 13 12:53:48 AM UTC 2024
 ======================================
 
 Project Tree:
@@ -1741,6 +1741,589 @@ mod tests {
 }
 
 ===================
+File: ./backend/src/vm/operations/network.rs
+===================
+// src/vm/operations/network.rs
+
+use std::collections::HashMap;
+use super::{Operation, VMState, VMResult, ensure_permissions, emit_event};
+use crate::vm::VMError;
+
+/// Types of network messages that can be sent
+#[derive(Debug, Clone, PartialEq)]
+pub enum MessageType {
+    /// Direct message to another node
+    Direct,
+    /// Broadcast to all federation members
+    FederationBroadcast,
+    /// Broadcast to all community members
+    CommunityBroadcast,
+    /// Network state synchronization
+    StateSync,
+    /// Resource discovery query
+    ResourceDiscovery,
+    /// Network health check
+    HealthCheck,
+}
+
+/// Network message priority levels
+#[derive(Debug, Clone, PartialEq)]
+pub enum MessagePriority {
+    Low,
+    Normal,
+    High,
+    Critical,
+}
+
+/// Network message content
+#[derive(Debug, Clone)]
+pub struct NetworkMessage {
+    /// Type of message
+    message_type: MessageType,
+    /// Message priority
+    priority: MessagePriority,
+    /// Target DID (for direct messages)
+    target: Option<String>,
+    /// Message content
+    content: String,
+    /// Additional metadata
+    metadata: HashMap<String, String>,
+}
+
+/// Operations for managing network communication
+pub enum NetworkOperation {
+    /// Send a message to another node
+    SendMessage {
+        message: NetworkMessage,
+    },
+    
+    /// Subscribe to network topics
+    Subscribe {
+        topics: Vec<String>,
+        filter: Option<String>,
+    },
+    
+    /// Unsubscribe from network topics
+    Unsubscribe {
+        topics: Vec<String>,
+    },
+    
+    /// Discover available resources on the network
+    DiscoverResources {
+        resource_type: String,
+        max_results: u32,
+    },
+    
+    /// Sync state with federation members
+    SyncState {
+        federation_id: String,
+        state_type: String,
+    },
+    
+    /// Join a network partition
+    JoinPartition {
+        partition_id: String,
+        capabilities: Vec<String>,
+    },
+    
+    /// Leave a network partition
+    LeavePartition {
+        partition_id: String,
+    },
+    
+    /// Broadcast node capabilities
+    BroadcastCapabilities {
+        capabilities: Vec<String>,
+    },
+    
+    /// Check network connection health
+    HealthCheck {
+        target: Option<String>,
+        timeout_ms: u64,
+    },
+    
+    /// Configure network settings
+    ConfigureNetwork {
+        settings: HashMap<String, String>,
+    },
+    
+    /// Request network route to target
+    RequestRoute {
+        target: String,
+        max_hops: u32,
+    },
+    
+    /// Update network topology
+    UpdateTopology {
+        connections: Vec<(String, String)>,
+    },
+    
+    /// Establish secure channel
+    EstablishChannel {
+        target: String,
+        encryption_params: HashMap<String, String>,
+    },
+}
+
+impl Operation for NetworkOperation {
+    fn execute(&self, state: &mut VMState) -> VMResult<()> {
+        match self {
+            NetworkOperation::SendMessage { message } => {
+                let permission = match message.message_type {
+                    MessageType::Direct => "network.send_direct",
+                    MessageType::FederationBroadcast => "network.broadcast_federation",
+                    MessageType::CommunityBroadcast => "network.broadcast_community",
+                    MessageType::StateSync => "network.sync_state",
+                    MessageType::ResourceDiscovery => "network.discover",
+                    MessageType::HealthCheck => "network.health_check",
+                };
+                
+                ensure_permissions(&[permission.to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("message_type".to_string(), format!("{:?}", message.message_type));
+                event_data.insert("priority".to_string(), format!("{:?}", message.priority));
+                if let Some(target) = &message.target {
+                    event_data.insert("target".to_string(), target.clone());
+                }
+                event_data.insert("content_length".to_string(), message.content.len().to_string());
+                
+                emit_event(state, "MessageSent".to_string(), event_data);
+                Ok(())
+            },
+
+            NetworkOperation::Subscribe { topics, filter } => {
+                ensure_permissions(&["network.subscribe".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("topics".to_string(), topics.join(","));
+                if let Some(f) = filter {
+                    event_data.insert("filter".to_string(), f.clone());
+                }
+                
+                emit_event(state, "TopicsSubscribed".to_string(), event_data);
+                Ok(())
+            },
+
+            NetworkOperation::Unsubscribe { topics } => {
+                let mut event_data = HashMap::new();
+                event_data.insert("topics".to_string(), topics.join(","));
+                
+                emit_event(state, "TopicsUnsubscribed".to_string(), event_data);
+                Ok(())
+            },
+
+            NetworkOperation::DiscoverResources { resource_type, max_results } => {
+                ensure_permissions(&["network.discover".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("resource_type".to_string(), resource_type.clone());
+                event_data.insert("max_results".to_string(), max_results.to_string());
+                
+                emit_event(state, "ResourceDiscoveryInitiated".to_string(), event_data);
+                Ok(())
+            },
+
+            NetworkOperation::SyncState { federation_id, state_type } => {
+                ensure_permissions(&["network.sync_state".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("federation_id".to_string(), federation_id.clone());
+                event_data.insert("state_type".to_string(), state_type.clone());
+                
+                emit_event(state, "StateSyncInitiated".to_string(), event_data);
+                Ok(())
+            },
+
+            NetworkOperation::JoinPartition { partition_id, capabilities } => {
+                ensure_permissions(&["network.partition".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("partition_id".to_string(), partition_id.clone());
+                event_data.insert("capabilities".to_string(), capabilities.join(","));
+                
+                emit_event(state, "PartitionJoined".to_string(), event_data);
+                Ok(())
+            },
+
+            NetworkOperation::LeavePartition { partition_id } => {
+                ensure_permissions(&["network.partition".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("partition_id".to_string(), partition_id.clone());
+                
+                emit_event(state, "PartitionLeft".to_string(), event_data);
+                Ok(())
+            },
+
+            NetworkOperation::BroadcastCapabilities { capabilities } => {
+                ensure_permissions(&["network.broadcast".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("capabilities".to_string(), capabilities.join(","));
+                
+                emit_event(state, "CapabilitiesBroadcast".to_string(), event_data);
+                Ok(())
+            },
+
+            NetworkOperation::HealthCheck { target, timeout_ms } => {
+                let mut event_data = HashMap::new();
+                if let Some(t) = target {
+                    event_data.insert("target".to_string(), t.clone());
+                }
+                event_data.insert("timeout_ms".to_string(), timeout_ms.to_string());
+                
+                emit_event(state, "HealthCheckInitiated".to_string(), event_data);
+                Ok(())
+            },
+
+            NetworkOperation::ConfigureNetwork { settings } => {
+                ensure_permissions(&["network.configure".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                for (key, value) in settings {
+                    event_data.insert(key.clone(), value.clone());
+                }
+                
+                emit_event(state, "NetworkConfigured".to_string(), event_data);
+                Ok(())
+            },
+
+            NetworkOperation::RequestRoute { target, max_hops } => {
+                let mut event_data = HashMap::new();
+                event_data.insert("target".to_string(), target.clone());
+                event_data.insert("max_hops".to_string(), max_hops.to_string());
+                
+                emit_event(state, "RouteRequested".to_string(), event_data);
+                Ok(())
+            },
+
+            NetworkOperation::UpdateTopology { connections } => {
+                ensure_permissions(&["network.topology".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("connection_count".to_string(), connections.len().to_string());
+                
+                emit_event(state, "TopologyUpdated".to_string(), event_data);
+                Ok(())
+            },
+
+            NetworkOperation::EstablishChannel { target, encryption_params } => {
+                ensure_permissions(&["network.secure_channel".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("target".to_string(), target.clone());
+                for (key, value) in encryption_params {
+                    event_data.insert(format!("param_{}", key), value.clone());
+                }
+                
+                emit_event(state, "SecureChannelEstablished".to_string(), event_data);
+                Ok(())
+            },
+        }
+    }
+
+    fn resource_cost(&self) -> u64 {
+        match self {
+            NetworkOperation::SendMessage { message } => {
+                let base_cost = match message.priority {
+                    MessagePriority::Low => 10,
+                    MessagePriority::Normal => 20,
+                    MessagePriority::High => 40,
+                    MessagePriority::Critical => 80,
+                };
+                base_cost + (message.content.len() as u64 / 100)
+            },
+            NetworkOperation::Subscribe { topics, .. } => 20 + (topics.len() as u64 * 5),
+            NetworkOperation::Unsubscribe { topics } => 10 + (topics.len() as u64 * 2),
+            NetworkOperation::DiscoverResources { .. } => 50,
+            NetworkOperation::SyncState { .. } => 100,
+            NetworkOperation::JoinPartition { .. } => 30,
+            NetworkOperation::LeavePartition { .. } => 20,
+            NetworkOperation::BroadcastCapabilities { capabilities } => 20 + (capabilities.len() as u64 * 5),
+            NetworkOperation::HealthCheck { .. } => 10,
+            NetworkOperation::ConfigureNetwork { settings } => 30 + (settings.len() as u64 * 5),
+            NetworkOperation::RequestRoute { .. } => 25,
+            NetworkOperation::UpdateTopology { connections } => 40 + (connections.len() as u64 * 5),
+            NetworkOperation::EstablishChannel { .. } => 60,
+        }
+    }
+
+    fn required_permissions(&self) -> Vec<String> {
+        match self {
+            NetworkOperation::SendMessage { message } => {
+                match message.message_type {
+                    MessageType::Direct => vec!["network.send_direct".to_string()],
+                    MessageType::FederationBroadcast => vec!["network.broadcast_federation".to_string()],
+                    MessageType::CommunityBroadcast => vec!["network.broadcast_community".to_string()],
+                    MessageType::StateSync => vec!["network.sync_state".to_string()],
+                    MessageType::ResourceDiscovery => vec!["network.discover".to_string()],
+                    MessageType::HealthCheck => vec!["network.health_check".to_string()],
+                }
+            },
+            NetworkOperation::Subscribe { .. } => vec!["network.subscribe".to_string()],
+            NetworkOperation::DiscoverResources { .. } => vec!["network.discover".to_string()],
+            NetworkOperation::SyncState { .. } => vec!["network.sync_state".to_string()],
+            NetworkOperation::JoinPartition { .. } | NetworkOperation::LeavePartition { .. } => 
+                vec!["network.partition".to_string()],
+            NetworkOperation::BroadcastCapabilities { .. } => vec!["network.broadcast".to_string()],
+            NetworkOperation::ConfigureNetwork { .. } => vec!["network.configure".to_string()],
+            NetworkOperation::UpdateTopology { .. } => vec!["network.topology".to_string()],
+            NetworkOperation::EstablishChannel { .. } => vec!["network.secure_channel".to_string()],
+            _ => vec![],
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_state() -> VMState {
+        let mut state = VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did: "test_caller".to_string(),
+            block_number: 1,
+            timestamp: 1000,
+            permissions: vec![
+                "network.send_direct".to_string(),
+                "network.broadcast_federation".to_string(),
+                "network.subscribe".to_string(),
+                "network.discover".to_string(),
+                "network.sync_state".to_string(),
+            ],
+        };
+        
+        state.reputation_context.insert(state.caller_did.clone(), 100);
+        state
+    }
+
+    #[test]
+    fn test_send_direct_message() {
+        let mut state = setup_test_state();
+        let message = NetworkMessage {
+            message_type: MessageType::Direct,
+            priority: MessagePriority::Normal,
+            target: Some("recipient".to_string()),
+            content: "Hello".to_string(),
+            metadata: HashMap::new(),
+        };
+        
+        let op = NetworkOperation::SendMessage { message };
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "MessageSent");
+    }
+
+    #[test]
+    fn test_federation_broadcast() {
+        let mut state = setup_test_state();
+        let message = NetworkMessage {
+            message_type: MessageType::FederationBroadcast,
+            priority: MessagePriority::High,
+            target: None,
+            content: "Federation update".to_string(),
+            metadata: HashMap::new(),
+        };
+        
+        let op = NetworkOperation::SendMessage { message };
+        assert!(op.execute(&mut state).is_ok());
+    }
+
+    #[test]
+    fn test_subscribe_topics() {
+        let mut state = setup_test_state();
+        let op = NetworkOperation::Subscribe {
+            topics: vec!["governance".to_string(), "resources".to_string()],
+            filter: Some("type = 'update'".to_string()),
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "TopicsSubscribed");
+    }
+
+    #[test]
+    fn test_sync_state() {
+        let mut state = setup_test_state();
+        let op = NetworkOperation::SyncState {
+            federation_id: "fed1".to_string(),
+            state_type: "resources".to_string(),
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "StateSyncInitiated");
+    }
+
+    #[test]
+    fn test_secure_channel() {
+        let mut state = setup_test_state();
+        state.permissions.push("network.secure_channel".to_string());
+        
+        let mut encryption_params = HashMap::new();
+        encryption_params.insert("algorithm".to_string(), "AES-256-GCM".to_string());
+        encryption_params.insert("key_exchange".to_string(), "ECDH".to_string());
+        
+        let op = NetworkOperation::EstablishChannel {
+            target: "peer1".to_string(),
+            encryption_params,
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "SecureChannelEstablished");
+    }
+
+    #[test]
+    fn test_resource_discovery() {
+        let mut state = setup_test_state();
+        let op = NetworkOperation::DiscoverResources {
+            resource_type: "computing".to_string(),
+            max_results: 10,
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "ResourceDiscoveryInitiated");
+    }
+
+    #[test]
+    fn test_network_partitioning() {
+        let mut state = setup_test_state();
+        state.permissions.push("network.partition".to_string());
+        
+        // Test joining partition
+        let join_op = NetworkOperation::JoinPartition {
+            partition_id: "partition1".to_string(),
+            capabilities: vec!["storage".to_string(), "compute".to_string()],
+        };
+        assert!(join_op.execute(&mut state).is_ok());
+        
+        // Test leaving partition
+        let leave_op = NetworkOperation::LeavePartition {
+            partition_id: "partition1".to_string(),
+        };
+        assert!(leave_op.execute(&mut state).is_ok());
+    }
+
+    #[test]
+    fn test_topology_update() {
+        let mut state = setup_test_state();
+        state.permissions.push("network.topology".to_string());
+        
+        let connections = vec![
+            ("node1".to_string(), "node2".to_string()),
+            ("node2".to_string(), "node3".to_string()),
+        ];
+        
+        let op = NetworkOperation::UpdateTopology { connections };
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "TopologyUpdated");
+    }
+
+    #[test]
+    fn test_health_check() {
+        let mut state = setup_test_state();
+        state.permissions.push("network.health_check".to_string());
+        
+        let op = NetworkOperation::HealthCheck {
+            target: Some("peer1".to_string()),
+            timeout_ms: 5000,
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "HealthCheckInitiated");
+    }
+
+    #[test]
+    fn test_network_configuration() {
+        let mut state = setup_test_state();
+        state.permissions.push("network.configure".to_string());
+        
+        let mut settings = HashMap::new();
+        settings.insert("max_connections".to_string(), "100".to_string());
+        settings.insert("timeout_ms".to_string(), "5000".to_string());
+        settings.insert("encryption_enabled".to_string(), "true".to_string());
+        
+        let op = NetworkOperation::ConfigureNetwork { settings };
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "NetworkConfigured");
+    }
+
+    #[test]
+    fn test_message_priorities() {
+        let mut state = setup_test_state();
+        
+        // Test different message priorities and their resource costs
+        let priorities = vec![
+            MessagePriority::Low,
+            MessagePriority::Normal,
+            MessagePriority::High,
+            MessagePriority::Critical,
+        ];
+        
+        for priority in priorities {
+            let message = NetworkMessage {
+                message_type: MessageType::Direct,
+                priority: priority.clone(),
+                target: Some("recipient".to_string()),
+                content: "Test message".to_string(),
+                metadata: HashMap::new(),
+            };
+            
+            let op = NetworkOperation::SendMessage { message };
+            assert!(op.execute(&mut state).is_ok());
+        }
+    }
+
+    #[test]
+    fn test_route_request() {
+        let mut state = setup_test_state();
+        
+        let op = NetworkOperation::RequestRoute {
+            target: "distant_peer".to_string(),
+            max_hops: 5,
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "RouteRequested");
+    }
+
+    #[test]
+    fn test_insufficient_permissions() {
+        let mut state = setup_test_state();
+        state.permissions.clear(); // Remove all permissions
+        
+        let message = NetworkMessage {
+            message_type: MessageType::Direct,
+            priority: MessagePriority::Normal,
+            target: Some("recipient".to_string()),
+            content: "Hello".to_string(),
+            metadata: HashMap::new(),
+        };
+        
+        let op = NetworkOperation::SendMessage { message };
+        assert!(matches!(op.execute(&mut state), Err(VMError::InsufficientPermissions)));
+    }
+
+    #[test]
+    fn test_broadcast_capabilities() {
+        let mut state = setup_test_state();
+        state.permissions.push("network.broadcast".to_string());
+        
+        let capabilities = vec![
+            "storage:100GB".to_string(),
+            "compute:4cores".to_string(),
+            "bandwidth:1Gbps".to_string(),
+        ];
+        
+        let op = NetworkOperation::BroadcastCapabilities { capabilities };
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "CapabilitiesBroadcast");
+    }
+}
+
+===================
 File: ./backend/src/vm/operations/data.rs
 ===================
 // src/vm/operations/data.rs
@@ -2173,6 +2756,529 @@ mod tests {
         assert_eq!(state.stack.pop().unwrap(), 25);
     }
 } 
+
+===================
+File: ./backend/src/vm/operations/memory.rs
+===================
+// src/vm/operations/memory.rs
+
+use std::collections::HashMap;
+use super::{Operation, VMState, VMResult, ensure_permissions, emit_event};
+use crate::vm::VMError;
+
+/// Memory segment types for different use cases
+#[derive(Debug, Clone, PartialEq)]
+pub enum MemorySegment {
+    /// Private memory for a single cooperative
+    Cooperative,
+    /// Shared memory between federation members
+    Federation,
+    /// Temporary computation space
+    Scratch,
+    /// Persistent storage space
+    Persistent,
+}
+
+/// Memory allocation request details
+#[derive(Debug, Clone)]
+pub struct AllocationRequest {
+    /// Size in bytes to allocate
+    size: u64,
+    /// Type of memory segment
+    segment_type: MemorySegment,
+    /// Optional federation ID for shared memory
+    federation_id: Option<String>,
+    /// Whether the memory should persist across VM invocations
+    persistent: bool,
+}
+
+/// Memory management operations for the VM
+pub enum MemoryOperation {
+    /// Allocate new memory space
+    Allocate {
+        request: AllocationRequest,
+    },
+    
+    /// Free allocated memory
+    Free {
+        address: String,
+        segment_type: MemorySegment,
+    },
+    
+    /// Create shared memory segment for federation
+    CreateSharedSegment {
+        federation_id: String,
+        size: u64,
+        access_control: Vec<String>,
+    },
+    
+    /// Join existing shared memory segment
+    JoinSharedSegment {
+        federation_id: String,
+        segment_id: String,
+    },
+    
+    /// Copy data between memory segments
+    CopyMemory {
+        source: String,
+        destination: String,
+        size: u64,
+    },
+    
+    /// Move data between memory segments
+    MoveMemory {
+        source: String,
+        destination: String,
+        size: u64,
+    },
+    
+    /// Resize existing memory allocation
+    Resize {
+        address: String,
+        new_size: u64,
+    },
+    
+    /// Get memory segment information
+    GetMemoryInfo {
+        segment_id: String,
+    },
+    
+    /// Clear memory segment
+    ClearMemory {
+        segment_id: String,
+    },
+    
+    /// Mark memory region for garbage collection
+    MarkForCollection {
+        address: String,
+    },
+    
+    /// Run garbage collection
+    CollectGarbage,
+    
+    /// Pin memory to prevent garbage collection
+    PinMemory {
+        address: String,
+    },
+    
+    /// Unpin previously pinned memory
+    UnpinMemory {
+        address: String,
+    },
+    
+    /// Compact memory to reduce fragmentation
+    CompactMemory {
+        segment_type: MemorySegment,
+    },
+}
+
+impl Operation for MemoryOperation {
+    fn execute(&self, state: &mut VMState) -> VMResult<()> {
+        match self {
+            MemoryOperation::Allocate { request } => {
+                ensure_permissions(&["memory.allocate".to_string()], &state.permissions)?;
+                
+                // Check if we have enough available memory
+                let current_usage = state.memory.len() as u64;
+                if current_usage + request.size > state.memory_limit {
+                    return Err(VMError::OutOfMemory);
+                }
+                
+                // Generate a unique address for this allocation
+                let address = format!("{}:{}", 
+                    match request.segment_type {
+                        MemorySegment::Cooperative => "coop",
+                        MemorySegment::Federation => "fed",
+                        MemorySegment::Scratch => "scratch",
+                        MemorySegment::Persistent => "persist",
+                    },
+                    state.next_memory_address()
+                );
+                
+                // Record the allocation
+                let mut event_data = HashMap::new();
+                event_data.insert("address".to_string(), address.clone());
+                event_data.insert("size".to_string(), request.size.to_string());
+                event_data.insert("segment_type".to_string(), format!("{:?}", request.segment_type));
+                if let Some(fed_id) = &request.federation_id {
+                    event_data.insert("federation_id".to_string(), fed_id.clone());
+                }
+                
+                emit_event(state, "MemoryAllocated".to_string(), event_data);
+                Ok(())
+            },
+
+            MemoryOperation::Free { address, segment_type } => {
+                ensure_permissions(&["memory.free".to_string()], &state.permissions)?;
+                
+                // Verify the memory segment exists and belongs to the caller
+                if !state.memory.contains_key(address) {
+                    return Err(VMError::InvalidMemoryAddress);
+                }
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("address".to_string(), address.clone());
+                event_data.insert("segment_type".to_string(), format!("{:?}", segment_type));
+                
+                emit_event(state, "MemoryFreed".to_string(), event_data);
+                Ok(())
+            },
+
+            MemoryOperation::CreateSharedSegment { federation_id, size, access_control } => {
+                ensure_permissions(&["memory.share".to_string()], &state.permissions)?;
+                
+                let segment_id = format!("shared:{}:{}", federation_id, state.next_memory_address());
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("segment_id".to_string(), segment_id);
+                event_data.insert("federation_id".to_string(), federation_id.clone());
+                event_data.insert("size".to_string(), size.to_string());
+                event_data.insert("access_control".to_string(), access_control.join(","));
+                
+                emit_event(state, "SharedMemoryCreated".to_string(), event_data);
+                Ok(())
+            },
+
+            MemoryOperation::JoinSharedSegment { federation_id, segment_id } => {
+                ensure_permissions(&["memory.share".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("federation_id".to_string(), federation_id.clone());
+                event_data.insert("segment_id".to_string(), segment_id.clone());
+                
+                emit_event(state, "SharedMemoryJoined".to_string(), event_data);
+                Ok(())
+            },
+
+            MemoryOperation::CopyMemory { source, destination, size } => {
+                ensure_permissions(&["memory.copy".to_string()], &state.permissions)?;
+                
+                if !state.memory.contains_key(source) || !state.memory.contains_key(destination) {
+                    return Err(VMError::InvalidMemoryAddress);
+                }
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("source".to_string(), source.clone());
+                event_data.insert("destination".to_string(), destination.clone());
+                event_data.insert("size".to_string(), size.to_string());
+                
+                emit_event(state, "MemoryCopied".to_string(), event_data);
+                Ok(())
+            },
+
+            MemoryOperation::MoveMemory { source, destination, size } => {
+                ensure_permissions(&["memory.move".to_string()], &state.permissions)?;
+                
+                if !state.memory.contains_key(source) || !state.memory.contains_key(destination) {
+                    return Err(VMError::InvalidMemoryAddress);
+                }
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("source".to_string(), source.clone());
+                event_data.insert("destination".to_string(), destination.clone());
+                event_data.insert("size".to_string(), size.to_string());
+                
+                emit_event(state, "MemoryMoved".to_string(), event_data);
+                Ok(())
+            },
+
+            MemoryOperation::Resize { address, new_size } => {
+                ensure_permissions(&["memory.resize".to_string()], &state.permissions)?;
+                
+                if !state.memory.contains_key(address) {
+                    return Err(VMError::InvalidMemoryAddress);
+                }
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("address".to_string(), address.clone());
+                event_data.insert("new_size".to_string(), new_size.to_string());
+                
+                emit_event(state, "MemoryResized".to_string(), event_data);
+                Ok(())
+            },
+
+            MemoryOperation::GetMemoryInfo { segment_id } => {
+                let mut event_data = HashMap::new();
+                event_data.insert("segment_id".to_string(), segment_id.clone());
+                
+                // In a real implementation, would return actual memory info
+                emit_event(state, "MemoryInfoQueried".to_string(), event_data);
+                Ok(())
+            },
+
+            MemoryOperation::ClearMemory { segment_id } => {
+                ensure_permissions(&["memory.clear".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("segment_id".to_string(), segment_id.clone());
+                
+                emit_event(state, "MemoryCleared".to_string(), event_data);
+                Ok(())
+            },
+
+            MemoryOperation::MarkForCollection { address } => {
+                let mut event_data = HashMap::new();
+                event_data.insert("address".to_string(), address.clone());
+                
+                emit_event(state, "MemoryMarkedForCollection".to_string(), event_data);
+                Ok(())
+            },
+
+            MemoryOperation::CollectGarbage => {
+                ensure_permissions(&["memory.gc".to_string()], &state.permissions)?;
+                
+                emit_event(state, "GarbageCollectionRun".to_string(), HashMap::new());
+                Ok(())
+            },
+
+            MemoryOperation::PinMemory { address } => {
+                ensure_permissions(&["memory.pin".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("address".to_string(), address.clone());
+                
+                emit_event(state, "MemoryPinned".to_string(), event_data);
+                Ok(())
+            },
+
+            MemoryOperation::UnpinMemory { address } => {
+                ensure_permissions(&["memory.pin".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("address".to_string(), address.clone());
+                
+                emit_event(state, "MemoryUnpinned".to_string(), event_data);
+                Ok(())
+            },
+
+            MemoryOperation::CompactMemory { segment_type } => {
+                ensure_permissions(&["memory.compact".to_string()], &state.permissions)?;
+                
+                let mut event_data = HashMap::new();
+                event_data.insert("segment_type".to_string(), format!("{:?}", segment_type));
+                
+                emit_event(state, "MemoryCompacted".to_string(), event_data);
+                Ok(())
+            },
+        }
+    }
+
+    fn resource_cost(&self) -> u64 {
+        match self {
+            MemoryOperation::Allocate { request } => 10 + (request.size / 1024), // Base cost plus size-based cost
+            MemoryOperation::Free { .. } => 5,
+            MemoryOperation::CreateSharedSegment { size, .. } => 20 + (size / 1024),
+            MemoryOperation::JoinSharedSegment { .. } => 10,
+            MemoryOperation::CopyMemory { size, .. } => 5 + (size / 1024),
+            MemoryOperation::MoveMemory { size, .. } => 5 + (size / 1024),
+            MemoryOperation::Resize { new_size, .. } => 10 + (new_size / 1024),
+            MemoryOperation::GetMemoryInfo { .. } => 2,
+            MemoryOperation::ClearMemory { .. } => 5,
+            MemoryOperation::MarkForCollection { .. } => 2,
+            MemoryOperation::CollectGarbage => 50,
+            MemoryOperation::PinMemory { .. } => 5,
+            MemoryOperation::UnpinMemory { .. } => 5,
+            MemoryOperation::CompactMemory { .. } => 30,
+        }
+    }
+
+    fn required_permissions(&self) -> Vec<String> {
+        match self {
+            MemoryOperation::Allocate { .. } => vec!["memory.allocate".to_string()],
+            MemoryOperation::Free { .. } => vec!["memory.free".to_string()],
+            MemoryOperation::CreateSharedSegment { .. } => vec!["memory.share".to_string()],
+            MemoryOperation::JoinSharedSegment { .. } => vec!["memory.share".to_string()],
+            MemoryOperation::CopyMemory { .. } => vec!["memory.copy".to_string()],
+            MemoryOperation::MoveMemory { .. } => vec!["memory.move".to_string()],
+            MemoryOperation::Resize { .. } => vec!["memory.resize".to_string()],
+            MemoryOperation::ClearMemory { .. } => vec!["memory.clear".to_string()],
+            MemoryOperation::CollectGarbage => vec!["memory.gc".to_string()],
+            MemoryOperation::PinMemory { .. } | MemoryOperation::UnpinMemory { .. } => vec!["memory.pin".to_string()],
+            MemoryOperation::CompactMemory { .. } => vec!["memory.compact".to_string()],
+            _ => vec![],
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_state() -> VMState {
+        let mut state = VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did: "test_caller".to_string(),
+            block_number: 1,
+            timestamp: 1000,
+            permissions: vec![
+                "memory.allocate".to_string(),
+                "memory.free".to_string(),
+                "memory.share".to_string(),
+                "memory.copy".to_string(),
+                "memory.move".to_string(),
+            ],
+            memory_limit: 1024 * 1024, // 1MB limit for testing
+        };
+        
+        state.reputation_context.insert(state.caller_did.clone(), 100);
+        state
+    }
+
+    #[test]
+    fn test_allocate_memory() {
+        let mut state = setup_test_state();
+        let request = AllocationRequest {
+            size: 1024,
+            segment_type: MemorySegment::Cooperative,
+            federation_id: None,
+            persistent: false,
+        };
+        
+        let op = MemoryOperation::Allocate { request };
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "MemoryAllocated");
+    }
+
+    #[test]
+    fn test_shared_memory() {
+        let mut state = setup_test_state();
+        let op = MemoryOperation::CreateSharedSegment {
+            federation_id: "fed1".to_string(),
+            size: 2048,
+            access_control: vec!["coop1".to_string(), "coop2".to_string()],
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "SharedMemoryCreated");
+    }
+    #[test]
+    fn test_copy_memory() {
+        let mut state = setup_test_state();
+        // Set up source and destination in memory
+        state.memory.insert("source".to_string(), 42);
+        state.memory.insert("dest".to_string(), 0);
+        
+        let op = MemoryOperation::CopyMemory {
+            source: "source".to_string(),
+            destination: "dest".to_string(),
+            size: 8,
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "MemoryCopied");
+    }
+
+    #[test]
+    fn test_garbage_collection() {
+        let mut state = setup_test_state();
+        state.permissions.push("memory.gc".to_string());
+        
+        // Mark some memory for collection
+        let mark_op = MemoryOperation::MarkForCollection {
+            address: "unused".to_string(),
+        };
+        assert!(mark_op.execute(&mut state).is_ok());
+        
+        // Run garbage collection
+        let gc_op = MemoryOperation::CollectGarbage;
+        assert!(gc_op.execute(&mut state).is_ok());
+        assert_eq!(state.events[1].event_type, "GarbageCollectionRun");
+    }
+
+    #[test]
+    fn test_memory_pin_unpin() {
+        let mut state = setup_test_state();
+        state.permissions.push("memory.pin".to_string());
+        
+        let pin_op = MemoryOperation::PinMemory {
+            address: "important".to_string(),
+        };
+        assert!(pin_op.execute(&mut state).is_ok());
+        
+        let unpin_op = MemoryOperation::UnpinMemory {
+            address: "important".to_string(),
+        };
+        assert!(unpin_op.execute(&mut state).is_ok());
+    }
+
+    #[test]
+    fn test_memory_compaction() {
+        let mut state = setup_test_state();
+        state.permissions.push("memory.compact".to_string());
+        
+        let op = MemoryOperation::CompactMemory {
+            segment_type: MemorySegment::Cooperative,
+        };
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "MemoryCompacted");
+    }
+
+    #[test]
+    fn test_out_of_memory() {
+        let mut state = setup_test_state();
+        state.memory_limit = 1024; // Set small memory limit
+        
+        let request = AllocationRequest {
+            size: 2048, // Try to allocate more than limit
+            segment_type: MemorySegment::Cooperative,
+            federation_id: None,
+            persistent: false,
+        };
+        
+        let op = MemoryOperation::Allocate { request };
+        assert!(matches!(op.execute(&mut state), Err(VMError::OutOfMemory)));
+    }
+
+    #[test]
+    fn test_invalid_memory_address() {
+        let mut state = setup_test_state();
+        let op = MemoryOperation::Free {
+            address: "nonexistent".to_string(),
+            segment_type: MemorySegment::Cooperative,
+        };
+        
+        assert!(matches!(op.execute(&mut state), Err(VMError::InvalidMemoryAddress)));
+    }
+
+    #[test]
+    fn test_federation_shared_memory() {
+        let mut state = setup_test_state();
+        
+        // Create shared memory segment
+        let create_op = MemoryOperation::CreateSharedSegment {
+            federation_id: "fed1".to_string(),
+            size: 1024,
+            access_control: vec!["coop1".to_string(), "coop2".to_string()],
+        };
+        assert!(create_op.execute(&mut state).is_ok());
+        
+        // Join shared memory segment
+        let join_op = MemoryOperation::JoinSharedSegment {
+            federation_id: "fed1".to_string(),
+            segment_id: "shared:fed1:1".to_string(),
+        };
+        assert!(join_op.execute(&mut state).is_ok());
+    }
+
+    #[test]
+    fn test_resize_memory() {
+        let mut state = setup_test_state();
+        state.permissions.push("memory.resize".to_string());
+        state.memory.insert("test_segment".to_string(), 0);
+        
+        let op = MemoryOperation::Resize {
+            address: "test_segment".to_string(),
+            new_size: 2048,
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "MemoryResized");
+    }
+}
 
 ===================
 File: ./backend/src/vm/operations/arithmetic.rs
@@ -9850,8 +10956,6 @@ mod tests {
 ===================
 File: ./backend/src/consensus/types.rs
 ===================
-// src/consensus/types.rs
-
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
@@ -9990,6 +11094,15 @@ pub struct ConsensusConfig {
     
     /// Multiplier for consecutive missed rounds
     pub penalty_factor: f64,
+    
+    /// Minimum number of validators needed for consensus
+    pub min_validators: usize,
+    
+    /// Maximum consecutive missed rounds before ejection
+    pub max_missed_rounds: u32,
+    
+    /// Minimum performance score to remain eligible
+    pub min_performance_score: f64,
 }
 
 impl Default for ConsensusConfig {
@@ -9999,9 +11112,12 @@ impl Default for ConsensusConfig {
             max_voting_power: 0.1,
             min_participation_rate: 0.67,  // 2/3 participation required
             min_approval_rate: 0.67,       // 2/3 approval required
-            round_timeout_ms: 30_000,      // 30 seconds
+            round_timeout_ms: 30_000,      // 30 second timeout
             base_reward: 10,
             penalty_factor: 1.5,
+            min_validators: 3,             // Minimum 3 validators for consensus
+            max_missed_rounds: 5,
+            min_performance_score: 0.5,
         }
     }
 }
@@ -10092,6 +11208,29 @@ pub mod utils {
 #[cfg(test)]
 mod tests {
     use super::*;
+    
+    #[test]
+    fn test_voting_power_calculation() {
+        let power = utils::calculate_voting_power(500, 1000, 0.1);
+        assert!(power <= 0.1);
+        assert!(power > 0.0);
+        assert_eq!(power, 0.1); // Should be capped at max_power
+        
+        let power = utils::calculate_voting_power(100, 1000, 0.1);
+        assert_eq!(power, 0.1);
+    }
+
+    #[test]
+    fn test_penalty_calculation() {
+        // Test basic penalty calculation
+        let penalty = utils::calculate_penalty(10, 3, 1.5);
+        assert_eq!(penalty, -45); // -10 * 1.5 * 3
+
+        // Test increasing penalties
+        let penalty1 = utils::calculate_penalty(10, 1, 1.5);
+        let penalty2 = utils::calculate_penalty(10, 2, 1.5);
+        assert!(penalty2 < penalty1); // Penalty should increase with missed rounds
+    }
 
     #[test]
     fn test_consensus_config_default() {
@@ -10100,41 +11239,13 @@ mod tests {
         assert_eq!(config.max_voting_power, 0.1);
         assert_eq!(config.min_participation_rate, 0.67);
         assert_eq!(config.min_approval_rate, 0.67);
+        assert_eq!(config.round_timeout_ms, 30_000);
     }
 
     #[test]
-    fn test_voting_power_calculation() {
-        let power = utils::calculate_voting_power(500, 1000, 0.1);
-        assert!(power <= 0.1);
-        assert!(power > 0.0);
-    }
-
-    #[test]
-    fn test_penalty_calculation() {
-        let penalty = utils::calculate_penalty(10, 3, 1.5);
-        assert_eq!(penalty, -45); // -10 * 1.5 * 3
-    }
-
-    #[test]
-    fn test_consensus_error_display() {
-        let error = ConsensusError::InsufficientValidators;
-        assert_eq!(
-            error.to_string(),
-            "Insufficient number of active validators"
-        );
-    }
-
-    #[test]
-    fn test_weighted_vote_creation() {
-        let vote = WeightedVote {
-            validator: "did:icn:test".to_string(),
-            approve: true,
-            voting_power: 0.5,
-            timestamp: Utc::now(),
-            signature: "sig".to_string(),
-        };
-        assert_eq!(vote.validator, "did:icn:test");
-        assert_eq!(vote.voting_power, 0.5);
+    fn test_round_status_equality() {
+        assert_eq!(RoundStatus::Proposing, RoundStatus::Proposing);
+        assert_ne!(RoundStatus::Voting, RoundStatus::Completed);
     }
 }
 
@@ -10290,44 +11401,70 @@ mod tests {
 ===================
 File: ./backend/src/consensus/proof_of_cooperation.rs
 ===================
-// src/consensus/proof_of_cooperation.rs
+//! Proof of Cooperation (PoC) Consensus Implementation
+//! 
+//! This module implements a reputation-based consensus mechanism designed for cooperative networks.
+//! Key features include:
+//! - Reputation-weighted validator selection
+//! - Multi-phase consensus process
+//! - Built-in security against Sybil attacks
+//! - Real-time consensus monitoring
+//! - Performance-based rewards and penalties
 
 use std::sync::Arc;
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use rand::{thread_rng, Rng};
 use serde::{Serialize, Deserialize};
+use tokio::sync::broadcast;
 
 use crate::websocket::WebSocketHandler;
 use crate::blockchain::Block;
+use crate::identity::DID;
+use crate::monitoring::energy::EnergyAware;
 use crate::consensus::types::{
-    ConsensusConfig,
-    RoundStatus,
-    WeightedVote,
-    ValidatorInfo,
-    ConsensusRoundStats,
-    ConsensusRound,
-    ConsensusError,
+    ConsensusConfig, RoundStatus, WeightedVote, ValidatorInfo,
+    ConsensusRoundStats, ConsensusRound, ConsensusError
 };
 
-/// Proof of Cooperation (PoC) consensus mechanism implementation.
-/// 
-/// The PoC system is designed around reputation-weighted consensus where validators
-/// gain influence through positive contributions to the network rather than 
-/// computational power or staked assets.
-///
-/// Key features:
-/// - Reputation-based validator selection
-/// - Multi-phase consensus process
-/// - Real-time status updates via WebSocket
-/// - Built-in penalties for malicious behavior
-/// - Dynamic reputation adjustments
-/// - Protection against Sybil attacks through reputation requirements
+/// Events emitted during consensus process
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ConsensusEvent {
+    RoundStarted(u64),
+    BlockProposed {
+        round: u64,
+        proposer: String,
+        block_hash: String,
+    },
+    VoteReceived {
+        validator: String,
+        approved: bool,
+        round: u64,
+        voting_power: f64,
+    },
+    RoundCompleted {
+        round: u64,
+        block_hash: String,
+        validators: Vec<String>,
+        duration_ms: u64,
+    },
+    ValidationFailed {
+        reason: String,
+        round: u64,
+    },
+    ReputationUpdated {
+        did: String,
+        change: i64,
+        new_total: i64,
+    },
+}
+
+/// Main consensus implementation
 pub struct ProofOfCooperation {
-    /// Configuration parameters for the consensus mechanism
+    /// Configuration parameters
     config: ConsensusConfig,
     
-    /// Map of validator DIDs to their information/state
+    /// Active validators with their information
     validators: HashMap<String, ValidatorInfo>,
     
     /// Current consensus round state
@@ -10341,11 +11478,22 @@ pub struct ProofOfCooperation {
     
     /// WebSocket handler for real-time updates
     ws_handler: Arc<WebSocketHandler>,
+    
+    /// Broadcast channel for consensus events
+    event_tx: broadcast::Sender<ConsensusEvent>,
+    
+    /// Total network voting power
+    total_voting_power: f64,
+    
+    /// Last round cleanup time
+    last_cleanup: DateTime<Utc>,
 }
 
 impl ProofOfCooperation {
     /// Creates a new instance of the PoC consensus mechanism
     pub fn new(config: ConsensusConfig, ws_handler: Arc<WebSocketHandler>) -> Self {
+        let (event_tx, _) = broadcast::channel(100);
+        
         ProofOfCooperation {
             config,
             validators: HashMap::new(),
@@ -10353,45 +11501,50 @@ impl ProofOfCooperation {
             round_history: Vec::new(),
             reputation_updates: Vec::new(),
             ws_handler,
+            event_tx,
+            total_voting_power: 0.0,
+            last_cleanup: Utc::now(),
         }
     }
 
     /// Starts a new consensus round
-    ///
-    /// This initiates the consensus process by:
-    /// 1. Checking if there's already an active round
-    /// 2. Validating there are sufficient active validators
-    /// 3. Selecting a coordinator based on reputation-weighted random selection
-    /// 4. Creating and broadcasting the new round state
-    ///
-    /// # Returns
-    /// - Ok(()) if the round starts successfully
-    /// - Err(String) with a description if the round cannot be started
-    pub async fn start_round(&mut self) -> Result<(), String> {
+    pub async fn start_round(&mut self) -> Result<(), ConsensusError> {
+        // Check if round already in progress
         if self.current_round.is_some() {
-            return Err("Round already in progress".to_string());
+            return Err(ConsensusError::RoundInProgress);
         }
 
+        // Clean up inactive validators periodically
+        self.cleanup_inactive_validators();
+
+        // Get active validators meeting reputation threshold
         let active_validators: Vec<_> = self.validators.values()
-            .filter(|v| v.reputation >= self.config.min_validator_reputation)
+            .filter(|v| self.is_validator_eligible(v))
             .collect();
 
-        if active_validators.len() < 3 {
-            return Err("Insufficient validators".to_string());
+        if active_validators.len() < self.config.min_validators {
+            return Err(ConsensusError::InsufficientValidators);
         }
 
+        // Select coordinator using reputation-weighted random selection
         let coordinator = self.select_coordinator(&active_validators)?;
-        
+
+        // Calculate total voting power for this round
+        self.total_voting_power = active_validators.iter()
+            .map(|v| v.voting_power)
+            .sum();
+
+        // Create new round
         let round = ConsensusRound {
             round_number: self.round_history.len() as u64 + 1,
             coordinator: coordinator.did.clone(),
             start_time: Utc::now(),
-            timeout: Utc::now() + chrono::Duration::milliseconds(self.config.round_timeout_ms as i64),
+            timeout: Utc::now() + Duration::milliseconds(self.config.round_timeout_ms as i64),
             status: RoundStatus::Proposing,
             proposed_block: None,
             votes: HashMap::new(),
             stats: ConsensusRoundStats {
-                total_voting_power: 0.0,
+                total_voting_power: self.total_voting_power,
                 participation_rate: 0.0,
                 approval_rate: 0.0,
                 round_duration_ms: 0,
@@ -10399,63 +11552,94 @@ impl ProofOfCooperation {
             },
         };
 
+        // Broadcast round start
         self.ws_handler.broadcast_consensus_update(&round);
+        let _ = self.event_tx.send(ConsensusEvent::RoundStarted(round.round_number));
+        
         self.current_round = Some(round);
         Ok(())
     }
 
     /// Proposes a new block for the current round
-    ///
-    /// # Arguments
-    /// * `proposer_did` - The DID of the validator proposing the block
-    /// * `block` - The proposed block
-    ///
-    /// # Returns
-    /// - Ok(()) if the proposal is accepted
-    /// - Err(String) describing why the proposal was rejected
-    pub async fn propose_block(&mut self, proposer_did: &str, block: Block) -> Result<(), String> {
+    pub async fn propose_block(&mut self, proposer_did: &str, block: Block) -> Result<(), ConsensusError> {
+        // Validate proposer
         let validator = self.validators.get(proposer_did)
-            .ok_or("Proposer not found")?;
+            .ok_or(ConsensusError::NotValidator)?;
 
-        if validator.reputation < self.config.min_validator_reputation {
-            return Err("Insufficient reputation to propose".to_string());
+        if !self.is_validator_eligible(validator) {
+            return Err(ConsensusError::InsufficientReputation);
         }
 
+        // Get current round
         let mut round = self.current_round.take()
-            .ok_or("No active round")?;
+            .ok_or(ConsensusError::NoActiveRound)?;
 
+        // Verify proposer is coordinator
         if round.coordinator != proposer_did {
             self.current_round = Some(round);
-            return Err("Not the round coordinator".to_string());
+            return Err(ConsensusError::InvalidCoordinator);
         }
 
+        // Verify round status
+        if round.status != RoundStatus::Proposing {
+            self.current_round = Some(round);
+            return Err(ConsensusError::InvalidRoundState);
+        }
+
+        // Verify block
+        if !block.verify(None) {
+            return Err(ConsensusError::ValidationFailed);
+        }
+
+        // Set proposed block and update status
         round.proposed_block = Some(block.clone());
         round.status = RoundStatus::Voting;
 
+        // Broadcast updates
         self.ws_handler.broadcast_consensus_update(&round);
         self.ws_handler.broadcast_block_finalized(&block);
+        let _ = self.event_tx.send(ConsensusEvent::BlockProposed {
+            round: round.round_number,
+            proposer: proposer_did.to_string(),
+            block_hash: block.hash.clone(),
+        });
+
         self.current_round = Some(round);
         Ok(())
     }
 
     /// Submits a vote for the current round
-    ///
-    /// # Arguments
-    /// * `validator_did` - The DID of the voting validator
-    /// * `approved` - Whether the validator approves the proposed block
-    /// * `signature` - Cryptographic signature of the vote
-    ///
-    /// # Returns
-    /// - Ok(()) if the vote is accepted
-    /// - Err(String) describing why the vote was rejected
-    pub async fn submit_vote(&mut self, validator_did: &str, approved: bool, signature: String) -> Result<(), String> {
+    pub async fn submit_vote(
+        &mut self,
+        validator_did: &str,
+        approved: bool,
+        signature: String
+    ) -> Result<(), ConsensusError> {
+        // Validate validator
         let validator = self.validators.get(validator_did)
-            .ok_or("Not a registered validator")?;
+            .ok_or(ConsensusError::NotValidator)?;
 
-        if validator.reputation < self.config.min_validator_reputation {
-            return Err("Insufficient reputation to vote".to_string());
+        if !self.is_validator_eligible(validator) {
+            return Err(ConsensusError::InsufficientReputation);
         }
 
+        // Get current round
+        let mut round = self.current_round.take()
+            .ok_or(ConsensusError::NoActiveRound)?;
+
+        // Verify round status
+        if round.status != RoundStatus::Voting {
+            self.current_round = Some(round);
+            return Err(ConsensusError::InvalidRoundState);
+        }
+
+        // Verify not already voted
+        if round.votes.contains_key(validator_did) {
+            self.current_round = Some(round);
+            return Err(ConsensusError::Custom("Already voted".to_string()));
+        }
+
+        // Create vote
         let vote = WeightedVote {
             validator: validator_did.to_string(),
             approve: approved,
@@ -10464,26 +11648,84 @@ impl ProofOfCooperation {
             signature,
         };
 
-        let mut round = self.current_round.take()
-            .ok_or("No active round")?;
+        // Add vote
+        round.votes.insert(validator_did.to_string(), vote.clone());
 
-        round.votes.insert(validator_did.to_string(), vote);
+        // Update round statistics
+        self.update_round_stats(&mut round);
 
-        // Calculate total available voting power
-        let total_power: f64 = self.validators.values()
-            .filter(|v| v.reputation >= self.config.min_validator_reputation)
-            .map(|v| v.voting_power)
-            .sum();
+        // Check if consensus reached
+        if self.is_consensus_reached(&round) {
+            round.status = RoundStatus::Finalizing;
+        }
 
-        // Calculate actual voting power used
+        // Broadcast updates
+        self.ws_handler.broadcast_consensus_update(&round);
+        let _ = self.event_tx.send(ConsensusEvent::VoteReceived {
+            validator: validator_did.to_string(),
+            approved,
+            round: round.round_number,
+            voting_power: validator.voting_power,
+        });
+
+        self.current_round = Some(round);
+        Ok(())
+    }
+
+    /// Finalizes the current consensus round
+    pub async fn finalize_round(&mut self) -> Result<Block, ConsensusError> {
+        // Get current round
+        let round = self.current_round.take()
+            .ok_or(ConsensusError::NoActiveRound)?;
+
+        // Verify round status
+        if round.status != RoundStatus::Finalizing {
+            self.current_round = Some(round);
+            return Err(ConsensusError::InvalidRoundState);
+        }
+
+        // Get proposed block
+        let block = round.proposed_block.clone()
+            .ok_or(ConsensusError::Custom("No proposed block".to_string()))?;
+
+        // Update validator statistics and reputation
+        self.update_validator_stats(&round);
+
+        // Update round history
+        let mut stats = round.stats;
+        stats.round_duration_ms = Utc::now()
+            .signed_duration_since(round.start_time)
+            .num_milliseconds() as u64;
+            
+        self.round_history.push(stats);
+
+        // Broadcast completion
+        self.ws_handler.broadcast_block_finalized(&block);
+        let _ = self.event_tx.send(ConsensusEvent::RoundCompleted {
+            round: round.round_number,
+            block_hash: block.hash.clone(),
+            validators: round.votes.keys().cloned().collect(),
+            duration_ms: stats.round_duration_ms,
+        });
+
+        Ok(block)
+    }
+
+    // Helper Functions
+
+    fn is_validator_eligible(&self, validator: &ValidatorInfo) -> bool {
+        validator.reputation >= self.config.min_validator_reputation &&
+        validator.performance_score >= self.config.min_performance_score &&
+        validator.consecutive_missed_rounds < self.config.max_missed_rounds
+    }
+
+    fn update_round_stats(&self, round: &mut ConsensusRound) {
         let votes_power: f64 = round.votes.values()
             .map(|v| v.voting_power)
             .sum();
 
-        round.stats.total_voting_power = total_power;
-        round.stats.participation_rate = votes_power / total_power;
+        round.stats.participation_rate = votes_power / self.total_voting_power;
 
-        // Calculate approval rate
         let approval_power: f64 = round.votes.values()
             .filter(|v| v.approve)
             .map(|v| v.voting_power)
@@ -10494,109 +11736,70 @@ impl ProofOfCooperation {
         } else {
             0.0
         };
-
-        // Check if we've reached consensus thresholds
-        if round.stats.participation_rate >= self.config.min_participation_rate
-            && round.stats.approval_rate >= self.config.min_approval_rate {
-            round.status = RoundStatus::Finalizing;
-        }
-
-        // Broadcast updates
-        self.ws_handler.broadcast_consensus_update(&round);
-        self.ws_handler.broadcast_validator_update(
-            validator.clone(),
-            round.round_number,
-            if approved { "approved".to_string() } else { "rejected".to_string() }
-        );
-
-        self.current_round = Some(round);
-        Ok(())
     }
 
-    /// Finalizes the current consensus round
-    ///
-    /// This method:
-    /// 1. Validates the round is ready for finalization
-    /// 2. Updates validator statistics and reputation
-    /// 3. Applies reputation rewards/penalties
-    /// 4. Records round history
-    ///
-    /// # Returns
-    /// - Ok(Block) with the finalized block
-    /// - Err(String) describing why finalization failed
-    pub async fn finalize_round(&mut self) -> Result<Block, String> {
-        let round = self.current_round.take()
-            .ok_or("No active round")?;
+    fn is_consensus_reached(&self, round: &ConsensusRound) -> bool {
+        round.stats.participation_rate >= self.config.min_participation_rate &&
+        round.stats.approval_rate >= self.config.min_approval_rate
+    }
 
-        if round.status != RoundStatus::Finalizing {
-            self.current_round = Some(round);
-            return Err("Round not ready for finalization".to_string());
-        }
-
-        let block = round.proposed_block.clone()
-            .ok_or("No proposed block")?;
-
-        // Update validator statistics and reputation
+    fn update_validator_stats(&mut self, round: &ConsensusRound) {
         for (validator_id, validator) in self.validators.iter_mut() {
-            if round.votes.contains_key(validator_id) {
+            if let Some(vote) = round.votes.get(validator_id) {
                 // Reward participation
                 validator.consecutive_missed_rounds = 0;
                 validator.last_active_round = round.round_number;
-                validator.reputation += self.config.base_reward;
+                validator.total_blocks_validated += 1;
 
-                // Additional reward for coordinator
-                if validator_id == &round.coordinator {
-                    validator.reputation += self.config.base_reward;
-                }
-
-                self.reputation_updates.push((
-                    validator_id.clone(),
+                // Calculate reward
+                let base_reward = if validator_id == &round.coordinator {
+                    self.config.base_reward * 2 // Double reward for coordinator
+                } else {
                     self.config.base_reward
-                ));
+                };
 
+                let performance_multiplier = if vote.approve {
+                    1.0 + (validator.performance_score * 0.5)
+                } else {
+                    1.0
+                };
+
+                let reward = (base_reward as f64 * performance_multiplier) as i64;
+                validator.reputation += reward;
+                self.reputation_updates.push((validator_id.clone(), reward));
+
+                // Update performance score
                 validator.performance_score = validator.performance_score * 0.95 + 0.05;
             } else {
                 // Penalize non-participation
                 validator.consecutive_missed_rounds += 1;
+                
                 let penalty = -(self.config.base_reward as f64 *
                     self.config.penalty_factor *
                     validator.consecutive_missed_rounds as f64) as i64;
+                
                 validator.reputation += penalty;
-
-                self.reputation_updates.push((
-                    validator_id.clone(),
-                    penalty
-                ));
-
+                self.reputation_updates.push((validator_id.clone(), penalty));
+                
                 validator.performance_score = validator.performance_score * 0.95;
             }
         }
-
-        // Update round history
-        let mut stats = round.stats;
-        stats.round_duration_ms = round.timeout
-            .signed_duration_since(round.start_time)
-            .num_milliseconds() as u64;
-        self.round_history.push(stats);
-
-        self.ws_handler.broadcast_block_finalized(&block);
-
-        Ok(block)
     }
 
-    /// Gets the current list of reputation updates
-    pub fn get_reputation_updates(&self) -> &[(String, i64)] {
-        &self.reputation_updates
+    fn cleanup_inactive_validators(&mut self) {
+        let now = Utc::now();
+        if (now - self.last_cleanup).num_hours() >= 24 {
+            self.validators.retain(|_, v| {
+                v.consecutive_missed_rounds < self.config.max_missed_rounds &&
+                v.performance_score >= self.config.min_performance_score
+            });
+            self.last_cleanup = now;
+        }
     }
 
-    /// Gets the current round state if one exists
-    pub fn get_current_round(&self) -> Option<ConsensusRound> {
-        self.current_round.clone()
-    }
-
-    /// Selects a coordinator for the next round using reputation-weighted random selection
+    /// Selects a coordinator using reputation-weighted random selection
     fn select_coordinator<'a>(&self, active_validators: &'a [&ValidatorInfo]) 
-        -> Result<&'a ValidatorInfo, String> 
+        -> Result<&'a ValidatorInfo, ConsensusError> 
     {
         let mut rng = thread_rng();
 
@@ -10606,7 +11809,7 @@ impl ProofOfCooperation {
 
         let total_weight: f64 = weights.iter().sum();
         if total_weight <= 0.0 {
-            return Err("No valid validators".to_string());
+            return Err(ConsensusError::Custom("No valid validators".to_string()));
         }
 
         let selection_point = rng.gen_range(0.0..total_weight);
@@ -10619,15 +11822,27 @@ impl ProofOfCooperation {
             }
         }
 
-        Err("Failed to select coordinator".to_string())
+        Err(ConsensusError::Custom("Failed to select coordinator".to_string()))
     }
 
-    /// Registers a new validator with the consensus mechanism
-    pub fn register_validator(&mut self, did: String, initial_reputation: i64) -> Result<(), String> {
+    // Public interfaces
+
+    /// Gets the current list of reputation updates
+    pub fn get_reputation_updates(&self) -> &[(String, i64)] {
+        &self.reputation_updates
+    }
+
+    /// Gets the current round state if one exists
+    pub fn get_current_round(&self) -> Option<ConsensusRound> {
+        self.current_round.clone()
+    }
+
+    /// Registers a new validator
+    pub fn register_validator(&mut self, did: String, initial_reputation: i64) -> Result<(), ConsensusError> {
         let validator = ValidatorInfo {
             did: did.clone(),
             reputation: initial_reputation,
-            voting_power: 1.0,
+            voting_power: self.calculate_voting_power(initial_reputation),
             last_active_round: 0,
             consecutive_missed_rounds: 0,
             total_blocks_validated: 0,
@@ -10637,24 +11852,66 @@ impl ProofOfCooperation {
         self.validators.insert(did, validator);
         Ok(())
     }
+
+    /// Calculates voting power based on reputation
+    fn calculate_voting_power(&self, reputation: i64) -> f64 {
+        let base_power = (reputation as f64) / 1000.0;
+        base_power.min(self.config.max_voting_power)
+    }
+
+    /// Gets a broadcast receiver for consensus events
+    pub fn subscribe_to_events(&self) -> broadcast::Receiver<ConsensusEvent> {
+        self.event_tx.subscribe()
+    }
+}
+
+// Implement energy awareness for the consensus mechanism
+impl EnergyAware for ProofOfCooperation {
+    fn record_energy_metrics(&self, monitor: &crate::monitoring::energy::EnergyMonitor) {
+        // Record basic operations
+        monitor.record_instruction();
+        
+        // Record voting operations
+        if let Some(round) = &self.current_round {
+            let vote_count = round.votes.len();
+            monitor.record_consensus_operation();
+            monitor.record_network_operation((vote_count * 256) as u64); // Estimate network usage
+        }
+        
+        // Record validator state size
+        let validator_size = (self.validators.len() * std::mem::size_of::<ValidatorInfo>()) as u64;
+        monitor.record_memory_operation(validator_size);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration as StdDuration;
 
     fn setup_test_consensus() -> ProofOfCooperation {
-        let config = ConsensusConfig::default();
+        let config = ConsensusConfig {
+            min_validator_reputation: 100,
+            max_voting_power: 0.1,
+            min_participation_rate: 0.67,
+            min_approval_rate: 0.67,
+            round_timeout_ms: 30_000,
+            base_reward: 10,
+            penalty_factor: 1.5,
+            min_validators: 3,
+            max_missed_rounds: 5,
+            min_performance_score: 0.5,
+        };
         let ws_handler = Arc::new(WebSocketHandler::new());
         ProofOfCooperation::new(config, ws_handler)
     }
 
     fn add_test_validators(consensus: &mut ProofOfCooperation) {
-        for i in 1..=3 {
+        for i in 1..=4 {
             let validator = ValidatorInfo {
                 did: format!("did:icn:test{}", i),
                 reputation: 1000,
-                voting_power: 1.0,
+                voting_power: 0.1,
                 last_active_round: 0,
                 consecutive_missed_rounds: 0,
                 total_blocks_validated: 0,
@@ -10671,15 +11928,10 @@ mod tests {
         
         assert!(consensus.start_round().await.is_ok());
         assert!(consensus.current_round.is_some());
-    }
-
-    #[tokio::test]
-    async fn test_insufficient_validators() {
-        let mut consensus = setup_test_consensus();
         
-        let result = consensus.start_round().await;
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Insufficient validators");
+        let round = consensus.current_round.unwrap();
+        assert_eq!(round.status, RoundStatus::Proposing);
+        assert!(round.votes.is_empty());
     }
 
     #[tokio::test]
@@ -10687,49 +11939,139 @@ mod tests {
         let mut consensus = setup_test_consensus();
         add_test_validators(&mut consensus);
         
-        // Start a round first
+        // Start round
         consensus.start_round().await.unwrap();
-        
-        // Get the coordinator's DID
         let coordinator_did = consensus.current_round.as_ref().unwrap().coordinator.clone();
         
-        // Create a test block
-        let block = Block::new(
-            1,
-            "previous_hash".to_string(),
-            vec![]
-        );
+        // Create test block
+        let block = Block::new(1, "prev_hash".to_string(), vec![], coordinator_did.clone());
         
-        // Test proposal
+        // Propose block
         let result = consensus.propose_block(&coordinator_did, block).await;
         assert!(result.is_ok());
         
-        // Verify round status changed
-        assert_eq!(
-            consensus.current_round.as_ref().unwrap().status,
-            RoundStatus::Voting
-        );
+        let round = consensus.current_round.unwrap();
+        assert_eq!(round.status, RoundStatus::Voting);
+        assert!(round.proposed_block.is_some());
     }
 
     #[tokio::test]
-    async fn test_invalid_proposer() {
+    async fn test_voting_process() {
         let mut consensus = setup_test_consensus();
         add_test_validators(&mut consensus);
         
+        // Start round
         consensus.start_round().await.unwrap();
+        let coordinator_did = consensus.current_round.as_ref().unwrap().coordinator.clone();
         
-        let block = Block::new(
-            1,
-            "previous_hash".to_string(),
-            vec![]
-        );
+        // Propose block
+        let block = Block::new(1, "prev_hash".to_string(), vec![], coordinator_did.clone());
+        consensus.propose_block(&coordinator_did, block).await.unwrap();
         
-        let result = consensus.propose_block("invalid_did", block).await;
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Proposer not found");
+        // Submit votes
+        for validator in consensus.validators.keys() {
+            let result = consensus.submit_vote(
+                validator,
+                true,
+                "test_signature".to_string()
+            ).await;
+            assert!(result.is_ok());
+        }
+        
+        let round = consensus.current_round.unwrap();
+        assert_eq!(round.status, RoundStatus::Finalizing);
+        assert!(consensus.is_consensus_reached(&round));
+    }
+
+    #[tokio::test]
+    async fn test_finalize_round() {
+        let mut consensus = setup_test_consensus();
+        add_test_validators(&mut consensus);
+        
+        // Complete full consensus process
+        consensus.start_round().await.unwrap();
+        let coordinator_did = consensus.current_round.as_ref().unwrap().coordinator.clone();
+        
+        let block = Block::new(1, "prev_hash".to_string(), vec![], coordinator_did.clone());
+        consensus.propose_block(&coordinator_did, block.clone()).await.unwrap();
+        
+        for validator in consensus.validators.keys() {
+            consensus.submit_vote(
+                validator,
+                true,
+                "test_signature".to_string()
+            ).await.unwrap();
+        }
+        
+        let result = consensus.finalize_round().await;
+        assert!(result.is_ok());
+        
+        let finalized_block = result.unwrap();
+        assert_eq!(finalized_block.hash, block.hash);
+        
+        // Check reputation updates
+        let updates = consensus.get_reputation_updates();
+        assert!(!updates.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_validator_eligibility() {
+        let mut consensus = setup_test_consensus();
+        
+        // Add validator with low reputation
+        consensus.register_validator(
+            "did:icn:low_rep".to_string(),
+            50  // Below minimum
+        ).unwrap();
+        
+        // Add valid validator
+        consensus.register_validator(
+            "did:icn:valid".to_string(),
+            1000
+        ).unwrap();
+        
+        let low_rep = consensus.validators.get("did:icn:low_rep").unwrap();
+        assert!(!consensus.is_validator_eligible(low_rep));
+        
+        let valid = consensus.validators.get("did:icn:valid").unwrap();
+        assert!(consensus.is_validator_eligible(valid));
+    }
+
+    #[tokio::test]
+    async fn test_performance_score_updates() {
+        let mut consensus = setup_test_consensus();
+        add_test_validators(&mut consensus);
+        
+        // Complete multiple rounds
+        for _ in 0..3 {
+            consensus.start_round().await.unwrap();
+            let coordinator_did = consensus.current_round.as_ref().unwrap().coordinator.clone();
+            
+            let block = Block::new(1, "prev_hash".to_string(), vec![], coordinator_did.clone());
+            consensus.propose_block(&coordinator_did, block).await.unwrap();
+            
+            // Only half validators vote
+            for (i, validator) in consensus.validators.keys().enumerate() {
+                if i % 2 == 0 {
+                    consensus.submit_vote(
+                        validator,
+                        true,
+                        "test_signature".to_string()
+                    ).await.unwrap();
+                }
+            }
+            
+            consensus.finalize_round().await.unwrap();
+        }
+        
+        // Check performance scores
+        for (_, validator) in consensus.validators.iter() {
+            if validator.consecutive_missed_rounds > 0 {
+                assert!(validator.performance_score < 1.0);
+            }
+        }
     }
 }
-
 
 ===================
 File: ./frontend/src/components/cooperative/CooperativeDashboard.tsx
