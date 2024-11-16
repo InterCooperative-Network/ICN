@@ -7,10 +7,10 @@ use crate::consensus::ProofOfCooperation;
 use crate::consensus::types::ConsensusRound;
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
-use crate::vm::{VM, Contract, ExecutionContext};
+use crate::vm::{VM, Contract, ExecutionContext, Event};
 use crate::blockchain::{Block, Transaction};
 use crate::blockchain::transaction::{TransactionType, ResourceAllocation};
-use crate::vm::operations::relationship::RelationshipSystem;
+use crate::relationship::RelationshipSystem;
 
 pub struct Blockchain {
     pub chain: Vec<Block>,
@@ -46,9 +46,16 @@ impl Blockchain {
         }
     }
 
-    pub fn create_contract(&mut self, contract: Contract) {
-        let mut vm = self.vm.lock().unwrap();
+    pub fn create_contract(&mut self, contract: Contract) -> Result<(), String> {
+        let reputation_context = {
+            let reputation_system = self.reputation_system.lock()
+                .map_err(|_| "Failed to acquire reputation lock".to_string())?;
+            reputation_system.get_reputation_context()
+        };
+        
+        let mut vm = VM::new(1000, reputation_context);
         vm.create_contract(contract);
+        Ok(())
     }
 
     pub async fn process_transaction(&mut self, transaction: &Transaction) -> Result<(), String> {
@@ -108,7 +115,7 @@ impl Blockchain {
 
                 match vm.execute_contract(&contract) {
                     Ok(_) => {
-                        self.handle_vm_events(&vm.get_events());
+                        self.handle_vm_events(vm.get_events());
                         let mut reputation_system = self.reputation_system.lock()
                             .map_err(|_| "Failed to acquire reputation lock".to_string())?;
                         reputation_system.update_reputations(&vm.get_reputation_context());
@@ -159,11 +166,11 @@ impl Blockchain {
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
                 relationship_system.update_relationship(
-                    transaction.sender.clone(),
-                    member_two.clone(),
-                    relationship_type.clone(),
-                    story.clone(),
-                    interaction.clone(),
+                    &transaction.sender,
+                    member_two,
+                    relationship_type,
+                    story,
+                    interaction,
                 )?;
 
                 resource_allocation.consume_resources(transaction.resource_cost)?;
@@ -176,11 +183,11 @@ impl Blockchain {
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
                 relationship_system.add_endorsement(
-                    transaction.sender.clone(),
-                    to_did.clone(),
-                    content.clone(),
-                    context.clone(),
-                    skills.clone(),
+                    &transaction.sender,
+                    to_did,
+                    content,
+                    context,
+                    skills,
                 )?;
 
                 resource_allocation.consume_resources(transaction.resource_cost)?;
@@ -229,9 +236,9 @@ impl Blockchain {
         Ok(())
     }
 
-    fn get_contract(&self, contract_id: &str) -> Result<&Contract, String> {
-        self.contracts.get(contract_id)
-            .ok_or_else(|| format!("Contract {} not found", contract_id))
+    fn get_contract(&self, contract_id: &str) -> Result<Contract, String> {
+        // In a real implementation, this would fetch the contract from storage
+        Err("Contract not found".to_string())
     }
 
     fn handle_vm_events(&self, events: &[Event]) {
