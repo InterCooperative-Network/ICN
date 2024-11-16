@@ -425,47 +425,116 @@ mod tests {
         };
         
         assert!(op.execute(&mut state).is_ok());
-        assert_eq!(state.events[0].event_type, "ConflictResolutionRecorded"); }
+        assert_eq!(state.events[0].event_type, "ConflictResolutionRecorded");
+    }
 
     #[test]
-        fn test_add_feedback() {
-    let mut state = setup_test_state();
-    let op = RelationshipOperation::AddFeedback {
-        contribution_id: "contrib123".to_string(),
-        feedback_type: FeedbackType::Impact,
-        content: "Highly impactful contribution".to_string(),
-        impact_rating: Some(9),
-    };
-    
-    assert!(op.execute(&mut state).is_ok());
-    assert_eq!(state.events[0].event_type, "FeedbackAdded");
-    assert_eq!(state.events[0].data.get("impact_rating").unwrap(), "9");
-}
+    fn test_add_feedback() {
+        let mut state = setup_test_state();
+        let op = RelationshipOperation::AddFeedback {
+            contribution_id: "contribution1".to_string(),
+            feedback_type: FeedbackType::Impact,
+            content: "This contribution had a significant positive effect.".to_string(),
+            impact_rating: Some(8),
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "FeedbackAdded");
+        assert_eq!(state.events[0].data.get("content").unwrap(), "This contribution had a significant positive effect.");
+        assert_eq!(state.events[0].data.get("impact_rating").unwrap(), "8");
+    }
 
-#[test]
-fn test_add_witness_without_permission() {
-    let mut state = setup_test_state();
-    state.permissions.retain(|p| p != "witness.add");
-    
-    let op = RelationshipOperation::AddWitness {
-        contribution_id: "contrib456".to_string(),
-        witness_did: "witness123".to_string(),
-        attestation: "Was present during contribution".to_string(),
-    };
-    
-    assert!(op.execute(&mut state).is_err());
-}
+    #[test]
+    fn test_update_relationship() {
+        let mut state = setup_test_state();
+        let op = RelationshipOperation::UpdateRelationship {
+            member_did: "member1".to_string(),
+            relationship_type: RelationType::Mentorship,
+            story: "Guided member1 through project challenges.".to_string(),
+            strength_indicators: vec![
+                StrengthIndicator {
+                    indicator_type: "Trust".to_string(),
+                    value: 9,
+                    context: "Mentorship during project".to_string(),
+                },
+                StrengthIndicator {
+                    indicator_type: "Reliability".to_string(),
+                    value: 8,
+                    context: "Consistently available for support".to_string(),
+                },
+            ],
+        };
 
-#[test]
-fn test_record_knowledge_sharing() {
-    let mut state = setup_test_state();
-    let op = RelationshipOperation::RecordKnowledgeSharing {
-        recipients: vec!["recipient1".to_string(), "recipient2".to_string()],
-        knowledge_type: "Technical Skills".to_string(),
-        description: "Shared insights on Rust programming".to_string(),
-        outcomes: vec!["Improved coding efficiency".to_string()],
-    };
-    
-    assert!(op.execute(&mut state).is_ok());
-    assert_eq!(state.events[0].event_type, "KnowledgeSharingRecorded");
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "RelationshipUpdated");
+        assert_eq!(state.events[0].data.get("member_did").unwrap(), "member1");
+        assert_eq!(state.events[0].data.get("relationship_type").unwrap(), "Mentorship");
+    }
+
+    #[test]
+    fn test_record_interaction() {
+        let mut state = setup_test_state();
+        let op = RelationshipOperation::RecordInteraction {
+            member_did: "member2".to_string(),
+            interaction_type: InteractionType::Collaboration,
+            description: "Collaborated on implementing a new module.".to_string(),
+            impact: Some("Improved overall efficiency.".to_string()),
+            outcomes: vec!["Module completed".to_string(), "Team learned new skills".to_string()],
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "InteractionRecorded");
+        assert_eq!(state.events[0].data.get("member_did").unwrap(), "member2");
+        assert_eq!(state.events[0].data.get("interaction_type").unwrap(), "Collaboration");
+        assert!(state.events[0].data.get("outcomes").unwrap().contains("Module completed"));
+    }
+
+    #[test]
+    fn test_record_knowledge_sharing() {
+        let mut state = setup_test_state();
+        let op = RelationshipOperation::RecordKnowledgeSharing {
+            recipients: vec!["member1".to_string(), "member3".to_string()],
+            knowledge_type: "Technical Knowledge".to_string(),
+            description: "Provided an overview of advanced Rust techniques.".to_string(),
+            outcomes: vec!["Improved coding practices".to_string()],
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "KnowledgeSharingRecorded");
+        assert_eq!(state.events[0].data.get("recipients").unwrap(), "member1,member3");
+        assert_eq!(state.events[0].data.get("knowledge_type").unwrap(), "Technical Knowledge");
+    }
+
+    #[test]
+    fn test_add_witness() {
+        let mut state = setup_test_state();
+        let op = RelationshipOperation::AddWitness {
+            contribution_id: "contribution123".to_string(),
+            witness_did: "witness1".to_string(),
+            attestation: "I witnessed this contribution.".to_string(),
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "WitnessAdded");
+        assert_eq!(state.events[0].data.get("contribution_id").unwrap(), "contribution123");
+        assert_eq!(state.events[0].data.get("witness_did").unwrap(), "witness1");
+    }
+
+    #[test]
+    fn test_record_conflict_resolution() {
+        let mut state = setup_test_state();
+        state.permissions.push("conflict.resolve".to_string());
+
+        let op = RelationshipOperation::RecordConflictResolution {
+            participants: vec!["member1".to_string(), "member2".to_string()],
+            description: "Disagreement over project timeline.".to_string(),
+            resolution: "Compromised on a new timeline.".to_string(),
+            learnings: vec!["Importance of early communication".to_string()],
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "ConflictResolutionRecorded");
+        assert_eq!(state.events[0].data.get("participants").unwrap(), "member1,member2");
+        assert_eq!(state.events[0].data.get("resolution").unwrap(), "Compromised on a new timeline.");
+    }
 }

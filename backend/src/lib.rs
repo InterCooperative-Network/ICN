@@ -9,17 +9,21 @@ pub mod vm;
 pub mod websocket;
 pub mod consensus;
 pub mod network;
+pub mod monitoring; // Add monitoring module
+pub mod relationship; // Add relationship module
 
 pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
 pub use identity::IdentitySystem;
 pub use reputation::ReputationSystem;
 pub use governance::Proposal;
-pub use consensus::types::ConsensusRound;
 pub use consensus::{ProofOfCooperation, types::ConsensusConfig};
+pub use consensus::types::ConsensusRound;
 pub use vm::{VM, Contract, ExecutionContext};
 pub use vm::opcode::OpCode;
 pub use vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
 pub use websocket::WebSocketHandler;
+pub use monitoring::energy::{EnergyAware, EnergyMonitor}; // Export energy monitoring types
+pub use relationship::{Contribution, MutualAidInteraction}; // Export relationship types
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
