@@ -2,21 +2,19 @@
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
-use chrono::Utc;
 
 use crate::consensus::ProofOfCooperation;
 use crate::consensus::types::ConsensusRound;
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
-use crate::relationship::RelationshipSystem;
 use crate::vm::{VM, Contract, ExecutionContext};
-use crate::vm::event::Event;
-use crate::blockchain::{Block, Transaction, TransactionType, ResourceAllocation};
+use crate::blockchain::{Block, Transaction};
+use crate::blockchain::transaction::{TransactionType, ResourceAllocation};
+use crate::vm::operations::relationship::RelationshipSystem;
 
 pub struct Blockchain {
     pub chain: Vec<Block>,
     pub pending_transactions: Vec<Transaction>,
-    pub contracts: HashMap<String, Contract>,
     pub consensus: Arc<Mutex<ProofOfCooperation>>,
     pub identity_system: Arc<Mutex<IdentitySystem>>,
     pub reputation_system: Arc<Mutex<ReputationSystem>>,
@@ -38,7 +36,6 @@ impl Blockchain {
         Blockchain {
             chain: vec![Block::genesis()],
             pending_transactions: vec![],
-            contracts: HashMap::new(),
             consensus,
             identity_system,
             reputation_system,
@@ -50,7 +47,8 @@ impl Blockchain {
     }
 
     pub fn create_contract(&mut self, contract: Contract) {
-        self.contracts.insert(contract.id.clone(), contract);
+        let mut vm = self.vm.lock().unwrap();
+        vm.create_contract(contract);
     }
 
     pub async fn process_transaction(&mut self, transaction: &Transaction) -> Result<(), String> {
@@ -108,7 +106,7 @@ impl Blockchain {
                 vm.set_execution_context(execution_context);
                 resource_allocation.consume_resources(transaction.resource_cost)?;
 
-                match vm.execute_contract(contract) {
+                match vm.execute_contract(&contract) {
                     Ok(_) => {
                         self.handle_vm_events(&vm.get_events());
                         let mut reputation_system = self.reputation_system.lock()
@@ -340,7 +338,7 @@ impl Blockchain {
     pub fn get_current_round(&self) -> Option<ConsensusRound> {
         self.consensus.try_lock()
             .ok()
-            .and_then(|consensus| consensus.get_current_round().map(|round| round.clone()))
+            .and_then(|consensus| consensus.get_current_round().cloned())
     }
 }
 
@@ -362,9 +360,9 @@ mod tests {
         )));
 
         let blockchain = Blockchain::new(
-            identity_system,
-            reputation_system,
-            relationship_system,
+            identity_system.clone(),
+            reputation_system.clone(),
+            relationship_system.clone(),
             consensus,
         );
 
@@ -373,6 +371,4 @@ mod tests {
         assert_eq!(blockchain.pending_transactions.len(), 0);
         assert_eq!(blockchain.coordinator_did, "did:icn:genesis");
     }
-
-    // Add more tests as needed...
 }
