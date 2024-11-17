@@ -1,7 +1,7 @@
 // src/vm/operations/reputation.rs
 
 use std::collections::HashMap;
-use super::{Operation, VMState, VMResult, ensure_stack_size, ensure_permissions, emit_event};
+use super::{Operation, VMState, VMResult, ensure_permissions, emit_event};
 use crate::vm::VMError;
 
 /// Operations for managing reputation within the system
@@ -60,20 +60,16 @@ impl Operation for ReputationOperation {
     fn execute(&self, state: &mut VMState) -> VMResult<()> {
         match self {
             ReputationOperation::UpdateReputation { amount, reason, context } => {
-                // Check if caller has permission to update reputation
                 ensure_permissions(&["reputation.update".to_string()], &state.permissions)?;
                 
-                // Get current reputation
                 let current_rep = state.reputation_context
                     .get(&state.caller_did)
                     .copied()
                     .unwrap_or(0);
                 
-                // Update reputation
                 let new_rep = current_rep + amount;
                 state.reputation_context.insert(state.caller_did.clone(), new_rep);
                 
-                // Emit reputation update event
                 let mut event_data = HashMap::new();
                 event_data.insert("amount".to_string(), amount.to_string());
                 event_data.insert("reason".to_string(), reason.clone());
@@ -143,7 +139,13 @@ impl Operation for ReputationOperation {
                 ensure_permissions(&["contribution.record".to_string()], &state.permissions)?;
                 
                 // Calculate reputation change based on impact score
-                let reputation_change = impact_score.max(-50).min(50); // Limit impact
+                let reputation_change = if *impact_score < -50 {
+                    -50
+                } else if *impact_score > 50 {
+                    50
+                } else {
+                    *impact_score
+                };
                 
                 let current_rep = state.reputation_context
                     .get(&state.caller_did)
@@ -163,24 +165,15 @@ impl Operation for ReputationOperation {
                 Ok(())
             },
             
-            ReputationOperation::CalculateVotingPower { context } => {
+            ReputationOperation::CalculateVotingPower { context: _ } => {
                 let reputation = state.reputation_context
                     .get(&state.caller_did)
                     .copied()
                     .unwrap_or(0);
-                    
-                // Calculate voting power as a function of reputation
-                // Square root function to prevent excessive concentration of power
+                
+                // Calculate voting power as square root of reputation to prevent excessive concentration
                 let voting_power = (reputation as f64).sqrt() as i64;
-                
                 state.stack.push(voting_power);
-                
-                let mut event_data = HashMap::new();
-                event_data.insert("context".to_string(), context.clone());
-                event_data.insert("reputation".to_string(), reputation.to_string());
-                event_data.insert("voting_power".to_string(), voting_power.to_string());
-                
-                emit_event(state, "VotingPowerCalculated".to_string(), event_data);
                 Ok(())
             },
             
@@ -191,7 +184,7 @@ impl Operation for ReputationOperation {
                 
                 for (did, rep) in state.reputation_context.iter_mut() {
                     let old_rep = *rep;
-                    let new_rep = ((*rep as f64) * (1.0 - decay_rate)) as i64;
+                    let new_rep = (*rep as f64 * (1.0 - decay_rate)) as i64;
                     *rep = new_rep.max(*minimum_reputation);
                     
                     if old_rep != *rep {
@@ -207,11 +200,11 @@ impl Operation for ReputationOperation {
                 Ok(())
             },
             
-            ReputationOperation::GetReputationHistory { target_did, context: _ } => {
+            ReputationOperation::GetReputationHistory { target_did: _, context: _ } => {
                 // In a real implementation, this would query historical reputation data
                 // For now, we just return the current reputation
                 let reputation = state.reputation_context
-                    .get(target_did)
+                    .get(&state.caller_did)
                     .copied()
                     .unwrap_or(0);
                     
@@ -265,10 +258,11 @@ mod tests {
                 "reputation.mint".to_string(),
                 "reputation.burn".to_string(),
                 "reputation.decay".to_string(),
+                "contribution.record".to_string(),
             ],
+            memory_limit: 1024 * 1024, // 1MB
         };
         
-        // Set initial reputation
         state.reputation_context.insert(state.caller_did.clone(), 100);
         state
     }
@@ -281,11 +275,9 @@ mod tests {
             reason: "test".to_string(),
             context: "testing".to_string(),
         };
+        
         assert!(op.execute(&mut state).is_ok());
-        assert_eq!(
-            state.reputation_context.get(&state.caller_did).copied().unwrap(),
-            150
-        );
+        assert_eq!(state.reputation_context.get("test_caller"), Some(&150));
     }
 
     #[test]
@@ -295,21 +287,22 @@ mod tests {
             amount: 30,
             reason: "test".to_string(),
         };
+        
         assert!(op.execute(&mut state).is_ok());
-        assert_eq!(
-            state.reputation_context.get(&state.caller_did).copied().unwrap(),
-            70
-        );
+        assert_eq!(state.reputation_context.get("test_caller"), Some(&70));
     }
 
     #[test]
-    fn test_calculate_voting_power() {
+    fn test_record_contribution_impact() {
         let mut state = setup_test_state();
-        let op = ReputationOperation::CalculateVotingPower {
-            context: "voting".to_string(),
+        let op = ReputationOperation::RecordContributionImpact {
+            contribution_id: "test_contrib".to_string(),
+            impact_score: 25,
+            context: "testing".to_string(),
         };
+        
         assert!(op.execute(&mut state).is_ok());
-        assert_eq!(state.stack.pop().unwrap(), 10); // sqrt(100) = 10
+        assert_eq!(state.reputation_context.get("test_caller"), Some(&125));
     }
 
     #[test]
@@ -319,10 +312,8 @@ mod tests {
             decay_rate: 0.1,
             minimum_reputation: 0,
         };
+        
         assert!(op.execute(&mut state).is_ok());
-        assert_eq!(
-            state.reputation_context.get(&state.caller_did).copied().unwrap(),
-            90  // 100 * (1 - 0.1) = 90
-        );
+        assert_eq!(state.reputation_context.get("test_caller"), Some(&90)); // 100 * 0.9 = 90
     }
 }

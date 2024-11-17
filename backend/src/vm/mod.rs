@@ -1,4 +1,4 @@
-// src/vm/mod.rs
+// src/vm/mod.rs 
 
 pub mod opcode;
 pub mod contract;
@@ -29,6 +29,8 @@ pub enum VMError {
     InsufficientReputation,
     InvalidOperand,
     ExecutionLimitExceeded,
+    OutOfMemory,
+    InvalidMemoryAddress,
     Custom(String),
 }
 
@@ -44,6 +46,8 @@ impl std::fmt::Display for VMError {
             VMError::InsufficientReputation => write!(f, "Insufficient reputation"),
             VMError::InvalidOperand => write!(f, "Invalid operand"),
             VMError::ExecutionLimitExceeded => write!(f, "Execution limit exceeded"),
+            VMError::OutOfMemory => write!(f, "Out of memory"),
+            VMError::InvalidMemoryAddress => write!(f, "Invalid memory address"),
             VMError::Custom(msg) => write!(f, "{}", msg),
         }
     }

@@ -7,6 +7,10 @@ mod governance;
 mod reputation;
 mod relationship;
 mod system;
+mod data;
+mod memory;
+mod network;
+mod federation;
 
 pub use stack::StackOperation;
 pub use arithmetic::ArithmeticOperation;
@@ -15,6 +19,10 @@ pub use governance::GovernanceOperation;
 pub use reputation::ReputationOperation;
 pub use relationship::RelationshipOperation;
 pub use system::SystemOperation;
+pub use data::DataOperation;
+pub use memory::MemoryOperation;
+pub use network::NetworkOperation;
+pub use federation::FederationOperation;
 
 use std::collections::HashMap;
 use crate::vm::{VMError, VMResult, Event};
@@ -41,6 +49,8 @@ pub struct VMState {
     pub caller_did: String,
     pub block_number: u64,
     pub timestamp: u64,
+    pub permissions: Vec<String>,           // Added permissions field 
+    pub memory_limit: u64,                  // Added memory limit field
 }
 
 /// Result type for operation execution
