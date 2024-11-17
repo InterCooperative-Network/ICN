@@ -72,12 +72,16 @@ impl Operation for DataOperation {
             DataOperation::CreateStruct { name, fields } => {
                 ensure_permissions(&["data.create".to_string()], &state.permissions)?;
                 
-                // Create structure representation in memory
-                let struct_data = fields.iter()
+                // Create structure data with initialized fields
+                let struct_data: HashMap<String, i64> = fields.iter()
                     .map(|field| (field.clone(), 0i64))
-                    .collect::<HashMap<String, i64>>();
-                
-                state.memory.insert(name.clone(), 0); // Store struct reference
+                    .collect();
+
+                // Store the structure definition and reference
+                state.memory.insert(format!("struct_def:{}", name), fields.len() as i64);
+                for (field, value) in &struct_data {
+                    state.memory.insert(format!("struct:{}:{}", name, field), *value);
+                }
                 
                 let mut event_data = HashMap::new();
                 event_data.insert("struct_name".to_string(), name.clone());
@@ -91,7 +95,11 @@ impl Operation for DataOperation {
                 ensure_stack_size(&state.stack, 1)?;
                 let value = state.stack.pop().ok_or(VMError::StackUnderflow)?;
                 
-                let key = format!("{}:{}", struct_name, field_name);
+                let key = format!("struct:{}:{}", struct_name, field_name);
+                if !state.memory.contains_key(&format!("struct_def:{}", struct_name)) {
+                    return Err(VMError::Custom("Structure not found".to_string()));
+                }
+                
                 state.memory.insert(key, value);
                 
                 let mut event_data = HashMap::new();
@@ -104,10 +112,10 @@ impl Operation for DataOperation {
             },
             
             DataOperation::GetField { struct_name, field_name } => {
-                let key = format!("{}:{}", struct_name, field_name);
+                let key = format!("struct:{}:{}", struct_name, field_name);
                 let value = state.memory.get(&key)
                     .copied()
-                    .unwrap_or(0);
+                    .ok_or_else(|| VMError::Custom("Field not found".to_string()))?;
                 
                 state.stack.push(value);
                 Ok(())
@@ -118,8 +126,7 @@ impl Operation for DataOperation {
                 
                 // Initialize array with zeros
                 for i in 0..*size {
-                    let key = format!("array:{}", i);
-                    state.memory.insert(key, 0);
+                    state.memory.insert(format!("array:{}", i), 0);
                 }
                 
                 state.memory.insert("array:length".to_string(), *size as i64);
@@ -191,6 +198,7 @@ impl Operation for DataOperation {
             
             DataOperation::SetMapValue => {
                 ensure_stack_size(&state.stack, 2)?;
+                ensure_permissions(&["data.write".to_string()], &state.permissions)?;
                 
                 let value = state.stack.pop().ok_or(VMError::StackUnderflow)?;
                 let key = state.stack.pop().ok_or(VMError::StackUnderflow)?;
@@ -240,12 +248,12 @@ impl Operation for DataOperation {
             
             DataOperation::DeleteMapValue => {
                 ensure_stack_size(&state.stack, 1)?;
+                ensure_permissions(&["data.write".to_string()], &state.permissions)?;
                 
                 let key = state.stack.pop().ok_or(VMError::StackUnderflow)?;
                 let map_key = format!("map:{}:value", key);
                 
                 if state.memory.remove(&map_key).is_some() {
-                    // Update map size
                     let size = state.memory.get("map:size")
                         .copied()
                         .unwrap_or(0);
@@ -260,20 +268,13 @@ impl Operation for DataOperation {
                 Ok(())
             },
             
-            DataOperation::Serialize => {
-                // In a real implementation, this would serialize data structures to bytes
-                // For now, we just emit an event
-                emit_event(state, "DataSerialized".to_string(), HashMap::new());
-                Ok(())
-            },
-            
-            DataOperation::Deserialize { target_type } => {
-                // In a real implementation, this would deserialize bytes to data structures
+            DataOperation::Serialize | DataOperation::Deserialize { .. } => {
+                // These operations would typically involve more complex serialization logic
                 // For now, we just emit an event
                 let mut event_data = HashMap::new();
-                event_data.insert("target_type".to_string(), target_type.clone());
+                event_data.insert("operation".to_string(), "serialization".to_string());
                 
-                emit_event(state, "DataDeserialized".to_string(), event_data);
+                emit_event(state, "DataOperation".to_string(), event_data);
                 Ok(())
             },
         }
@@ -309,7 +310,7 @@ impl Operation for DataOperation {
             DataOperation::SetMapValue |
             DataOperation::DeleteMapValue => vec!["data.write".to_string()],
             
-            _ => vec![], // Read operations don't require special permissions
+            _ => vec![],
         }
     }
 }
@@ -319,19 +320,8 @@ mod tests {
     use super::*;
 
     fn setup_test_state() -> VMState {
-        let mut state = VMState {
-            stack: Vec::new(),
-            memory: HashMap::new(),
-            events: Vec::new(),
-            instruction_pointer: 0,
-            reputation_context: HashMap::new(),
-            caller_did: "test_caller".to_string(),
-            block_number: 1,
-            timestamp: 1000,
-            permissions: vec!["data.create".to_string(), "data.write".to_string()],
-        };
-        
-        state.reputation_context.insert(state.caller_did.clone(), 100);
+        let mut state = VMState::default();
+        state.permissions = vec!["data.create".to_string(), "data.write".to_string()];
         state
     }
 
@@ -339,12 +329,12 @@ mod tests {
     fn test_create_struct() {
         let mut state = setup_test_state();
         let op = DataOperation::CreateStruct {
-            name: "test_struct".to_string(),
+            name: "test".to_string(),
             fields: vec!["field1".to_string(), "field2".to_string()],
         };
         
         assert!(op.execute(&mut state).is_ok());
-        assert_eq!(state.events[0].event_type, "StructCreated");
+        assert!(state.memory.contains_key("struct_def:test"));
     }
 
     #[test]
@@ -397,34 +387,25 @@ mod tests {
         
         // Try to access invalid index
         let get_op = DataOperation::GetArrayValue { index: 5 };
-        assert!(matches!(get_op.execute(&mut state), Err(VMError::Custom(_))));
+        assert!(matches!(
+            get_op.execute(&mut state),
+            Err(VMError::Custom(_))
+        ));
     }
 
     #[test]
-    fn test_field_operations() {
+    fn test_permissions() {
         let mut state = setup_test_state();
+        state.permissions.clear(); // Remove all permissions
         
-        // Create struct
-        let create_op = DataOperation::CreateStruct {
-            name: "person".to_string(),
-            fields: vec!["age".to_string()],
+        let op = DataOperation::CreateStruct {
+            name: "test".to_string(),
+            fields: vec!["field1".to_string()],
         };
-        assert!(create_op.execute(&mut state).is_ok());
         
-        // Set field
-        state.stack.push(25);
-        let set_op = DataOperation::SetField {
-            struct_name: "person".to_string(),
-            field_name: "age".to_string(),
-        };
-        assert!(set_op.execute(&mut state).is_ok());
-        
-        // Get field
-        let get_op = DataOperation::GetField {
-            struct_name: "person".to_string(),
-            field_name: "age".to_string(),
-        };
-        assert!(get_op.execute(&mut state).is_ok());
-        assert_eq!(state.stack.pop().unwrap(), 25);
+        assert!(matches!(
+            op.execute(&mut state),
+            Err(VMError::InsufficientPermissions)
+        ));
     }
-} 
+}

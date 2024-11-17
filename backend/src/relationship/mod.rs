@@ -19,6 +19,10 @@
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
+use crate::monitoring::energy::{EnergyAware, EnergyMonitor};
+
+mod types;
+pub use types::RelationshipType;
 
 /// Records a concrete contribution made to the cooperative community.
 /// Focuses on capturing both the action and its impact through storytelling.
@@ -132,28 +136,6 @@ pub struct Relationship {
     
     /// Notes about the relationship
     pub notes: Vec<RelationshipNote>,
-}
-
-/// Types of relationships that can exist between members
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum RelationshipType {
-    /// Working together on specific projects
-    Collaboration,
-    
-    /// Knowledge sharing and guidance
-    Mentorship,
-    
-    /// Sharing physical or digital resources
-    ResourceSharing,
-    
-    /// Mutual aid and support
-    MutualAid,
-    
-    /// Formal project partnership
-    ProjectPartnership,
-    
-    /// Other types of relationships
-    Other(String),
 }
 
 /// Records individual interactions within a relationship
@@ -274,7 +256,6 @@ impl RelationshipSystem {
 
     /// Records a new contribution with its story and impact
     pub fn record_contribution(&mut self, contribution: Contribution) -> Result<(), String> {
-        // Validate contributor exists
         if !self.is_valid_member(&contribution.contributor_did) {
             return Err("Contributor not found".to_string());
         }
@@ -289,7 +270,6 @@ impl RelationshipSystem {
 
     /// Records mutual aid interaction between members
     pub fn record_mutual_aid(&mut self, interaction: MutualAidInteraction) -> Result<(), String> {
-        // Validate both parties exist
         if !self.is_valid_member(&interaction.provider_did) || 
            !self.is_valid_member(&interaction.receiver_did) {
             return Err("Invalid member DID".to_string());
@@ -368,7 +348,7 @@ impl RelationshipSystem {
     // Internal helper methods
 
     /// Validates that a member exists in the system
-    fn is_valid_member(&self, did: &str) -> bool {
+    fn is_valid_member(&self, _did: &str) -> bool {
         // In a real implementation, this would check against your identity system
         true // Simplified for example
     }
@@ -427,8 +407,8 @@ impl RelationshipSystem {
 }
 
 // Implement the energy awareness trait
-impl crate::monitoring::energy::EnergyAware for RelationshipSystem {
-    fn record_energy_metrics(&self, monitor: &crate::monitoring::energy::EnergyMonitor) {
+impl EnergyAware for RelationshipSystem {
+    fn record_energy_metrics(&self, monitor: &EnergyMonitor) {
         // Record basic operations
         monitor.record_instruction();
         
