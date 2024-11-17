@@ -10,7 +10,7 @@ use crate::vm::{VM, Contract, ExecutionContext, Event};
 use crate::blockchain::{Block, Transaction};
 use crate::blockchain::transaction::{TransactionType, ResourceAllocation};
 use crate::relationship::{RelationshipSystem, Contribution, MutualAidInteraction, Relationship};
-use crate::relationship::{RelationshipType, InteractionType};
+use crate::vm::operations::relationship::RelationType;
 
 pub struct Blockchain {
     pub chain: Vec<Block>,
@@ -47,28 +47,38 @@ impl Blockchain {
     }
 
     pub async fn process_transaction(&mut self, transaction: &Transaction) -> Result<(), String> {
-        // Validate sender's resources
+        // First validate the transaction and check resources
+        self.validate_transaction(transaction)?;
         self.check_and_update_resources(&transaction.sender)?;
-        let resource_allocation = self.resource_allocations.get_mut(&transaction.sender)
-            .ok_or("Resource allocation not found")?;
-        
-        if !resource_allocation.can_afford(transaction.resource_cost) {
-            return Err("Insufficient resources".to_string());
-        }
 
-        match &transaction.transaction_type {
-            TransactionType::Transfer { amount, receiver } => {
-                self.validate_transaction(transaction)?;
-                println!(
-                    "Processing transfer of {} from {} to {}",
-                    amount, transaction.sender, receiver
-                );
-                resource_allocation.consume_resources(transaction.resource_cost)?;
-                self.pending_transactions.push(transaction.clone());
-                Ok(())
+        // Create a local copy of the transaction for processing
+        let tx = transaction.clone();
+        let sender = tx.sender.clone();
+
+        // Get resource allocation after validation
+        {
+            let resource_allocation = self.resource_allocations.get_mut(&sender)
+                .ok_or("Resource allocation not found")?;
+            
+            if !resource_allocation.can_afford(tx.resource_cost) {
+                return Err("Insufficient resources".to_string());
             }
 
-            TransactionType::ContractExecution { contract_id, input_data } => {
+            // Consume resources
+            resource_allocation.consume_resources(tx.resource_cost)?;
+        }
+
+        match &tx.transaction_type {
+            TransactionType::Transfer { amount, receiver } => {
+                println!(
+                    "Processing transfer of {} from {} to {}",
+                    amount, tx.sender, receiver
+                );
+                self.pending_transactions.push(tx);
+                Ok(())
+            },
+
+            TransactionType::ContractExecution { contract_id, input_data: _ } => {
                 let contract = self.get_contract(contract_id)?;
                 let reputation_context = {
                     let reputation_system = self.reputation_system.lock()
@@ -78,28 +88,27 @@ impl Blockchain {
 
                 let (permissions, reputation_score) = {
                     let identity_system = self.identity_system.lock()
-                        .map_err(|_| "Failed to acquire identity lock".to_string())?;
-                    let perms = identity_system.get_permissions(&transaction.sender);
+                        .map_err(|_| "Failed to acquire identity system lock".to_string())?;
+                    let perms = identity_system.get_permissions(&tx.sender);
                     
                     let reputation_system = self.reputation_system.lock()
                         .map_err(|_| "Failed to acquire reputation lock".to_string())?;
-                    let score = reputation_system.get_reputation(&transaction.sender);
+                    let score = reputation_system.get_reputation(&tx.sender);
                     
                     (perms, score)
                 };
 
                 let mut vm = VM::new(1000, reputation_context);
                 let execution_context = ExecutionContext {
-                    caller_did: transaction.sender.clone(),
+                    caller_did: tx.sender.clone(),
                     cooperative_id: contract.cooperative_metadata.cooperative_id.clone(),
-                    timestamp: transaction.timestamp as u64,
+                    timestamp: tx.timestamp as u64,
                     block_number: self.current_block_number,
                     reputation_score,
                     permissions,
                 };
 
                 vm.set_execution_context(execution_context);
-                resource_allocation.consume_resources(transaction.resource_cost)?;
 
                 match vm.execute_contract(&contract) {
                     Ok(_) => {
@@ -107,19 +116,19 @@ impl Blockchain {
                         let mut reputation_system = self.reputation_system.lock()
                             .map_err(|_| "Failed to acquire reputation lock".to_string())?;
                         reputation_system.update_reputations(&vm.get_reputation_context());
-                        self.pending_transactions.push(transaction.clone());
+                        self.pending_transactions.push(tx);
                         Ok(())
                     }
                     Err(e) => Err(format!("Contract execution failed: {}", e)),
                 }
-            }
+            },
 
             TransactionType::RecordContribution { description, impact_story, context, tags } => {
                 let mut relationship_system = self.relationship_system.lock()
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
                 let contribution = Contribution {
-                    contributor_did: transaction.sender.clone(),
+                    contributor_did: tx.sender.clone(),
                     description: description.clone(),
                     impact_story: impact_story.clone(),
                     date: chrono::Utc::now(),
@@ -130,11 +139,9 @@ impl Blockchain {
                 };
                 
                 relationship_system.record_contribution(contribution)?;
-
-                resource_allocation.consume_resources(transaction.resource_cost)?;
-                self.pending_transactions.push(transaction.clone());
+                self.pending_transactions.push(tx);
                 Ok(())
-            }
+            },
 
             TransactionType::RecordMutualAid { receiver, description, impact_story, reciprocity_notes, tags } => {
                 let mut relationship_system = self.relationship_system.lock()
@@ -142,7 +149,7 @@ impl Blockchain {
                 
                 let interaction = MutualAidInteraction {
                     date: chrono::Utc::now(),
-                    provider_did: transaction.sender.clone(),
+                    provider_did: tx.sender.clone(),
                     receiver_did: receiver.clone(),
                     description: description.clone(),
                     impact_story: impact_story.clone(),
@@ -151,61 +158,51 @@ impl Blockchain {
                 };
                 
                 relationship_system.record_mutual_aid(interaction)?;
-
-                resource_allocation.consume_resources(transaction.resource_cost)?;
-                self.pending_transactions.push(transaction.clone());
+                self.pending_transactions.push(tx);
                 Ok(())
-            }
+            },
 
-            TransactionType::UpdateRelationship { member_two, relationship_type, story, interaction: interaction_notes } => {
+            TransactionType::UpdateRelationship { member_two, relationship_type, story, interaction } => {
                 let mut relationship_system = self.relationship_system.lock()
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
                 let relationship = Relationship {
-                    member_one: transaction.sender.clone(),
+                    member_one: tx.sender.clone(),
                     member_two: member_two.clone(),
-                    relationship_type: RelationshipType::Other(relationship_type.clone()),
+                    relationship_type: RelationType::Custom(relationship_type.clone()),
                     started: chrono::Utc::now(),
                     story: story.clone(),
-                    interactions: if let Some(notes) = interaction_notes {
-                        vec![crate::relationship::Interaction {
-                            date: chrono::Utc::now(),
-                            description: notes.clone(),
-                            impact: None,
-                            interaction_type: InteractionType::Other("Initial".to_string()),
-                        }]
-                    } else {
-                        vec![]
-                    },
+                    interactions: vec![],
                     mutual_endorsements: vec![],
                     notes: vec![],
                 };
                 
+                if let Some(interaction_data) = interaction {
+                    // Handle optional interaction data if provided
+                    let _ = interaction_data; // Placeholder for interaction handling
+                }
+                
                 relationship_system.update_relationship(relationship)?;
-
-                resource_allocation.consume_resources(transaction.resource_cost)?;
-                self.pending_transactions.push(transaction.clone());
+                self.pending_transactions.push(tx);
                 Ok(())
-            }
+            },
 
             TransactionType::AddEndorsement { to_did, content, context, skills } => {
                 let mut relationship_system = self.relationship_system.lock()
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
                 let endorsement = crate::relationship::Endorsement {
-                    from_did: transaction.sender.clone(),
+                    from_did: tx.sender.clone(),
                     content: content.clone(),
                     date: chrono::Utc::now(),
                     context: context.clone(),
                     skills: skills.clone(),
                 };
                 
-                relationship_system.add_endorsement(&transaction.sender, to_did, endorsement)?;
-
-                resource_allocation.consume_resources(transaction.resource_cost)?;
-                self.pending_transactions.push(transaction.clone());
+                relationship_system.add_endorsement(&tx.sender, to_did, endorsement)?;
+                self.pending_transactions.push(tx);
                 Ok(())
-            }
+            },
         }
     }
 
@@ -237,7 +234,7 @@ impl Blockchain {
 
         let reputation_valid = {
             let reputation_system = self.reputation_system.lock()
-                .map_err(|_| "Failed to acquire reputation system lock".to_string())?;
+                .map_err(|_| "Failed to acquire reputation lock".to_string())?;
             reputation_system.get_reputation(&transaction.sender) >= 10
         };
 
@@ -270,8 +267,7 @@ impl Blockchain {
     }
 
     pub async fn add_transaction(&mut self, transaction: Transaction) -> Result<(), String> {
-        self.validate_transaction(&transaction)?;
-        self.pending_transactions.push(transaction.clone());
+        self.process_transaction(&transaction).await?;
         
         if self.pending_transactions.len() >= 10 {
             self.finalize_block().await?;

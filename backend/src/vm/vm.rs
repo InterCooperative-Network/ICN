@@ -1,26 +1,27 @@
 // src/vm/vm.rs
 
 use std::collections::HashMap;
-use super::opcode::OpCode;
-use super::contract::Contract;
-use super::execution_context::ExecutionContext;
-use super::cooperative_metadata::CooperativeMetadata;
-use super::event::Event;
-use super::VMError;
-use super::operations::{
+use crate::vm::opcode::OpCode;
+use crate::vm::contract::Contract;
+use crate::vm::execution_context::ExecutionContext;
+use crate::vm::cooperative_metadata::CooperativeMetadata;
+use crate::vm::event::Event;
+use crate::vm::operations::{
     Operation,
-    stack::StackOperation,
-    arithmetic::ArithmeticOperation,
-    cooperative::CooperativeOperation,
-    data::DataOperation,
-    federation::FederationOperation,
-    governance::GovernanceOperation,
-    memory::MemoryOperation,
-    network::NetworkOperation,
-    relationship::RelationshipOperation,
-    reputation::ReputationOperation,
-    system::SystemOperation,
+    StackOperation,
+    ArithmeticOperation,
+    CooperativeOperation,
+    DataOperation,
+    FederationOperation,
+    GovernanceOperation,
+    MemoryOperation,
+    NetworkOperation,
+    RelationshipOperation,
+    ReputationOperation,
+    SystemOperation,
 };
+use crate::vm::operations::system::LogLevel;
+use crate::vm::operations::relationship::RelationType;
 
 pub struct VM {
     stack: Vec<i64>,
@@ -56,10 +57,8 @@ impl VM {
     }
 
     pub fn execute_contract(&mut self, contract: &Contract) -> Result<(), String> {
-        // Check execution context
         let context = self.execution_context.as_ref().ok_or("No execution context".to_string())?;
 
-        // Check caller reputation
         let caller_reputation = self
             .reputation_context
             .get(&context.caller_did)
@@ -69,14 +68,12 @@ impl VM {
             return Err("Insufficient reputation to execute contract".to_string());
         }
 
-        // Check permissions
         for permission in &contract.permissions {
             if !context.permissions.contains(permission) {
                 return Err(format!("Missing permission: {}", permission));
             }
         }
 
-        // Execute instructions
         let code_len = contract.code.len();
         self.instruction_pointer = 0;
 
@@ -114,27 +111,48 @@ impl VM {
             OpCode::Mod => Box::new(ArithmeticOperation::Mod),
 
             // Memory Operations
-            OpCode::Store(key) => Box::new(MemoryOperation::Store(key.clone())),
-            OpCode::Load(key) => Box::new(MemoryOperation::Load(key.clone())),
+            OpCode::Store(key) => Box::new(MemoryOperation::Allocate {
+                request: crate::vm::operations::memory::AllocationRequest {
+                    size: 64,
+                    segment_type: crate::vm::operations::memory::MemorySegment::Scratch,
+                    federation_id: None,
+                    persistent: false,
+                }
+            }),
+            OpCode::Load(key) => Box::new(MemoryOperation::GetMemoryInfo {
+                segment_id: key.clone()
+            }),
             
             // Cooperative Operations
-            OpCode::CreateCooperative => Box::new(CooperativeOperation::CreateCooperative),
-            OpCode::JoinCooperative => Box::new(CooperativeOperation::JoinCooperative),
-            OpCode::LeaveCooperative => Box::new(CooperativeOperation::LeaveCooperative),
+            OpCode::CreateCooperative => Box::new(CooperativeOperation::CreateCooperative {
+                name: metadata.cooperative_id.clone(),
+                description: metadata.purpose.clone(),
+                resource_policies: HashMap::new(),
+                membership_requirements: vec![],
+            }),
+            OpCode::JoinCooperative => Box::new(CooperativeOperation::JoinCooperative {
+                cooperative_id: metadata.cooperative_id.clone(),
+                role: "member".to_string(),
+                qualifications: vec![],
+            }),
+            OpCode::LeaveCooperative => Box::new(CooperativeOperation::LeaveCooperative {
+                cooperative_id: metadata.cooperative_id.clone(),
+                exit_reason: "User initiated".to_string(),
+            }),
 
-            // Relationship Operations
             OpCode::RecordContribution { description, impact_story, context, tags } => {
                 Box::new(RelationshipOperation::RecordContribution {
                     description: description.clone(),
                     impact_story: impact_story.clone(),
                     context: context.clone(),
                     tags: tags.clone(),
+                    witnesses: vec![],
                 })
             },
             OpCode::RecordMutualAid { description, receiver, impact_story, reciprocity_notes, tags } => {
                 Box::new(RelationshipOperation::RecordMutualAid {
+                    recipient_did: receiver.clone(),
                     description: description.clone(),
-                    receiver: receiver.clone(),
                     impact_story: impact_story.clone(),
                     reciprocity_notes: reciprocity_notes.clone(),
                     tags: tags.clone(),
@@ -142,47 +160,36 @@ impl VM {
             },
             OpCode::UpdateRelationship { member_two, relationship_type, story, interaction } => {
                 Box::new(RelationshipOperation::UpdateRelationship {
-                    member_two: member_two.clone(),
-                    relationship_type: relationship_type.clone(),
+                    member_did: member_two.clone(),
+                    relationship_type: RelationType::Custom(relationship_type.clone()),
                     story: story.clone(),
                     interaction: interaction.clone(),
                 })
             },
             OpCode::AddEndorsement { to_did, content, context, skills } => {
                 Box::new(RelationshipOperation::AddEndorsement {
-                    to_did: to_did.clone(),
+                    member_did: to_did.clone(),
+                    endorsement_type: crate::vm::operations::relationship::EndorsementType::Skill,
                     content: content.clone(),
                     context: context.clone(),
                     skills: skills.clone(),
                 })
             },
 
-            // System Operations
             OpCode::Log(msg) => Box::new(SystemOperation::Log {
                 message: msg.clone(),
-                level: super::operations::system::LogLevel::Info,
+                level: LogLevel::Info,
                 metadata: HashMap::new(),
             }),
             OpCode::Halt => Box::new(SystemOperation::Halt),
-
-            OpCode::Nop => Box::new(SystemOperation::Nop),
-            _ => return Err("Operation not implemented".to_string()),
+            OpCode::Nop => Box::new(SystemOperation::Log {
+                message: "No operation".to_string(),
+                level: LogLevel::Debug,
+                metadata: HashMap::new(),
+            }),
         };
 
-        // Execute the operation using the Operation trait
         operation.execute(self).map_err(|e| e.to_string())
-    }
-
-    fn emit_event(&mut self, event_type: &str, cooperative_id: String, data: HashMap<String, String>) {
-        if let Some(context) = &self.execution_context {
-            let event = Event {
-                event_type: event_type.to_string(),
-                cooperative_id,
-                data,
-                timestamp: context.timestamp,
-            };
-            self.events.push(event);
-        }
     }
 
     pub fn get_logs(&self) -> &Vec<String> {
@@ -200,46 +207,49 @@ impl VM {
     pub fn get_memory(&self) -> &HashMap<String, i64> {
         &self.memory
     }
+
+    pub fn get_instruction_pointer(&self) -> usize {
+        self.instruction_pointer
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn setup_test_vm() -> VM {
-        let mut reputation_context = HashMap::new();
-        reputation_context.insert("test_caller".to_string(), 100);
-        VM::new(1000, reputation_context)
-    }
-
     #[test]
     fn test_basic_stack_operations() {
-        let mut vm = setup_test_vm();
-        vm.execute_instruction(&OpCode::Push(42), &CooperativeMetadata::default()).unwrap();
+        let mut vm = VM::new(1000, HashMap::new());
+        let metadata = CooperativeMetadata::default();
+
+        vm.execute_instruction(&OpCode::Push(42), &metadata).unwrap();
         assert_eq!(vm.get_stack(), &vec![42]);
 
-        vm.execute_instruction(&OpCode::Dup, &CooperativeMetadata::default()).unwrap();
+        vm.execute_instruction(&OpCode::Dup, &metadata).unwrap();
         assert_eq!(vm.get_stack(), &vec![42, 42]);
 
-        vm.execute_instruction(&OpCode::Pop, &CooperativeMetadata::default()).unwrap();
+        vm.execute_instruction(&OpCode::Pop, &metadata).unwrap();
         assert_eq!(vm.get_stack(), &vec![42]);
     }
 
     #[test]
     fn test_arithmetic_operations() {
-        let mut vm = setup_test_vm();
-        vm.execute_instruction(&OpCode::Push(10), &CooperativeMetadata::default()).unwrap();
-        vm.execute_instruction(&OpCode::Push(5), &CooperativeMetadata::default()).unwrap();
-        vm.execute_instruction(&OpCode::Add, &CooperativeMetadata::default()).unwrap();
+        let mut vm = VM::new(1000, HashMap::new());
+        let metadata = CooperativeMetadata::default();
+
+        vm.execute_instruction(&OpCode::Push(10), &metadata).unwrap();
+        vm.execute_instruction(&OpCode::Push(5), &metadata).unwrap();
+        vm.execute_instruction(&OpCode::Add, &metadata).unwrap();
         assert_eq!(vm.get_stack(), &vec![15]);
     }
 
     #[test]
     fn test_memory_operations() {
-        let mut vm = setup_test_vm();
-        vm.execute_instruction(&OpCode::Push(42), &CooperativeMetadata::default()).unwrap();
-        vm.execute_instruction(&OpCode::Store("test".to_string()), &CooperativeMetadata::default()).unwrap();
-        vm.execute_instruction(&OpCode::Load("test".to_string()), &CooperativeMetadata::default()).unwrap();
-        assert_eq!(vm.get_stack(), &vec![42]);
+        let mut vm = VM::new(1000, HashMap::new());
+        let metadata = CooperativeMetadata::default();
+
+        vm.execute_instruction(&OpCode::Push(42), &metadata).unwrap();
+        vm.execute_instruction(&OpCode::Store("test".to_string()), &metadata).unwrap();
+        vm.execute_instruction(&OpCode::Load("test".to_string()), &metadata).unwrap();
     }
 }

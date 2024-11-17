@@ -6,7 +6,7 @@ pub mod types;
 // Re-export key types and modules
 pub use proof_of_cooperation::{
     core::ProofOfCooperation,
-    event::ConsensusEvent,
+    events::ConsensusEvent,
     validator::ValidatorManager,
     round::RoundManager
 };
