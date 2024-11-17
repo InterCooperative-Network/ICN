@@ -239,6 +239,7 @@ impl CooperativeManager {
             last_updated: chrono::Utc::now().timestamp() as u64,
             member_count: 1,
             resource_allocation: HashMap::new(),
+            energy_usage: HashMap::new(),
         };
 
         self.core.create_cooperative(creator_did, metadata).await
@@ -305,7 +306,7 @@ mod tests {
     #[tokio::test]
     async fn test_icn_core_creation() {
         let core = ICNCore::new();
-        assert!(core.subscribe_to_events().is_ok());
+        assert!(core.subscribe_to_events().await.is_ok());
     }
 
     #[tokio::test]
