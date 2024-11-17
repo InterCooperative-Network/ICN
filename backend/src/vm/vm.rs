@@ -11,7 +11,8 @@ use crate::vm::operations::{
     MemoryOperation,
 };
 use crate::vm::{Contract, ExecutionContext, VMState, VMResult, VMError, Event};
-use crate::relationship::{RelationshipType, Relationship};
+use crate::relationship::Relationship;
+use crate::vm::operations::relationship::RelationType;
 
 /// Virtual Machine implementation for executing cooperative operations
 pub struct VM {
@@ -71,20 +72,17 @@ impl VM {
     /// Executes a single instruction
     pub fn execute_instruction(&mut self, op: &OpCode) -> VMResult<()> {
         match op {
-            // Stack Operations
             OpCode::Push(val) => StackOperation::Push(*val).execute(&mut self.state),
             OpCode::Pop => StackOperation::Pop.execute(&mut self.state),
             OpCode::Dup => StackOperation::Dup.execute(&mut self.state),
             OpCode::Swap => StackOperation::Swap.execute(&mut self.state),
             
-            // Arithmetic Operations
             OpCode::Add => ArithmeticOperation::Add.execute(&mut self.state),
             OpCode::Sub => ArithmeticOperation::Sub.execute(&mut self.state),
             OpCode::Mul => ArithmeticOperation::Mul.execute(&mut self.state),
             OpCode::Div => ArithmeticOperation::Div.execute(&mut self.state),
             OpCode::Mod => ArithmeticOperation::Mod.execute(&mut self.state),
 
-            // Memory Operations
             OpCode::Store(key) => {
                 let request = crate::vm::operations::memory::AllocationRequest {
                     size: 64,
@@ -95,7 +93,6 @@ impl VM {
                 MemoryOperation::Allocate { request }.execute(&mut self.state)
             },
 
-            // Relationship Operations
             OpCode::RecordContribution { description, impact_story, context, tags } => {
                 RelationshipOperation::RecordContribution {
                     description: description.clone(),
@@ -119,13 +116,12 @@ impl VM {
             OpCode::UpdateRelationship { member_two, relationship_type, story } => {
                 RelationshipOperation::UpdateRelationship {
                     member_did: member_two.clone(),
-                    relationship_type: relationship_type.clone(),
+                    relationship_type: RelationType::Custom(relationship_type.clone()),
                     story: story.clone(),
                     strength_indicators: vec![],
                 }.execute(&mut self.state)
             },
 
-            // System Operations
             OpCode::Log(msg) => SystemOperation::Log {
                 message: msg.clone(),
                 level: crate::vm::operations::system::LogLevel::Info,

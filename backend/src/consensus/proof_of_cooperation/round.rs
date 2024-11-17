@@ -85,7 +85,6 @@ impl RoundManager {
             return Err(ConsensusError::InvalidRoundState);
         }
 
-        // Create event before modifying round state
         let event = ConsensusEvent::BlockProposed {
             round: round.round_number,
             proposer: proposer.to_string(),
@@ -106,17 +105,33 @@ impl RoundManager {
         voting_power: f64,
         signature: String,
     ) -> Result<ConsensusEvent, ConsensusError> {
-        let round = self.current_round.as_mut()
-            .ok_or(ConsensusError::NoActiveRound)?;
+        // First get all the data we need from the current state
+        let round_number;
+        let current_votes_power: f64;
+        let current_approval_power: f64;
+        {
+            let round = self.current_round.as_ref()
+                .ok_or(ConsensusError::NoActiveRound)?;
 
-        if round.status != RoundStatus::Voting {
-            return Err(ConsensusError::InvalidRoundState);
+            if round.status != RoundStatus::Voting {
+                return Err(ConsensusError::InvalidRoundState);
+            }
+
+            if round.votes.contains_key(&validator) {
+                return Err(ConsensusError::Custom("Already voted".to_string()));
+            }
+
+            round_number = round.round_number;
+            current_votes_power = round.votes.values()
+                .map(|v| v.voting_power)
+                .sum();
+            current_approval_power = round.votes.values()
+                .filter(|v| v.approve)
+                .map(|v| v.voting_power)
+                .sum();
         }
 
-        if round.votes.contains_key(&validator) {
-            return Err(ConsensusError::Custom("Already voted".to_string()));
-        }
-
+        // Create the new vote
         let vote = WeightedVote {
             validator: validator.clone(),
             approve,
@@ -125,19 +140,32 @@ impl RoundManager {
             signature,
         };
 
-        let round_number = round.round_number;
-        round.votes.insert(validator.clone(), vote);
+        // Calculate new stats
+        let new_total_power = current_votes_power + voting_power;
+        let new_approval_power = if approve {
+            current_approval_power + voting_power
+        } else {
+            current_approval_power
+        };
 
-        // Calculate stats independently to avoid borrow issues
-        let stats = self.calculate_vote_stats(round);
-        
-        // Update round stats
-        round.stats.participation_rate = stats.0;
-        round.stats.approval_rate = stats.1;
+        let participation_rate = new_total_power / self.total_voting_power;
+        let approval_rate = if new_total_power > 0.0 {
+            new_approval_power / new_total_power
+        } else {
+            0.0
+        };
+
+        // Now update the round with all our calculations
+        let round = self.current_round.as_mut()
+            .ok_or(ConsensusError::NoActiveRound)?;
+
+        round.votes.insert(validator.clone(), vote);
+        round.stats.participation_rate = participation_rate;
+        round.stats.approval_rate = approval_rate;
 
         // Check if consensus is reached
-        if stats.0 >= self.config.min_participation_rate && 
-           stats.1 >= self.config.min_approval_rate {
+        if participation_rate >= self.config.min_participation_rate && 
+           approval_rate >= self.config.min_approval_rate {
             round.status = RoundStatus::Finalizing;
         }
 
@@ -187,28 +215,6 @@ impl RoundManager {
 
     pub fn get_round_history(&self) -> &[ConsensusRoundStats] {
         &self.round_history
-    }
-
-    // Helper method to calculate vote stats without mutable borrow conflicts
-    fn calculate_vote_stats(&self, round: &ConsensusRound) -> (f64, f64) {
-        let votes_power: f64 = round.votes.values()
-            .map(|v| v.voting_power)
-            .sum();
-
-        let participation_rate = votes_power / self.total_voting_power;
-
-        let approval_power: f64 = round.votes.values()
-            .filter(|v| v.approve)
-            .map(|v| v.voting_power)
-            .sum();
-
-        let approval_rate = if votes_power > 0.0 {
-            approval_power / votes_power
-        } else {
-            0.0
-        };
-
-        (participation_rate, approval_rate)
     }
 }
 
@@ -305,5 +311,29 @@ mod tests {
             manager.get_current_round().unwrap().status,
             RoundStatus::Failed
         );
+    }
+
+    #[test]
+    fn test_finalize_round() {
+        let mut manager = setup_test_round_manager();
+        
+        // Setup and get to finalization state
+        manager.start_round(1, "did:icn:test".to_string(), 1.0, 3).unwrap();
+        let block = Block::new(1, "prev_hash".to_string(), vec![], "did:icn:test".to_string());
+        manager.propose_block("did:icn:test", block).unwrap();
+        
+        // Submit vote with enough power for consensus
+        manager.submit_vote(
+            "validator1".to_string(),
+            true,
+            0.7,
+            "signature1".to_string()
+        ).unwrap();
+        
+        // Finalize
+        let result = manager.finalize_round();
+        assert!(result.is_ok());
+        assert!(manager.get_current_round().is_none());
+        assert_eq!(manager.get_round_history().len(), 1);
     }
 }
