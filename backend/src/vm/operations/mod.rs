@@ -1,6 +1,9 @@
 // src/vm/operations/mod.rs
 
-// Change privacy levels of modules
+use std::collections::HashMap;
+use crate::vm::{VMError, VMState, VMResult, Event};
+
+// Re-export all operation modules
 pub mod stack;
 pub mod arithmetic;
 pub mod cooperative;
@@ -13,6 +16,7 @@ pub mod memory;
 pub mod network;
 pub mod federation;
 
+// Re-export operation types
 pub use stack::StackOperation;
 pub use arithmetic::ArithmeticOperation;
 pub use cooperative::CooperativeOperation;
@@ -24,10 +28,6 @@ pub use data::DataOperation;
 pub use memory::MemoryOperation;
 pub use network::NetworkOperation;
 pub use federation::FederationOperation;
-
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
-use crate::vm::{VMError, VMState, VMResult, Event};
 
 /// Trait for implementable VM operations
 pub trait Operation {
@@ -77,4 +77,48 @@ pub fn emit_event(state: &mut VMState, event_type: String, data: HashMap<String,
         data,
         timestamp: state.timestamp,
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ensure_stack_size() {
+        let stack = vec![1, 2, 3];
+        assert!(ensure_stack_size(&stack, 3).is_ok());
+        assert!(ensure_stack_size(&stack, 4).is_err());
+    }
+
+    #[test]
+    fn test_ensure_permissions() {
+        let required = vec!["test.permission".to_string()];
+        let available = vec!["test.permission".to_string()];
+        assert!(ensure_permissions(&required, &available).is_ok());
+
+        let available = vec!["other.permission".to_string()];
+        assert!(ensure_permissions(&required, &available).is_err());
+    }
+
+    #[test]
+    fn test_ensure_reputation() {
+        assert!(ensure_reputation(10, 20).is_ok());
+        assert!(ensure_reputation(20, 10).is_err());
+    }
+
+    #[test]
+    fn test_emit_event() {
+        let mut state = VMState::new(
+            "test".to_string(),
+            1,
+            1000,
+        );
+        let mut data = HashMap::new();
+        data.insert("test_key".to_string(), "test_value".to_string());
+        
+        emit_event(&mut state, "test_event".to_string(), data);
+        
+        assert_eq!(state.events.len(), 1);
+        assert_eq!(state.events[0].event_type, "test_event");
+    }
 }
