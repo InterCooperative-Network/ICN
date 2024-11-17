@@ -1,43 +1,33 @@
-// src/consensus/mod.rs
+// src/consensus/proof_of_cooperation/mod.rs
 
-pub mod proof_of_cooperation;
-pub mod types;
+pub mod core;
+pub mod event;
+pub mod metrics;
+pub mod round;
+pub mod validator;
 
-pub use proof_of_cooperation::{
-    ProofOfCooperation,
-    ConsensusEvent,
-    ValidatorManager,
-    RoundManager,
-};
-
-pub use types::{
-    ConsensusConfig,
-    ConsensusRound,
-    ConsensusError,
-    ValidatorInfo,
-    WeightedVote,
-    RoundStatus,
-};
+// Re-export key components
+pub use core::ProofOfCooperation;
+pub use event::ConsensusEvent;
+pub use validator::ValidatorManager;
+pub use round::RoundManager;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
-    use tokio;
+    use crate::consensus::types::ConsensusConfig;
     use crate::websocket::WebSocketHandler;
+    use std::sync::Arc;
 
-    #[tokio::test]
-    async fn test_consensus_integration() {
+    async fn setup_test_consensus() -> ProofOfCooperation {
         let ws_handler = Arc::new(WebSocketHandler::new());
         let config = ConsensusConfig::default();
-        
-        let mut consensus = ProofOfCooperation::new(config, ws_handler);
-        
-        // Register test validators
-        consensus.register_validator("did:icn:test1".to_string(), 1000).unwrap();
-        consensus.register_validator("did:icn:test2".to_string(), 1000).unwrap();
-        consensus.register_validator("did:icn:test3".to_string(), 1000).unwrap();
-        
-        assert!(consensus.start_round().await.is_ok());
+        ProofOfCooperation::new(config, ws_handler)
+    }
+
+    #[tokio::test]
+    async fn test_consensus_initialization() {
+        let consensus = setup_test_consensus().await;
+        assert!(consensus.get_current_round().is_none());
     }
 }

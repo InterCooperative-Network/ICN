@@ -9,8 +9,8 @@ pub mod vm;
 pub mod websocket;
 pub mod consensus;
 pub mod network;
-pub mod monitoring; // Add monitoring module
-pub mod relationship; // Add relationship module
+pub mod monitoring;
+pub mod relationship;
 
 pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
 pub use identity::IdentitySystem;
@@ -22,8 +22,8 @@ pub use vm::{VM, Contract, ExecutionContext};
 pub use vm::opcode::OpCode;
 pub use vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
 pub use websocket::WebSocketHandler;
-pub use monitoring::energy::{EnergyAware, EnergyMonitor}; // Export energy monitoring types
-pub use relationship::{Contribution, MutualAidInteraction}; // Export relationship types
+pub use monitoring::energy::{EnergyAware, EnergyMonitor};
+pub use relationship::{Contribution, MutualAidInteraction, RelationshipSystem};
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
@@ -35,6 +35,7 @@ pub struct ICNCore {
     blockchain: Arc<Mutex<Blockchain>>,
     identity_system: Arc<Mutex<IdentitySystem>>,
     reputation_system: Arc<Mutex<ReputationSystem>>,
+    relationship_system: Arc<Mutex<RelationshipSystem>>,
     ws_handler: Arc<WebSocketHandler>,
     vm: Arc<Mutex<VM>>,
     event_bus: broadcast::Sender<SystemEvent>,
@@ -58,6 +59,7 @@ impl ICNCore {
         
         let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
         let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+        let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new()));
         let ws_handler = Arc::new(WebSocketHandler::new());
 
         let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
@@ -68,7 +70,8 @@ impl ICNCore {
         let blockchain = Arc::new(Mutex::new(Blockchain::new(
             identity_system.clone(),
             reputation_system.clone(),
-            consensus.clone()  // Add consensus argument
+            relationship_system.clone(),
+            consensus.clone()
         )));
 
         let reputation_context = reputation_system.lock()
@@ -82,12 +85,12 @@ impl ICNCore {
             blockchain,
             identity_system,
             reputation_system,
+            relationship_system,
             ws_handler,
             vm,
             event_bus: event_tx,
         }
     }
-
 
     pub async fn create_cooperative(&self, creator_did: String, metadata: CooperativeMetadata) -> Result<String, String> {
         let identity = self.identity_system.lock()
@@ -292,5 +295,41 @@ impl ICNNode {
             .map_err(|_| "Failed to acquire peers lock".to_string())?
             .insert(peer_id, address);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_icn_core_creation() {
+        let core = ICNCore::new();
+        assert!(core.subscribe_to_events().is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_cooperative_creation() {
+        let core = Arc::new(ICNCore::new());
+        let manager = CooperativeManager::new(core);
+        
+        let result = manager.create_cooperative(
+            "did:icn:test".to_string(),
+            "Test Cooperative".to_string(),
+            "Test Purpose".to_string()
+        ).await;
+        
+        assert!(result.is_err()); // Should fail because DID not registered
+    }
+
+    #[tokio::test]
+    async fn test_node_connection() {
+        let core = Arc::new(ICNCore::new());
+        let node = ICNNode::new(core, "test-node".to_string());
+        
+        assert!(node.connect_to_peer(
+            "peer1".to_string(),
+            "localhost:8080".to_string()
+        ).await.is_ok());
     }
 }

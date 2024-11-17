@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sun Nov 17 12:04:52 AM UTC 2024
+Project Code Dump - Generated Sun Nov 17 12:10:17 AM UTC 2024
 ======================================
 
 Project Tree:
@@ -6955,7 +6955,7 @@ mod tests {
 ===================
 File: ./backend/src/vm/mod.rs
 ===================
-// src/vm/mod.rs
+// src/vm/mod.rs 
 
 pub mod opcode;
 pub mod contract;
@@ -6986,6 +6986,8 @@ pub enum VMError {
     InsufficientReputation,
     InvalidOperand,
     ExecutionLimitExceeded,
+    OutOfMemory,
+    InvalidMemoryAddress,
     Custom(String),
 }
 
@@ -7001,6 +7003,8 @@ impl std::fmt::Display for VMError {
             VMError::InsufficientReputation => write!(f, "Insufficient reputation"),
             VMError::InvalidOperand => write!(f, "Invalid operand"),
             VMError::ExecutionLimitExceeded => write!(f, "Execution limit exceeded"),
+            VMError::OutOfMemory => write!(f, "Out of memory"),
+            VMError::InvalidMemoryAddress => write!(f, "Invalid memory address"),
             VMError::Custom(msg) => write!(f, "{}", msg),
         }
     }
@@ -8387,14 +8391,13 @@ File: ./backend/src/blockchain/chain.rs
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 
-use crate::consensus::ProofOfCooperation;
-use crate::consensus::types::ConsensusRound;
+use crate::consensus::{ProofOfCooperation, ConsensusConfig, ConsensusRound};
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
 use crate::vm::{VM, Contract, ExecutionContext, Event};
 use crate::blockchain::{Block, Transaction};
 use crate::blockchain::transaction::{TransactionType, ResourceAllocation};
-use crate::relationship::RelationshipSystem;
+use crate::relationship::{RelationshipSystem, Contribution, MutualAidInteraction, Relationship};
 
 pub struct Blockchain {
     pub chain: Vec<Block>,
@@ -8428,18 +8431,6 @@ impl Blockchain {
             current_block_number: 1,
             coordinator_did,
         }
-    }
-
-    pub fn create_contract(&mut self, contract: Contract) -> Result<(), String> {
-        let reputation_context = {
-            let reputation_system = self.reputation_system.lock()
-                .map_err(|_| "Failed to acquire reputation lock".to_string())?;
-            reputation_system.get_reputation_context()
-        };
-        
-        let mut vm = VM::new(1000, reputation_context);
-        vm.create_contract(contract);
-        Ok(())
     }
 
     pub async fn process_transaction(&mut self, transaction: &Transaction) -> Result<(), String> {
@@ -8514,13 +8505,18 @@ impl Blockchain {
                 let mut relationship_system = self.relationship_system.lock()
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
-                relationship_system.record_contribution(
-                    transaction.sender.clone(),
-                    description.clone(),
-                    impact_story.clone(),
-                    context.clone(),
-                    tags.clone(),
-                )?;
+                let contribution = Contribution {
+                    contributor_did: transaction.sender.clone(),
+                    description: description.clone(),
+                    impact_story: impact_story.clone(),
+                    date: chrono::Utc::now(),
+                    context: context.clone(),
+                    witnesses: vec![],
+                    feedback: vec![],
+                    tags: tags.clone(),
+                };
+                
+                relationship_system.record_contribution(contribution)?;
 
                 resource_allocation.consume_resources(transaction.resource_cost)?;
                 self.pending_transactions.push(transaction.clone());
@@ -8531,31 +8527,48 @@ impl Blockchain {
                 let mut relationship_system = self.relationship_system.lock()
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
-                relationship_system.record_mutual_aid(
-                    transaction.sender.clone(),
-                    receiver.clone(),
-                    description.clone(),
-                    impact_story.clone(),
-                    reciprocity_notes.clone(),
-                    tags.clone(),
-                )?;
+                let interaction = MutualAidInteraction {
+                    date: chrono::Utc::now(),
+                    provider_did: transaction.sender.clone(),
+                    receiver_did: receiver.clone(),
+                    description: description.clone(),
+                    impact_story: impact_story.clone(),
+                    reciprocity_notes: reciprocity_notes.clone(),
+                    tags: tags.clone(),
+                };
+                
+                relationship_system.record_mutual_aid(interaction)?;
 
                 resource_allocation.consume_resources(transaction.resource_cost)?;
                 self.pending_transactions.push(transaction.clone());
                 Ok(())
             }
 
-            TransactionType::UpdateRelationship { member_two, relationship_type, story, interaction } => {
+            TransactionType::UpdateRelationship { member_two, relationship_type, story, interaction: interaction_notes } => {
                 let mut relationship_system = self.relationship_system.lock()
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
-                relationship_system.update_relationship(
-                    &transaction.sender,
-                    member_two,
-                    relationship_type,
-                    story,
-                    interaction,
-                )?;
+                let relationship = Relationship {
+                    member_one: transaction.sender.clone(),
+                    member_two: member_two.clone(),
+                    relationship_type: relationship_type.clone(),
+                    started: chrono::Utc::now(),
+                    story: story.clone(),
+                    interactions: if let Some(notes) = interaction_notes {
+                        vec![crate::relationship::Interaction {
+                            date: chrono::Utc::now(),
+                            description: notes.clone(),
+                            impact: None,
+                            interaction_type: "Initial".to_string(),
+                        }]
+                    } else {
+                        vec![]
+                    },
+                    mutual_endorsements: vec![],
+                    notes: vec![],
+                };
+                
+                relationship_system.update_relationship(relationship)?;
 
                 resource_allocation.consume_resources(transaction.resource_cost)?;
                 self.pending_transactions.push(transaction.clone());
@@ -8566,13 +8579,15 @@ impl Blockchain {
                 let mut relationship_system = self.relationship_system.lock()
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
-                relationship_system.add_endorsement(
-                    &transaction.sender,
-                    to_did,
-                    content,
-                    context,
-                    skills,
-                )?;
+                let endorsement = crate::relationship::Endorsement {
+                    from_did: transaction.sender.clone(),
+                    content: content.clone(),
+                    date: chrono::Utc::now(),
+                    context: context.clone(),
+                    skills: skills.clone(),
+                };
+                
+                relationship_system.add_endorsement(&transaction.sender, to_did, endorsement)?;
 
                 resource_allocation.consume_resources(transaction.resource_cost)?;
                 self.pending_transactions.push(transaction.clone());
@@ -8620,7 +8635,7 @@ impl Blockchain {
         Ok(())
     }
 
-    fn get_contract(&self, contract_id: &str) -> Result<Contract, String> {
+    fn get_contract(&self, _contract_id: &str) -> Result<Contract, String> {
         // In a real implementation, this would fetch the contract from storage
         Err("Contract not found".to_string())
     }
@@ -8685,7 +8700,7 @@ impl Blockchain {
         }
 
         let block = consensus.finalize_round().await?;
-        let updates = consensus.get_reputation_updates().to_vec();
+        let updates = consensus.get_reputation_updates();
         
         drop(consensus);
 
@@ -8694,8 +8709,8 @@ impl Blockchain {
         
         let mut reputation_system = self.reputation_system.lock()
             .map_err(|_| "Failed to acquire reputation lock".to_string())?;
-        for (did, change) in updates {
-            reputation_system.increase_reputation(&did, change);
+        for (did, change) in updates.iter() {
+            reputation_system.increase_reputation(did, *change);
         }
 
         self.current_block_number += 1;
@@ -11287,20 +11302,16 @@ mod tests {
 ===================
 File: ./backend/src/consensus/mod.rs
 ===================
-// src/consensus/proof_of_cooperation/mod.rs
+// src/consensus/mod.rs
 
-pub mod core;
-pub mod validator;
-pub mod metrics;
-pub mod round;
-pub mod event;
+pub mod proof_of_cooperation;
+pub mod types;
 
-pub use core::ProofOfCooperation;
-pub use validator::ValidatorManager;
-pub use round::RoundManager;
-pub use event::ConsensusEvent;
+// Re-export key types and modules
+pub use proof_of_cooperation::ProofOfCooperation;
 
-use crate::consensus::types::{
+// Re-export from types module for convenience
+pub use types::{
     ConsensusConfig,
     ConsensusRound,
     ConsensusError,
@@ -11309,15 +11320,28 @@ use crate::consensus::types::{
     RoundStatus,
 };
 
-// Re-export commonly used types at this module level
-pub use crate::consensus::types::{
-    ConsensusConfig,
-    ConsensusRound,
-    ConsensusError,
-    ValidatorInfo,
-    WeightedVote,
-    RoundStatus,
-};
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use tokio;
+    use crate::websocket::WebSocketHandler;
+
+    #[tokio::test]
+    async fn test_consensus_integration() {
+        let ws_handler = Arc::new(WebSocketHandler::new());
+        let config = ConsensusConfig::default();
+        
+        let mut consensus = ProofOfCooperation::new(config, ws_handler);
+        
+        // Register test validators
+        consensus.register_validator("did:icn:test1".to_string(), 1000).unwrap();
+        consensus.register_validator("did:icn:test2".to_string(), 1000).unwrap();
+        consensus.register_validator("did:icn:test3".to_string(), 1000).unwrap();
+        
+        assert!(consensus.start_round().await.is_ok());
+    }
+}
 
 ===================
 File: ./backend/src/consensus/proof_of_cooperation/metrics.rs
