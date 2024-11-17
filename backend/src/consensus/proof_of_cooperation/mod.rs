@@ -1,14 +1,14 @@
 // src/consensus/proof_of_cooperation/mod.rs
 
 pub mod core;
-pub mod event;
+pub mod events;
 pub mod metrics;
 pub mod round;
 pub mod validator;
 
 // Re-export key components
 pub use core::ProofOfCooperation;
-pub use event::ConsensusEvent;
+pub use events::ConsensusEvent;
 pub use validator::ValidatorManager;
 pub use round::RoundManager;
 

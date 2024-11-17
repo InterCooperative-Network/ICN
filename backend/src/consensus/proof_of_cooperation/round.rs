@@ -1,7 +1,7 @@
 // src/consensus/proof_of_cooperation/round.rs
 
 use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration};
+use chrono::{Utc, Duration};
 use crate::blockchain::Block;
 use crate::consensus::types::{
     ConsensusRound,
@@ -61,7 +61,12 @@ impl RoundManager {
         };
 
         self.current_round = Some(round);
-        Ok(ConsensusEvent::RoundStarted(round_number))
+
+        Ok(ConsensusEvent::RoundStarted { 
+            round: round_number,
+            coordinator,
+            timeout: self.config.round_timeout_ms,
+        })
     }
 
     pub fn propose_block(
@@ -82,7 +87,7 @@ impl RoundManager {
             return Err(ConsensusError::InvalidRoundState);
         }
 
-        if !block.verify(None).unwrap_or(false) {
+        if let Err(_) = block.verify(None) {
             return Err(ConsensusError::ValidationFailed);
         }
 
@@ -95,6 +100,7 @@ impl RoundManager {
             round: round.round_number,
             proposer: proposer.to_string(),
             block_hash: block.hash,
+            transactions: block.transactions.len(),
         })
     }
 
@@ -136,9 +142,9 @@ impl RoundManager {
         self.current_round = Some(round);
 
         Ok(ConsensusEvent::VoteReceived {
-            validator,
-            approved: approve,
             round: round.round_number,
+            validator,
+            approve,
             voting_power,
         })
     }
