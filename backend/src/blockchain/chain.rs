@@ -3,13 +3,14 @@
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 
-use crate::consensus::{ProofOfCooperation, ConsensusConfig, ConsensusRound};
+use crate::consensus::{ProofOfCooperation, ConsensusRound};
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
 use crate::vm::{VM, Contract, ExecutionContext, Event};
 use crate::blockchain::{Block, Transaction};
 use crate::blockchain::transaction::{TransactionType, ResourceAllocation};
 use crate::relationship::{RelationshipSystem, Contribution, MutualAidInteraction, Relationship};
+use crate::relationship::{RelationshipType, InteractionType};
 
 pub struct Blockchain {
     pub chain: Vec<Block>,
@@ -163,7 +164,7 @@ impl Blockchain {
                 let relationship = Relationship {
                     member_one: transaction.sender.clone(),
                     member_two: member_two.clone(),
-                    relationship_type: relationship_type.clone(),
+                    relationship_type: RelationshipType::Other(relationship_type.clone()),
                     started: chrono::Utc::now(),
                     story: story.clone(),
                     interactions: if let Some(notes) = interaction_notes {
@@ -171,7 +172,7 @@ impl Blockchain {
                             date: chrono::Utc::now(),
                             description: notes.clone(),
                             impact: None,
-                            interaction_type: "Initial".to_string(),
+                            interaction_type: InteractionType::Other("Initial".to_string()),
                         }]
                     } else {
                         vec![]
@@ -291,11 +292,11 @@ impl Blockchain {
             self.coordinator_did.clone(),
         );
 
-        let consensus_guard = self.consensus.lock()
+        // Get consensus lock and propose block
+        let mut consensus_guard = self.consensus.lock()
             .map_err(|_| "Failed to acquire consensus lock".to_string())?;
-        let mut consensus = consensus_guard;
-        
-        consensus.start_round().await?;
+
+        consensus_guard.start_round().await?;
         
         let validators = self.get_active_validators();
         if validators.is_empty() {
@@ -304,28 +305,29 @@ impl Blockchain {
 
         self.coordinator_did = validators[0].clone();
 
-        consensus.propose_block(&self.coordinator_did, new_block.clone()).await?;
+        consensus_guard.propose_block(&self.coordinator_did, new_block.clone()).await?;
 
         for validator in &validators {
             let signature = String::from("dummy_signature"); // TODO: Implement real signatures
-            consensus.submit_vote(validator, true, signature).await?;
+            consensus_guard.submit_vote(validator, true, signature).await?;
         }
 
-        let block = consensus.finalize_round().await?;
-        let updates = consensus.get_reputation_updates();
-        
-        drop(consensus);
+        let block = consensus_guard.finalize_round().await?;
+        let updates = consensus_guard.get_reputation_updates();
 
-        self.chain.push(block);
-        self.pending_transactions.clear();
-        
+        // Update reputations
         let mut reputation_system = self.reputation_system.lock()
             .map_err(|_| "Failed to acquire reputation lock".to_string())?;
-        for (did, change) in updates.iter() {
-            reputation_system.increase_reputation(did, *change);
+            
+        for (did, change) in updates {
+            reputation_system.increase_reputation(&did, *change);
         }
 
+        // Add block and cleanup
+        self.chain.push(block);
+        self.pending_transactions.clear();
         self.current_block_number += 1;
+        
         Ok(())
     }
 
@@ -373,7 +375,7 @@ mod tests {
         let ws_handler = Arc::new(WebSocketHandler::new());
         
         let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
-            ConsensusConfig::default(),
+            crate::consensus::types::ConsensusConfig::default(),
             ws_handler,
         )));
 

@@ -12,6 +12,9 @@ pub use event::ConsensusEvent;
 pub use validator::ValidatorManager;
 pub use round::RoundManager;
 
+// Re-export the Events type from the correct location
+use crate::consensus::types::ConsensusEvent as TypesConsensusEvent;
+
 #[cfg(test)]
 mod tests {
     use super::*;

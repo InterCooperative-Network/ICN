@@ -1,9 +1,26 @@
+// src/vm/vm.rs
+
 use std::collections::HashMap;
 use super::opcode::OpCode;
 use super::contract::Contract;
 use super::execution_context::ExecutionContext;
 use super::cooperative_metadata::CooperativeMetadata;
 use super::event::Event;
+use super::VMError;
+use super::operations::{
+    Operation,
+    stack::StackOperation,
+    arithmetic::ArithmeticOperation,
+    cooperative::CooperativeOperation,
+    data::DataOperation,
+    federation::FederationOperation,
+    governance::GovernanceOperation,
+    memory::MemoryOperation,
+    network::NetworkOperation,
+    relationship::RelationshipOperation,
+    reputation::ReputationOperation,
+    system::SystemOperation,
+};
 
 pub struct VM {
     stack: Vec<i64>,
@@ -82,574 +99,78 @@ impl VM {
         op: &OpCode,
         metadata: &CooperativeMetadata,
     ) -> Result<(), String> {
-        match op {
-            OpCode::Push(val) => {
-                self.stack.push(*val);
-                Ok(())
-            }
-            OpCode::Pop => {
-                self.stack.pop().ok_or("Stack underflow".to_string())?;
-                Ok(())
-            }
-            OpCode::Dup => {
-                let val = *self.stack.last().ok_or("Stack underflow")?;
-                self.stack.push(val);
-                Ok(())
-            }
-            OpCode::Swap => {
-                let len = self.stack.len();
-                if len < 2 {
-                    return Err("Not enough values on the stack to swap".to_string());
-                }
-                self.stack.swap(len - 1, len - 2);
-                Ok(())
-            }
-            OpCode::Add => {
-                let b = self.stack.pop().ok_or("Stack underflow")?;
-                let a = self.stack.pop().ok_or("Stack underflow")?;
-                self.stack.push(a + b);
-                Ok(())
-            }
-            OpCode::Sub => {
-                let b = self.stack.pop().ok_or("Stack underflow")?;
-                let a = self.stack.pop().ok_or("Stack underflow")?;
-                self.stack.push(a - b);
-                Ok(())
-            }
-            OpCode::Mul => {
-                let b = self.stack.pop().ok_or("Stack underflow")?;
-                let a = self.stack.pop().ok_or("Stack underflow")?;
-                self.stack.push(a * b);
-                Ok(())
-            }
-            OpCode::Div => {
-                let b = self.stack.pop().ok_or("Stack underflow")?;
-                if b == 0 {
-                    return Err("Division by zero".to_string());
-                }
-                let a = self.stack.pop().ok_or("Stack underflow")?;
-                self.stack.push(a / b);
-                Ok(())
-            }
-            OpCode::Mod => {
-                let b = self.stack.pop().ok_or("Stack underflow")?;
-                if b == 0 {
-                    return Err("Modulo by zero".to_string());
-                }
-                let a = self.stack.pop().ok_or("Stack underflow")?;
-                self.stack.push(a % b);
-                Ok(())
-            }
-            OpCode::Store(key) => {
-                let value = self.stack.pop().ok_or("Stack underflow")?;
-                self.memory.insert(key.clone(), value);
-                Ok(())
-            }
-            OpCode::Load(key) => {
-                let value = self
-                    .memory
-                    .get(key)
-                    .copied()
-                    .ok_or("Key not found in memory".to_string())?;
-                self.stack.push(value);
-                Ok(())
-            }
-            OpCode::Jump(target) => {
-                if *target >= self.instruction_limit {
-                    return Err("Jump target out of bounds".to_string());
-                }
-                self.instruction_pointer = *target;
-                Ok(())
-            }
-            OpCode::JumpIf(target) => {
-                let condition = self.stack.pop().ok_or("Stack underflow")?;
-                if condition != 0 {
-                    if *target >= self.instruction_limit {
-                        return Err("Jump target out of bounds".to_string());
-                    }
-                    self.instruction_pointer = *target;
-                }
-                Ok(())
-            }
-            OpCode::CreateCooperative => {
-                let context = self.execution_context.as_ref()
-                    .ok_or("No execution context".to_string())?;
-                if !context.permissions.contains(&"cooperative.create".to_string()) {
-                    return Err("Permission denied: cooperative.create".to_string());
-                }
-                let reputation = self.reputation_context
-                    .get(&context.caller_did)
-                    .copied()
-                    .unwrap_or(0);
-                if reputation < 100 {
-                    return Err("Insufficient reputation to create cooperative".to_string());
-                }
-                self.emit_event(
-                    "CooperativeCreated",
-                    metadata.cooperative_id.clone(),
-                    HashMap::new(),
-                );
-                Ok(())
-            }
-            OpCode::JoinCooperative => {
-                let _context = self.execution_context.as_ref()
-                    .ok_or("No execution context".to_string())?;
-                self.emit_event(
-                    "CooperativeJoined",
-                    metadata.cooperative_id.clone(),
-                    HashMap::new(),
-                );
-                Ok(())
-            }
-            OpCode::LeaveCooperative => {
-                let _context = self.execution_context.as_ref()
-                    .ok_or("No execution context".to_string())?;
-                self.emit_event(
-                    "CooperativeLeft",
-                    metadata.cooperative_id.clone(),
-                    HashMap::new(),
-                );
-                Ok(())
-            }
-            OpCode::AllocateResource => {
-                let resource_amount = self.stack.pop().ok_or("Stack underflow")?;
-                self.emit_event(
-                    "ResourceAllocated",
-                    metadata.cooperative_id.clone(),
-                    [("amount".to_string(), resource_amount.to_string())]
-                        .iter()
-                        .cloned()
-                        .collect(),
-                );
-                Ok(())
-            }
-            OpCode::TransferResource => {
-                let resource_amount = self.stack.pop().ok_or("Stack underflow")?;
-                let to_member_id = self.stack.pop().ok_or("Stack underflow")?;
-                self.emit_event(
-                    "ResourceTransferred",
-                    metadata.cooperative_id.clone(),
-                    [
-                        ("amount".to_string(), resource_amount.to_string()),
-                        ("to_member".to_string(), to_member_id.to_string()),
-                    ]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                );
-                Ok(())
-            }
-            OpCode::UpdateCooperativeMetadata => {
-                Ok(())
-            }
-            OpCode::AddCooperativeMember => {
-                let member_id = self.stack.pop().ok_or("Stack underflow")?;
-                self.emit_event(
-                    "CooperativeMemberAdded",
-                    metadata.cooperative_id.clone(),
-                    [("member_id".to_string(), member_id.to_string())]
-                        .iter()
-                        .cloned()
-                        .collect(),
-                );
-                Ok(())
-            }
-            OpCode::RemoveCooperativeMember => {
-                let member_id = self.stack.pop().ok_or("Stack underflow")?;
-                self.emit_event(
-                    "CooperativeMemberRemoved",
-                    metadata.cooperative_id.clone(),
-                    [("member_id".to_string(), member_id.to_string())]
-                        .iter()
-                        .cloned()
-                        .collect(),
-                );
-                Ok(())
-            }
-            OpCode::SetMemberRole => {
-                let role = self.stack.pop().ok_or("Stack underflow")?;
-                let member_id = self.stack.pop().ok_or("Stack underflow")?;
-                self.emit_event(
-                    "MemberRoleSet",
-                    metadata.cooperative_id.clone(),
-                    [
-                        ("member_id".to_string(), member_id.to_string()),
-                        ("role".to_string(), role.to_string()),
-                    ]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                );
-                Ok(())
-            }
-            OpCode::CreateProposal => {
-                let context = self.execution_context.as_ref()
-                    .ok_or("No execution context".to_string())?;
-                if !context.permissions.contains(&"proposal.create".to_string()) {
-                    return Err("Permission denied: proposal.create".to_string());
-                }
-                self.emit_event(
-                    "ProposalCreated",
-                    metadata.cooperative_id.clone(),
-                    HashMap::new(),
-                );
-                Ok(())
-            }
-            OpCode::CastVote => {
-                let vote_value = self.stack.pop().ok_or("Stack underflow")?;
-                let proposal_id = self.stack.pop().ok_or("Stack underflow")?;
-                self.emit_event(
-                    "VoteCast",
-                    metadata.cooperative_id.clone(),
-                    [
-                        ("proposal_id".to_string(), proposal_id.to_string()),
-                        ("vote_value".to_string(), vote_value.to_string()),
-                    ]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                );
-                Ok(())
-            }
-            OpCode::DelegateVotes => {
-                let delegate_to_id = self.stack.pop().ok_or("Stack underflow")?;
-                self.emit_event(
-                    "VotesDelegated",
-                    metadata.cooperative_id.clone(),
-                    [("delegate_to".to_string(), delegate_to_id.to_string())]
-                        .iter()
-                        .cloned()
-                        .collect(),
-                );
-                Ok(())
-            }
-            OpCode::ExecuteProposal => {
-                let proposal_id = self.stack.pop().ok_or("Stack underflow")?;
-                self.emit_event(
-                    "ProposalExecuted",
-                    metadata.cooperative_id.clone(),
-                    [("proposal_id".to_string(), proposal_id.to_string())]
-                        .iter()
-                        .cloned()
-                        .collect(),
-                );
-                Ok(())
-            }
-            OpCode::CancelProposal => {
-                let proposal_id = self.stack.pop().ok_or("Stack underflow")?;
-                self.emit_event(
-                    "ProposalCancelled",
-                    metadata.cooperative_id.clone(),
-                    [("proposal_id".to_string(), proposal_id.to_string())]
-                        .iter()
-                        .cloned()
-                        .collect(),
-                );
-                Ok(())
-            }
-            OpCode::ExtendVotingPeriod => {
-                let proposal_id = self.stack.pop().ok_or("Stack underflow")?;
-                let additional_time = self.stack.pop().ok_or("Stack underflow")?;
-                self.emit_event(
-                    "VotingPeriodExtended",
-                    metadata.cooperative_id.clone(),
-                    [
-                        ("proposal_id".to_string(), proposal_id.to_string()),
-                        ("additional_time".to_string(), additional_time.to_string()),
-                    ]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                );
-                Ok(())
-            }
-            OpCode::UpdateQuorum => {
-                let new_quorum = self.stack.pop().ok_or("Stack underflow")?;
-                self.emit_event(
-                    "QuorumUpdated",
-                    metadata.cooperative_id.clone(),
-                    [("new_quorum".to_string(), new_quorum.to_string())]
-                        .iter()
-                        .cloned()
-                        .collect(),
-                );
-                Ok(())
-            }
-            OpCode::CalculateVotingWeight => {
-                let context = self.execution_context.as_ref()
-                    .ok_or("No execution context".to_string())?;
-                let reputation = self.reputation_context
-                    .get(&context.caller_did)
-                    .copied()
-                    .unwrap_or(0);
-                self.stack.push(reputation);
-                Ok(())
-            }
-            OpCode::UpdateReputation(amount) => {
-                let context = self.execution_context.as_ref()
-                    .ok_or("No execution context".to_string())?;
-                let reputation = self.reputation_context
-                    .entry(context.caller_did.clone())
-                    .or_insert(0);
-                *reputation += *amount;
-                self.emit_event(
-                    "ReputationUpdated",
-                    metadata.cooperative_id.clone(),
-                    [("amount".to_string(), amount.to_string())]
-                        .iter()
-                        .cloned()
-                        .collect(),
-                );
-                Ok(())
-            }
-            OpCode::GetReputation => {
-                let context = self.execution_context.as_ref()
-                    .ok_or("No execution context".to_string())?;
-                let reputation = self.reputation_context
-                    .get(&context.caller_did)
-                    .copied()
-                    .unwrap_or(0);
-                self.stack.push(reputation);
-                Ok(())
-            }
-            OpCode::TransferReputation => {
-                let amount = self.stack.pop().ok_or("Stack underflow")?;
-                let to_did_hash = self.stack.pop().ok_or("Stack underflow")?;
-                let to_did = self.reverse_hash_did(to_did_hash);
-                let from_context = self.execution_context.as_ref()
-                    .ok_or("No execution context".to_string())?;
-
-                    let from_reputation = self
-                    .reputation_context
-                    .entry(from_context.caller_did.clone())
-                    .or_insert(0);
-                if *from_reputation < amount {
-                    return Err("Insufficient reputation to transfer".to_string());
-                }
-
-                *from_reputation -= amount;
-                let to_reputation = self.reputation_context.entry(to_did).or_insert(0);
-                *to_reputation += amount;
-
-                self.emit_event(
-                    "ReputationTransferred",
-                    metadata.cooperative_id.clone(),
-                    [("amount".to_string(), amount.to_string())]
-                        .iter()
-                        .cloned()
-                        .collect(),
-                );
-                Ok(())
-            }
-            OpCode::BurnReputation => {
-                let amount = self.stack.pop().ok_or("Stack underflow")?;
-                let context = self.execution_context.as_ref()
-                    .ok_or("No execution context".to_string())?;
-                let reputation = self.reputation_context
-                    .entry(context.caller_did.clone())
-                    .or_insert(0);
-                if *reputation < amount {
-                    return Err("Insufficient reputation to burn".to_string());
-                }
-                *reputation -= amount;
-                self.emit_event(
-                    "ReputationBurned",
-                    metadata.cooperative_id.clone(),
-                    [("amount".to_string(), amount.to_string())]
-                        .iter()
-                        .cloned()
-                        .collect(),
-                );
-                Ok(())
-            }
-            OpCode::MintReputation => {
-                let amount = self.stack.pop().ok_or("Stack underflow")?;
-                let to_did_hash = self.stack.pop().ok_or("Stack underflow")?;
-                let to_did = self.reverse_hash_did(to_did_hash);
-                let to_reputation = self.reputation_context.entry(to_did).or_insert(0);
-                *to_reputation += amount;
-                self.emit_event(
-                    "ReputationMinted",
-                    metadata.cooperative_id.clone(),
-                    [("amount".to_string(), amount.to_string())]
-                        .iter()
-                        .cloned()
-                        .collect(),
-                );
-                Ok(())
-            }
-            OpCode::VerifyDID => {
-                self.stack.push(1); // 1 for true
-                Ok(())
-            }
-            OpCode::UpdateDIDDocument => {
-                self.emit_event(
-                    "DIDDocumentUpdated",
-                    metadata.cooperative_id.clone(),
-                    HashMap::new(),
-                );
-                Ok(())
-            }
-            OpCode::CreateCredential => {
-                self.emit_event(
-                    "CredentialCreated",
-                    metadata.cooperative_id.clone(),
-                    HashMap::new(),
-                );
-                Ok(())
-            }
-            OpCode::VerifyCredential => {
-                self.stack.push(1); // Assume credential is valid
-                Ok(())
-            }
-            OpCode::RevokeCredential => {
-                self.emit_event(
-                    "CredentialRevoked",
-                    metadata.cooperative_id.clone(),
-                    HashMap::new(),
-                );
-                Ok(())
-            }
-            OpCode::InitiateFederation => {
-                self.emit_event(
-                    "FederationInitiated",
-                    metadata.cooperative_id.clone(),
-                    HashMap::new(),
-                );
-                Ok(())
-            }
-            OpCode::JoinFederation => {
-                self.emit_event(
-                    "FederationJoined",
-                    metadata.cooperative_id.clone(),
-                    HashMap::new(),
-                );
-                Ok(())
-            }
-            OpCode::LeaveFederation => {
-                self.emit_event(
-                    "FederationLeft",
-                    metadata.cooperative_id.clone(),
-                    HashMap::new(),
-                );
-                Ok(())
-            }
-            OpCode::SyncFederationState => {
-                self.emit_event(
-                    "FederationStateSynced",
-                    metadata.cooperative_id.clone(),
-                    HashMap::new(),
-                );
-                Ok(())
-            }
-            OpCode::ValidateFederationAction => {
-                self.stack.push(1); // Assume action is valid
-                Ok(())
-            }
-            OpCode::CreateTransaction => {
-                self.emit_event(
-                    "TransactionCreated",
-                    metadata.cooperative_id.clone(),
-                    HashMap::new(),
-                );
-                Ok(())
-            }
-            OpCode::ValidateTransaction => {
-                self.stack.push(1); // Assume transaction is valid
-                Ok(())
-            }
-            OpCode::SignTransaction => {
-                self.emit_event(
-                    "TransactionSigned",
-                    metadata.cooperative_id.clone(),
-                    HashMap::new(),
-                );
-                Ok(())
-            }
-            OpCode::BroadcastTransaction => {
-                self.emit_event(
-                    "TransactionBroadcasted",
-                    metadata.cooperative_id.clone(),
-                    HashMap::new(),
-                );
-                Ok(())
-            }
-            OpCode::Log(message) => {
-                self.logs.push(format!("Log: {}", message));
-                Ok(())
-            }
-            OpCode::Halt => {
-                self.instruction_pointer = self.instruction_limit;
-                Ok(())
-            }
-            OpCode::EmitEvent(event_type) => {
-                self.emit_event(event_type, metadata.cooperative_id.clone(), HashMap::new());
-                Ok(())
-            }
-            OpCode::GetBlockNumber => {
-                let context = self.execution_context.as_ref()
-                    .ok_or("No execution context".to_string())?;
-                self.stack.push(context.block_number as i64);
-                Ok(())
-            }
-            OpCode::GetTimestamp => {
-                let context = self.execution_context.as_ref()
-                    .ok_or("No execution context".to_string())?;
-                self.stack.push(context.timestamp as i64);
-                Ok(())
-            }
-                // Add the GetCaller implementation here:
-            OpCode::GetCaller => {
-                let context = self.execution_context.as_ref()
-                    .ok_or("No execution context".to_string())?;
-                let caller_id_hash = self.hash_did(&context.caller_did);
-                self.stack.push(caller_id_hash);
-                Ok(())
-            }
+        let operation: Box<dyn Operation> = match op {
+            // Stack Operations
+            OpCode::Push(val) => Box::new(StackOperation::Push(*val)),
+            OpCode::Pop => Box::new(StackOperation::Pop),
+            OpCode::Dup => Box::new(StackOperation::Dup),
+            OpCode::Swap => Box::new(StackOperation::Swap),
             
-            OpCode::Equal => {
-                let b = self.stack.pop().ok_or("Stack underflow")?;
-                let a = self.stack.pop().ok_or("Stack underflow")?;
-                self.stack.push(if a == b { 1 } else { 0 });
-                Ok(())
-            }
-            OpCode::NotEqual => {
-                let b = self.stack.pop().ok_or("Stack underflow")?;
-                let a = self.stack.pop().ok_or("Stack underflow")?;
-                self.stack.push(if a != b { 1 } else { 0 });
-                Ok(())
-            }
-            OpCode::GreaterThan => {
-                let b = self.stack.pop().ok_or("Stack underflow")?;
-                let a = self.stack.pop().ok_or("Stack underflow")?;
-                self.stack.push(if a > b { 1 } else { 0 });
-                Ok(())
-            }
-            OpCode::LessThan => {
-                let b = self.stack.pop().ok_or("Stack underflow")?;
-                let a = self.stack.pop().ok_or("Stack underflow")?;
-                self.stack.push(if a < b { 1 } else { 0 });
-                Ok(())
-            }
-            OpCode::And => {
-                let b = self.stack.pop().ok_or("Stack underflow")?;
-                let a = self.stack.pop().ok_or("Stack underflow")?;
-                self.stack.push(a & b);
-                Ok(())
-            }
-            OpCode::Or => {
-                let b = self.stack.pop().ok_or("Stack underflow")?;
-                let a = self.stack.pop().ok_or("Stack underflow")?;
-                self.stack.push(a | b);
-                Ok(())
-            }
-            OpCode::Not => {
-                let a = self.stack.pop().ok_or("Stack underflow")?;
-                self.stack.push(!a);
-                Ok(())
-            }
-            OpCode::Nop => Ok(()),
-        }
+            // Arithmetic Operations
+            OpCode::Add => Box::new(ArithmeticOperation::Add),
+            OpCode::Sub => Box::new(ArithmeticOperation::Sub),
+            OpCode::Mul => Box::new(ArithmeticOperation::Mul),
+            OpCode::Div => Box::new(ArithmeticOperation::Div),
+            OpCode::Mod => Box::new(ArithmeticOperation::Mod),
+
+            // Memory Operations
+            OpCode::Store(key) => Box::new(MemoryOperation::Store(key.clone())),
+            OpCode::Load(key) => Box::new(MemoryOperation::Load(key.clone())),
+            
+            // Cooperative Operations
+            OpCode::CreateCooperative => Box::new(CooperativeOperation::CreateCooperative),
+            OpCode::JoinCooperative => Box::new(CooperativeOperation::JoinCooperative),
+            OpCode::LeaveCooperative => Box::new(CooperativeOperation::LeaveCooperative),
+
+            // Relationship Operations
+            OpCode::RecordContribution { description, impact_story, context, tags } => {
+                Box::new(RelationshipOperation::RecordContribution {
+                    description: description.clone(),
+                    impact_story: impact_story.clone(),
+                    context: context.clone(),
+                    tags: tags.clone(),
+                })
+            },
+            OpCode::RecordMutualAid { description, receiver, impact_story, reciprocity_notes, tags } => {
+                Box::new(RelationshipOperation::RecordMutualAid {
+                    description: description.clone(),
+                    receiver: receiver.clone(),
+                    impact_story: impact_story.clone(),
+                    reciprocity_notes: reciprocity_notes.clone(),
+                    tags: tags.clone(),
+                })
+            },
+            OpCode::UpdateRelationship { member_two, relationship_type, story, interaction } => {
+                Box::new(RelationshipOperation::UpdateRelationship {
+                    member_two: member_two.clone(),
+                    relationship_type: relationship_type.clone(),
+                    story: story.clone(),
+                    interaction: interaction.clone(),
+                })
+            },
+            OpCode::AddEndorsement { to_did, content, context, skills } => {
+                Box::new(RelationshipOperation::AddEndorsement {
+                    to_did: to_did.clone(),
+                    content: content.clone(),
+                    context: context.clone(),
+                    skills: skills.clone(),
+                })
+            },
+
+            // System Operations
+            OpCode::Log(msg) => Box::new(SystemOperation::Log {
+                message: msg.clone(),
+                level: super::operations::system::LogLevel::Info,
+                metadata: HashMap::new(),
+            }),
+            OpCode::Halt => Box::new(SystemOperation::Halt),
+
+            OpCode::Nop => Box::new(SystemOperation::Nop),
+            _ => return Err("Operation not implemented".to_string()),
+        };
+
+        // Execute the operation using the Operation trait
+        operation.execute(self).map_err(|e| e.to_string())
     }
 
     fn emit_event(&mut self, event_type: &str, cooperative_id: String, data: HashMap<String, String>) {
@@ -662,15 +183,6 @@ impl VM {
             };
             self.events.push(event);
         }
-    }
-
-    fn hash_did(&self, did: &str) -> i64 {
-        // Simple hash function for example purposes
-        did.bytes().fold(0, |acc, b| acc + b as i64)
-    }
-
-    fn reverse_hash_did(&self, hash: i64) -> String {
-        format!("did:placeholder:{}", hash)
     }
 
     pub fn get_logs(&self) -> &Vec<String> {
@@ -687,5 +199,47 @@ impl VM {
 
     pub fn get_memory(&self) -> &HashMap<String, i64> {
         &self.memory
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_vm() -> VM {
+        let mut reputation_context = HashMap::new();
+        reputation_context.insert("test_caller".to_string(), 100);
+        VM::new(1000, reputation_context)
+    }
+
+    #[test]
+    fn test_basic_stack_operations() {
+        let mut vm = setup_test_vm();
+        vm.execute_instruction(&OpCode::Push(42), &CooperativeMetadata::default()).unwrap();
+        assert_eq!(vm.get_stack(), &vec![42]);
+
+        vm.execute_instruction(&OpCode::Dup, &CooperativeMetadata::default()).unwrap();
+        assert_eq!(vm.get_stack(), &vec![42, 42]);
+
+        vm.execute_instruction(&OpCode::Pop, &CooperativeMetadata::default()).unwrap();
+        assert_eq!(vm.get_stack(), &vec![42]);
+    }
+
+    #[test]
+    fn test_arithmetic_operations() {
+        let mut vm = setup_test_vm();
+        vm.execute_instruction(&OpCode::Push(10), &CooperativeMetadata::default()).unwrap();
+        vm.execute_instruction(&OpCode::Push(5), &CooperativeMetadata::default()).unwrap();
+        vm.execute_instruction(&OpCode::Add, &CooperativeMetadata::default()).unwrap();
+        assert_eq!(vm.get_stack(), &vec![15]);
+    }
+
+    #[test]
+    fn test_memory_operations() {
+        let mut vm = setup_test_vm();
+        vm.execute_instruction(&OpCode::Push(42), &CooperativeMetadata::default()).unwrap();
+        vm.execute_instruction(&OpCode::Store("test".to_string()), &CooperativeMetadata::default()).unwrap();
+        vm.execute_instruction(&OpCode::Load("test".to_string()), &CooperativeMetadata::default()).unwrap();
+        assert_eq!(vm.get_stack(), &vec![42]);
     }
 }
