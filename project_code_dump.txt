@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sun Nov 17 03:27:26 AM UTC 2024
+Project Code Dump - Generated Sun Nov 17 08:28:23 AM UTC 2024
 ======================================
 
 Project Tree:
@@ -56,7 +56,8 @@ Project Tree:
 │   │   ├── network
 │   │   │   └── mod.rs
 │   │   ├── relationship
-│   │   │   └── mod.rs
+│   │   │   ├── mod.rs
+│   │   │   └── types.rs
 │   │   ├── reputation
 │   │   │   ├── mod.rs
 │   │   │   └── reputation_system.rs
@@ -135,7 +136,7 @@ Project Tree:
     ├── install_docsctl.sh
     └── requirements.txt
 
-37 directories, 94 files
+37 directories, 95 files
 
 
 ===================
@@ -6831,8 +6832,11 @@ pub enum OpCode {
 ===================
 File: ./backend/src/vm/event.rs
 ===================
+// src/vm/event.rs
+
 use std::collections::HashMap;
 
+#[derive(Debug, Clone)]
 pub struct Event {
     pub event_type: String,
     pub cooperative_id: String,
@@ -6840,6 +6844,16 @@ pub struct Event {
     pub timestamp: u64,
 }
 
+impl Event {
+    pub fn new(event_type: String, cooperative_id: String, data: HashMap<String, String>, timestamp: u64) -> Self {
+        Event {
+            event_type,
+            cooperative_id,
+            data,
+            timestamp,
+        }
+    }
+}
 
 ===================
 File: ./backend/src/vm/execution_context.rs
@@ -7540,6 +7554,71 @@ File: ./backend/src/api/mod.rs
 
 
 ===================
+File: ./backend/src/relationship/types.rs
+===================
+// src/relationship/types.rs
+
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum RelationshipType {
+    Collaboration,
+    Mentorship,
+    ResourceSharing,
+    MutualAid,
+    ProjectPartnership,
+    Custom(String),
+}
+
+impl RelationshipType {
+    pub fn new(relationship_type: &str) -> Self {
+        match relationship_type.to_lowercase().as_str() {
+            "collaboration" => RelationshipType::Collaboration,
+            "mentorship" => RelationshipType::Mentorship,
+            "resource_sharing" => RelationshipType::ResourceSharing,
+            "mutual_aid" => RelationshipType::MutualAid,
+            "project_partnership" => RelationshipType::ProjectPartnership,
+            other => RelationshipType::Custom(other.to_string()),
+        }
+    }
+
+    pub fn as_str(&self) -> String {
+        match self {
+            RelationshipType::Collaboration => "collaboration".to_string(),
+            RelationshipType::Mentorship => "mentorship".to_string(),
+            RelationshipType::ResourceSharing => "resource_sharing".to_string(),
+            RelationshipType::MutualAid => "mutual_aid".to_string(),
+            RelationshipType::ProjectPartnership => "project_partnership".to_string(),
+            RelationshipType::Custom(s) => s.clone(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_relationship_type_creation() {
+        assert!(matches!(RelationshipType::new("collaboration"), RelationshipType::Collaboration));
+        assert!(matches!(RelationshipType::new("mentorship"), RelationshipType::Mentorship));
+        assert!(matches!(
+            RelationshipType::new("custom_type"),
+            RelationshipType::Custom(s) if s == "custom_type"
+        ));
+    }
+
+    #[test]
+    fn test_relationship_type_string_conversion() {
+        let r_type = RelationshipType::Collaboration;
+        assert_eq!(r_type.as_str(), "collaboration");
+
+        let custom = RelationshipType::Custom("test".to_string());
+        assert_eq!(custom.as_str(), "test");
+    }
+}
+
+===================
 File: ./backend/src/relationship/mod.rs
 ===================
 //! Relationship System for Inter-Cooperative Network
@@ -7563,6 +7642,10 @@ File: ./backend/src/relationship/mod.rs
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
+use crate::monitoring::energy::{EnergyAware, EnergyMonitor};
+
+mod types;
+pub use types::RelationshipType;
 
 /// Records a concrete contribution made to the cooperative community.
 /// Focuses on capturing both the action and its impact through storytelling.
@@ -7676,28 +7759,6 @@ pub struct Relationship {
     
     /// Notes about the relationship
     pub notes: Vec<RelationshipNote>,
-}
-
-/// Types of relationships that can exist between members
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum RelationshipType {
-    /// Working together on specific projects
-    Collaboration,
-    
-    /// Knowledge sharing and guidance
-    Mentorship,
-    
-    /// Sharing physical or digital resources
-    ResourceSharing,
-    
-    /// Mutual aid and support
-    MutualAid,
-    
-    /// Formal project partnership
-    ProjectPartnership,
-    
-    /// Other types of relationships
-    Other(String),
 }
 
 /// Records individual interactions within a relationship
@@ -7818,7 +7879,6 @@ impl RelationshipSystem {
 
     /// Records a new contribution with its story and impact
     pub fn record_contribution(&mut self, contribution: Contribution) -> Result<(), String> {
-        // Validate contributor exists
         if !self.is_valid_member(&contribution.contributor_did) {
             return Err("Contributor not found".to_string());
         }
@@ -7833,7 +7893,6 @@ impl RelationshipSystem {
 
     /// Records mutual aid interaction between members
     pub fn record_mutual_aid(&mut self, interaction: MutualAidInteraction) -> Result<(), String> {
-        // Validate both parties exist
         if !self.is_valid_member(&interaction.provider_did) || 
            !self.is_valid_member(&interaction.receiver_did) {
             return Err("Invalid member DID".to_string());
@@ -7912,7 +7971,7 @@ impl RelationshipSystem {
     // Internal helper methods
 
     /// Validates that a member exists in the system
-    fn is_valid_member(&self, did: &str) -> bool {
+    fn is_valid_member(&self, _did: &str) -> bool {
         // In a real implementation, this would check against your identity system
         true // Simplified for example
     }
@@ -7971,8 +8030,8 @@ impl RelationshipSystem {
 }
 
 // Implement the energy awareness trait
-impl crate::monitoring::energy::EnergyAware for RelationshipSystem {
-    fn record_energy_metrics(&self, monitor: &crate::monitoring::energy::EnergyMonitor) {
+impl EnergyAware for RelationshipSystem {
+    fn record_energy_metrics(&self, monitor: &EnergyMonitor) {
         // Record basic operations
         monitor.record_instruction();
         
@@ -11666,23 +11725,19 @@ impl RoundManager {
         })
     }
 
-
     pub fn propose_block(
         &mut self,
         proposer: &str,
         block: Block,
     ) -> Result<ConsensusEvent, ConsensusError> {
-        let mut round = self.current_round.take()
+        let round = self.current_round.as_mut()
             .ok_or(ConsensusError::NoActiveRound)?;
-    
 
         if round.coordinator != proposer {
-            self.current_round = Some(round);
             return Err(ConsensusError::InvalidCoordinator);
         }
 
         if round.status != RoundStatus::Proposing {
-            self.current_round = Some(round);
             return Err(ConsensusError::InvalidRoundState);
         }
 
@@ -11690,18 +11745,19 @@ impl RoundManager {
             return Err(ConsensusError::ValidationFailed);
         }
 
-        round.proposed_block = Some(block.clone());
-        round.status = RoundStatus::Voting;
-        
-        self.current_round = Some(round);
-
-        Ok(ConsensusEvent::BlockProposed {
-            round: round_number,
+        // Create event before modifying round
+        let event = ConsensusEvent::BlockProposed {
+            round: round.round_number,
             proposer: proposer.to_string(),
-            block_hash: block.hash,
+            block_hash: block.hash.clone(),
             transactions: block.transactions.len(),
-        })
-        
+        };
+
+        // Modify round after creating event
+        round.proposed_block = Some(block);
+        round.status = RoundStatus::Voting;
+
+        Ok(event)
     }
 
     pub fn submit_vote(
@@ -11711,16 +11767,14 @@ impl RoundManager {
         voting_power: f64,
         signature: String,
     ) -> Result<ConsensusEvent, ConsensusError> {
-        let mut round = self.current_round.take()
+        let round = self.current_round.as_mut()
             .ok_or(ConsensusError::NoActiveRound)?;
 
         if round.status != RoundStatus::Voting {
-            self.current_round = Some(round);
             return Err(ConsensusError::InvalidRoundState);
         }
 
         if round.votes.contains_key(&validator) {
-            self.current_round = Some(round);
             return Err(ConsensusError::Custom("Already voted".to_string()));
         }
 
@@ -11732,17 +11786,19 @@ impl RoundManager {
             signature,
         };
 
+        let round_number = round.round_number;
         round.votes.insert(validator.clone(), vote);
-        self.update_round_stats(&mut round);
+        
+        // Update stats using a separate method that takes round as parameter
+        self.update_round_stats_for_round(round);
 
-        if self.is_consensus_reached(&round) {
+        // Check consensus using a separate method that takes round as parameter
+        if self.is_consensus_reached_for_round(round) {
             round.status = RoundStatus::Finalizing;
         }
 
-        self.current_round = Some(round);
-
         Ok(ConsensusEvent::VoteReceived {
-            round: round.round_number,
+            round: round_number,
             validator,
             approve,
             voting_power,
@@ -11771,10 +11827,17 @@ impl RoundManager {
         Ok((block, stats))
     }
 
-    pub fn check_timeout(&self) -> bool {
-        self.current_round.as_ref()
-            .map(|round| Utc::now() > round.timeout)
-            .unwrap_or(false)
+    pub fn check_timeout(&mut self) -> bool {
+        if let Some(round) = &self.current_round {
+            if Utc::now() > round.timeout {
+                // Move to failed state
+                if let Some(round) = &mut self.current_round {
+                    round.status = RoundStatus::Failed;
+                }
+                return true;
+            }
+        }
+        false
     }
 
     pub fn get_current_round(&self) -> Option<&ConsensusRound> {
@@ -11785,7 +11848,7 @@ impl RoundManager {
         &self.round_history
     }
 
-    fn update_round_stats(&self, round: &mut ConsensusRound) {
+    fn update_round_stats_for_round(&self, round: &mut ConsensusRound) {
         let votes_power: f64 = round.votes.values()
             .map(|v| v.voting_power)
             .sum();
@@ -11804,7 +11867,7 @@ impl RoundManager {
         };
     }
 
-    fn is_consensus_reached(&self, round: &ConsensusRound) -> bool {
+    fn is_consensus_reached_for_round(&self, round: &ConsensusRound) -> bool {
         round.stats.participation_rate >= self.config.min_participation_rate &&
         round.stats.approval_rate >= self.config.min_approval_rate
     }
@@ -11821,30 +11884,34 @@ mod tests {
     #[test]
     fn test_start_round() {
         let mut manager = setup_test_round_manager();
-        let result = manager.start_round(
-            1,
-            "did:icn:test".to_string(),
-            1.0,
-            3
-        );
+        let result = manager.start_round(1, "did:icn:test".to_string(), 1.0, 3);
         assert!(result.is_ok());
         assert!(manager.get_current_round().is_some());
     }
 
     #[test]
-    fn test_vote_submission() {
+    fn test_propose_block() {
         let mut manager = setup_test_round_manager();
+        let block = Block::new(1, "prev_hash".to_string(), vec![], "did:icn:test".to_string());
         
-        // Start round
+        // Start round first
         manager.start_round(1, "did:icn:test".to_string(), 1.0, 3).unwrap();
         
-        // Add a block
+        let result = manager.propose_block("did:icn:test", block);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_submit_vote() {
+        let mut manager = setup_test_round_manager();
+        
+        // Setup round and block
+        manager.start_round(1, "did:icn:test".to_string(), 1.0, 3).unwrap();
         let block = Block::new(1, "prev_hash".to_string(), vec![], "did:icn:test".to_string());
         manager.propose_block("did:icn:test", block).unwrap();
         
-        // Submit vote
         let result = manager.submit_vote(
-            "did:icn:validator1".to_string(),
+            "validator1".to_string(),
             true,
             0.3,
             "signature".to_string()
@@ -11853,28 +11920,92 @@ mod tests {
     }
 
     #[test]
-    fn test_consensus_reached() {
+    fn test_finalize_round() {
         let mut manager = setup_test_round_manager();
         
-        // Start round
+        // Setup complete round
         manager.start_round(1, "did:icn:test".to_string(), 1.0, 3).unwrap();
-        
-        // Add block
         let block = Block::new(1, "prev_hash".to_string(), vec![], "did:icn:test".to_string());
         manager.propose_block("did:icn:test", block).unwrap();
         
-        // Submit enough votes for consensus
-        for i in 1..=3 {
-            manager.submit_vote(
-                format!("did:icn:validator{}", i),
-                true,
-                0.3,
-                "signature".to_string()
-            ).unwrap();
-        }
+        // Add enough votes to reach consensus
+        manager.submit_vote(
+            "validator1".to_string(), 
+            true, 
+            0.7, // Above consensus threshold
+            "signature1".to_string()
+        ).unwrap();
+
+        // Should be ready to finalize
+        let result = manager.finalize_round();
+        assert!(result.is_ok());
+        
+        // Round should be cleared after finalization
+        assert!(manager.get_current_round().is_none());
+    }
+
+    #[test]
+    fn test_timeout() {
+        let mut manager = setup_test_round_manager();
+        
+        // Create a round with artificially short timeout
+        let mut round = ConsensusRound {
+            round_number: 1,
+            coordinator: "did:icn:test".to_string(),
+            start_time: Utc::now() - Duration::seconds(60), // Started 60 seconds ago
+            timeout: Utc::now() - Duration::seconds(30),    // Timed out 30 seconds ago
+            status: RoundStatus::Voting,
+            proposed_block: None,
+            votes: HashMap::new(),
+            stats: ConsensusRoundStats {
+                total_voting_power: 1.0,
+                participation_rate: 0.0,
+                approval_rate: 0.0,
+                round_duration_ms: 0,
+                validator_count: 3,
+            },
+        };
+
+        manager.current_round = Some(round);
+        assert!(manager.check_timeout());
+        
+        // Round should be marked as failed
+        assert_eq!(
+            manager.get_current_round().unwrap().status,
+            RoundStatus::Failed
+        );
+    }
+
+    #[test]
+    fn test_consensus_calculation() {
+        let mut manager = setup_test_round_manager();
+        
+        // Setup round
+        manager.start_round(1, "did:icn:test".to_string(), 1.0, 3).unwrap();
+        let block = Block::new(1, "prev_hash".to_string(), vec![], "did:icn:test".to_string());
+        manager.propose_block("did:icn:test", block).unwrap();
+        
+        // Add votes but not enough for consensus
+        manager.submit_vote(
+            "validator1".to_string(),
+            true,
+            0.3,
+            "signature1".to_string()
+        ).unwrap();
         
         let round = manager.get_current_round().unwrap();
-        assert_eq!(round.status, RoundStatus::Finalizing);
+        assert_eq!(round.status, RoundStatus::Voting); // Should still be voting
+        
+        // Add more votes to reach consensus
+        manager.submit_vote(
+            "validator2".to_string(),
+            true,
+            0.4,
+            "signature2".to_string()
+        ).unwrap();
+        
+        let round = manager.get_current_round().unwrap();
+        assert_eq!(round.status, RoundStatus::Finalizing); // Should be ready to finalize
     }
 }
 

@@ -10,8 +10,8 @@ use crate::vm::operations::{
     RelationshipOperation,
     MemoryOperation,
 };
-use crate::vm::{Contract, ExecutionContext, VMState, VMResult, VMError};
-use crate::relationship::RelationshipType;
+use crate::vm::{Contract, ExecutionContext, VMState, VMResult, VMError, Event};
+use crate::relationship::{RelationshipType, Relationship};
 
 /// Virtual Machine implementation for executing cooperative operations
 pub struct VM {
@@ -85,14 +85,15 @@ impl VM {
             OpCode::Mod => ArithmeticOperation::Mod.execute(&mut self.state),
 
             // Memory Operations
-            OpCode::Store(key) => MemoryOperation::Allocate {
-                request: crate::vm::operations::memory::AllocationRequest {
+            OpCode::Store(key) => {
+                let request = crate::vm::operations::memory::AllocationRequest {
                     size: 64,
                     segment_type: crate::vm::operations::memory::MemorySegment::Scratch,
                     federation_id: None,
                     persistent: false,
-                }
-            }.execute(&mut self.state),
+                };
+                MemoryOperation::Allocate { request }.execute(&mut self.state)
+            },
 
             // Relationship Operations
             OpCode::RecordContribution { description, impact_story, context, tags } => {
@@ -118,7 +119,7 @@ impl VM {
             OpCode::UpdateRelationship { member_two, relationship_type, story } => {
                 RelationshipOperation::UpdateRelationship {
                     member_did: member_two.clone(),
-                    relationship_type: RelationshipType::new(&relationship_type),
+                    relationship_type: relationship_type.clone(),
                     story: story.clone(),
                     strength_indicators: vec![],
                 }.execute(&mut self.state)
@@ -209,5 +210,45 @@ mod tests {
         assert!(vm.execute_instruction(&OpCode::Add).is_ok());
         
         assert_eq!(vm.state.stack, vec![15]);
+    }
+
+    #[test]
+    fn test_execution_limit() {
+        let mut vm = VM::new(1, HashMap::new()); // Set limit to 1 instruction
+        let contract = Contract {
+            id: "test".to_string(),
+            code: vec![
+                OpCode::Push(1),
+                OpCode::Push(2), // This should exceed the limit
+            ],
+            state: HashMap::new(),
+            required_reputation: 0,
+            cooperative_metadata: Default::default(),
+            version: "1.0".to_string(),
+            dependencies: vec![],
+            permissions: vec![],
+        };
+
+        assert!(matches!(
+            vm.execute_contract(&contract),
+            Err(VMError::ExecutionLimitExceeded)
+        ));
+    }
+
+    #[test]
+    fn test_contract_validation() {
+        let mut vm = setup_test_vm();
+        let contract = Contract {
+            id: "test".to_string(),
+            code: vec![OpCode::Push(1)],
+            state: HashMap::new(),
+            required_reputation: 1000, // Higher than test_did's reputation
+            cooperative_metadata: Default::default(),
+            version: "1.0".to_string(),
+            dependencies: vec![],
+            permissions: vec![],
+        };
+
+        assert!(!vm.validate_contract(&contract).unwrap());
     }
 }
