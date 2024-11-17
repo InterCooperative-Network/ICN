@@ -1,4 +1,4 @@
-// src/vm/mod.rs 
+//src/vm/mod.rs
 
 pub mod opcode;
 pub mod contract;
@@ -7,6 +7,9 @@ pub mod cooperative_metadata;
 pub mod event;
 pub mod operations;
 pub mod vm;
+
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub use contract::Contract;
 pub use vm::VM;
@@ -54,3 +57,40 @@ impl std::fmt::Display for VMError {
 }
 
 pub type VMResult<T> = Result<T, VMError>;
+
+/// Represents the complete state of the VM during execution
+pub struct VMState {
+    pub stack: Vec<i64>,
+    pub memory: HashMap<String, i64>,
+    pub events: Vec<Event>,
+    pub instruction_pointer: usize,
+    pub reputation_context: HashMap<String, i64>,
+    pub caller_did: String,
+    pub block_number: u64,
+    pub timestamp: u64,
+    pub permissions: Vec<String>,
+    pub memory_limit: u64,
+    memory_address_counter: AtomicU64,
+}
+
+impl VMState {
+    pub fn new(caller_did: String, block_number: u64, timestamp: u64) -> Self {
+        VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did,
+            block_number,
+            timestamp,
+            permissions: Vec::new(),
+            memory_limit: 1024 * 1024, // 1MB default limit
+            memory_address_counter: AtomicU64::new(0),
+        }
+    }
+
+    pub fn next_memory_address(&self) -> u64 {
+        self.memory_address_counter.fetch_add(1, Ordering::SeqCst)
+    }
+}
