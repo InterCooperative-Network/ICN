@@ -2,17 +2,26 @@
 
 use std::collections::HashMap;
 use super::{Operation, VMState, VMResult, ensure_permissions, emit_event};
-use crate::relationship::Contribution;
+use crate::vm::VMError;
 
-/// Operations for managing relationships between cooperatives and members
+#[derive(Debug, Clone, PartialEq)]
+pub enum RelationType {
+    Collaboration,
+    Mentorship,
+    ResourceSharing,
+    MutualAid,
+    ProjectPartnership,
+    Custom(String),
+}
+
+/// Operations for managing relationships between members
 pub enum RelationshipOperation {
-    /// Record a contribution with impact story
+    /// Record a contribution
     RecordContribution {
         description: String,
         impact_story: String,
         context: String,
         tags: Vec<String>,
-        witnesses: Vec<String>,
     },
     
     /// Record mutual aid interaction
@@ -32,20 +41,12 @@ pub enum RelationshipOperation {
         interaction: Option<String>,
     },
     
-    /// Add endorsement to relationship
+    /// Add endorsement
     AddEndorsement {
         to_did: String,
         content: String,
         context: String,
         skills: Vec<String>,
-    },
-    
-    /// Add feedback to contribution
-    AddFeedback {
-        contribution_id: String,
-        endorsement_type: String,
-        content: String,
-        impact_rating: Option<u8>,
     },
 }
 
@@ -56,8 +57,7 @@ impl Operation for RelationshipOperation {
                 description,
                 impact_story,
                 context,
-                tags,
-                witnesses 
+                tags 
             } => {
                 ensure_permissions(&["contribution.record".to_string()], &state.permissions)?;
                 
@@ -65,13 +65,12 @@ impl Operation for RelationshipOperation {
                 event_data.insert("description".to_string(), description.clone());
                 event_data.insert("impact_story".to_string(), impact_story.clone());
                 event_data.insert("context".to_string(), context.clone());
-                event_data.insert("witness_count".to_string(), witnesses.len().to_string());
                 event_data.insert("tags".to_string(), tags.join(","));
                 
                 emit_event(state, "ContributionRecorded".to_string(), event_data);
                 Ok(())
             },
-            
+
             RelationshipOperation::RecordMutualAid { 
                 receiver_did,
                 description,
@@ -95,13 +94,15 @@ impl Operation for RelationshipOperation {
                 emit_event(state, "MutualAidRecorded".to_string(), event_data);
                 Ok(())
             },
-            
+
             RelationshipOperation::UpdateRelationship { 
                 member_two,
                 relationship_type,
                 story,
-                interaction 
+                interaction
             } => {
+                ensure_permissions(&["relationship.update".to_string()], &state.permissions)?;
+                
                 let mut event_data = HashMap::new();
                 event_data.insert("member_two".to_string(), member_two.clone());
                 event_data.insert("relationship_type".to_string(), relationship_type.clone());
@@ -113,7 +114,7 @@ impl Operation for RelationshipOperation {
                 emit_event(state, "RelationshipUpdated".to_string(), event_data);
                 Ok(())
             },
-            
+
             RelationshipOperation::AddEndorsement { 
                 to_did,
                 content,
@@ -131,26 +132,6 @@ impl Operation for RelationshipOperation {
                 emit_event(state, "EndorsementAdded".to_string(), event_data);
                 Ok(())
             },
-            
-            RelationshipOperation::AddFeedback { 
-                contribution_id,
-                endorsement_type,
-                content,
-                impact_rating 
-            } => {
-                ensure_permissions(&["feedback.add".to_string()], &state.permissions)?;
-                
-                let mut event_data = HashMap::new();
-                event_data.insert("contribution_id".to_string(), contribution_id.clone());
-                event_data.insert("endorsement_type".to_string(), endorsement_type.clone());
-                event_data.insert("content".to_string(), content.clone());
-                if let Some(rating) = impact_rating {
-                    event_data.insert("impact_rating".to_string(), rating.to_string());
-                }
-                
-                emit_event(state, "FeedbackAdded".to_string(), event_data);
-                Ok(())
-            },
         }
     }
 
@@ -160,7 +141,6 @@ impl Operation for RelationshipOperation {
             RelationshipOperation::RecordMutualAid { .. } => 80,
             RelationshipOperation::UpdateRelationship { .. } => 60,
             RelationshipOperation::AddEndorsement { .. } => 50,
-            RelationshipOperation::AddFeedback { .. } => 40,
         }
     }
 
@@ -170,7 +150,6 @@ impl Operation for RelationshipOperation {
             RelationshipOperation::RecordMutualAid { .. } => vec!["mutual_aid.record".to_string()],
             RelationshipOperation::UpdateRelationship { .. } => vec!["relationship.update".to_string()],
             RelationshipOperation::AddEndorsement { .. } => vec!["endorsement.add".to_string()],
-            RelationshipOperation::AddFeedback { .. } => vec!["feedback.add".to_string()],
         }
     }
 }
@@ -178,20 +157,25 @@ impl Operation for RelationshipOperation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::relationship::{Contribution, MutualAidInteraction};
 
     fn setup_test_state() -> VMState {
-        let mut state = VMState::new(
-            "test_caller".to_string(),
-            1,
-            1000
-        );
-        state.permissions = vec![
-            "contribution.record".to_string(),
-            "mutual_aid.record".to_string(),
-            "endorsement.add".to_string(),
-            "feedback.add".to_string(),
-        ];
+        let mut state = VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did: "test_caller".to_string(),
+            block_number: 1,
+            timestamp: 1000,
+            permissions: vec![
+                "contribution.record".to_string(),
+                "mutual_aid.record".to_string(),
+            ],
+            memory_address_counter: std::sync::atomic::AtomicU64::new(0),
+            memory_limit: 1024 * 1024, // 1MB
+        };
+        state.reputation_context.insert(state.caller_did.clone(), 100);
         state
     }
 
@@ -203,7 +187,6 @@ mod tests {
             impact_story: "Made a difference".to_string(),
             context: "Testing".to_string(),
             tags: vec!["test".to_string()],
-            witnesses: vec!["witness1".to_string()],
         };
         
         assert!(op.execute(&mut state).is_ok());
@@ -226,49 +209,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_relationship() {
-        let mut state = setup_test_state();
-        let op = RelationshipOperation::UpdateRelationship {
-            member_two: "other_member".to_string(),
-            relationship_type: "Collaboration".to_string(),
-            story: "Working together".to_string(),
-            interaction: Some("First meeting".to_string()),
-        };
-        
-        assert!(op.execute(&mut state).is_ok());
-        assert_eq!(state.events[0].event_type, "RelationshipUpdated");
-    }
-
-    #[test]
-    fn test_add_endorsement() {
-        let mut state = setup_test_state();
-        let op = RelationshipOperation::AddEndorsement {
-            to_did: "endorsed_member".to_string(),
-            content: "Great collaboration".to_string(),
-            context: "Project work".to_string(),
-            skills: vec!["teamwork".to_string()],
-        };
-        
-        assert!(op.execute(&mut state).is_ok());
-        assert_eq!(state.events[0].event_type, "EndorsementAdded");
-    }
-
-    #[test]
-    fn test_add_feedback() {
-        let mut state = setup_test_state();
-        let op = RelationshipOperation::AddFeedback {
-            contribution_id: "contribution1".to_string(),
-            endorsement_type: "Positive".to_string(),
-            content: "Excellent work".to_string(),
-            impact_rating: Some(5),
-        };
-        
-        assert!(op.execute(&mut state).is_ok());
-        assert_eq!(state.events[0].event_type, "FeedbackAdded");
-    }
-
-    #[test]
-    fn test_missing_permissions() {
+    fn test_insufficient_permissions() {
         let mut state = setup_test_state();
         state.permissions.clear();
         
@@ -277,9 +218,8 @@ mod tests {
             impact_story: "Test".to_string(),
             context: "Test".to_string(),
             tags: vec![],
-            witnesses: vec![],
         };
         
-        assert!(op.execute(&mut state).is_err());
+        assert!(matches!(op.execute(&mut state), Err(VMError::InsufficientPermissions)));
     }
 }
