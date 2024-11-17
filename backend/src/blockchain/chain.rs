@@ -47,15 +47,12 @@ impl Blockchain {
     }
 
     pub async fn process_transaction(&mut self, transaction: &Transaction) -> Result<(), String> {
-        // First validate the transaction and check resources
         self.validate_transaction(transaction)?;
         self.check_and_update_resources(&transaction.sender)?;
 
-        // Create a local copy of the transaction for processing
         let tx = transaction.clone();
         let sender = tx.sender.clone();
 
-        // Get resource allocation after validation
         {
             let resource_allocation = self.resource_allocations.get_mut(&sender)
                 .ok_or("Resource allocation not found")?;
@@ -64,7 +61,6 @@ impl Blockchain {
                 return Err("Insufficient resources".to_string());
             }
 
-            // Consume resources
             resource_allocation.consume_resources(tx.resource_cost)?;
         }
 
@@ -178,8 +174,7 @@ impl Blockchain {
                 };
                 
                 if let Some(interaction_data) = interaction {
-                    // Handle optional interaction data if provided
-                    let _ = interaction_data; // Placeholder for interaction handling
+                    let _ = interaction_data;
                 }
                 
                 relationship_system.update_relationship(relationship)?;
@@ -246,7 +241,6 @@ impl Blockchain {
     }
 
     fn get_contract(&self, _contract_id: &str) -> Result<Contract, String> {
-        // In a real implementation, this would fetch the contract from storage
         Err("Contract not found".to_string())
     }
 
@@ -288,7 +282,6 @@ impl Blockchain {
             self.coordinator_did.clone(),
         );
 
-        // Get consensus lock and propose block
         let mut consensus_guard = self.consensus.lock()
             .map_err(|_| "Failed to acquire consensus lock".to_string())?;
 
@@ -304,14 +297,13 @@ impl Blockchain {
         consensus_guard.propose_block(&self.coordinator_did, new_block.clone()).await?;
 
         for validator in &validators {
-            let signature = String::from("dummy_signature"); // TODO: Implement real signatures
+            let signature = String::from("dummy_signature");
             consensus_guard.submit_vote(validator, true, signature).await?;
         }
 
         let block = consensus_guard.finalize_round().await?;
         let updates = consensus_guard.get_reputation_updates();
 
-        // Update reputations
         let mut reputation_system = self.reputation_system.lock()
             .map_err(|_| "Failed to acquire reputation lock".to_string())?;
             
@@ -319,7 +311,6 @@ impl Blockchain {
             reputation_system.increase_reputation(&did, *change);
         }
 
-        // Add block and cleanup
         self.chain.push(block);
         self.pending_transactions.clear();
         self.current_block_number += 1;

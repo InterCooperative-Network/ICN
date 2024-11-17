@@ -71,11 +71,19 @@ pub fn ensure_reputation(required: i64, available: i64) -> VMResult<()> {
 
 /// Helper function to emit an event
 pub fn emit_event(state: &mut VMState, event_type: String, data: HashMap<String, String>) {
+    let context = crate::vm::event::EventContext {
+        triggered_by: state.caller_did.clone(),
+        block_number: state.block_number,
+        source_module: "vm".to_string(),
+        transaction_id: None,
+    };
+
     state.events.push(Event {
         event_type,
         cooperative_id: String::new(),
         data,
         timestamp: state.timestamp,
+        context: Some(context)
     });
 }
 

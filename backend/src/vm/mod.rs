@@ -67,18 +67,40 @@ impl From<VMError> for String {
 pub type VMResult<T> = Result<T, VMError>;
 
 /// Represents the complete state of the VM during execution
+#[derive(Default)]
 pub struct VMState {
+    /// Current stack
     pub stack: Vec<i64>,
+    
+    /// Memory storage
     pub memory: HashMap<String, i64>,
+    
+    /// Events emitted during execution
     pub events: Vec<Event>,
+    
+    /// Current instruction pointer
     pub instruction_pointer: usize,
+    
+    /// Reputation scores for participating DIDs
     pub reputation_context: HashMap<String, i64>,
+    
+    /// Currently executing DID
     pub caller_did: String,
+    
+    /// Current block number
     pub block_number: u64,
+    
+    /// Current timestamp
     pub timestamp: u64,
+    
+    /// Available permissions
     pub permissions: Vec<String>,
+    
+    /// Maximum memory usage in bytes
     pub memory_limit: u64,
-    memory_address_counter: AtomicU64,
+    
+    /// Counter for generating unique memory addresses
+    pub memory_address_counter: AtomicU64,
 }
 
 impl VMState {
@@ -104,5 +126,51 @@ impl VMState {
 
     pub fn get_reputation(&self) -> i64 {
         self.reputation_context.get(&self.caller_did).copied().unwrap_or(0)
+    }
+
+    pub fn incr_memory_usage(&mut self, size: u64) -> Result<(), VMError> {
+        let current_usage = self.memory.len() as u64 * std::mem::size_of::<i64>() as u64;
+        if current_usage + size > self.memory_limit {
+            Err(VMError::OutOfMemory)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn get_stack(&self) -> &[i64] {
+        &self.stack
+    }
+
+    pub fn get_memory(&self) -> &HashMap<String, i64> {
+        &self.memory
+    }
+
+    pub fn get_events(&self) -> &[Event] {
+        &self.events
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_vm_state_new() {
+        let state = VMState::new(
+            "test_did".to_string(),
+            1,
+            1000
+        );
+        assert_eq!(state.caller_did, "test_did");
+        assert_eq!(state.block_number, 1);
+        assert_eq!(state.timestamp, 1000);
+    }
+
+    #[test]
+    fn test_memory_limit() {
+        let mut state = VMState::new("test_did".to_string(), 1, 1000);
+        state.memory_limit = 100;
+        assert!(state.incr_memory_usage(200).is_err());
+        assert!(state.incr_memory_usage(50).is_ok());
     }
 }
