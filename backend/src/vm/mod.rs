@@ -1,4 +1,4 @@
-//src/vm/mod.rs
+// src/vm/mod.rs
 
 pub mod opcode;
 pub mod contract;
@@ -18,7 +18,7 @@ pub use event::Event;
 
 // Re-export core operation traits
 pub use operations::Operation;
-pub use operations::OperationResult;
+pub use std::result::Result as OperationResult;
 
 // Error type for VM operations
 #[derive(Debug, Clone, PartialEq)]
@@ -34,6 +34,7 @@ pub enum VMError {
     ExecutionLimitExceeded,
     OutOfMemory,
     InvalidMemoryAddress,
+    ValidationError,
     Custom(String),
 }
 
@@ -51,8 +52,15 @@ impl std::fmt::Display for VMError {
             VMError::ExecutionLimitExceeded => write!(f, "Execution limit exceeded"),
             VMError::OutOfMemory => write!(f, "Out of memory"),
             VMError::InvalidMemoryAddress => write!(f, "Invalid memory address"),
+            VMError::ValidationError => write!(f, "Validation failed"),
             VMError::Custom(msg) => write!(f, "{}", msg),
         }
+    }
+}
+
+impl From<VMError> for String {
+    fn from(error: VMError) -> String {
+        error.to_string()
     }
 }
 
@@ -92,5 +100,9 @@ impl VMState {
 
     pub fn next_memory_address(&self) -> u64 {
         self.memory_address_counter.fetch_add(1, Ordering::SeqCst)
+    }
+
+    pub fn get_reputation(&self) -> i64 {
+        self.reputation_context.get(&self.caller_did).copied().unwrap_or(0)
     }
 }

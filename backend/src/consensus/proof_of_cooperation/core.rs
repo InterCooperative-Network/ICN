@@ -12,15 +12,12 @@ use super::{
 };
 
 pub struct ProofOfCooperation {
-    // Core components
-    validator_manager: ValidatorManager,
-    round_manager: RoundManager,
+    // Make these public to fix the access error
+    pub validator_manager: ValidatorManager,
+    pub round_manager: RoundManager,
     
-    // Configuration and state
     config: ConsensusConfig,
     reputation_updates: Vec<(String, i64)>,
-    
-    // Communication
     ws_handler: Arc<WebSocketHandler>,
     event_tx: broadcast::Sender<ConsensusEvent>,
 }

@@ -69,6 +69,7 @@ impl RoundManager {
         })
     }
 
+
     pub fn propose_block(
         &mut self,
         proposer: &str,
@@ -76,6 +77,7 @@ impl RoundManager {
     ) -> Result<ConsensusEvent, ConsensusError> {
         let mut round = self.current_round.take()
             .ok_or(ConsensusError::NoActiveRound)?;
+    
 
         if round.coordinator != proposer {
             self.current_round = Some(round);
@@ -97,11 +99,12 @@ impl RoundManager {
         self.current_round = Some(round);
 
         Ok(ConsensusEvent::BlockProposed {
-            round: round.round_number,
+            round: round_number,
             proposer: proposer.to_string(),
             block_hash: block.hash,
             transactions: block.transactions.len(),
         })
+        
     }
 
     pub fn submit_vote(

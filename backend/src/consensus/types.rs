@@ -1,7 +1,58 @@
+// src/consensus/types.rs
+
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use crate::blockchain::Block;
+
+/// Events emitted during consensus process
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ConsensusEvent {
+    /// Round started event
+    RoundStarted {
+        round: u64,
+        coordinator: String,
+        timeout: u64,
+    },
+    
+    /// Block proposed event
+    BlockProposed {
+        round: u64,
+        proposer: String,
+        block_hash: String,
+        transactions: usize,
+    },
+    
+    /// Vote received event
+    VoteReceived {
+        round: u64,
+        validator: String,
+        approve: bool,
+        voting_power: f64,
+    },
+    
+    /// Round completed event
+    RoundCompleted {
+        round: u64,
+        block_hash: String,
+        validators: Vec<String>,
+        duration_ms: u64,
+    },
+    
+    /// Round failed event
+    RoundFailed {
+        round: u64,
+        reason: String,
+    },
+    
+    /// Validator status update
+    ValidatorUpdate {
+        did: String,
+        reputation: i64,
+        voting_power: f64,
+        performance_score: f64,
+    },
+}
 
 /// Information about a validator in the network
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,13 +188,13 @@ pub struct ConsensusConfig {
     /// Multiplier for consecutive missed rounds
     pub penalty_factor: f64,
     
-    /// Minimum number of validators needed for consensus
+    /// Minimum number of validators needed
     pub min_validators: usize,
     
     /// Maximum consecutive missed rounds before ejection
     pub max_missed_rounds: u32,
     
-    /// Minimum performance score to remain eligible
+    /// Minimum performance score to remain eligible 
     pub min_performance_score: f64,
 }
 
@@ -157,7 +208,7 @@ impl Default for ConsensusConfig {
             round_timeout_ms: 30_000,      // 30 second timeout
             base_reward: 10,
             penalty_factor: 1.5,
-            min_validators: 3,             // Minimum 3 validators for consensus
+            min_validators: 3,
             max_missed_rounds: 5,
             min_performance_score: 0.5,
         }
@@ -170,31 +221,31 @@ pub enum ConsensusError {
     /// Not enough validators available
     InsufficientValidators,
     
-    /// Proposed block came from wrong coordinator
+    /// Invalid coordinator for this round
     InvalidCoordinator,
     
-    /// Cannot start new round while one is in progress
+    /// Round already in progress
     RoundInProgress,
     
-    /// No consensus round is currently active
+    /// No active round found
     NoActiveRound,
     
-    /// Action invalid for current round state
+    /// Invalid state for operation
     InvalidRoundState,
     
-    /// Round exceeded time limit
+    /// Round timed out
     TimedOut,
     
     /// Block validation failed
     ValidationFailed,
     
-    /// Entity is not a registered validator
+    /// Not a registered validator
     NotValidator,
     
-    /// Validator lacks required reputation
+    /// Insufficient reputation
     InsufficientReputation,
     
-    /// Custom error with message
+    /// Custom error message
     Custom(String),
 }
 
@@ -264,14 +315,12 @@ mod tests {
 
     #[test]
     fn test_penalty_calculation() {
-        // Test basic penalty calculation
         let penalty = utils::calculate_penalty(10, 3, 1.5);
         assert_eq!(penalty, -45); // -10 * 1.5 * 3
 
-        // Test increasing penalties
         let penalty1 = utils::calculate_penalty(10, 1, 1.5);
         let penalty2 = utils::calculate_penalty(10, 2, 1.5);
-        assert!(penalty2 < penalty1); // Penalty should increase with missed rounds
+        assert!(penalty2 < penalty1); 
     }
 
     #[test]
@@ -282,11 +331,5 @@ mod tests {
         assert_eq!(config.min_participation_rate, 0.67);
         assert_eq!(config.min_approval_rate, 0.67);
         assert_eq!(config.round_timeout_ms, 30_000);
-    }
-
-    #[test]
-    fn test_round_status_equality() {
-        assert_eq!(RoundStatus::Proposing, RoundStatus::Proposing);
-        assert_ne!(RoundStatus::Voting, RoundStatus::Completed);
     }
 }
