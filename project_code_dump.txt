@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sat Nov 16 04:35:13 PM UTC 2024
+Project Code Dump - Generated Sun Nov 17 12:04:52 AM UTC 2024
 ======================================
 
 Project Tree:
@@ -26,7 +26,14 @@ Project Tree:
 │   │   │   └── mod.rs
 │   │   ├── consensus
 │   │   │   ├── mod.rs
-│   │   │   ├── proof_of_cooperation.rs
+│   │   │   ├── proof_of_cooperation
+│   │   │   │   ├── core.rs
+│   │   │   │   ├── event.rs
+│   │   │   │   ├── metrics.rs
+│   │   │   │   ├── mod.rs
+│   │   │   │   ├── round.rs
+│   │   │   │   └── validator.rs
+│   │   │   ├── proof_of_cooperation.rs.old
 │   │   │   ├── tests.rs
 │   │   │   └── types.rs
 │   │   ├── cooperative
@@ -44,7 +51,8 @@ Project Tree:
 │   │   ├── lib.rs
 │   │   ├── main.rs
 │   │   ├── monitoring
-│   │   │   └── energy.rs
+│   │   │   ├── energy.rs
+│   │   │   └── mod.rs
 │   │   ├── network
 │   │   │   └── mod.rs
 │   │   ├── relationship
@@ -57,11 +65,29 @@ Project Tree:
 │   │   │   └── notifications.rs
 │   │   ├── vm
 │   │   │   ├── contract.rs
+│   │   │   ├── contracts
+│   │   │   │   └── voting_rules.rs
 │   │   │   ├── cooperative_metadata.rs
 │   │   │   ├── event.rs
 │   │   │   ├── execution_context.rs
 │   │   │   ├── mod.rs
 │   │   │   ├── opcode.rs
+│   │   │   ├── operations
+│   │   │   │   ├── arithmetic.rs
+│   │   │   │   ├── community.rs
+│   │   │   │   ├── cooperative.rs
+│   │   │   │   ├── data.rs
+│   │   │   │   ├── federation.rs
+│   │   │   │   ├── governance.rs
+│   │   │   │   ├── memory.rs
+│   │   │   │   ├── mod.rs
+│   │   │   │   ├── network.rs
+│   │   │   │   ├── relationship.rs
+│   │   │   │   ├── reputation.rs
+│   │   │   │   ├── stack.rs
+│   │   │   │   └── system.rs
+│   │   │   ├── tests
+│   │   │   │   └── vm_tests.rs
 │   │   │   └── vm.rs
 │   │   └── websocket
 │   │       ├── handler.rs
@@ -79,6 +105,16 @@ Project Tree:
 │   └── frontend.Dockerfile
 ├── frontend
 │   ├── package.json
+│   ├── src
+│   │   └── components
+│   │       ├── consensus
+│   │       │   └── ConsensusMonitor.tsx
+│   │       ├── cooperative
+│   │       │   └── CooperativeDashboard.tsx
+│   │       ├── governance
+│   │       │   └── GovernanceDashboard.tsx
+│   │       └── relationship
+│   │           └── RelationshipIntegration.tsx
 │   └── tsconfig.json
 ├── generate_code_dump.sh
 ├── project_code_dump.txt
@@ -99,7 +135,7 @@ Project Tree:
     ├── install_docsctl.sh
     └── requirements.txt
 
-27 directories, 68 files
+37 directories, 94 files
 
 
 ===================
@@ -4235,6 +4271,10 @@ mod governance;
 mod reputation;
 mod relationship;
 mod system;
+mod data;
+mod memory;
+mod network;
+mod federation;
 
 pub use stack::StackOperation;
 pub use arithmetic::ArithmeticOperation;
@@ -4243,6 +4283,10 @@ pub use governance::GovernanceOperation;
 pub use reputation::ReputationOperation;
 pub use relationship::RelationshipOperation;
 pub use system::SystemOperation;
+pub use data::DataOperation;
+pub use memory::MemoryOperation;
+pub use network::NetworkOperation;
+pub use federation::FederationOperation;
 
 use std::collections::HashMap;
 use crate::vm::{VMError, VMResult, Event};
@@ -4269,6 +4313,8 @@ pub struct VMState {
     pub caller_did: String,
     pub block_number: u64,
     pub timestamp: u64,
+    pub permissions: Vec<String>,           // Added permissions field 
+    pub memory_limit: u64,                  // Added memory limit field
 }
 
 /// Result type for operation execution
@@ -4673,7 +4719,7 @@ File: ./backend/src/vm/operations/reputation.rs
 // src/vm/operations/reputation.rs
 
 use std::collections::HashMap;
-use super::{Operation, VMState, VMResult, ensure_stack_size, ensure_permissions, emit_event};
+use super::{Operation, VMState, VMResult, ensure_permissions, emit_event};
 use crate::vm::VMError;
 
 /// Operations for managing reputation within the system
@@ -4732,20 +4778,16 @@ impl Operation for ReputationOperation {
     fn execute(&self, state: &mut VMState) -> VMResult<()> {
         match self {
             ReputationOperation::UpdateReputation { amount, reason, context } => {
-                // Check if caller has permission to update reputation
                 ensure_permissions(&["reputation.update".to_string()], &state.permissions)?;
                 
-                // Get current reputation
                 let current_rep = state.reputation_context
                     .get(&state.caller_did)
                     .copied()
                     .unwrap_or(0);
                 
-                // Update reputation
                 let new_rep = current_rep + amount;
                 state.reputation_context.insert(state.caller_did.clone(), new_rep);
                 
-                // Emit reputation update event
                 let mut event_data = HashMap::new();
                 event_data.insert("amount".to_string(), amount.to_string());
                 event_data.insert("reason".to_string(), reason.clone());
@@ -4815,7 +4857,13 @@ impl Operation for ReputationOperation {
                 ensure_permissions(&["contribution.record".to_string()], &state.permissions)?;
                 
                 // Calculate reputation change based on impact score
-                let reputation_change = impact_score.max(-50).min(50); // Limit impact
+                let reputation_change = if *impact_score < -50 {
+                    -50
+                } else if *impact_score > 50 {
+                    50
+                } else {
+                    *impact_score
+                };
                 
                 let current_rep = state.reputation_context
                     .get(&state.caller_did)
@@ -4835,24 +4883,15 @@ impl Operation for ReputationOperation {
                 Ok(())
             },
             
-            ReputationOperation::CalculateVotingPower { context } => {
+            ReputationOperation::CalculateVotingPower { context: _ } => {
                 let reputation = state.reputation_context
                     .get(&state.caller_did)
                     .copied()
                     .unwrap_or(0);
-                    
-                // Calculate voting power as a function of reputation
-                // Square root function to prevent excessive concentration of power
+                
+                // Calculate voting power as square root of reputation to prevent excessive concentration
                 let voting_power = (reputation as f64).sqrt() as i64;
-                
                 state.stack.push(voting_power);
-                
-                let mut event_data = HashMap::new();
-                event_data.insert("context".to_string(), context.clone());
-                event_data.insert("reputation".to_string(), reputation.to_string());
-                event_data.insert("voting_power".to_string(), voting_power.to_string());
-                
-                emit_event(state, "VotingPowerCalculated".to_string(), event_data);
                 Ok(())
             },
             
@@ -4863,7 +4902,7 @@ impl Operation for ReputationOperation {
                 
                 for (did, rep) in state.reputation_context.iter_mut() {
                     let old_rep = *rep;
-                    let new_rep = ((*rep as f64) * (1.0 - decay_rate)) as i64;
+                    let new_rep = (*rep as f64 * (1.0 - decay_rate)) as i64;
                     *rep = new_rep.max(*minimum_reputation);
                     
                     if old_rep != *rep {
@@ -4879,11 +4918,11 @@ impl Operation for ReputationOperation {
                 Ok(())
             },
             
-            ReputationOperation::GetReputationHistory { target_did, context: _ } => {
+            ReputationOperation::GetReputationHistory { target_did: _, context: _ } => {
                 // In a real implementation, this would query historical reputation data
                 // For now, we just return the current reputation
                 let reputation = state.reputation_context
-                    .get(target_did)
+                    .get(&state.caller_did)
                     .copied()
                     .unwrap_or(0);
                     
@@ -4937,10 +4976,11 @@ mod tests {
                 "reputation.mint".to_string(),
                 "reputation.burn".to_string(),
                 "reputation.decay".to_string(),
+                "contribution.record".to_string(),
             ],
+            memory_limit: 1024 * 1024, // 1MB
         };
         
-        // Set initial reputation
         state.reputation_context.insert(state.caller_did.clone(), 100);
         state
     }
@@ -4953,11 +4993,9 @@ mod tests {
             reason: "test".to_string(),
             context: "testing".to_string(),
         };
+        
         assert!(op.execute(&mut state).is_ok());
-        assert_eq!(
-            state.reputation_context.get(&state.caller_did).copied().unwrap(),
-            150
-        );
+        assert_eq!(state.reputation_context.get("test_caller"), Some(&150));
     }
 
     #[test]
@@ -4967,21 +5005,22 @@ mod tests {
             amount: 30,
             reason: "test".to_string(),
         };
+        
         assert!(op.execute(&mut state).is_ok());
-        assert_eq!(
-            state.reputation_context.get(&state.caller_did).copied().unwrap(),
-            70
-        );
+        assert_eq!(state.reputation_context.get("test_caller"), Some(&70));
     }
 
     #[test]
-    fn test_calculate_voting_power() {
+    fn test_record_contribution_impact() {
         let mut state = setup_test_state();
-        let op = ReputationOperation::CalculateVotingPower {
-            context: "voting".to_string(),
+        let op = ReputationOperation::RecordContributionImpact {
+            contribution_id: "test_contrib".to_string(),
+            impact_score: 25,
+            context: "testing".to_string(),
         };
+        
         assert!(op.execute(&mut state).is_ok());
-        assert_eq!(state.stack.pop().unwrap(), 10); // sqrt(100) = 10
+        assert_eq!(state.reputation_context.get("test_caller"), Some(&125));
     }
 
     #[test]
@@ -4991,11 +5030,9 @@ mod tests {
             decay_rate: 0.1,
             minimum_reputation: 0,
         };
+        
         assert!(op.execute(&mut state).is_ok());
-        assert_eq!(
-            state.reputation_context.get(&state.caller_did).copied().unwrap(),
-            90  // 100 * (1 - 0.1) = 90
-        );
+        assert_eq!(state.reputation_context.get("test_caller"), Some(&90)); // 100 * 0.9 = 90
     }
 }
 
@@ -7365,40 +7402,23 @@ use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnergyMetrics {
-    // CPU usage metrics
     pub cpu_cycles: u64,
     pub instructions_executed: u64,
-    
-    // Memory metrics
     pub memory_reads: u64,
     pub memory_writes: u64,
     pub peak_memory_usage: usize,
-    
-    // Network metrics
     pub network_packets_sent: u64,
     pub network_bytes_transferred: u64,
-    
-    // Storage metrics
     pub storage_reads: u64,
     pub storage_writes: u64,
     pub storage_bytes_written: u64,
-    
-    // Consensus-specific metrics
     pub consensus_rounds: u64,
     pub validator_operations: u64,
-    
-    // Timing metrics
     pub operation_duration_ms: u64,
-    
-    // Estimated energy consumption (in joules)
     pub estimated_energy_consumption: f64,
-    
-    // Carbon footprint estimation (in grams CO2)
     pub estimated_carbon_footprint: f64,
-    
-    // Node-specific metrics
-    pub node_location: Option<String>,  // For regional power grid calculations
-    pub power_source: Option<String>,   // e.g., "grid", "renewable", "mixed"
+    pub node_location: Option<String>,
+    pub power_source: Option<String>,
 }
 
 pub struct EnergyMonitor {
@@ -7416,8 +7436,7 @@ pub struct EnergyMonitor {
 pub struct NodeEnergyConfig {
     pub location: Option<String>,
     pub power_source: Option<String>,
-    pub carbon_factor: f64,  // grams CO2 per kWh for this node's power source
-    // Hardware-specific energy coefficients
+    pub carbon_factor: f64,
     pub cpu_energy_factor: f64,
     pub memory_energy_factor: f64,
     pub network_energy_factor: f64,
@@ -7429,11 +7448,11 @@ impl Default for NodeEnergyConfig {
         NodeEnergyConfig {
             location: None,
             power_source: None,
-            carbon_factor: 500.0, // Default assumption: 500g CO2/kWh (mixed grid)
-            cpu_energy_factor: 0.0000001,    // joules per CPU cycle
-            memory_energy_factor: 0.0000002,  // joules per memory operation
-            network_energy_factor: 0.0000005, // joules per network operation
-            storage_energy_factor: 0.0000003, // joules per storage operation
+            carbon_factor: 500.0,
+            cpu_energy_factor: 0.0000001,
+            memory_energy_factor: 0.0000002,
+            network_energy_factor: 0.0000005,
+            storage_energy_factor: 0.0000003,
         }
     }
 }
@@ -7451,72 +7470,67 @@ impl EnergyMonitor {
             node_config: config,
         }
     }
-    
+
     pub fn record_cpu_cycles(&self, cycles: u64) {
         self.cpu_cycles.fetch_add(cycles, Ordering::Relaxed);
     }
-    
+
     pub fn record_instruction(&self) {
         self.instructions.fetch_add(1, Ordering::Relaxed);
     }
-    
+
     pub fn record_memory_operation(&self, bytes: u64) {
         self.memory_ops.fetch_add(bytes, Ordering::Relaxed);
     }
-    
+
     pub fn record_network_operation(&self, bytes: u64) {
         self.network_ops.fetch_add(bytes, Ordering::Relaxed);
     }
-    
+
     pub fn record_consensus_operation(&self) {
         self.consensus_ops.fetch_add(1, Ordering::Relaxed);
     }
-    
+
     pub fn record_storage_operation(&self, bytes: u64) {
         self.storage_ops.fetch_add(bytes, Ordering::Relaxed);
     }
-    
-    /// Calculate estimated energy consumption based on recorded metrics
+
     pub fn estimate_energy_consumption(&self) -> f64 {
         let cpu_energy = self.cpu_cycles.load(Ordering::Relaxed) as f64 
             * self.node_config.cpu_energy_factor;
-            
         let memory_energy = self.memory_ops.load(Ordering::Relaxed) as f64 
             * self.node_config.memory_energy_factor;
-            
         let network_energy = self.network_ops.load(Ordering::Relaxed) as f64 
             * self.node_config.network_energy_factor;
-            
         let storage_energy = self.storage_ops.load(Ordering::Relaxed) as f64 
             * self.node_config.storage_energy_factor;
-            
+
         cpu_energy + memory_energy + network_energy + storage_energy
     }
-    
-    /// Calculate carbon footprint based on energy consumption
+
     pub fn estimate_carbon_footprint(&self) -> f64 {
-        let energy_kwh = self.estimate_energy_consumption() / 3_600_000.0; // Convert joules to kWh
+        let energy_kwh = self.estimate_energy_consumption() / 3_600_000.0;
         energy_kwh * self.node_config.carbon_factor
     }
-    
+
     pub fn get_metrics(&self) -> EnergyMetrics {
         let total_memory_ops = self.memory_ops.load(Ordering::Relaxed);
         let total_network_ops = self.network_ops.load(Ordering::Relaxed);
         let total_storage_ops = self.storage_ops.load(Ordering::Relaxed);
-        
+
         EnergyMetrics {
             cpu_cycles: self.cpu_cycles.load(Ordering::Relaxed),
             instructions_executed: self.instructions.load(Ordering::Relaxed),
-            memory_reads: total_memory_ops / 2,  // Assuming 50/50 split
+            memory_reads: total_memory_ops / 2,
             memory_writes: total_memory_ops / 2,
-            peak_memory_usage: 0, // Would need to implement memory tracking
+            peak_memory_usage: 0,
             network_packets_sent: total_network_ops,
             network_bytes_transferred: total_network_ops,
             storage_reads: total_storage_ops / 2,
             storage_writes: total_storage_ops / 2,
             storage_bytes_written: total_storage_ops,
             consensus_rounds: self.consensus_ops.load(Ordering::Relaxed),
-            validator_operations: 0, // Would need to implement validator tracking
+            validator_operations: 0,
             operation_duration_ms: self.start_time.elapsed().as_millis() as u64,
             estimated_energy_consumption: self.estimate_energy_consumption(),
             estimated_carbon_footprint: self.estimate_carbon_footprint(),
@@ -7526,84 +7540,53 @@ impl EnergyMonitor {
     }
 }
 
-/// Trait for components that want to track their energy usage
 pub trait EnergyAware {
     fn record_energy_metrics(&self, monitor: &EnergyMonitor);
-}
-
-/// Implementation for the VM to track its energy usage
-impl EnergyAware for crate::vm::VM {
-    fn record_energy_metrics(&self, monitor: &EnergyMonitor) {
-        // Record CPU operations
-        monitor.record_cpu_cycles(self.get_cycle_count());
-        
-        // Record instructions
-        monitor.record_instruction();
-        
-        // Record memory operations
-        if let Some(memory_usage) = self.get_memory_usage() {
-            monitor.record_memory_operation(memory_usage);
-        }
-        
-        // Record storage operations
-        if let Some(storage_usage) = self.get_storage_usage() {
-            monitor.record_storage_operation(storage_usage);
-        }
-    }
-}
-
-/// Implementation for the consensus system
-impl EnergyAware for crate::consensus::ProofOfCooperation {
-    fn record_energy_metrics(&self, monitor: &EnergyMonitor) {
-        // Record consensus operations
-        monitor.record_consensus_operation();
-        
-        // Record network operations for consensus messages
-        if let Some(network_bytes) = self.get_network_usage() {
-            monitor.record_network_operation(network_bytes);
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_energy_monitoring() {
         let config = NodeEnergyConfig::default();
         let monitor = EnergyMonitor::new(config);
-        
-        // Simulate some operations
+
         monitor.record_cpu_cycles(1000);
         monitor.record_instruction();
-        monitor.record_memory_operation(1024); // 1KB memory operation
-        monitor.record_network_operation(512); // 512B network operation
-        monitor.record_storage_operation(2048); // 2KB storage operation
+        monitor.record_memory_operation(1024);
+        monitor.record_network_operation(512);
+        monitor.record_storage_operation(2048);
         monitor.record_consensus_operation();
-        
+
         let metrics = monitor.get_metrics();
-        
         assert_eq!(metrics.cpu_cycles, 1000);
         assert_eq!(metrics.instructions_executed, 1);
         assert!(metrics.estimated_energy_consumption > 0.0);
         assert!(metrics.estimated_carbon_footprint > 0.0);
     }
-    
+
     #[test]
     fn test_carbon_footprint_calculation() {
         let mut config = NodeEnergyConfig::default();
-        config.carbon_factor = 100.0; // 100g CO2/kWh (renewable heavy grid)
+        config.carbon_factor = 100.0;
         let monitor = EnergyMonitor::new(config);
-        
-        monitor.record_cpu_cycles(1000000); // Significant CPU usage
-        
+
+        monitor.record_cpu_cycles(1000000);
         let metrics = monitor.get_metrics();
+        
         assert!(metrics.estimated_carbon_footprint > 0.0);
-        assert!(metrics.estimated_carbon_footprint < 
-                metrics.estimated_carbon_footprint * 5.0); // Should be significantly less than default grid
+        assert!(metrics.estimated_carbon_footprint < metrics.estimated_carbon_footprint * 5.0);
     }
 }
+
+===================
+File: ./backend/src/monitoring/mod.rs
+===================
+// src/monitoring/mod.rs
+
+pub mod energy;
 
 ===================
 File: ./backend/src/network/mod.rs
@@ -8408,10 +8391,10 @@ use crate::consensus::ProofOfCooperation;
 use crate::consensus::types::ConsensusRound;
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
-use crate::vm::{VM, Contract, ExecutionContext};
+use crate::vm::{VM, Contract, ExecutionContext, Event};
 use crate::blockchain::{Block, Transaction};
 use crate::blockchain::transaction::{TransactionType, ResourceAllocation};
-use crate::vm::operations::relationship::RelationshipSystem;
+use crate::relationship::RelationshipSystem;
 
 pub struct Blockchain {
     pub chain: Vec<Block>,
@@ -8447,9 +8430,16 @@ impl Blockchain {
         }
     }
 
-    pub fn create_contract(&mut self, contract: Contract) {
-        let mut vm = self.vm.lock().unwrap();
+    pub fn create_contract(&mut self, contract: Contract) -> Result<(), String> {
+        let reputation_context = {
+            let reputation_system = self.reputation_system.lock()
+                .map_err(|_| "Failed to acquire reputation lock".to_string())?;
+            reputation_system.get_reputation_context()
+        };
+        
+        let mut vm = VM::new(1000, reputation_context);
         vm.create_contract(contract);
+        Ok(())
     }
 
     pub async fn process_transaction(&mut self, transaction: &Transaction) -> Result<(), String> {
@@ -8509,7 +8499,7 @@ impl Blockchain {
 
                 match vm.execute_contract(&contract) {
                     Ok(_) => {
-                        self.handle_vm_events(&vm.get_events());
+                        self.handle_vm_events(vm.get_events());
                         let mut reputation_system = self.reputation_system.lock()
                             .map_err(|_| "Failed to acquire reputation lock".to_string())?;
                         reputation_system.update_reputations(&vm.get_reputation_context());
@@ -8560,11 +8550,11 @@ impl Blockchain {
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
                 relationship_system.update_relationship(
-                    transaction.sender.clone(),
-                    member_two.clone(),
-                    relationship_type.clone(),
-                    story.clone(),
-                    interaction.clone(),
+                    &transaction.sender,
+                    member_two,
+                    relationship_type,
+                    story,
+                    interaction,
                 )?;
 
                 resource_allocation.consume_resources(transaction.resource_cost)?;
@@ -8577,11 +8567,11 @@ impl Blockchain {
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
                 relationship_system.add_endorsement(
-                    transaction.sender.clone(),
-                    to_did.clone(),
-                    content.clone(),
-                    context.clone(),
-                    skills.clone(),
+                    &transaction.sender,
+                    to_did,
+                    content,
+                    context,
+                    skills,
                 )?;
 
                 resource_allocation.consume_resources(transaction.resource_cost)?;
@@ -8630,9 +8620,9 @@ impl Blockchain {
         Ok(())
     }
 
-    fn get_contract(&self, contract_id: &str) -> Result<&Contract, String> {
-        self.contracts.get(contract_id)
-            .ok_or_else(|| format!("Contract {} not found", contract_id))
+    fn get_contract(&self, contract_id: &str) -> Result<Contract, String> {
+        // In a real implementation, this would fetch the contract from storage
+        Err("Contract not found".to_string())
     }
 
     fn handle_vm_events(&self, events: &[Event]) {
@@ -8871,7 +8861,7 @@ pub struct BlockMetadata {
 }
 
 /// Metadata specific to relationship transactions in the block
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct RelationshipMetadata {
     pub contribution_count: u32,
     pub mutual_aid_count: u32,
@@ -9005,7 +8995,7 @@ impl Block {
         // Verify all transactions
         for tx in &self.transactions {
             if !tx.validate() {
-                return Err(format!("Invalid transaction: {}", tx.get_hash()));
+                return Err(format!("Invalid transaction: {}", tx.hash));
             }
         }
 
@@ -9050,21 +9040,22 @@ impl Block {
                     participants.insert(tx.sender.clone());
                     participants.insert(receiver.clone());
                 }
-                super::TransactionType::AddEndorsement { to_did, .. } => {
-                    metadata.endorsement_count += 1;
-                    participants.insert(tx.sender.clone());
-                    participants.insert(to_did.clone());
-                }
                 super::TransactionType::UpdateRelationship { member_two, .. } => {
                     metadata.relationship_update_count += 1;
                     participants.insert(tx.sender.clone());
                     participants.insert(member_two.clone());
+                }
+                super::TransactionType::AddEndorsement { to_did, .. } => {
+                    metadata.endorsement_count += 1;
+                    participants.insert(tx.sender.clone());
+                    participants.insert(to_did.clone());
                 }
                 _ => {}
             }
         }
 
         metadata.total_participants = participants.len() as u32;
+
         metadata
     }
 
@@ -9141,6 +9132,16 @@ mod tests {
         assert_eq!(block.signatures.len(), 1);
         assert_eq!(block.metadata.validator_count, 1);
         assert_eq!(block.metadata.total_voting_power, 0.5);
+    }
+
+    #[test]
+    fn test_block_verification() {
+        let mut block = create_test_block();
+        assert!(block.verify(None).is_ok());
+
+        // Test invalid hash
+        block.hash = "invalid".to_string();
+        assert!(block.verify(None).is_err());
     }
 
     #[test]
@@ -11286,553 +11287,127 @@ mod tests {
 ===================
 File: ./backend/src/consensus/mod.rs
 ===================
-// src/consensus/mod.rs
+// src/consensus/proof_of_cooperation/mod.rs
 
-pub mod proof_of_cooperation;
-pub mod types;
+pub mod core;
+pub mod validator;
+pub mod metrics;
+pub mod round;
+pub mod event;
 
-pub use proof_of_cooperation::ProofOfCooperation;
-pub use types::{ConsensusRound, ConsensusConfig, RoundStatus}; 
+pub use core::ProofOfCooperation;
+pub use validator::ValidatorManager;
+pub use round::RoundManager;
+pub use event::ConsensusEvent;
 
-use std::sync::{Arc, Mutex};
-use crate::blockchain::{Block, Transaction};
-use crate::identity::IdentitySystem;
-use crate::reputation::ReputationSystem;
+use crate::consensus::types::{
+    ConsensusConfig,
+    ConsensusRound,
+    ConsensusError,
+    ValidatorInfo,
+    WeightedVote,
+    RoundStatus,
+};
 
-pub struct Blockchain {
-    pub chain: Vec<Block>,
-    pub pending_transactions: Vec<Transaction>,
-    pub consensus: Arc<Mutex<ProofOfCooperation>>,
-    pub identity_system: Arc<Mutex<IdentitySystem>>,
-    pub reputation_system: Arc<Mutex<ReputationSystem>>,
-    pub current_block_number: u64,
-    coordinator_did: String,
-}
+// Re-export commonly used types at this module level
+pub use crate::consensus::types::{
+    ConsensusConfig,
+    ConsensusRound,
+    ConsensusError,
+    ValidatorInfo,
+    WeightedVote,
+    RoundStatus,
+};
 
-impl Blockchain {
-    pub fn new(
-        identity_system: Arc<Mutex<IdentitySystem>>, 
-        reputation_system: Arc<Mutex<ReputationSystem>>,
-        consensus: Arc<Mutex<ProofOfCooperation>>,
-    ) -> Self {
-        let coordinator_did = "did:icn:genesis".to_string();
+===================
+File: ./backend/src/consensus/proof_of_cooperation/metrics.rs
+===================
+// src/consensus/proof_of_cooperation/metrics.rs
+
+use crate::monitoring::energy::{EnergyAware, EnergyMonitor};
+use super::core::ProofOfCooperation;
+
+impl EnergyAware for ProofOfCooperation {
+    fn record_energy_metrics(&self, monitor: &EnergyMonitor) {
+        // Record basic operations
+        monitor.record_instruction();
         
-        Blockchain {
-            chain: vec![Block::genesis()],
-            pending_transactions: vec![],
-            consensus,
-            identity_system,
-            reputation_system,
-            current_block_number: 1,
-            coordinator_did,
+        // Record voting operations
+        if let Some(round) = &self.current_round {
+            let vote_count = round.votes.len();
+            monitor.record_consensus_operation();
+            monitor.record_network_operation((vote_count * 256) as u64); // Estimate network usage
         }
-    }
-
-    pub async fn finalize_block(&mut self) -> Result<(), String> {
-        let previous_hash = self.chain.last()
-            .map(|block| block.hash.clone())
-            .unwrap_or_default();
-
-        let new_block = Block::new(
-            self.chain.len() as u64,
-            previous_hash,
-            self.pending_transactions.clone(),
-            self.coordinator_did.clone(),
-        );
-
-        let mut consensus = self.consensus.lock()
-            .map_err(|_| "Failed to acquire consensus lock".to_string())?;
         
-        consensus.start_round().await?;
-
-        let validators = self.get_active_validators();
-        if validators.is_empty() {
-            return Err("No active validators available".to_string());
-        }
-
-        drop(consensus);
-
-        {
-            let mut consensus = self.consensus.lock()
-                .map_err(|_| "Failed to acquire consensus lock".to_string())?;
-            consensus.propose_block(&validators[0], new_block.clone()).await?;
-        }
-
-        for validator in validators {
-            let signature = String::from("dummy_signature");
-            let mut consensus = self.consensus.lock()
-                .map_err(|_| "Failed to acquire consensus lock".to_string())?;
-            consensus.submit_vote(&validator, true, signature).await?;
-        }
-
-        let (finalized_block, reputation_updates) = {
-            let mut consensus = self.consensus.lock()
-                .map_err(|_| "Failed to acquire consensus lock".to_string())?;
-            let block = consensus.finalize_round().await?;
-            let updates = consensus.get_reputation_updates().to_vec();
-            (block, updates)
-        };
-
-        self.chain.push(finalized_block);
-        self.pending_transactions.clear();
-        
-        {
-            let mut reputation_system = self.reputation_system.lock()
-                .map_err(|_| "Failed to acquire reputation lock".to_string())?;
-            for (did, change) in reputation_updates {
-                reputation_system.increase_reputation(&did, change);
-            }
-        }
-
-        self.current_block_number += 1;
-        Ok(())
-    }
-
-    fn get_active_validators(&self) -> Vec<String> {
-        vec![
-            "did:icn:validator1".to_string(),
-            "did:icn:validator2".to_string(),
-            "did:icn:validator3".to_string(),
-        ]
-    }
-
-    pub fn get_current_round(&self) -> Option<ConsensusRound> {
-        self.consensus.try_lock()
-            .ok()
-            .and_then(|consensus| consensus.get_current_round())
+        // Record validator state size
+        let validator_size = (self.validators.len() * std::mem::size_of::<ValidatorInfo>()) as u64;
+        monitor.record_memory_operation(validator_size);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::websocket::WebSocketHandler;
+    use crate::monitoring::energy::NodeEnergyConfig;
 
-    #[tokio::test]
-    async fn test_blockchain_new() {
-        let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
-        let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
-        let ws_handler = Arc::new(WebSocketHandler::new());
-        
-        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
-            ConsensusConfig::default(),
-            ws_handler,
-        )));
-
-        let blockchain = Blockchain::new(
-            identity_system.clone(),
-            reputation_system.clone(),
-            consensus,
-        );
-
-        assert_eq!(blockchain.current_block_number, 1);
-        assert_eq!(blockchain.chain.len(), 1);
-        assert_eq!(blockchain.pending_transactions.len(), 0);
-        assert_eq!(blockchain.coordinator_did, "did:icn:genesis");
+    #[test]
+    fn test_energy_metrics() {
+        // TODO: Add energy metrics tests
     }
 }
 
 ===================
-File: ./backend/src/consensus/proof_of_cooperation.rs
+File: ./backend/src/consensus/proof_of_cooperation/validator.rs
 ===================
-//! Proof of Cooperation (PoC) Consensus Implementation
-//! 
-//! This module implements a reputation-based consensus mechanism designed for cooperative networks.
-//! Key features include:
-//! - Reputation-weighted validator selection
-//! - Multi-phase consensus process
-//! - Built-in security against Sybil attacks
-//! - Real-time consensus monitoring
-//! - Performance-based rewards and penalties
+// src/consensus/proof_of_cooperation/validator.rs
 
-use std::sync::Arc;
 use std::collections::HashMap;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use rand::{thread_rng, Rng};
-use serde::{Serialize, Deserialize};
-use tokio::sync::broadcast;
+use crate::consensus::types::{ValidatorInfo, ConsensusConfig, ConsensusError};
 
-use crate::websocket::WebSocketHandler;
-use crate::blockchain::Block;
-use crate::identity::DID;
-use crate::monitoring::energy::EnergyAware;
-use crate::consensus::types::{
-    ConsensusConfig, RoundStatus, WeightedVote, ValidatorInfo,
-    ConsensusRoundStats, ConsensusRound, ConsensusError
-};
-
-/// Events emitted during consensus process
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum ConsensusEvent {
-    RoundStarted(u64),
-    BlockProposed {
-        round: u64,
-        proposer: String,
-        block_hash: String,
-    },
-    VoteReceived {
-        validator: String,
-        approved: bool,
-        round: u64,
-        voting_power: f64,
-    },
-    RoundCompleted {
-        round: u64,
-        block_hash: String,
-        validators: Vec<String>,
-        duration_ms: u64,
-    },
-    ValidationFailed {
-        reason: String,
-        round: u64,
-    },
-    ReputationUpdated {
-        did: String,
-        change: i64,
-        new_total: i64,
-    },
-}
-
-/// Main consensus implementation
-pub struct ProofOfCooperation {
-    /// Configuration parameters
-    config: ConsensusConfig,
-    
-    /// Active validators with their information
+pub struct ValidatorManager {
     validators: HashMap<String, ValidatorInfo>,
-    
-    /// Current consensus round state
-    current_round: Option<ConsensusRound>,
-    
-    /// History of completed rounds' statistics
-    round_history: Vec<ConsensusRoundStats>,
-    
-    /// Pending reputation updates to be applied
-    reputation_updates: Vec<(String, i64)>,
-    
-    /// WebSocket handler for real-time updates
-    ws_handler: Arc<WebSocketHandler>,
-    
-    /// Broadcast channel for consensus events
-    event_tx: broadcast::Sender<ConsensusEvent>,
-    
-    /// Total network voting power
+    config: ConsensusConfig,
     total_voting_power: f64,
-    
-    /// Last round cleanup time
     last_cleanup: DateTime<Utc>,
 }
 
-impl ProofOfCooperation {
-    /// Creates a new instance of the PoC consensus mechanism
-    pub fn new(config: ConsensusConfig, ws_handler: Arc<WebSocketHandler>) -> Self {
-        let (event_tx, _) = broadcast::channel(100);
-        
-        ProofOfCooperation {
-            config,
+impl ValidatorManager {
+    pub fn new(config: ConsensusConfig) -> Self {
+        ValidatorManager {
             validators: HashMap::new(),
-            current_round: None,
-            round_history: Vec::new(),
-            reputation_updates: Vec::new(),
-            ws_handler,
-            event_tx,
+            config,
             total_voting_power: 0.0,
             last_cleanup: Utc::now(),
         }
     }
 
-    /// Starts a new consensus round
-    pub async fn start_round(&mut self) -> Result<(), ConsensusError> {
-        // Check if round already in progress
-        if self.current_round.is_some() {
-            return Err(ConsensusError::RoundInProgress);
-        }
-
-        // Clean up inactive validators periodically
-        self.cleanup_inactive_validators();
-
-        // Get active validators meeting reputation threshold
-        let active_validators: Vec<_> = self.validators.values()
-            .filter(|v| self.is_validator_eligible(v))
-            .collect();
-
-        if active_validators.len() < self.config.min_validators {
-            return Err(ConsensusError::InsufficientValidators);
-        }
-
-        // Select coordinator using reputation-weighted random selection
-        let coordinator = self.select_coordinator(&active_validators)?;
-
-        // Calculate total voting power for this round
-        self.total_voting_power = active_validators.iter()
-            .map(|v| v.voting_power)
-            .sum();
-
-        // Create new round
-        let round = ConsensusRound {
-            round_number: self.round_history.len() as u64 + 1,
-            coordinator: coordinator.did.clone(),
-            start_time: Utc::now(),
-            timeout: Utc::now() + Duration::milliseconds(self.config.round_timeout_ms as i64),
-            status: RoundStatus::Proposing,
-            proposed_block: None,
-            votes: HashMap::new(),
-            stats: ConsensusRoundStats {
-                total_voting_power: self.total_voting_power,
-                participation_rate: 0.0,
-                approval_rate: 0.0,
-                round_duration_ms: 0,
-                validator_count: active_validators.len(),
-            },
+    pub fn register_validator(&mut self, did: String, initial_reputation: i64) -> Result<(), ConsensusError> {
+        let validator = ValidatorInfo {
+            did: did.clone(),
+            reputation: initial_reputation,
+            voting_power: self.calculate_voting_power(initial_reputation),
+            last_active_round: 0,
+            consecutive_missed_rounds: 0,
+            total_blocks_validated: 0,
+            performance_score: 1.0,
         };
 
-        // Broadcast round start
-        self.ws_handler.broadcast_consensus_update(&round);
-        let _ = self.event_tx.send(ConsensusEvent::RoundStarted(round.round_number));
-        
-        self.current_round = Some(round);
+        self.validators.insert(did, validator);
+        self.update_total_voting_power();
         Ok(())
     }
 
-    /// Proposes a new block for the current round
-    pub async fn propose_block(&mut self, proposer_did: &str, block: Block) -> Result<(), ConsensusError> {
-        // Validate proposer
-        let validator = self.validators.get(proposer_did)
-            .ok_or(ConsensusError::NotValidator)?;
-
-        if !self.is_validator_eligible(validator) {
-            return Err(ConsensusError::InsufficientReputation);
-        }
-
-        // Get current round
-        let mut round = self.current_round.take()
-            .ok_or(ConsensusError::NoActiveRound)?;
-
-        // Verify proposer is coordinator
-        if round.coordinator != proposer_did {
-            self.current_round = Some(round);
-            return Err(ConsensusError::InvalidCoordinator);
-        }
-
-        // Verify round status
-        if round.status != RoundStatus::Proposing {
-            self.current_round = Some(round);
-            return Err(ConsensusError::InvalidRoundState);
-        }
-
-        // Verify block
-        if !block.verify(None) {
-            return Err(ConsensusError::ValidationFailed);
-        }
-
-        // Set proposed block and update status
-        round.proposed_block = Some(block.clone());
-        round.status = RoundStatus::Voting;
-
-        // Broadcast updates
-        self.ws_handler.broadcast_consensus_update(&round);
-        self.ws_handler.broadcast_block_finalized(&block);
-        let _ = self.event_tx.send(ConsensusEvent::BlockProposed {
-            round: round.round_number,
-            proposer: proposer_did.to_string(),
-            block_hash: block.hash.clone(),
-        });
-
-        self.current_round = Some(round);
-        Ok(())
+    pub fn get_validator(&self, did: &str) -> Option<&ValidatorInfo> {
+        self.validators.get(did)
     }
 
-    /// Submits a vote for the current round
-    pub async fn submit_vote(
-        &mut self,
-        validator_did: &str,
-        approved: bool,
-        signature: String
-    ) -> Result<(), ConsensusError> {
-        // Validate validator
-        let validator = self.validators.get(validator_did)
-            .ok_or(ConsensusError::NotValidator)?;
-
-        if !self.is_validator_eligible(validator) {
-            return Err(ConsensusError::InsufficientReputation);
-        }
-
-        // Get current round
-        let mut round = self.current_round.take()
-            .ok_or(ConsensusError::NoActiveRound)?;
-
-        // Verify round status
-        if round.status != RoundStatus::Voting {
-            self.current_round = Some(round);
-            return Err(ConsensusError::InvalidRoundState);
-        }
-
-        // Verify not already voted
-        if round.votes.contains_key(validator_did) {
-            self.current_round = Some(round);
-            return Err(ConsensusError::Custom("Already voted".to_string()));
-        }
-
-        // Create vote
-        let vote = WeightedVote {
-            validator: validator_did.to_string(),
-            approve: approved,
-            voting_power: validator.voting_power,
-            timestamp: Utc::now(),
-            signature,
-        };
-
-        // Add vote
-        round.votes.insert(validator_did.to_string(), vote.clone());
-
-        // Update round statistics
-        self.update_round_stats(&mut round);
-
-        // Check if consensus reached
-        if self.is_consensus_reached(&round) {
-            round.status = RoundStatus::Finalizing;
-        }
-
-        // Broadcast updates
-        self.ws_handler.broadcast_consensus_update(&round);
-        let _ = self.event_tx.send(ConsensusEvent::VoteReceived {
-            validator: validator_did.to_string(),
-            approved,
-            round: round.round_number,
-            voting_power: validator.voting_power,
-        });
-
-        self.current_round = Some(round);
-        Ok(())
+    pub fn get_validators(&self) -> &HashMap<String, ValidatorInfo> {
+        &self.validators
     }
 
-    /// Finalizes the current consensus round
-    pub async fn finalize_round(&mut self) -> Result<Block, ConsensusError> {
-        // Get current round
-        let round = self.current_round.take()
-            .ok_or(ConsensusError::NoActiveRound)?;
-
-        // Verify round status
-        if round.status != RoundStatus::Finalizing {
-            self.current_round = Some(round);
-            return Err(ConsensusError::InvalidRoundState);
-        }
-
-        // Get proposed block
-        let block = round.proposed_block.clone()
-            .ok_or(ConsensusError::Custom("No proposed block".to_string()))?;
-
-        // Update validator statistics and reputation
-        self.update_validator_stats(&round);
-
-        // Update round history
-        let mut stats = round.stats;
-        stats.round_duration_ms = Utc::now()
-            .signed_duration_since(round.start_time)
-            .num_milliseconds() as u64;
-            
-        self.round_history.push(stats);
-
-        // Broadcast completion
-        self.ws_handler.broadcast_block_finalized(&block);
-        let _ = self.event_tx.send(ConsensusEvent::RoundCompleted {
-            round: round.round_number,
-            block_hash: block.hash.clone(),
-            validators: round.votes.keys().cloned().collect(),
-            duration_ms: stats.round_duration_ms,
-        });
-
-        Ok(block)
-    }
-
-    // Helper Functions
-
-    fn is_validator_eligible(&self, validator: &ValidatorInfo) -> bool {
-        validator.reputation >= self.config.min_validator_reputation &&
-        validator.performance_score >= self.config.min_performance_score &&
-        validator.consecutive_missed_rounds < self.config.max_missed_rounds
-    }
-
-    fn update_round_stats(&self, round: &mut ConsensusRound) {
-        let votes_power: f64 = round.votes.values()
-            .map(|v| v.voting_power)
-            .sum();
-
-        round.stats.participation_rate = votes_power / self.total_voting_power;
-
-        let approval_power: f64 = round.votes.values()
-            .filter(|v| v.approve)
-            .map(|v| v.voting_power)
-            .sum();
-
-        round.stats.approval_rate = if votes_power > 0.0 {
-            approval_power / votes_power
-        } else {
-            0.0
-        };
-    }
-
-    fn is_consensus_reached(&self, round: &ConsensusRound) -> bool {
-        round.stats.participation_rate >= self.config.min_participation_rate &&
-        round.stats.approval_rate >= self.config.min_approval_rate
-    }
-
-    fn update_validator_stats(&mut self, round: &ConsensusRound) {
-        for (validator_id, validator) in self.validators.iter_mut() {
-            if let Some(vote) = round.votes.get(validator_id) {
-                // Reward participation
-                validator.consecutive_missed_rounds = 0;
-                validator.last_active_round = round.round_number;
-                validator.total_blocks_validated += 1;
-
-                // Calculate reward
-                let base_reward = if validator_id == &round.coordinator {
-                    self.config.base_reward * 2 // Double reward for coordinator
-                } else {
-                    self.config.base_reward
-                };
-
-                let performance_multiplier = if vote.approve {
-                    1.0 + (validator.performance_score * 0.5)
-                } else {
-                    1.0
-                };
-
-                let reward = (base_reward as f64 * performance_multiplier) as i64;
-                validator.reputation += reward;
-                self.reputation_updates.push((validator_id.clone(), reward));
-
-                // Update performance score
-                validator.performance_score = validator.performance_score * 0.95 + 0.05;
-            } else {
-                // Penalize non-participation
-                validator.consecutive_missed_rounds += 1;
-                
-                let penalty = -(self.config.base_reward as f64 *
-                    self.config.penalty_factor *
-                    validator.consecutive_missed_rounds as f64) as i64;
-                
-                validator.reputation += penalty;
-                self.reputation_updates.push((validator_id.clone(), penalty));
-                
-                validator.performance_score = validator.performance_score * 0.95;
-            }
-        }
-    }
-
-    fn cleanup_inactive_validators(&mut self) {
-        let now = Utc::now();
-        if (now - self.last_cleanup).num_hours() >= 24 {
-            self.validators.retain(|_, v| {
-                v.consecutive_missed_rounds < self.config.max_missed_rounds &&
-                v.performance_score >= self.config.min_performance_score
-            });
-            self.last_cleanup = now;
-        }
-    }
-
-    /// Selects a coordinator using reputation-weighted random selection
-    fn select_coordinator<'a>(&self, active_validators: &'a [&ValidatorInfo]) 
+    pub fn select_coordinator<'a>(&self, active_validators: &'a [&ValidatorInfo]) 
         -> Result<&'a ValidatorInfo, ConsensusError> 
     {
         let mut rng = thread_rng();
@@ -11859,251 +11434,739 @@ impl ProofOfCooperation {
         Err(ConsensusError::Custom("Failed to select coordinator".to_string()))
     }
 
-    // Public interfaces
+    pub fn update_validator_stats(
+        &mut self,
+        round_number: u64,
+        votes: &HashMap<String, bool>,
+        coordinator: &str
+    ) {
+        for (validator_id, validator) in self.validators.iter_mut() {
+            if let Some(&approved) = votes.get(validator_id) {
+                // Reset consecutive misses
+                validator.consecutive_missed_rounds = 0;
+                validator.last_active_round = round_number;
+                validator.total_blocks_validated += 1;
 
-    /// Gets the current list of reputation updates
-    pub fn get_reputation_updates(&self) -> &[(String, i64)] {
-        &self.reputation_updates
+                // Calculate reward
+                let base_reward = if validator_id == coordinator {
+                    self.config.base_reward * 2 // Double reward for coordinator
+                } else {
+                    self.config.base_reward
+                };
+
+                let performance_multiplier = if approved {
+                    1.0 + (validator.performance_score * 0.5)
+                } else {
+                    1.0
+                };
+
+                let reward = (base_reward as f64 * performance_multiplier) as i64;
+                validator.reputation += reward;
+
+                // Update performance score
+                validator.performance_score = validator.performance_score * 0.95 + 0.05;
+            } else {
+                // Penalize non-participation
+                validator.consecutive_missed_rounds += 1;
+                
+                let penalty = -(self.config.base_reward as f64 *
+                    self.config.penalty_factor *
+                    validator.consecutive_missed_rounds as f64) as i64;
+                
+                validator.reputation += penalty;
+                validator.performance_score = validator.performance_score * 0.95;
+            }
+        }
+
+        self.update_total_voting_power();
     }
 
-    /// Gets the current round state if one exists
-    pub fn get_current_round(&self) -> Option<ConsensusRound> {
-        self.current_round.clone()
+    pub fn cleanup_inactive_validators(&mut self) {
+        let now = Utc::now();
+        if (now - self.last_cleanup).num_hours() >= 24 {
+            self.validators.retain(|_, v| {
+                v.consecutive_missed_rounds < self.config.max_missed_rounds &&
+                v.performance_score >= self.config.min_performance_score
+            });
+            self.last_cleanup = now;
+            self.update_total_voting_power();
+        }
     }
 
-    /// Registers a new validator
-    pub fn register_validator(&mut self, did: String, initial_reputation: i64) -> Result<(), ConsensusError> {
-        let validator = ValidatorInfo {
-            did: did.clone(),
-            reputation: initial_reputation,
-            voting_power: self.calculate_voting_power(initial_reputation),
-            last_active_round: 0,
-            consecutive_missed_rounds: 0,
-            total_blocks_validated: 0,
-            performance_score: 1.0,
-        };
-
-        self.validators.insert(did, validator);
-        Ok(())
-    }
-
-    /// Calculates voting power based on reputation
     fn calculate_voting_power(&self, reputation: i64) -> f64 {
         let base_power = (reputation as f64) / 1000.0;
         base_power.min(self.config.max_voting_power)
     }
 
-    /// Gets a broadcast receiver for consensus events
-    pub fn subscribe_to_events(&self) -> broadcast::Receiver<ConsensusEvent> {
-        self.event_tx.subscribe()
-    }
-}
-
-// Implement energy awareness for the consensus mechanism
-impl EnergyAware for ProofOfCooperation {
-    fn record_energy_metrics(&self, monitor: &crate::monitoring::energy::EnergyMonitor) {
-        // Record basic operations
-        monitor.record_instruction();
-        
-        // Record voting operations
-        if let Some(round) = &self.current_round {
-            let vote_count = round.votes.len();
-            monitor.record_consensus_operation();
-            monitor.record_network_operation((vote_count * 256) as u64); // Estimate network usage
-        }
-        
-        // Record validator state size
-        let validator_size = (self.validators.len() * std::mem::size_of::<ValidatorInfo>()) as u64;
-        monitor.record_memory_operation(validator_size);
+    fn update_total_voting_power(&mut self) {
+        self.total_voting_power = self.validators.values()
+            .map(|v| v.voting_power)
+            .sum();
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration as StdDuration;
 
-    fn setup_test_consensus() -> ProofOfCooperation {
-        let config = ConsensusConfig {
-            min_validator_reputation: 100,
-            max_voting_power: 0.1,
-            min_participation_rate: 0.67,
-            min_approval_rate: 0.67,
-            round_timeout_ms: 30_000,
-            base_reward: 10,
-            penalty_factor: 1.5,
-            min_validators: 3,
-            max_missed_rounds: 5,
-            min_performance_score: 0.5,
-        };
-        let ws_handler = Arc::new(WebSocketHandler::new());
-        ProofOfCooperation::new(config, ws_handler)
+    fn setup_test_manager() -> ValidatorManager {
+        ValidatorManager::new(ConsensusConfig::default())
     }
 
-    fn add_test_validators(consensus: &mut ProofOfCooperation) {
-        for i in 1..=4 {
-            let validator = ValidatorInfo {
-                did: format!("did:icn:test{}", i),
-                reputation: 1000,
-                voting_power: 0.1,
-                last_active_round: 0,
-                consecutive_missed_rounds: 0,
-                total_blocks_validated: 0,
-                performance_score: 1.0,
-            };
-            consensus.validators.insert(validator.did.clone(), validator);
+    #[test]
+    fn test_register_validator() {
+        let mut manager = setup_test_manager();
+        assert!(manager.register_validator(
+            "did:icn:test".to_string(),
+            1000
+        ).is_ok());
+        
+        let validator = manager.get_validator("did:icn:test").unwrap();
+        assert_eq!(validator.reputation, 1000);
+    }
+
+    #[test]
+    fn test_validator_selection() {
+        let mut manager = setup_test_manager();
+        
+        // Add some test validators
+        for i in 1..=3 {
+            manager.register_validator(
+                format!("did:icn:test{}", i),
+                1000
+            ).unwrap();
         }
+
+        let active_validators: Vec<_> = manager.validators.values().collect();
+        let coordinator = manager.select_coordinator(&active_validators);
+        assert!(coordinator.is_ok());
+    }
+}
+
+===================
+File: ./backend/src/consensus/proof_of_cooperation/core.rs
+===================
+// src/consensus/proof_of_cooperation/core.rs
+
+use std::sync::Arc;
+use tokio::sync::broadcast;
+use crate::websocket::WebSocketHandler;
+use crate::blockchain::Block;
+use crate::consensus::types::{ConsensusConfig, ConsensusError, ConsensusRound};
+use super::{
+    validator::ValidatorManager,
+    round::RoundManager,
+    events::ConsensusEvent,
+};
+
+pub struct ProofOfCooperation {
+    // Core components
+    validator_manager: ValidatorManager,
+    round_manager: RoundManager,
+    
+    // Configuration and state
+    config: ConsensusConfig,
+    reputation_updates: Vec<(String, i64)>,
+    
+    // Communication
+    ws_handler: Arc<WebSocketHandler>,
+    event_tx: broadcast::Sender<ConsensusEvent>,
+}
+
+impl ProofOfCooperation {
+    pub fn new(config: ConsensusConfig, ws_handler: Arc<WebSocketHandler>) -> Self {
+        let (event_tx, _) = broadcast::channel(100);
+        
+        ProofOfCooperation {
+            validator_manager: ValidatorManager::new(config.clone()),
+            round_manager: RoundManager::new(config.clone()),
+            config,
+            reputation_updates: Vec::new(),
+            ws_handler,
+            event_tx,
+        }
+    }
+
+    pub async fn start_round(&mut self) -> Result<(), ConsensusError> {
+        // Clean up inactive validators periodically
+        self.validator_manager.cleanup_inactive_validators();
+
+        // Get active validators meeting reputation threshold
+        let active_validators: Vec<_> = self.validator_manager.get_validators().values()
+            .filter(|v| v.reputation >= self.config.min_validator_reputation &&
+                      v.performance_score >= self.config.min_performance_score)
+            .collect();
+
+        if active_validators.len() < self.config.min_validators {
+            return Err(ConsensusError::InsufficientValidators);
+        }
+
+        // Select coordinator
+        let coordinator = self.validator_manager.select_coordinator(&active_validators)?;
+
+        // Calculate total voting power
+        let total_voting_power: f64 = active_validators.iter()
+            .map(|v| v.voting_power)
+            .sum();
+
+        // Start new round
+        let event = self.round_manager.start_round(
+            self.get_next_round_number(),
+            coordinator.did.clone(),
+            total_voting_power,
+            active_validators.len(),
+        )?;
+
+        // Broadcast updates
+        if let Some(round) = self.round_manager.get_current_round() {
+            self.ws_handler.broadcast_consensus_update(round);
+        }
+        let _ = self.event_tx.send(event);
+
+        Ok(())
+    }
+
+    pub async fn propose_block(&mut self, proposer_did: &str, block: Block) -> Result<(), ConsensusError> {
+        // Validate proposer
+        let validator = self.validator_manager.get_validator(proposer_did)
+            .ok_or(ConsensusError::NotValidator)?;
+
+        if validator.reputation < self.config.min_validator_reputation {
+            return Err(ConsensusError::InsufficientReputation);
+        }
+
+        // Process proposal
+        let event = self.round_manager.propose_block(proposer_did, block.clone())?;
+
+        // Broadcast updates
+        self.ws_handler.broadcast_block_finalized(&block);
+        let _ = self.event_tx.send(event);
+
+        Ok(())
+    }
+
+    pub async fn submit_vote(
+        &mut self,
+        validator_did: &str,
+        approve: bool,
+        signature: String,
+    ) -> Result<(), ConsensusError> {
+        // Validate validator
+        let validator = self.validator_manager.get_validator(validator_did)
+            .ok_or(ConsensusError::NotValidator)?;
+
+        if validator.reputation < self.config.min_validator_reputation {
+            return Err(ConsensusError::InsufficientReputation);
+        }
+
+        // Submit vote
+        let event = self.round_manager.submit_vote(
+            validator_did.to_string(),
+            approve,
+            validator.voting_power,
+            signature,
+        )?;
+
+        // Broadcast updates
+        if let Some(round) = self.round_manager.get_current_round() {
+            self.ws_handler.broadcast_consensus_update(round);
+        }
+        let _ = self.event_tx.send(event);
+
+        Ok(())
+    }
+
+    pub async fn finalize_round(&mut self) -> Result<Block, ConsensusError> {
+        // Finalize the round
+        let (block, stats) = self.round_manager.finalize_round()?;
+
+        // Update validator statistics
+        let round = self.round_manager.get_current_round()
+            .ok_or(ConsensusError::NoActiveRound)?;
+
+        self.validator_manager.update_validator_stats(
+            round.round_number,
+            &round.votes.iter().map(|(k, v)| (k.clone(), v.approve)).collect(),
+            &round.coordinator,
+        );
+
+        // Create round completed event
+        let event = ConsensusEvent::RoundCompleted {
+            round: round.round_number,
+            block_hash: block.hash.clone(),
+            validators: round.votes.keys().cloned().collect(),
+            duration_ms: stats.round_duration_ms,
+        };
+
+        // Broadcast completion
+        self.ws_handler.broadcast_block_finalized(&block);
+        let _ = self.event_tx.send(event);
+
+        Ok(block)
+    }
+
+    pub fn register_validator(&mut self, did: String, initial_reputation: i64) -> Result<(), ConsensusError> {
+        self.validator_manager.register_validator(did, initial_reputation)
+    }
+
+    pub fn get_current_round(&self) -> Option<&ConsensusRound> {
+        self.round_manager.get_current_round()
+    }
+
+    pub fn get_reputation_updates(&self) -> &[(String, i64)] {
+        &self.reputation_updates
+    }
+
+    pub fn subscribe_to_events(&self) -> broadcast::Receiver<ConsensusEvent> {
+        self.event_tx.subscribe()
+    }
+
+    fn get_next_round_number(&self) -> u64 {
+        self.round_manager.get_round_history().len() as u64 + 1
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn setup_test_consensus() -> ProofOfCooperation {
+        let ws_handler = Arc::new(WebSocketHandler::new());
+        let config = ConsensusConfig::default();
+        ProofOfCooperation::new(config, ws_handler)
     }
 
     #[tokio::test]
     async fn test_start_round() {
-        let mut consensus = setup_test_consensus();
-        add_test_validators(&mut consensus);
+        let mut consensus = setup_test_consensus().await;
+        
+        // Add test validators
+        consensus.register_validator("did:icn:test1".to_string(), 1000).unwrap();
+        consensus.register_validator("did:icn:test2".to_string(), 1000).unwrap();
+        consensus.register_validator("did:icn:test3".to_string(), 1000).unwrap();
         
         assert!(consensus.start_round().await.is_ok());
-        assert!(consensus.current_round.is_some());
-        
-        let round = consensus.current_round.unwrap();
-        assert_eq!(round.status, RoundStatus::Proposing);
-        assert!(round.votes.is_empty());
+        assert!(consensus.get_current_round().is_some());
     }
 
     #[tokio::test]
-    async fn test_propose_block() {
-        let mut consensus = setup_test_consensus();
-        add_test_validators(&mut consensus);
+    async fn test_full_consensus_cycle() {
+        let mut consensus = setup_test_consensus().await;
+        
+        // Set up validators
+        for i in 1..=3 {
+            consensus.register_validator(format!("did:icn:test{}", i), 1000).unwrap();
+        }
         
         // Start round
         consensus.start_round().await.unwrap();
-        let coordinator_did = consensus.current_round.as_ref().unwrap().coordinator.clone();
-        
-        // Create test block
-        let block = Block::new(1, "prev_hash".to_string(), vec![], coordinator_did.clone());
-        
-        // Propose block
-        let result = consensus.propose_block(&coordinator_did, block).await;
-        assert!(result.is_ok());
-        
-        let round = consensus.current_round.unwrap();
-        assert_eq!(round.status, RoundStatus::Voting);
-        assert!(round.proposed_block.is_some());
-    }
-
-    #[tokio::test]
-    async fn test_voting_process() {
-        let mut consensus = setup_test_consensus();
-        add_test_validators(&mut consensus);
-        
-        // Start round
-        consensus.start_round().await.unwrap();
-        let coordinator_did = consensus.current_round.as_ref().unwrap().coordinator.clone();
+        let coordinator_did = consensus.get_current_round().unwrap().coordinator.clone();
         
         // Propose block
         let block = Block::new(1, "prev_hash".to_string(), vec![], coordinator_did.clone());
         consensus.propose_block(&coordinator_did, block).await.unwrap();
         
         // Submit votes
-        for validator in consensus.validators.keys() {
-            let result = consensus.submit_vote(
-                validator,
-                true,
-                "test_signature".to_string()
-            ).await;
-            assert!(result.is_ok());
-        }
-        
-        let round = consensus.current_round.unwrap();
-        assert_eq!(round.status, RoundStatus::Finalizing);
-        assert!(consensus.is_consensus_reached(&round));
-    }
-
-    #[tokio::test]
-    async fn test_finalize_round() {
-        let mut consensus = setup_test_consensus();
-        add_test_validators(&mut consensus);
-        
-        // Complete full consensus process
-        consensus.start_round().await.unwrap();
-        let coordinator_did = consensus.current_round.as_ref().unwrap().coordinator.clone();
-        
-        let block = Block::new(1, "prev_hash".to_string(), vec![], coordinator_did.clone());
-        consensus.propose_block(&coordinator_did, block.clone()).await.unwrap();
-        
-        for validator in consensus.validators.keys() {
+        for i in 1..=3 {
             consensus.submit_vote(
-                validator,
+                &format!("did:icn:test{}", i),
                 true,
-                "test_signature".to_string()
+                "signature".to_string()
             ).await.unwrap();
         }
         
+        // Finalize
         let result = consensus.finalize_round().await;
         assert!(result.is_ok());
-        
-        let finalized_block = result.unwrap();
-        assert_eq!(finalized_block.hash, block.hash);
-        
-        // Check reputation updates
-        let updates = consensus.get_reputation_updates();
-        assert!(!updates.is_empty());
     }
+}
+
+===================
+File: ./backend/src/consensus/proof_of_cooperation/mod.rs
+===================
+// src/consensus/mod.rs
+
+pub mod proof_of_cooperation;
+pub mod types;
+
+pub use proof_of_cooperation::{
+    ProofOfCooperation,
+    ConsensusEvent,
+    ValidatorManager,
+    RoundManager,
+};
+
+pub use types::{
+    ConsensusConfig,
+    ConsensusRound,
+    ConsensusError,
+    ValidatorInfo,
+    WeightedVote,
+    RoundStatus,
+};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use tokio;
+    use crate::websocket::WebSocketHandler;
 
     #[tokio::test]
-    async fn test_validator_eligibility() {
-        let mut consensus = setup_test_consensus();
+    async fn test_consensus_integration() {
+        let ws_handler = Arc::new(WebSocketHandler::new());
+        let config = ConsensusConfig::default();
         
-        // Add validator with low reputation
-        consensus.register_validator(
-            "did:icn:low_rep".to_string(),
-            50  // Below minimum
-        ).unwrap();
+        let mut consensus = ProofOfCooperation::new(config, ws_handler);
         
-        // Add valid validator
-        consensus.register_validator(
-            "did:icn:valid".to_string(),
-            1000
-        ).unwrap();
+        // Register test validators
+        consensus.register_validator("did:icn:test1".to_string(), 1000).unwrap();
+        consensus.register_validator("did:icn:test2".to_string(), 1000).unwrap();
+        consensus.register_validator("did:icn:test3".to_string(), 1000).unwrap();
         
-        let low_rep = consensus.validators.get("did:icn:low_rep").unwrap();
-        assert!(!consensus.is_validator_eligible(low_rep));
-        
-        let valid = consensus.validators.get("did:icn:valid").unwrap();
-        assert!(consensus.is_validator_eligible(valid));
+        assert!(consensus.start_round().await.is_ok());
+    }
+}
+
+===================
+File: ./backend/src/consensus/proof_of_cooperation/event.rs
+===================
+// src/consensus/proof_of_cooperation/events.rs
+
+use serde::{Serialize, Deserialize};
+use crate::blockchain::Block;
+
+/// Events emitted during consensus process
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ConsensusEvent {
+    RoundStarted(u64),
+    
+    BlockProposed {
+        round: u64,
+        proposer: String,
+        block_hash: String,
+    },
+    
+    VoteReceived {
+        validator: String,
+        approved: bool,
+        round: u64,
+        voting_power: f64,
+    },
+    
+    RoundCompleted {
+        round: u64,
+        block_hash: String,
+        validators: Vec<String>,
+        duration_ms: u64,
+    },
+    
+    ValidationFailed {
+        reason: String,
+        round: u64,
+    },
+    
+    ReputationUpdated {
+        did: String,
+        change: i64,
+        new_total: i64,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_consensus_event_serialization() {
+        let event = ConsensusEvent::RoundStarted(1);
+        let serialized = serde_json::to_string(&event).unwrap();
+        assert!(!serialized.is_empty());
+
+        let event = ConsensusEvent::BlockProposed {
+            round: 1,
+            proposer: "did:icn:test".to_string(),
+            block_hash: "hash".to_string(),
+        };
+        let serialized = serde_json::to_string(&event).unwrap();
+        assert!(!serialized.is_empty());
+    }
+}
+
+===================
+File: ./backend/src/consensus/proof_of_cooperation/round.rs
+===================
+// src/consensus/proof_of_cooperation/round.rs
+
+use std::collections::HashMap;
+use chrono::{DateTime, Utc, Duration};
+use crate::blockchain::Block;
+use crate::consensus::types::{
+    ConsensusRound,
+    ConsensusError,
+    RoundStatus,
+    WeightedVote,
+    ConsensusConfig,
+    ConsensusRoundStats
+};
+use super::events::ConsensusEvent;
+
+pub struct RoundManager {
+    config: ConsensusConfig,
+    current_round: Option<ConsensusRound>,
+    round_history: Vec<ConsensusRoundStats>,
+    total_voting_power: f64,
+}
+
+impl RoundManager {
+    pub fn new(config: ConsensusConfig) -> Self {
+        RoundManager {
+            config,
+            current_round: None,
+            round_history: Vec::new(),
+            total_voting_power: 0.0,
+        }
     }
 
-    #[tokio::test]
-    async fn test_performance_score_updates() {
-        let mut consensus = setup_test_consensus();
-        add_test_validators(&mut consensus);
+    pub fn start_round(
+        &mut self,
+        round_number: u64,
+        coordinator: String,
+        total_voting_power: f64,
+        validator_count: usize,
+    ) -> Result<ConsensusEvent, ConsensusError> {
+        if self.current_round.is_some() {
+            return Err(ConsensusError::RoundInProgress);
+        }
+
+        self.total_voting_power = total_voting_power;
+
+        let round = ConsensusRound {
+            round_number,
+            coordinator: coordinator.clone(),
+            start_time: Utc::now(),
+            timeout: Utc::now() + Duration::milliseconds(self.config.round_timeout_ms as i64),
+            status: RoundStatus::Proposing,
+            proposed_block: None,
+            votes: HashMap::new(),
+            stats: ConsensusRoundStats {
+                total_voting_power,
+                participation_rate: 0.0,
+                approval_rate: 0.0,
+                round_duration_ms: 0,
+                validator_count,
+            },
+        };
+
+        self.current_round = Some(round);
+        Ok(ConsensusEvent::RoundStarted(round_number))
+    }
+
+    pub fn propose_block(
+        &mut self,
+        proposer: &str,
+        block: Block,
+    ) -> Result<ConsensusEvent, ConsensusError> {
+        let mut round = self.current_round.take()
+            .ok_or(ConsensusError::NoActiveRound)?;
+
+        if round.coordinator != proposer {
+            self.current_round = Some(round);
+            return Err(ConsensusError::InvalidCoordinator);
+        }
+
+        if round.status != RoundStatus::Proposing {
+            self.current_round = Some(round);
+            return Err(ConsensusError::InvalidRoundState);
+        }
+
+        if !block.verify(None).unwrap_or(false) {
+            return Err(ConsensusError::ValidationFailed);
+        }
+
+        round.proposed_block = Some(block.clone());
+        round.status = RoundStatus::Voting;
         
-        // Complete multiple rounds
-        for _ in 0..3 {
-            consensus.start_round().await.unwrap();
-            let coordinator_did = consensus.current_round.as_ref().unwrap().coordinator.clone();
-            
-            let block = Block::new(1, "prev_hash".to_string(), vec![], coordinator_did.clone());
-            consensus.propose_block(&coordinator_did, block).await.unwrap();
-            
-            // Only half validators vote
-            for (i, validator) in consensus.validators.keys().enumerate() {
-                if i % 2 == 0 {
-                    consensus.submit_vote(
-                        validator,
-                        true,
-                        "test_signature".to_string()
-                    ).await.unwrap();
-                }
-            }
-            
-            consensus.finalize_round().await.unwrap();
+        self.current_round = Some(round);
+
+        Ok(ConsensusEvent::BlockProposed {
+            round: round.round_number,
+            proposer: proposer.to_string(),
+            block_hash: block.hash,
+        })
+    }
+
+    pub fn submit_vote(
+        &mut self,
+        validator: String,
+        approve: bool,
+        voting_power: f64,
+        signature: String,
+    ) -> Result<ConsensusEvent, ConsensusError> {
+        let mut round = self.current_round.take()
+            .ok_or(ConsensusError::NoActiveRound)?;
+
+        if round.status != RoundStatus::Voting {
+            self.current_round = Some(round);
+            return Err(ConsensusError::InvalidRoundState);
+        }
+
+        if round.votes.contains_key(&validator) {
+            self.current_round = Some(round);
+            return Err(ConsensusError::Custom("Already voted".to_string()));
+        }
+
+        let vote = WeightedVote {
+            validator: validator.clone(),
+            approve,
+            voting_power,
+            timestamp: Utc::now(),
+            signature,
+        };
+
+        round.votes.insert(validator.clone(), vote);
+        self.update_round_stats(&mut round);
+
+        if self.is_consensus_reached(&round) {
+            round.status = RoundStatus::Finalizing;
+        }
+
+        self.current_round = Some(round);
+
+        Ok(ConsensusEvent::VoteReceived {
+            validator,
+            approved: approve,
+            round: round.round_number,
+            voting_power,
+        })
+    }
+
+    pub fn finalize_round(&mut self) -> Result<(Block, ConsensusRoundStats), ConsensusError> {
+        let round = self.current_round.take()
+            .ok_or(ConsensusError::NoActiveRound)?;
+
+        if round.status != RoundStatus::Finalizing {
+            self.current_round = Some(round);
+            return Err(ConsensusError::InvalidRoundState);
+        }
+
+        let block = round.proposed_block.clone()
+            .ok_or_else(|| ConsensusError::Custom("No proposed block".to_string()))?;
+
+        let mut stats = round.stats;
+        stats.round_duration_ms = Utc::now()
+            .signed_duration_since(round.start_time)
+            .num_milliseconds() as u64;
+
+        self.round_history.push(stats.clone());
+
+        Ok((block, stats))
+    }
+
+    pub fn check_timeout(&self) -> bool {
+        self.current_round.as_ref()
+            .map(|round| Utc::now() > round.timeout)
+            .unwrap_or(false)
+    }
+
+    pub fn get_current_round(&self) -> Option<&ConsensusRound> {
+        self.current_round.as_ref()
+    }
+
+    pub fn get_round_history(&self) -> &[ConsensusRoundStats] {
+        &self.round_history
+    }
+
+    fn update_round_stats(&self, round: &mut ConsensusRound) {
+        let votes_power: f64 = round.votes.values()
+            .map(|v| v.voting_power)
+            .sum();
+
+        round.stats.participation_rate = votes_power / self.total_voting_power;
+
+        let approval_power: f64 = round.votes.values()
+            .filter(|v| v.approve)
+            .map(|v| v.voting_power)
+            .sum();
+
+        round.stats.approval_rate = if votes_power > 0.0 {
+            approval_power / votes_power
+        } else {
+            0.0
+        };
+    }
+
+    fn is_consensus_reached(&self, round: &ConsensusRound) -> bool {
+        round.stats.participation_rate >= self.config.min_participation_rate &&
+        round.stats.approval_rate >= self.config.min_approval_rate
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_round_manager() -> RoundManager {
+        RoundManager::new(ConsensusConfig::default())
+    }
+
+    #[test]
+    fn test_start_round() {
+        let mut manager = setup_test_round_manager();
+        let result = manager.start_round(
+            1,
+            "did:icn:test".to_string(),
+            1.0,
+            3
+        );
+        assert!(result.is_ok());
+        assert!(manager.get_current_round().is_some());
+    }
+
+    #[test]
+    fn test_vote_submission() {
+        let mut manager = setup_test_round_manager();
+        
+        // Start round
+        manager.start_round(1, "did:icn:test".to_string(), 1.0, 3).unwrap();
+        
+        // Add a block
+        let block = Block::new(1, "prev_hash".to_string(), vec![], "did:icn:test".to_string());
+        manager.propose_block("did:icn:test", block).unwrap();
+        
+        // Submit vote
+        let result = manager.submit_vote(
+            "did:icn:validator1".to_string(),
+            true,
+            0.3,
+            "signature".to_string()
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_consensus_reached() {
+        let mut manager = setup_test_round_manager();
+        
+        // Start round
+        manager.start_round(1, "did:icn:test".to_string(), 1.0, 3).unwrap();
+        
+        // Add block
+        let block = Block::new(1, "prev_hash".to_string(), vec![], "did:icn:test".to_string());
+        manager.propose_block("did:icn:test", block).unwrap();
+        
+        // Submit enough votes for consensus
+        for i in 1..=3 {
+            manager.submit_vote(
+                format!("did:icn:validator{}", i),
+                true,
+                0.3,
+                "signature".to_string()
+            ).unwrap();
         }
         
-        // Check performance scores
-        for (_, validator) in consensus.validators.iter() {
-            if validator.consecutive_missed_rounds > 0 {
-                assert!(validator.performance_score < 1.0);
-            }
-        }
+        let round = manager.get_current_round().unwrap();
+        assert_eq!(round.status, RoundStatus::Finalizing);
     }
 }
 

@@ -22,7 +22,7 @@ echo "" >> $OUTPUT_FILE
 # Add project tree
 echo "Project Tree:" >> $OUTPUT_FILE
 echo "=============" >> $OUTPUT_FILE
-tree -L 4 --prune -I "$EXCLUDE_DIRS" . >> $OUTPUT_FILE
+tree -L 5 --prune -I "$EXCLUDE_DIRS" . >> $OUTPUT_FILE
 echo "" >> $OUTPUT_FILE
 echo "" >> $OUTPUT_FILE
 

@@ -74,7 +74,7 @@ pub struct BlockMetadata {
 }
 
 /// Metadata specific to relationship transactions in the block
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct RelationshipMetadata {
     pub contribution_count: u32,
     pub mutual_aid_count: u32,
@@ -208,7 +208,7 @@ impl Block {
         // Verify all transactions
         for tx in &self.transactions {
             if !tx.validate() {
-                return Err(format!("Invalid transaction: {}", tx.get_hash()));
+                return Err(format!("Invalid transaction: {}", tx.hash));
             }
         }
 
@@ -253,21 +253,22 @@ impl Block {
                     participants.insert(tx.sender.clone());
                     participants.insert(receiver.clone());
                 }
-                super::TransactionType::AddEndorsement { to_did, .. } => {
-                    metadata.endorsement_count += 1;
-                    participants.insert(tx.sender.clone());
-                    participants.insert(to_did.clone());
-                }
                 super::TransactionType::UpdateRelationship { member_two, .. } => {
                     metadata.relationship_update_count += 1;
                     participants.insert(tx.sender.clone());
                     participants.insert(member_two.clone());
+                }
+                super::TransactionType::AddEndorsement { to_did, .. } => {
+                    metadata.endorsement_count += 1;
+                    participants.insert(tx.sender.clone());
+                    participants.insert(to_did.clone());
                 }
                 _ => {}
             }
         }
 
         metadata.total_participants = participants.len() as u32;
+
         metadata
     }
 
@@ -344,6 +345,16 @@ mod tests {
         assert_eq!(block.signatures.len(), 1);
         assert_eq!(block.metadata.validator_count, 1);
         assert_eq!(block.metadata.total_voting_power, 0.5);
+    }
+
+    #[test]
+    fn test_block_verification() {
+        let mut block = create_test_block();
+        assert!(block.verify(None).is_ok());
+
+        // Test invalid hash
+        block.hash = "invalid".to_string();
+        assert!(block.verify(None).is_err());
     }
 
     #[test]
