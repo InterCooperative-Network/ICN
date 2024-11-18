@@ -4,14 +4,6 @@ pub mod proof_of_cooperation;
 pub mod types;
 
 // Re-export key types and modules
-pub use proof_of_cooperation::{
-    core::ProofOfCooperation,
-    events::ConsensusEvent,
-    validator::ValidatorManager,
-    round::RoundManager
-};
-
-// Re-export from types module for convenience
 pub use types::{
     ConsensusConfig,
     ConsensusRound,
@@ -20,6 +12,8 @@ pub use types::{
     WeightedVote,
     RoundStatus,
 };
+
+pub use proof_of_cooperation::core::ProofOfCooperation;
 
 #[cfg(test)]
 mod tests {

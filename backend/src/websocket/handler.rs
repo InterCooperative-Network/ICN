@@ -10,7 +10,7 @@ use chrono::Utc;
 use tokio::sync::mpsc::Sender;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::consensus::types::{ValidatorInfo, ConsensusRound, RoundStatus};
+use crate::consensus::types::{ConsensusRound, RoundStatus};
 use crate::blockchain::Block;
 use crate::relationship::{Contribution, MutualAidInteraction};
 

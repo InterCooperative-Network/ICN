@@ -1,8 +1,10 @@
 // src/vm/operations/relationship.rs
 
+
 use std::collections::HashMap;
 use super::{Operation, VMState, VMResult, ensure_permissions, emit_event};
-use crate::relationship::RelationshipType;
+use crate::relationship::{Contribution, MutualAidInteraction, Relationship, 
+                         Interaction, InteractionType, Endorsement};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RelationType {

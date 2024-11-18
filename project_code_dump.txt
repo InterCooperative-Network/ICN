@@ -1,4 +1,4 @@
-Project Code Dump - Generated Mon Nov 18 05:23:28 PM UTC 2024
+Project Code Dump - Generated Mon Nov 18 11:46:40 PM UTC 2024
 ======================================
 
 Project Tree:
@@ -22,6 +22,8 @@ Project Tree:
 │   │   │   ├── chain.rs
 │   │   │   ├── mod.rs
 │   │   │   └── transaction.rs
+│   │   ├── claims
+│   │   │   └── mod.rs
 │   │   ├── community
 │   │   │   └── mod.rs
 │   │   ├── consensus
@@ -99,6 +101,7 @@ Project Tree:
 │   └── cooperative
 │       └── src
 │           └── lib.rs
+├── create_docs_dump.sh
 ├── docker
 │   ├── backend.Dockerfile
 │   ├── backend_new.Dockerfile
@@ -119,6 +122,7 @@ Project Tree:
 │   └── tsconfig.json
 ├── generate_code_dump.sh
 ├── project_code_dump.txt
+├── project_docs_dump.txt
 ├── setup_docs.sh
 ├── setup_venv.sh
 └── tools
@@ -136,7 +140,7 @@ Project Tree:
     ├── install_docsctl.sh
     └── requirements.txt
 
-37 directories, 95 files
+38 directories, 98 files
 
 
 ===================
@@ -321,7 +325,7 @@ use chrono::Utc;
 use tokio::sync::mpsc::Sender;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::consensus::types::{ValidatorInfo, ConsensusRound, RoundStatus};
+use crate::consensus::types::{ConsensusRound, RoundStatus};
 use crate::blockchain::Block;
 use crate::relationship::{Contribution, MutualAidInteraction};
 
@@ -4273,10 +4277,10 @@ File: ./backend/src/vm/operations/mod.rs
 // src/vm/operations/mod.rs
 
 use std::collections::HashMap;
-use std::sync::atomic::Ordering;
-use crate::vm::{VMError, VMResult, Event};
+use crate::vm::{VMError, VMResult};
+use crate::vm::event::Event;
 
-// Re-export all operation modules
+// Re-export operation modules
 pub mod stack;
 pub mod arithmetic;
 pub mod cooperative;
@@ -4289,18 +4293,12 @@ pub mod memory;
 pub mod network;
 pub mod federation;
 
-// Re-export operation types
+// Re-export necessary operation types
 pub use stack::StackOperation;
 pub use arithmetic::ArithmeticOperation;
-pub use cooperative::CooperativeOperation;
-pub use governance::GovernanceOperation;
-pub use reputation::ReputationOperation;
-pub use relationship::RelationshipOperation;
 pub use system::SystemOperation;
-pub use data::DataOperation;
-pub use memory::{MemoryOperation, MemorySegment};
-pub use network::NetworkOperation;
-pub use federation::FederationOperation;
+pub use relationship::RelationshipOperation;
+pub use memory::MemoryOperation;
 
 /// VM state structure
 #[derive(Default)]
@@ -5346,9 +5344,11 @@ File: ./backend/src/vm/operations/relationship.rs
 ===================
 // src/vm/operations/relationship.rs
 
+
 use std::collections::HashMap;
 use super::{Operation, VMState, VMResult, ensure_permissions, emit_event};
-use crate::relationship::RelationshipType;
+use crate::relationship::{Contribution, MutualAidInteraction, Relationship, 
+                         Interaction, InteractionType, Endorsement};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RelationType {
@@ -5859,8 +5859,6 @@ mod tests {
 ===================
 File: ./backend/src/vm/vm.rs
 ===================
-// src/vm/vm.rs
-
 use std::collections::HashMap;
 use crate::vm::opcode::OpCode;
 use crate::vm::operations::{Operation, VMState};
@@ -5872,7 +5870,6 @@ use crate::vm::operations::{
     RelationshipOperation,
     MemoryOperation,
 };
-use crate::blockchain::Block;
 use std::sync::atomic::AtomicU64;
 
 /// Virtual Machine implementation for executing cooperative operations
@@ -5972,40 +5969,12 @@ impl VM {
                 }
             },
 
-            OpCode::Load(key) => {
-                if let Some(&value) = self.state.memory.get(key) {
-                    self.state.stack.push(value);
-                    Ok(())
-                } else {
-                    Err(VMError::InvalidMemoryAccess)
-                }
-            },
-
             OpCode::RecordContribution { description, impact_story, context, tags } => {
                 RelationshipOperation::RecordContribution {
                     description: description.clone(),
                     impact_story: impact_story.clone(), 
                     context: context.clone(),
                     tags: tags.clone(),
-                }.execute(&mut self.state)
-            },
-
-            OpCode::RecordMutualAid { receiver, description, impact_story, reciprocity_notes, tags } => {
-                RelationshipOperation::RecordMutualAid {
-                    receiver_did: receiver.clone(),
-                    description: description.clone(),
-                    impact_story: impact_story.clone(),
-                    reciprocity_notes: reciprocity_notes.clone(),
-                    tags: tags.clone(),
-                }.execute(&mut self.state)
-            },
-
-            OpCode::UpdateRelationship { member_two, relationship_type, story, interaction } => {
-                RelationshipOperation::UpdateRelationship {
-                    member_two: member_two.clone(),
-                    relationship_type: relationship_type.clone(),
-                    story: story.clone(),
-                    interaction: interaction.clone(),
                 }.execute(&mut self.state)
             },
 
@@ -6018,7 +5987,7 @@ impl VM {
             OpCode::Halt => SystemOperation::Halt.execute(&mut self.state),
             OpCode::Nop => Ok(()),
             
-            op => Err(VMError::InvalidOperand(format!("Unknown opcode: {:?}", op))),
+            _ => Err(VMError::InvalidOperand),
         }
     }
 
@@ -6118,6 +6087,7 @@ mod tests {
         assert_eq!(vm.get_stack(), &[30]); // 10 + 20 = 30
     }
 }
+
 
 ===================
 File: ./backend/src/vm/tests/vm_tests.rs
@@ -6527,8 +6497,7 @@ pub use contract::Contract;
 pub use vm::VM;
 pub use execution_context::ExecutionContext;
 pub use event::Event;
-pub use operations::Operation;
-pub use std::result::Result as OperationResult;
+pub use opcode::OpCode;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum VMError {
@@ -7972,7 +7941,7 @@ pub enum RelationshipType {
 }
 
 impl RelationshipType {
-    pub fn new(relationship_type: &str) -> Self {
+    pub fn from_str(relationship_type: &str) -> Self {
         match relationship_type.to_lowercase().as_str() {
             "collaboration" => RelationshipType::Collaboration,
             "mentorship" => RelationshipType::Mentorship,
@@ -7983,14 +7952,14 @@ impl RelationshipType {
         }
     }
 
-    pub fn as_str(&self) -> String {
+    pub fn as_str(&self) -> &str {
         match self {
-            RelationshipType::Collaboration => "collaboration".to_string(),
-            RelationshipType::Mentorship => "mentorship".to_string(),
-            RelationshipType::ResourceSharing => "resource_sharing".to_string(),
-            RelationshipType::MutualAid => "mutual_aid".to_string(),
-            RelationshipType::ProjectPartnership => "project_partnership".to_string(),
-            RelationshipType::Custom(s) => s.clone(),
+            RelationshipType::Collaboration => "collaboration",
+            RelationshipType::Mentorship => "mentorship",
+            RelationshipType::ResourceSharing => "resource_sharing",
+            RelationshipType::MutualAid => "mutual_aid",
+            RelationshipType::ProjectPartnership => "project_partnership",
+            RelationshipType::Custom(s) => s,
         }
     }
 }
@@ -8000,22 +7969,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_relationship_type_creation() {
-        assert!(matches!(RelationshipType::new("collaboration"), RelationshipType::Collaboration));
-        assert!(matches!(RelationshipType::new("mentorship"), RelationshipType::Mentorship));
+    fn test_relationship_type_conversion() {
         assert!(matches!(
-            RelationshipType::new("custom_type"),
+            RelationshipType::from_str("collaboration"),
+            RelationshipType::Collaboration
+        ));
+        assert!(matches!(
+            RelationshipType::from_str("custom_type"),
             RelationshipType::Custom(s) if s == "custom_type"
         ));
     }
 
     #[test]
-    fn test_relationship_type_string_conversion() {
-        let r_type = RelationshipType::Collaboration;
-        assert_eq!(r_type.as_str(), "collaboration");
-
-        let custom = RelationshipType::Custom("test".to_string());
-        assert_eq!(custom.as_str(), "test");
+    fn test_relationship_type_as_str() {
+        assert_eq!(RelationshipType::Collaboration.as_str(), "collaboration");
+        assert_eq!(
+            RelationshipType::Custom("test".to_string()).as_str(),
+            "test"
+        );
     }
 }
 
@@ -8498,9 +8469,9 @@ mod tests {
 File: ./backend/src/blockchain/chain.rs
 ===================
 // src/blockchain/chain.rs
-
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
+use chrono::Utc;
 
 use crate::consensus::{ProofOfCooperation, ConsensusRound};
 use crate::identity::IdentitySystem;
@@ -8508,8 +8479,13 @@ use crate::reputation::ReputationSystem;
 use crate::vm::{VM, Contract, ExecutionContext, Event};
 use crate::blockchain::{Block, Transaction};
 use crate::blockchain::transaction::{TransactionType, ResourceAllocation};
-use crate::relationship::{RelationshipSystem, RelationshipType, Contribution, MutualAidInteraction, Relationship};
+use crate::relationship::{
+    RelationshipSystem, Contribution, MutualAidInteraction, 
+    Relationship, Interaction, InteractionType, Endorsement
+};
 
+
+/// Main blockchain implementation with cooperative-specific features
 pub struct Blockchain {
     pub chain: Vec<Block>,
     pub pending_transactions: Vec<Transaction>,
@@ -8523,6 +8499,7 @@ pub struct Blockchain {
 }
 
 impl Blockchain {
+    /// Creates a new blockchain instance with required subsystems
     pub fn new(
         identity_system: Arc<Mutex<IdentitySystem>>, 
         reputation_system: Arc<Mutex<ReputationSystem>>,
@@ -8544,6 +8521,7 @@ impl Blockchain {
         }
     }
 
+    /// Processes a new transaction
     pub async fn process_transaction(&mut self, transaction: &Transaction) -> Result<(), String> {
         self.validate_transaction(transaction)?;
         self.check_and_update_resources(&transaction.sender)?;
@@ -8625,7 +8603,7 @@ impl Blockchain {
                     contributor_did: tx.sender.clone(),
                     description: description.clone(),
                     impact_story: impact_story.clone(),
-                    date: chrono::Utc::now(),
+                    date: Utc::now(),
                     context: context.clone(),
                     witnesses: vec![],
                     feedback: vec![],
@@ -8642,7 +8620,7 @@ impl Blockchain {
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
                 let interaction = MutualAidInteraction {
-                    date: chrono::Utc::now(),
+                    date: Utc::now(),
                     provider_did: tx.sender.clone(),
                     receiver_did: receiver.clone(),
                     description: description.clone(),
@@ -8660,19 +8638,26 @@ impl Blockchain {
                 let mut relationship_system = self.relationship_system.lock()
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
-                let relationship = Relationship {
+                let mut relationship = Relationship {
                     member_one: tx.sender.clone(),
                     member_two: member_two.clone(),
                     relationship_type: RelationshipType::new(relationship_type),
-                    started: chrono::Utc::now(),
+                    started: Utc::now(),
                     story: story.clone(),
                     interactions: vec![],
                     mutual_endorsements: vec![],
                     notes: vec![],
                 };
-                
-                if let Some(interaction_data) = interaction {
-                    // Handle interaction data if needed
+
+                // Handle the interaction if provided
+                if let Some(interaction_text) = interaction {
+                    let new_interaction = Interaction {
+                        date: Utc::now(),
+                        description: interaction_text.clone(),
+                        impact: None,
+                        interaction_type: crate::relationship::InteractionType::Collaboration,
+                    };
+                    relationship.interactions.push(new_interaction);
                 }
                 
                 relationship_system.update_relationship(relationship)?;
@@ -8687,7 +8672,7 @@ impl Blockchain {
                 let endorsement = crate::relationship::Endorsement {
                     from_did: tx.sender.clone(),
                     content: content.clone(),
-                    date: chrono::Utc::now(),
+                    date: Utc::now(),
                     context: context.clone(),
                     skills: skills.clone(),
                 };
@@ -8699,6 +8684,7 @@ impl Blockchain {
         }
     }
 
+    /// Checks and updates resource allocations for a DID
     fn check_and_update_resources(&mut self, did: &str) -> Result<(), String> {
         let reputation_score = {
             let reputation_system = self.reputation_system.lock()
@@ -8714,6 +8700,7 @@ impl Blockchain {
         Ok(())
     }
 
+    /// Validates a transaction before processing
     fn validate_transaction(&self, transaction: &Transaction) -> Result<(), String> {
         let identity_valid = {
             let identity_system = self.identity_system.lock()
@@ -8738,10 +8725,13 @@ impl Blockchain {
         Ok(())
     }
 
+    /// Retrieves a contract by ID
     fn get_contract(&self, _contract_id: &str) -> Result<Contract, String> {
+        // TODO: Implement contract storage and retrieval
         Err("Contract not found".to_string())
     }
 
+    /// Handles events emitted by the VM
     fn handle_vm_events(&self, events: &[Event]) {
         for event in events {
             match event.event_type.as_str() {
@@ -8758,6 +8748,7 @@ impl Blockchain {
         }
     }
 
+    /// Adds a new transaction to the pending pool
     pub async fn add_transaction(&mut self, transaction: Transaction) -> Result<(), String> {
         self.process_transaction(&transaction).await?;
         
@@ -8768,6 +8759,7 @@ impl Blockchain {
         Ok(())
     }
 
+    /// Finalizes the current block and starts a new consensus round
     pub async fn finalize_block(&mut self) -> Result<(), String> {
         let previous_hash = self.chain.last()
             .map(|block| block.hash.clone())
@@ -8795,7 +8787,7 @@ impl Blockchain {
         consensus_guard.propose_block(&self.coordinator_did, new_block.clone()).await?;
 
         for validator in &validators {
-            let signature = String::from("dummy_signature");
+            let signature = String::from("dummy_signature"); // TODO: Implement real signatures
             consensus_guard.submit_vote(validator, true, signature).await?;
         }
 
@@ -8816,7 +8808,9 @@ impl Blockchain {
         Ok(())
     }
 
+    /// Gets a list of active validators
     fn get_active_validators(&self) -> Vec<String> {
+        // TODO: Implement real validator selection based on reputation and stake
         vec![
             "did:icn:validator1".to_string(),
             "did:icn:validator2".to_string(),
@@ -8824,22 +8818,27 @@ impl Blockchain {
         ]
     }
 
+    /// Gets a block by index
     pub fn get_block(&self, index: u64) -> Option<&Block> {
         self.chain.get(index as usize)
     }
 
+    /// Gets the latest block
     pub fn get_latest_block(&self) -> &Block {
         self.chain.last().unwrap()
     }
 
+    /// Gets the total number of transactions processed
     pub fn get_transaction_count(&self) -> usize {
         self.chain.iter().map(|block| block.transactions.len()).sum()
     }
 
+    /// Gets the total number of blocks in the chain
     pub fn get_block_count(&self) -> usize {
         self.chain.len()
     }
 
+    /// Gets the current consensus round
     pub fn get_current_round(&self) -> Option<ConsensusRound> {
         self.consensus.try_lock()
             .ok()
@@ -8875,6 +8874,209 @@ mod tests {
         assert_eq!(blockchain.chain.len(), 1);
         assert_eq!(blockchain.pending_transactions.len(), 0);
         assert_eq!(blockchain.coordinator_did, "did:icn:genesis");
+    }
+
+    #[test]
+    fn test_block_getters() {
+        let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+        let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+        let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new()));
+        let ws_handler = Arc::new(WebSocketHandler::new());
+        
+        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
+            crate::consensus::types::ConsensusConfig::default(),
+            ws_handler,
+        )));
+
+        let blockchain = Blockchain::new(
+            identity_system.clone(),
+            reputation_system.clone(),
+            relationship_system.clone(),
+            consensus,
+        );
+
+        assert_eq!(blockchain.get_block_count(), 1); // Genesis block
+        assert!(blockchain.get_block(0).is_some());
+        assert!(blockchain.get_block(1).is_none());
+        assert_eq!(blockchain.get_transaction_count(), 0);
+        assert_eq!(blockchain.get_latest_block().index, 0);
+    }
+
+    #[tokio::test]
+    async fn test_transaction_processing() {
+        let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+        let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+        let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new()));
+        let ws_handler = Arc::new(WebSocketHandler::new());
+        
+        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
+            crate::consensus::types::ConsensusConfig::default(),
+            ws_handler,
+        )));
+
+        let mut blockchain = Blockchain::new(
+            identity_system.clone(),
+            reputation_system.clone(),
+            relationship_system.clone(),
+            consensus,
+        );
+
+        // Register test identity
+        {
+            let mut identity = identity_system.lock().unwrap();
+            identity.register_did("did:icn:test".into());
+        }
+
+        // Set initial reputation
+        {
+            let mut reputation = reputation_system.lock().unwrap();
+            reputation.increase_reputation("did:icn:test", 100);
+        }
+
+        // Create test transaction
+        let transaction = Transaction::new(
+            "did:icn:test".to_string(),
+            TransactionType::Transfer {
+                receiver: "did:icn:recipient".to_string(),
+                amount: 100,
+            },
+        );
+
+        // Process transaction
+        assert!(blockchain.process_transaction(&transaction).await.is_ok());
+        assert_eq!(blockchain.pending_transactions.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_block_finalization() {
+        let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+        let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+        let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new()));
+        let ws_handler = Arc::new(WebSocketHandler::new());
+        
+        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
+            crate::consensus::types::ConsensusConfig::default(),
+            ws_handler,
+        )));
+
+        let mut blockchain = Blockchain::new(
+            identity_system.clone(),
+            reputation_system.clone(),
+            relationship_system.clone(),
+            consensus.clone(),
+        );
+
+        // Add validators
+        {
+            let mut consensus_guard = consensus.lock().unwrap();
+            consensus_guard.register_validator("did:icn:validator1".to_string(), 1000).unwrap();
+            consensus_guard.register_validator("did:icn:validator2".to_string(), 1000).unwrap();
+            consensus_guard.register_validator("did:icn:validator3".to_string(), 1000).unwrap();
+        }
+
+        // Register test identity and set reputation
+        {
+            let mut identity = identity_system.lock().unwrap();
+            identity.register_did("did:icn:test".into());
+        }
+        {
+            let mut reputation = reputation_system.lock().unwrap();
+            reputation.increase_reputation("did:icn:test", 100);
+        }
+
+        // Add test transaction
+        let transaction = Transaction::new(
+            "did:icn:test".to_string(),
+            TransactionType::Transfer {
+                receiver: "did:icn:recipient".to_string(),
+                amount: 100,
+            },
+        );
+
+        assert!(blockchain.add_transaction(transaction).await.is_ok());
+        assert!(blockchain.finalize_block().await.is_ok());
+        assert_eq!(blockchain.get_block_count(), 2); // Genesis + new block
+        assert_eq!(blockchain.pending_transactions.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_relationship_transactions() {
+        let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+        let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+        let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new()));
+        let ws_handler = Arc::new(WebSocketHandler::new());
+        
+        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
+            crate::consensus::types::ConsensusConfig::default(),
+            ws_handler,
+        )));
+
+        let mut blockchain = Blockchain::new(
+            identity_system.clone(),
+            reputation_system.clone(),
+            relationship_system.clone(),
+            consensus,
+        );
+
+        // Setup test identity
+        {
+            let mut identity = identity_system.lock().unwrap();
+            identity.register_did("did:icn:test".into());
+        }
+        {
+            let mut reputation = reputation_system.lock().unwrap();
+            reputation.increase_reputation("did:icn:test", 100);
+        }
+
+        // Test contribution transaction
+        let contribution_tx = Transaction::new(
+            "did:icn:test".to_string(),
+            TransactionType::RecordContribution {
+                description: "Test contribution".to_string(),
+                impact_story: "Made an impact".to_string(),
+                context: "Testing".to_string(),
+                tags: vec!["test".to_string()],
+            },
+        );
+
+        assert!(blockchain.process_transaction(&contribution_tx).await.is_ok());
+
+        // Test mutual aid transaction
+        let mutual_aid_tx = Transaction::new(
+            "did:icn:test".to_string(),
+            TransactionType::RecordMutualAid {
+                receiver: "did:icn:recipient".to_string(),
+                description: "Test aid".to_string(),
+                impact_story: Some("Helped someone".to_string()),
+                reciprocity_notes: None,
+                tags: vec!["help".to_string()],
+            },
+        );
+
+        assert!(blockchain.process_transaction(&mutual_aid_tx).await.is_ok());
+    }
+
+    #[test]
+    fn test_resource_management() {
+        let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+        let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+        let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new()));
+        let ws_handler = Arc::new(WebSocketHandler::new());
+        
+        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
+            crate::consensus::types::ConsensusConfig::default(),
+            ws_handler,
+        )));
+
+        let mut blockchain = Blockchain::new(
+            identity_system,
+            reputation_system,
+            relationship_system,
+            consensus,
+        );
+
+        assert!(blockchain.check_and_update_resources("did:icn:test").is_ok());
+        assert!(blockchain.resource_allocations.contains_key("did:icn:test"));
     }
 }
 
@@ -10568,15 +10770,126 @@ async fn main() {
 }
 
 ===================
+File: ./backend/src/claims/mod.rs
+===================
+use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Utc};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Claim {
+    pub id: String,
+    pub issuer: String,
+    pub subject: String,
+    pub claim_type: ClaimType,
+    pub value: String,
+    pub issued_at: DateTime<Utc>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub verification_method: String,
+    pub proof: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ClaimType {
+    Skill,
+    Reputation,
+    Membership,
+    Role,
+    Contribution,
+    Verification,
+    Custom(String),
+}
+
+impl Claim {
+    pub fn new(
+        issuer: String,
+        subject: String,
+        claim_type: ClaimType,
+        value: String,
+        verification_method: String,
+    ) -> Self {
+        Claim {
+            id: uuid::Uuid::new_v4().to_string(),
+            issuer,
+            subject,
+            claim_type,
+            value,
+            issued_at: Utc::now(),
+            expires_at: None,
+            verification_method,
+            proof: None,
+        }
+    }
+
+    pub fn verify(&self) -> bool {
+        // Basic validation
+        if self.issuer.is_empty() || self.subject.is_empty() {
+            return false;
+        }
+
+        // Check expiration
+        if let Some(expires_at) = self.expires_at {
+            if Utc::now() > expires_at {
+                return false;
+            }
+        }
+
+        // Check proof if present
+        if let Some(proof) = &self.proof {
+            if proof.is_empty() {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_claim_creation() {
+        let claim = Claim::new(
+            "issuer".to_string(),
+            "subject".to_string(),
+            ClaimType::Skill,
+            "programming".to_string(),
+            "manual".to_string(),
+        );
+
+        assert!(!claim.id.is_empty());
+        assert_eq!(claim.issuer, "issuer");
+        assert_eq!(claim.subject, "subject");
+        assert!(matches!(claim.claim_type, ClaimType::Skill));
+        assert!(claim.verify());
+    }
+
+    #[test]
+    fn test_claim_verification() {
+        let mut claim = Claim::new(
+            "issuer".to_string(),
+            "subject".to_string(),
+            ClaimType::Skill,
+            "programming".to_string(),
+            "manual".to_string(),
+        );
+
+        assert!(claim.verify());
+
+        claim.issuer = "".to_string();
+        assert!(!claim.verify());
+    }
+}
+
+===================
 File: ./backend/src/community/mod.rs
 ===================
-// src/community/mod.rs
-
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
-use crate::governance::Proposal;
 use crate::claims::Claim;
+use crate::governance::Proposal;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Community {
@@ -10586,7 +10899,8 @@ pub struct Community {
     pub created_at: DateTime<Utc>,
     pub members: HashMap<String, CivicRole>, // DID -> Role mapping
     pub governance_model: GovernanceModel,
-    pub active_proposals: Vec<Proposal>,
+    #[serde(default)]
+    pub active_proposals: Vec<String>, // Store proposal IDs instead of whole proposals
     pub policies: Vec<CivicPolicy>,
     pub cooperative_ids: Vec<String>, // Associated cooperatives
 }
@@ -10660,7 +10974,7 @@ pub enum CivicPolicyType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicyRule {
     pub condition: String,
-    pub effect: String,
+    pub action: String,
     pub parameters: HashMap<String, String>,
 }
 
@@ -10692,8 +11006,10 @@ impl Community {
         Ok(())
     }
 
-    pub fn add_proposal(&mut self, proposal: Proposal) {
-        self.active_proposals.push(proposal);
+    pub fn add_proposal(&mut self, proposal_id: String) {
+        if !self.active_proposals.contains(&proposal_id) {
+            self.active_proposals.push(proposal_id);
+        }
     }
 
     pub fn add_policy(&mut self, policy: CivicPolicy) {
@@ -10722,19 +11038,72 @@ impl Community {
     }
 }
 
-// Implement the trait for community energy tracking
 impl crate::monitoring::energy::EnergyAware for Community {
     fn record_energy_metrics(&self, monitor: &crate::monitoring::energy::EnergyMonitor) {
         // Record basic operations
         monitor.record_instruction();
         
         // Record proposal storage
-        let proposals_size = (self.active_proposals.len() * std::mem::size_of::<Proposal>()) as u64;
+        let proposals_size = (self.active_proposals.len() * std::mem::size_of::<String>()) as u64;
         monitor.record_storage_operation(proposals_size);
         
         // Record member operations
         let members_size = (self.members.len() * std::mem::size_of::<CivicRole>()) as u64;
         monitor.record_memory_operation(members_size);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_governance_model() -> GovernanceModel {
+        GovernanceModel {
+            model_type: GovernanceType::DirectDemocracy,
+            voting_rules: VotingRules {
+                voting_period_days: 7,
+                min_participation: 0.5,
+                allow_delegation: false,
+                require_claims: vec![],
+            },
+            quorum_requirement: 0.5,
+            decision_threshold: 0.66,
+        }
+    }
+
+    #[test]
+    fn test_community_creation() {
+        let community = Community::new(
+            "test_id".to_string(),
+            "Test Community".to_string(),
+            "Test Description".to_string(),
+            create_test_governance_model(),
+        );
+
+        assert_eq!(community.name, "Test Community");
+        assert_eq!(community.members.len(), 0);
+        assert_eq!(community.active_proposals.len(), 0);
+    }
+
+    #[test]
+    fn test_member_management() {
+        let mut community = Community::new(
+            "test_id".to_string(),
+            "Test Community".to_string(),
+            "Test Description".to_string(),
+            create_test_governance_model(),
+        );
+
+        let role = CivicRole {
+            role: "member".to_string(),
+            permissions: vec!["vote".to_string()],
+            joined_at: Utc::now(),
+            verified_claims: vec![],
+            voting_history: vec![],
+        };
+
+        assert!(community.add_member("test_did".to_string(), role).is_ok());
+        assert!(community.add_member("test_did".to_string(), role).is_err());
     }
 }
 
@@ -10744,6 +11113,7 @@ File: ./backend/src/lib.rs
 // src/lib.rs
 
 pub mod blockchain;
+pub mod claims;
 pub mod identity;
 pub mod reputation;
 pub mod governance;
@@ -10754,6 +11124,7 @@ pub mod consensus;
 pub mod network;
 pub mod monitoring;
 pub mod relationship;
+pub mod community;
 
 pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
 pub use identity::IdentitySystem;
@@ -10772,18 +11143,9 @@ use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use tokio::sync::broadcast;
 use uuid;
-use chrono;
+use chrono::{DateTime, Utc};
 
-pub struct ICNCore {
-    blockchain: Arc<Mutex<Blockchain>>,
-    identity_system: Arc<Mutex<IdentitySystem>>,
-    reputation_system: Arc<Mutex<ReputationSystem>>,
-    relationship_system: Arc<Mutex<RelationshipSystem>>,
-    ws_handler: Arc<WebSocketHandler>,
-    vm: Arc<Mutex<VM>>,
-    event_bus: broadcast::Sender<SystemEvent>,
-}
-
+/// Events emitted by the ICN system
 #[derive(Clone, Debug)]
 pub enum SystemEvent {
     BlockCreated(Block),
@@ -10794,9 +11156,25 @@ pub enum SystemEvent {
     ConsensusFinished(Block),
     CooperativeCreated { id: String, creator: String },
     CooperativeJoined { id: String, member: String },
+    ContributionRecorded(Contribution),
+    MutualAidProvided(MutualAidInteraction),
+    RelationshipUpdated { member_one: String, member_two: String },
+}
+
+/// Core system for the Inter-Cooperative Network
+pub struct ICNCore {
+    blockchain: Arc<Mutex<Blockchain>>,
+    identity_system: Arc<Mutex<IdentitySystem>>,
+    reputation_system: Arc<Mutex<ReputationSystem>>,
+    relationship_system: Arc<Mutex<RelationshipSystem>>,
+    ws_handler: Arc<WebSocketHandler>,
+    vm: Arc<Mutex<VM>>,
+    event_bus: broadcast::Sender<SystemEvent>,
+    start_time: DateTime<Utc>,
 }
 
 impl ICNCore {
+    /// Creates a new instance of the ICN core system
     pub fn new() -> Self {
         let (event_tx, _) = broadcast::channel(100);
         
@@ -10832,14 +11210,17 @@ impl ICNCore {
             ws_handler,
             vm,
             event_bus: event_tx,
+            start_time: Utc::now(),
         }
     }
 
+    /// Creates a new cooperative with the given creator and metadata
     pub async fn create_cooperative(
         &self,
         creator_did: String,
         metadata: CooperativeMetadata
     ) -> Result<String, String> {
+        // Validate creator's identity
         let identity = self.identity_system.lock()
             .map_err(|_| "Failed to acquire identity lock".to_string())?;
         if !identity.is_registered(&creator_did) {
@@ -10847,6 +11228,7 @@ impl ICNCore {
         }
         drop(identity);
 
+        // Check reputation requirements
         let reputation = self.reputation_system.lock()
             .map_err(|_| "Failed to acquire reputation lock".to_string())?;
         if reputation.get_reputation(&creator_did) < 100 {
@@ -10855,9 +11237,15 @@ impl ICNCore {
         let reputation_score = reputation.get_reputation(&creator_did);
         drop(reputation);
 
+        // Create and execute contract
         let contract = Contract {
             id: uuid::Uuid::new_v4().to_string(),
-            code: vec![OpCode::CreateCooperative],
+            code: vec![OpCode::CreateCooperative {
+                name: metadata.cooperative_id.clone(),
+                description: metadata.purpose.clone(),
+                resources: HashMap::new(),
+                federation_id: metadata.federation_id.clone(),
+            }],
             state: HashMap::new(),
             required_reputation: 100,
             cooperative_metadata: metadata.clone(),
@@ -10869,7 +11257,7 @@ impl ICNCore {
         let context = ExecutionContext {
             caller_did: creator_did.clone(),
             cooperative_id: contract.id.clone(),
-            timestamp: chrono::Utc::now().timestamp() as u64,
+            timestamp: Utc::now().timestamp() as u64,
             block_number: {
                 let blockchain = self.blockchain.lock()
                     .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
@@ -10879,6 +11267,7 @@ impl ICNCore {
             permissions: vec!["cooperative.create".to_string()],
         };
 
+        // Execute contract
         {
             let mut vm = self.vm.lock()
                 .map_err(|_| "Failed to acquire VM lock".to_string())?;
@@ -10886,6 +11275,7 @@ impl ICNCore {
             vm.execute_contract(&contract)?;
         }
 
+        // Create and submit transaction
         let transaction = Transaction::new(
             creator_did.clone(),
             TransactionType::ContractExecution {
@@ -10900,6 +11290,7 @@ impl ICNCore {
             blockchain.add_transaction(transaction).await?;
         }
 
+        // Emit creation event
         let event = SystemEvent::CooperativeCreated {
             id: contract.id.clone(),
             creator: creator_did,
@@ -10909,9 +11300,61 @@ impl ICNCore {
         Ok(contract.id)
     }
 
-    pub async fn submit_proposal(&self, creator_did: String, proposal: Proposal) -> Result<u64, String> {
+    /// Records a new contribution in the system
+    pub async fn record_contribution(
+        &self,
+        contribution: Contribution
+    ) -> Result<(), String> {
+        let mut relationship_system = self.relationship_system.lock()
+            .map_err(|_| "Failed to acquire relationship lock".to_string())?;
+        
+        relationship_system.record_contribution(contribution.clone())?;
+
+        let event = SystemEvent::ContributionRecorded(contribution);
+        let _ = self.event_bus.send(event);
+
+        Ok(())
+    }
+
+    /// Records a mutual aid interaction between members
+    pub async fn record_mutual_aid(
+        &self,
+        interaction: MutualAidInteraction
+    ) -> Result<(), String> {
+        let mut relationship_system = self.relationship_system.lock()
+            .map_err(|_| "Failed to acquire relationship lock".to_string())?;
+        
+        relationship_system.record_mutual_aid(interaction.clone())?;
+
+        let event = SystemEvent::MutualAidProvided(interaction);
+        let _ = self.event_bus.send(event);
+
+        Ok(())
+    }
+
+    /// Starts a new consensus round
+    pub async fn start_consensus_round(&self) -> Result<(), String> {
+        let blockchain = self.blockchain.lock()
+            .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
+        
+        if let Some(round) = blockchain.get_current_round() {
+            drop(blockchain);
+            let event = SystemEvent::ConsensusStarted(round);
+            let _ = self.event_bus.send(event);
+        }
+
+        Ok(())
+    }
+
+    /// Submits a new proposal for voting
+    pub async fn submit_proposal(
+        &self,
+        creator_did: String,
+        proposal: Proposal
+    ) -> Result<u64, String> {
         let reputation = self.reputation_system.lock()
             .map_err(|_| "Failed to acquire reputation lock".to_string())?;
+        
         if reputation.get_reputation(&creator_did) < proposal.required_reputation {
             return Err("Insufficient reputation to create proposal".to_string());
         }
@@ -10937,24 +11380,31 @@ impl ICNCore {
         Ok(proposal.id)
     }
 
-    pub async fn start_consensus_round(&self) -> Result<(), String> {
-        let blockchain = self.blockchain.lock()
-            .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
-        
-        if let Some(round) = blockchain.get_current_round() {
-            drop(blockchain);
-            let event = SystemEvent::ConsensusStarted(round);
-            let _ = self.event_bus.send(event);
-        }
-
-        Ok(())
-    }
-
+    /// Subscribes to system events
     pub fn subscribe_to_events(&self) -> broadcast::Receiver<SystemEvent> {
         self.event_bus.subscribe()
     }
+
+    /// Gets system uptime in seconds
+    pub fn get_uptime(&self) -> i64 {
+        (Utc::now() - self.start_time).num_seconds()
+    }
+
+    /// Gets system statistics
+    pub fn get_stats(&self) -> HashMap<String, String> {
+        let mut stats = HashMap::new();
+        stats.insert("uptime".to_string(), self.get_uptime().to_string());
+        
+        if let Ok(blockchain) = self.blockchain.lock() {
+            stats.insert("block_count".to_string(), blockchain.get_block_count().to_string());
+            stats.insert("tx_count".to_string(), blockchain.get_transaction_count().to_string());
+        }
+
+        stats
+    }
 }
 
+/// Manager for cooperative-specific operations
 pub struct CooperativeManager {
     core: Arc<ICNCore>,
 }
@@ -10967,7 +11417,7 @@ impl CooperativeManager {
     pub async fn create_cooperative(
         &self, 
         creator_did: String, 
-        _name: String,
+        name: String,
         purpose: String
     ) -> Result<String, String> {
         let metadata = CooperativeMetadata {
@@ -10982,8 +11432,8 @@ impl CooperativeManager {
                 bandwidth_usage: 1,
             },
             federation_id: None,
-            creation_timestamp: chrono::Utc::now().timestamp() as u64,
-            last_updated: chrono::Utc::now().timestamp() as u64,
+            creation_timestamp: Utc::now().timestamp() as u64,
+            last_updated: Utc::now().timestamp() as u64,
             member_count: 1,
             resource_allocation: HashMap::new(),
             energy_usage: HashMap::new(),
@@ -11002,6 +11452,7 @@ impl CooperativeManager {
     }
 }
 
+/// Node implementation for the ICN network
 pub struct ICNNode {
     core: Arc<ICNCore>,
     node_id: String,
@@ -11044,6 +11495,10 @@ impl ICNNode {
             .insert(peer_id, address);
         Ok(())
     }
+
+    pub fn get_peer_count(&self) -> usize {
+        self.peers.lock().map(|peers| peers.len()).unwrap_or(0)
+    }
 }
 
 #[cfg(test)]
@@ -11053,8 +11508,8 @@ mod tests {
     #[tokio::test]
     async fn test_icn_core_creation() {
         let core = ICNCore::new();
-        // Test event subscription without awaiting
         let _receiver = core.subscribe_to_events();
+        assert!(core.get_uptime() >= 0);
     }
 
     #[tokio::test]
@@ -11080,6 +11535,17 @@ mod tests {
             "peer1".to_string(),
             "localhost:8080".to_string()
         ).await.is_ok());
+        
+        assert_eq!(node.get_peer_count(), 1);
+    }
+
+    #[test]
+    fn test_system_stats() {
+        let core = ICNCore::new();
+        let stats = core.get_stats();
+        assert!(stats.contains_key("uptime"));
+        assert!(stats.contains_key("block_count"));
+        assert!(stats.contains_key("tx_count"));
     }
 }
 
@@ -11494,14 +11960,6 @@ pub mod proof_of_cooperation;
 pub mod types;
 
 // Re-export key types and modules
-pub use proof_of_cooperation::{
-    core::ProofOfCooperation,
-    events::ConsensusEvent,
-    validator::ValidatorManager,
-    round::RoundManager
-};
-
-// Re-export from types module for convenience
 pub use types::{
     ConsensusConfig,
     ConsensusRound,
@@ -11510,6 +11968,8 @@ pub use types::{
     WeightedVote,
     RoundStatus,
 };
+
+pub use proof_of_cooperation::core::ProofOfCooperation;
 
 #[cfg(test)]
 mod tests {
@@ -11594,10 +12054,10 @@ pub enum ConsensusEvent {
 File: ./backend/src/consensus/proof_of_cooperation/metrics.rs
 ===================
 // src/consensus/proof_of_cooperation/metrics.rs
-
 use crate::monitoring::energy::{EnergyAware, EnergyMonitor};
 use crate::consensus::types::ValidatorInfo;
 use super::core::ProofOfCooperation;
+use std::sync::Arc;
 
 impl EnergyAware for ProofOfCooperation {
     fn record_energy_metrics(&self, monitor: &EnergyMonitor) {
@@ -11633,7 +12093,6 @@ mod tests {
         let monitor = EnergyMonitor::new(NodeEnergyConfig::default());
         
         consensus.record_energy_metrics(&monitor);
-        // Add assertions here if needed
     }
 }
 

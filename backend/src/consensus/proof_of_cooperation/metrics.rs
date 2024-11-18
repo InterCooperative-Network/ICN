@@ -1,8 +1,8 @@
 // src/consensus/proof_of_cooperation/metrics.rs
-
 use crate::monitoring::energy::{EnergyAware, EnergyMonitor};
 use crate::consensus::types::ValidatorInfo;
 use super::core::ProofOfCooperation;
+use std::sync::Arc;
 
 impl EnergyAware for ProofOfCooperation {
     fn record_energy_metrics(&self, monitor: &EnergyMonitor) {
@@ -38,6 +38,5 @@ mod tests {
         let monitor = EnergyMonitor::new(NodeEnergyConfig::default());
         
         consensus.record_energy_metrics(&monitor);
-        // Add assertions here if needed
     }
 }
