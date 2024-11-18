@@ -1,5 +1,3 @@
-// src/vm/vm.rs
-
 use std::collections::HashMap;
 use crate::vm::opcode::OpCode;
 use crate::vm::operations::{Operation, VMState};
@@ -11,7 +9,6 @@ use crate::vm::operations::{
     RelationshipOperation,
     MemoryOperation,
 };
-use crate::blockchain::Block;
 use std::sync::atomic::AtomicU64;
 
 /// Virtual Machine implementation for executing cooperative operations
@@ -111,40 +108,12 @@ impl VM {
                 }
             },
 
-            OpCode::Load(key) => {
-                if let Some(&value) = self.state.memory.get(key) {
-                    self.state.stack.push(value);
-                    Ok(())
-                } else {
-                    Err(VMError::InvalidMemoryAccess)
-                }
-            },
-
             OpCode::RecordContribution { description, impact_story, context, tags } => {
                 RelationshipOperation::RecordContribution {
                     description: description.clone(),
                     impact_story: impact_story.clone(), 
                     context: context.clone(),
                     tags: tags.clone(),
-                }.execute(&mut self.state)
-            },
-
-            OpCode::RecordMutualAid { receiver, description, impact_story, reciprocity_notes, tags } => {
-                RelationshipOperation::RecordMutualAid {
-                    receiver_did: receiver.clone(),
-                    description: description.clone(),
-                    impact_story: impact_story.clone(),
-                    reciprocity_notes: reciprocity_notes.clone(),
-                    tags: tags.clone(),
-                }.execute(&mut self.state)
-            },
-
-            OpCode::UpdateRelationship { member_two, relationship_type, story, interaction } => {
-                RelationshipOperation::UpdateRelationship {
-                    member_two: member_two.clone(),
-                    relationship_type: relationship_type.clone(),
-                    story: story.clone(),
-                    interaction: interaction.clone(),
                 }.execute(&mut self.state)
             },
 
@@ -157,7 +126,7 @@ impl VM {
             OpCode::Halt => SystemOperation::Halt.execute(&mut self.state),
             OpCode::Nop => Ok(()),
             
-            op => Err(VMError::InvalidOperand(format!("Unknown opcode: {:?}", op))),
+            _ => Err(VMError::InvalidOperand),
         }
     }
 
