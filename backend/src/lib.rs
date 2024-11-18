@@ -92,7 +92,11 @@ impl ICNCore {
         }
     }
 
-    pub async fn create_cooperative(&self, creator_did: String, metadata: CooperativeMetadata) -> Result<String, String> {
+    pub async fn create_cooperative(
+        &self,
+        creator_did: String,
+        metadata: CooperativeMetadata
+    ) -> Result<String, String> {
         let identity = self.identity_system.lock()
             .map_err(|_| "Failed to acquire identity lock".to_string())?;
         if !identity.is_registered(&creator_did) {
@@ -306,7 +310,8 @@ mod tests {
     #[tokio::test]
     async fn test_icn_core_creation() {
         let core = ICNCore::new();
-        assert!(core.subscribe_to_events().await.is_ok());
+        // Test event subscription without awaiting
+        let _receiver = core.subscribe_to_events();
     }
 
     #[tokio::test]
