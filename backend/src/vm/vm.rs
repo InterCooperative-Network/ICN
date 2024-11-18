@@ -96,20 +96,19 @@ impl VM {
             OpCode::Mod => ArithmeticOperation::Mod.execute(&mut self.state),
 
             OpCode::Store(key) => {
-                // Create allocation request for memory operation
-                let allocation = MemoryOperation::Allocate {
-                    size: 64,
-                    segment_type: MemoryOperation::MemorySegment::Scratch,
-                    federation_id: None,
-                    persistent: false,
-                };
-                allocation.execute(&mut self.state)?;
-                
-                // Store the key-value pair
                 if let Some(value) = self.state.stack.pop() {
                     self.state.memory.insert(key.clone(), value);
                 }
                 Ok(())
+            },
+
+            OpCode::Load(key) => {
+                if let Some(&value) = self.state.memory.get(key) {
+                    self.state.stack.push(value);
+                    Ok(())
+                } else {
+                    Err(VMError::InvalidMemoryAccess)
+                }
             },
 
             OpCode::Load(key) => {
