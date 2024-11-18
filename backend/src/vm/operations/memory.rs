@@ -3,8 +3,10 @@
 use std::collections::HashMap;
 use super::{Operation, VMState, VMResult, ensure_permissions, emit_event};
 use crate::vm::VMError;
+use std::sync::atomic::{AtomicU64, Ordering};
+use chrono::Utc;
 
-/// Memory segment types for different use cases
+/// Types of memory segment for different use cases
 #[derive(Debug, Clone, PartialEq)]
 pub enum MemorySegment {
     /// Private memory for a single cooperative
@@ -21,20 +23,23 @@ pub enum MemorySegment {
 #[derive(Debug, Clone)]
 pub struct AllocationRequest {
     /// Size in bytes to allocate
-    size: u64,
+    pub size: u64,
     /// Type of memory segment
-    segment_type: MemorySegment,
+    pub segment_type: MemorySegment,
     /// Optional federation ID for shared memory
-    federation_id: Option<String>,
+    pub federation_id: Option<String>,
     /// Whether the memory should persist across VM invocations
-    persistent: bool,
+    pub persistent: bool,
 }
 
 /// Memory management operations for the VM
 pub enum MemoryOperation {
     /// Allocate new memory space
     Allocate {
-        request: AllocationRequest,
+        size: u64,
+        segment_type: MemorySegment,
+        federation_id: Option<String>,
+        persistent: bool,
     },
     
     /// Free allocated memory
@@ -113,34 +118,35 @@ pub enum MemoryOperation {
 impl Operation for MemoryOperation {
     fn execute(&self, state: &mut VMState) -> VMResult<()> {
         match self {
-            MemoryOperation::Allocate { request } => {
+            MemoryOperation::Allocate { size, segment_type, federation_id, persistent } => {
                 ensure_permissions(&["memory.allocate".to_string()], &state.permissions)?;
                 
                 // Check if we have enough available memory
                 let current_usage = state.memory.len() as u64;
-                if current_usage + request.size > state.memory_limit {
+                if current_usage + size > state.memory_limit {
                     return Err(VMError::OutOfMemory);
                 }
                 
                 // Generate a unique address for this allocation
                 let address = format!("{}:{}", 
-                    match request.segment_type {
+                    match segment_type {
                         MemorySegment::Cooperative => "coop",
                         MemorySegment::Federation => "fed",
                         MemorySegment::Scratch => "scratch",
                         MemorySegment::Persistent => "persist",
                     },
-                    state.next_memory_address()
+                    state.memory_address_counter.fetch_add(1, Ordering::SeqCst)
                 );
                 
                 // Record the allocation
                 let mut event_data = HashMap::new();
                 event_data.insert("address".to_string(), address.clone());
-                event_data.insert("size".to_string(), request.size.to_string());
-                event_data.insert("segment_type".to_string(), format!("{:?}", request.segment_type));
-                if let Some(fed_id) = &request.federation_id {
+                event_data.insert("size".to_string(), size.to_string());
+                event_data.insert("segment_type".to_string(), format!("{:?}", segment_type));
+                if let Some(fed_id) = federation_id {
                     event_data.insert("federation_id".to_string(), fed_id.clone());
                 }
+                event_data.insert("persistent".to_string(), persistent.to_string());
                 
                 emit_event(state, "MemoryAllocated".to_string(), event_data);
                 Ok(())
@@ -165,7 +171,8 @@ impl Operation for MemoryOperation {
             MemoryOperation::CreateSharedSegment { federation_id, size, access_control } => {
                 ensure_permissions(&["memory.share".to_string()], &state.permissions)?;
                 
-                let segment_id = format!("shared:{}:{}", federation_id, state.next_memory_address());
+                let segment_id = format!("shared:{}:{}", federation_id, 
+                    state.memory_address_counter.fetch_add(1, Ordering::SeqCst));
                 
                 let mut event_data = HashMap::new();
                 event_data.insert("segment_id".to_string(), segment_id);
@@ -239,7 +246,6 @@ impl Operation for MemoryOperation {
                 let mut event_data = HashMap::new();
                 event_data.insert("segment_id".to_string(), segment_id.clone());
                 
-                // In a real implementation, would return actual memory info
                 emit_event(state, "MemoryInfoQueried".to_string(), event_data);
                 Ok(())
             },
@@ -303,7 +309,7 @@ impl Operation for MemoryOperation {
 
     fn resource_cost(&self) -> u64 {
         match self {
-            MemoryOperation::Allocate { request } => 10 + (request.size / 1024), // Base cost plus size-based cost
+            MemoryOperation::Allocate { size, .. } => 10 + (size / 1024),
             MemoryOperation::Free { .. } => 5,
             MemoryOperation::CreateSharedSegment { size, .. } => 20 + (size / 1024),
             MemoryOperation::JoinSharedSegment { .. } => 10,
@@ -324,14 +330,15 @@ impl Operation for MemoryOperation {
         match self {
             MemoryOperation::Allocate { .. } => vec!["memory.allocate".to_string()],
             MemoryOperation::Free { .. } => vec!["memory.free".to_string()],
-            MemoryOperation::CreateSharedSegment { .. } => vec!["memory.share".to_string()],
-            MemoryOperation::JoinSharedSegment { .. } => vec!["memory.share".to_string()],
+            MemoryOperation::CreateSharedSegment { .. } | MemoryOperation::JoinSharedSegment { .. } => 
+                vec!["memory.share".to_string()],
             MemoryOperation::CopyMemory { .. } => vec!["memory.copy".to_string()],
             MemoryOperation::MoveMemory { .. } => vec!["memory.move".to_string()],
             MemoryOperation::Resize { .. } => vec!["memory.resize".to_string()],
             MemoryOperation::ClearMemory { .. } => vec!["memory.clear".to_string()],
             MemoryOperation::CollectGarbage => vec!["memory.gc".to_string()],
-            MemoryOperation::PinMemory { .. } | MemoryOperation::UnpinMemory { .. } => vec!["memory.pin".to_string()],
+            MemoryOperation::PinMemory { .. } | MemoryOperation::UnpinMemory { .. } => 
+                vec!["memory.pin".to_string()],
             MemoryOperation::CompactMemory { .. } => vec!["memory.compact".to_string()],
             _ => vec![],
         }
@@ -343,7 +350,7 @@ mod tests {
     use super::*;
 
     fn setup_test_state() -> VMState {
-        let mut state = VMState {
+        VMState {
             stack: Vec::new(),
             memory: HashMap::new(),
             events: Vec::new(),
@@ -359,26 +366,38 @@ mod tests {
                 "memory.copy".to_string(),
                 "memory.move".to_string(),
             ],
-            memory_limit: 1024 * 1024, // 1MB limit for testing
-        };
-        
-        state.reputation_context.insert(state.caller_did.clone(), 100);
-        state
+            memory_limit: 1024 * 1024, // 1MB limit
+            memory_address_counter: AtomicU64::new(0),
+        }
     }
 
     #[test]
     fn test_allocate_memory() {
         let mut state = setup_test_state();
-        let request = AllocationRequest {
+        let op = MemoryOperation::Allocate { 
             size: 1024,
             segment_type: MemorySegment::Cooperative,
             federation_id: None,
             persistent: false,
         };
         
-        let op = MemoryOperation::Allocate { request };
         assert!(op.execute(&mut state).is_ok());
         assert_eq!(state.events[0].event_type, "MemoryAllocated");
+    }
+
+    #[test]
+    fn test_out_of_memory() {
+        let mut state = setup_test_state();
+        state.memory_limit = 1024; // Set small memory limit
+        
+        let op = MemoryOperation::Allocate {
+            size: 2048,
+            segment_type: MemorySegment::Cooperative,
+            federation_id: None,
+            persistent: false,
+        };
+        
+        assert!(matches!(op.execute(&mut state), Err(VMError::OutOfMemory)));
     }
 
     #[test]
@@ -393,6 +412,7 @@ mod tests {
         assert!(op.execute(&mut state).is_ok());
         assert_eq!(state.events[0].event_type, "SharedMemoryCreated");
     }
+
     #[test]
     fn test_copy_memory() {
         let mut state = setup_test_state();
@@ -456,22 +476,6 @@ mod tests {
     }
 
     #[test]
-    fn test_out_of_memory() {
-        let mut state = setup_test_state();
-        state.memory_limit = 1024; // Set small memory limit
-        
-        let request = AllocationRequest {
-            size: 2048, // Try to allocate more than limit
-            segment_type: MemorySegment::Cooperative,
-            federation_id: None,
-            persistent: false,
-        };
-        
-        let op = MemoryOperation::Allocate { request };
-        assert!(matches!(op.execute(&mut state), Err(VMError::OutOfMemory)));
-    }
-
-    #[test]
     fn test_invalid_memory_address() {
         let mut state = setup_test_state();
         let op = MemoryOperation::Free {
@@ -515,5 +519,30 @@ mod tests {
         
         assert!(op.execute(&mut state).is_ok());
         assert_eq!(state.events[0].event_type, "MemoryResized");
+    }
+
+    #[test]
+    fn test_memory_info() {
+        let mut state = setup_test_state();
+        
+        let op = MemoryOperation::GetMemoryInfo {
+            segment_id: "test_segment".to_string(),
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "MemoryInfoQueried");
+    }
+
+    #[test]
+    fn test_clear_memory() {
+        let mut state = setup_test_state();
+        state.permissions.push("memory.clear".to_string());
+        
+        let op = MemoryOperation::ClearMemory {
+            segment_id: "test_segment".to_string(),
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "MemoryCleared");
     }
 }
