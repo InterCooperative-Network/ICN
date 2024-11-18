@@ -1,10 +1,8 @@
-// src/community/mod.rs
-
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
-use crate::governance::Proposal;
 use crate::claims::Claim;
+use crate::governance::Proposal;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Community {
@@ -14,7 +12,8 @@ pub struct Community {
     pub created_at: DateTime<Utc>,
     pub members: HashMap<String, CivicRole>, // DID -> Role mapping
     pub governance_model: GovernanceModel,
-    pub active_proposals: Vec<Proposal>,
+    #[serde(default)]
+    pub active_proposals: Vec<String>, // Store proposal IDs instead of whole proposals
     pub policies: Vec<CivicPolicy>,
     pub cooperative_ids: Vec<String>, // Associated cooperatives
 }
@@ -88,7 +87,7 @@ pub enum CivicPolicyType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicyRule {
     pub condition: String,
-    pub effect: String,
+    pub action: String,
     pub parameters: HashMap<String, String>,
 }
 
@@ -120,8 +119,10 @@ impl Community {
         Ok(())
     }
 
-    pub fn add_proposal(&mut self, proposal: Proposal) {
-        self.active_proposals.push(proposal);
+    pub fn add_proposal(&mut self, proposal_id: String) {
+        if !self.active_proposals.contains(&proposal_id) {
+            self.active_proposals.push(proposal_id);
+        }
     }
 
     pub fn add_policy(&mut self, policy: CivicPolicy) {
@@ -150,18 +151,71 @@ impl Community {
     }
 }
 
-// Implement the trait for community energy tracking
 impl crate::monitoring::energy::EnergyAware for Community {
     fn record_energy_metrics(&self, monitor: &crate::monitoring::energy::EnergyMonitor) {
         // Record basic operations
         monitor.record_instruction();
         
         // Record proposal storage
-        let proposals_size = (self.active_proposals.len() * std::mem::size_of::<Proposal>()) as u64;
+        let proposals_size = (self.active_proposals.len() * std::mem::size_of::<String>()) as u64;
         monitor.record_storage_operation(proposals_size);
         
         // Record member operations
         let members_size = (self.members.len() * std::mem::size_of::<CivicRole>()) as u64;
         monitor.record_memory_operation(members_size);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_governance_model() -> GovernanceModel {
+        GovernanceModel {
+            model_type: GovernanceType::DirectDemocracy,
+            voting_rules: VotingRules {
+                voting_period_days: 7,
+                min_participation: 0.5,
+                allow_delegation: false,
+                require_claims: vec![],
+            },
+            quorum_requirement: 0.5,
+            decision_threshold: 0.66,
+        }
+    }
+
+    #[test]
+    fn test_community_creation() {
+        let community = Community::new(
+            "test_id".to_string(),
+            "Test Community".to_string(),
+            "Test Description".to_string(),
+            create_test_governance_model(),
+        );
+
+        assert_eq!(community.name, "Test Community");
+        assert_eq!(community.members.len(), 0);
+        assert_eq!(community.active_proposals.len(), 0);
+    }
+
+    #[test]
+    fn test_member_management() {
+        let mut community = Community::new(
+            "test_id".to_string(),
+            "Test Community".to_string(),
+            "Test Description".to_string(),
+            create_test_governance_model(),
+        );
+
+        let role = CivicRole {
+            role: "member".to_string(),
+            permissions: vec!["vote".to_string()],
+            joined_at: Utc::now(),
+            verified_claims: vec![],
+            voting_history: vec![],
+        };
+
+        assert!(community.add_member("test_did".to_string(), role).is_ok());
+        assert!(community.add_member("test_did".to_string(), role).is_err());
     }
 }

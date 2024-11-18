@@ -15,8 +15,7 @@ pub use contract::Contract;
 pub use vm::VM;
 pub use execution_context::ExecutionContext;
 pub use event::Event;
-pub use operations::Operation;
-pub use std::result::Result as OperationResult;
+pub use opcode::OpCode;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum VMError {

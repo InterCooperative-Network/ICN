@@ -1,6 +1,7 @@
 // src/lib.rs
 
 pub mod blockchain;
+pub mod claims;
 pub mod identity;
 pub mod reputation;
 pub mod governance;
@@ -11,6 +12,7 @@ pub mod consensus;
 pub mod network;
 pub mod monitoring;
 pub mod relationship;
+pub mod community;
 
 pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
 pub use identity::IdentitySystem;
@@ -29,18 +31,9 @@ use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use tokio::sync::broadcast;
 use uuid;
-use chrono;
+use chrono::{DateTime, Utc};
 
-pub struct ICNCore {
-    blockchain: Arc<Mutex<Blockchain>>,
-    identity_system: Arc<Mutex<IdentitySystem>>,
-    reputation_system: Arc<Mutex<ReputationSystem>>,
-    relationship_system: Arc<Mutex<RelationshipSystem>>,
-    ws_handler: Arc<WebSocketHandler>,
-    vm: Arc<Mutex<VM>>,
-    event_bus: broadcast::Sender<SystemEvent>,
-}
-
+/// Events emitted by the ICN system
 #[derive(Clone, Debug)]
 pub enum SystemEvent {
     BlockCreated(Block),
@@ -51,9 +44,25 @@ pub enum SystemEvent {
     ConsensusFinished(Block),
     CooperativeCreated { id: String, creator: String },
     CooperativeJoined { id: String, member: String },
+    ContributionRecorded(Contribution),
+    MutualAidProvided(MutualAidInteraction),
+    RelationshipUpdated { member_one: String, member_two: String },
+}
+
+/// Core system for the Inter-Cooperative Network
+pub struct ICNCore {
+    blockchain: Arc<Mutex<Blockchain>>,
+    identity_system: Arc<Mutex<IdentitySystem>>,
+    reputation_system: Arc<Mutex<ReputationSystem>>,
+    relationship_system: Arc<Mutex<RelationshipSystem>>,
+    ws_handler: Arc<WebSocketHandler>,
+    vm: Arc<Mutex<VM>>,
+    event_bus: broadcast::Sender<SystemEvent>,
+    start_time: DateTime<Utc>,
 }
 
 impl ICNCore {
+    /// Creates a new instance of the ICN core system
     pub fn new() -> Self {
         let (event_tx, _) = broadcast::channel(100);
         
@@ -89,14 +98,17 @@ impl ICNCore {
             ws_handler,
             vm,
             event_bus: event_tx,
+            start_time: Utc::now(),
         }
     }
 
+    /// Creates a new cooperative with the given creator and metadata
     pub async fn create_cooperative(
         &self,
         creator_did: String,
         metadata: CooperativeMetadata
     ) -> Result<String, String> {
+        // Validate creator's identity
         let identity = self.identity_system.lock()
             .map_err(|_| "Failed to acquire identity lock".to_string())?;
         if !identity.is_registered(&creator_did) {
@@ -104,6 +116,7 @@ impl ICNCore {
         }
         drop(identity);
 
+        // Check reputation requirements
         let reputation = self.reputation_system.lock()
             .map_err(|_| "Failed to acquire reputation lock".to_string())?;
         if reputation.get_reputation(&creator_did) < 100 {
@@ -112,9 +125,15 @@ impl ICNCore {
         let reputation_score = reputation.get_reputation(&creator_did);
         drop(reputation);
 
+        // Create and execute contract
         let contract = Contract {
             id: uuid::Uuid::new_v4().to_string(),
-            code: vec![OpCode::CreateCooperative],
+            code: vec![OpCode::CreateCooperative {
+                name: metadata.cooperative_id.clone(),
+                description: metadata.purpose.clone(),
+                resources: HashMap::new(),
+                federation_id: metadata.federation_id.clone(),
+            }],
             state: HashMap::new(),
             required_reputation: 100,
             cooperative_metadata: metadata.clone(),
@@ -126,7 +145,7 @@ impl ICNCore {
         let context = ExecutionContext {
             caller_did: creator_did.clone(),
             cooperative_id: contract.id.clone(),
-            timestamp: chrono::Utc::now().timestamp() as u64,
+            timestamp: Utc::now().timestamp() as u64,
             block_number: {
                 let blockchain = self.blockchain.lock()
                     .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
@@ -136,6 +155,7 @@ impl ICNCore {
             permissions: vec!["cooperative.create".to_string()],
         };
 
+        // Execute contract
         {
             let mut vm = self.vm.lock()
                 .map_err(|_| "Failed to acquire VM lock".to_string())?;
@@ -143,6 +163,7 @@ impl ICNCore {
             vm.execute_contract(&contract)?;
         }
 
+        // Create and submit transaction
         let transaction = Transaction::new(
             creator_did.clone(),
             TransactionType::ContractExecution {
@@ -157,6 +178,7 @@ impl ICNCore {
             blockchain.add_transaction(transaction).await?;
         }
 
+        // Emit creation event
         let event = SystemEvent::CooperativeCreated {
             id: contract.id.clone(),
             creator: creator_did,
@@ -166,9 +188,61 @@ impl ICNCore {
         Ok(contract.id)
     }
 
-    pub async fn submit_proposal(&self, creator_did: String, proposal: Proposal) -> Result<u64, String> {
+    /// Records a new contribution in the system
+    pub async fn record_contribution(
+        &self,
+        contribution: Contribution
+    ) -> Result<(), String> {
+        let mut relationship_system = self.relationship_system.lock()
+            .map_err(|_| "Failed to acquire relationship lock".to_string())?;
+        
+        relationship_system.record_contribution(contribution.clone())?;
+
+        let event = SystemEvent::ContributionRecorded(contribution);
+        let _ = self.event_bus.send(event);
+
+        Ok(())
+    }
+
+    /// Records a mutual aid interaction between members
+    pub async fn record_mutual_aid(
+        &self,
+        interaction: MutualAidInteraction
+    ) -> Result<(), String> {
+        let mut relationship_system = self.relationship_system.lock()
+            .map_err(|_| "Failed to acquire relationship lock".to_string())?;
+        
+        relationship_system.record_mutual_aid(interaction.clone())?;
+
+        let event = SystemEvent::MutualAidProvided(interaction);
+        let _ = self.event_bus.send(event);
+
+        Ok(())
+    }
+
+    /// Starts a new consensus round
+    pub async fn start_consensus_round(&self) -> Result<(), String> {
+        let blockchain = self.blockchain.lock()
+            .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
+        
+        if let Some(round) = blockchain.get_current_round() {
+            drop(blockchain);
+            let event = SystemEvent::ConsensusStarted(round);
+            let _ = self.event_bus.send(event);
+        }
+
+        Ok(())
+    }
+
+    /// Submits a new proposal for voting
+    pub async fn submit_proposal(
+        &self,
+        creator_did: String,
+        proposal: Proposal
+    ) -> Result<u64, String> {
         let reputation = self.reputation_system.lock()
             .map_err(|_| "Failed to acquire reputation lock".to_string())?;
+        
         if reputation.get_reputation(&creator_did) < proposal.required_reputation {
             return Err("Insufficient reputation to create proposal".to_string());
         }
@@ -194,24 +268,31 @@ impl ICNCore {
         Ok(proposal.id)
     }
 
-    pub async fn start_consensus_round(&self) -> Result<(), String> {
-        let blockchain = self.blockchain.lock()
-            .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
-        
-        if let Some(round) = blockchain.get_current_round() {
-            drop(blockchain);
-            let event = SystemEvent::ConsensusStarted(round);
-            let _ = self.event_bus.send(event);
-        }
-
-        Ok(())
-    }
-
+    /// Subscribes to system events
     pub fn subscribe_to_events(&self) -> broadcast::Receiver<SystemEvent> {
         self.event_bus.subscribe()
     }
+
+    /// Gets system uptime in seconds
+    pub fn get_uptime(&self) -> i64 {
+        (Utc::now() - self.start_time).num_seconds()
+    }
+
+    /// Gets system statistics
+    pub fn get_stats(&self) -> HashMap<String, String> {
+        let mut stats = HashMap::new();
+        stats.insert("uptime".to_string(), self.get_uptime().to_string());
+        
+        if let Ok(blockchain) = self.blockchain.lock() {
+            stats.insert("block_count".to_string(), blockchain.get_block_count().to_string());
+            stats.insert("tx_count".to_string(), blockchain.get_transaction_count().to_string());
+        }
+
+        stats
+    }
 }
 
+/// Manager for cooperative-specific operations
 pub struct CooperativeManager {
     core: Arc<ICNCore>,
 }
@@ -224,7 +305,7 @@ impl CooperativeManager {
     pub async fn create_cooperative(
         &self, 
         creator_did: String, 
-        _name: String,
+        name: String,
         purpose: String
     ) -> Result<String, String> {
         let metadata = CooperativeMetadata {
@@ -239,8 +320,8 @@ impl CooperativeManager {
                 bandwidth_usage: 1,
             },
             federation_id: None,
-            creation_timestamp: chrono::Utc::now().timestamp() as u64,
-            last_updated: chrono::Utc::now().timestamp() as u64,
+            creation_timestamp: Utc::now().timestamp() as u64,
+            last_updated: Utc::now().timestamp() as u64,
             member_count: 1,
             resource_allocation: HashMap::new(),
             energy_usage: HashMap::new(),
@@ -259,6 +340,7 @@ impl CooperativeManager {
     }
 }
 
+/// Node implementation for the ICN network
 pub struct ICNNode {
     core: Arc<ICNCore>,
     node_id: String,
@@ -301,6 +383,10 @@ impl ICNNode {
             .insert(peer_id, address);
         Ok(())
     }
+
+    pub fn get_peer_count(&self) -> usize {
+        self.peers.lock().map(|peers| peers.len()).unwrap_or(0)
+    }
 }
 
 #[cfg(test)]
@@ -310,8 +396,8 @@ mod tests {
     #[tokio::test]
     async fn test_icn_core_creation() {
         let core = ICNCore::new();
-        // Test event subscription without awaiting
         let _receiver = core.subscribe_to_events();
+        assert!(core.get_uptime() >= 0);
     }
 
     #[tokio::test]
@@ -337,5 +423,16 @@ mod tests {
             "peer1".to_string(),
             "localhost:8080".to_string()
         ).await.is_ok());
+        
+        assert_eq!(node.get_peer_count(), 1);
+    }
+
+    #[test]
+    fn test_system_stats() {
+        let core = ICNCore::new();
+        let stats = core.get_stats();
+        assert!(stats.contains_key("uptime"));
+        assert!(stats.contains_key("block_count"));
+        assert!(stats.contains_key("tx_count"));
     }
 }

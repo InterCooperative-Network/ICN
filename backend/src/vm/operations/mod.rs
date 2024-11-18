@@ -1,10 +1,10 @@
 // src/vm/operations/mod.rs
 
 use std::collections::HashMap;
-use std::sync::atomic::Ordering;
-use crate::vm::{VMError, VMResult, Event};
+use crate::vm::{VMError, VMResult};
+use crate::vm::event::Event;
 
-// Re-export all operation modules
+// Re-export operation modules
 pub mod stack;
 pub mod arithmetic;
 pub mod cooperative;
@@ -17,18 +17,12 @@ pub mod memory;
 pub mod network;
 pub mod federation;
 
-// Re-export operation types
+// Re-export necessary operation types
 pub use stack::StackOperation;
 pub use arithmetic::ArithmeticOperation;
-pub use cooperative::CooperativeOperation;
-pub use governance::GovernanceOperation;
-pub use reputation::ReputationOperation;
-pub use relationship::RelationshipOperation;
 pub use system::SystemOperation;
-pub use data::DataOperation;
-pub use memory::{MemoryOperation, MemorySegment};
-pub use network::NetworkOperation;
-pub use federation::FederationOperation;
+pub use relationship::RelationshipOperation;
+pub use memory::MemoryOperation;
 
 /// VM state structure
 #[derive(Default)]
