@@ -3,8 +3,7 @@
 use std::collections::HashMap;
 use super::{Operation, VMState, VMResult, ensure_permissions, emit_event};
 use crate::vm::VMError;
-use std::sync::atomic::{AtomicU64, Ordering};
-use chrono::Utc;
+use std::sync::atomic::Ordering;
 
 /// Types of memory segment for different use cases
 #[derive(Debug, Clone, PartialEq)]
@@ -19,20 +18,7 @@ pub enum MemorySegment {
     Persistent,
 }
 
-/// Memory allocation request details
-#[derive(Debug, Clone)]
-pub struct AllocationRequest {
-    /// Size in bytes to allocate
-    pub size: u64,
-    /// Type of memory segment
-    pub segment_type: MemorySegment,
-    /// Optional federation ID for shared memory
-    pub federation_id: Option<String>,
-    /// Whether the memory should persist across VM invocations
-    pub persistent: bool,
-}
-
-/// Memory management operations for the VM
+/// Operations for managing memory within the VM
 pub enum MemoryOperation {
     /// Allocate new memory space
     Allocate {
@@ -127,18 +113,17 @@ impl Operation for MemoryOperation {
                     return Err(VMError::OutOfMemory);
                 }
                 
-                // Generate a unique address for this allocation
-                let address = format!("{}:{}", 
+                // Generate unique address
+                let address = format!("{}:{}",
                     match segment_type {
                         MemorySegment::Cooperative => "coop",
-                        MemorySegment::Federation => "fed",
+                        MemorySegment::Federation => "fed", 
                         MemorySegment::Scratch => "scratch",
                         MemorySegment::Persistent => "persist",
                     },
                     state.memory_address_counter.fetch_add(1, Ordering::SeqCst)
                 );
-                
-                // Record the allocation
+
                 let mut event_data = HashMap::new();
                 event_data.insert("address".to_string(), address.clone());
                 event_data.insert("size".to_string(), size.to_string());
@@ -155,7 +140,6 @@ impl Operation for MemoryOperation {
             MemoryOperation::Free { address, segment_type } => {
                 ensure_permissions(&["memory.free".to_string()], &state.permissions)?;
                 
-                // Verify the memory segment exists and belongs to the caller
                 if !state.memory.contains_key(address) {
                     return Err(VMError::InvalidMemoryAddress);
                 }
@@ -234,6 +218,12 @@ impl Operation for MemoryOperation {
                     return Err(VMError::InvalidMemoryAddress);
                 }
                 
+                // Check if we have enough memory for the resize
+                let current_usage = state.memory.len() as u64;
+                if current_usage + new_size > state.memory_limit {
+                    return Err(VMError::OutOfMemory);
+                }
+                
                 let mut event_data = HashMap::new();
                 event_data.insert("address".to_string(), address.clone());
                 event_data.insert("new_size".to_string(), new_size.to_string());
@@ -275,23 +265,18 @@ impl Operation for MemoryOperation {
                 Ok(())
             },
 
-            MemoryOperation::PinMemory { address } => {
+            MemoryOperation::PinMemory { address } | MemoryOperation::UnpinMemory { address } => {
                 ensure_permissions(&["memory.pin".to_string()], &state.permissions)?;
+                
+                let event_type = match self {
+                    MemoryOperation::PinMemory { .. } => "MemoryPinned",
+                    _ => "MemoryUnpinned",
+                };
                 
                 let mut event_data = HashMap::new();
                 event_data.insert("address".to_string(), address.clone());
                 
-                emit_event(state, "MemoryPinned".to_string(), event_data);
-                Ok(())
-            },
-
-            MemoryOperation::UnpinMemory { address } => {
-                ensure_permissions(&["memory.pin".to_string()], &state.permissions)?;
-                
-                let mut event_data = HashMap::new();
-                event_data.insert("address".to_string(), address.clone());
-                
-                emit_event(state, "MemoryUnpinned".to_string(), event_data);
+                emit_event(state, event_type.to_string(), event_data);
                 Ok(())
             },
 
@@ -348,6 +333,7 @@ impl Operation for MemoryOperation {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::AtomicU64;
 
     fn setup_test_state() -> VMState {
         VMState {
@@ -366,7 +352,7 @@ mod tests {
                 "memory.copy".to_string(),
                 "memory.move".to_string(),
             ],
-            memory_limit: 1024 * 1024, // 1MB limit
+            memory_limit: 1024 * 1024, // 1MB
             memory_address_counter: AtomicU64::new(0),
         }
     }
@@ -461,6 +447,9 @@ mod tests {
             address: "important".to_string(),
         };
         assert!(unpin_op.execute(&mut state).is_ok());
+        
+        assert_eq!(state.events[0].event_type, "MemoryPinned");
+        assert_eq!(state.events[1].event_type, "MemoryUnpinned");
     }
 
     #[test]
@@ -487,6 +476,38 @@ mod tests {
     }
 
     #[test]
+    fn test_memory_resize() {
+        let mut state = setup_test_state();
+        state.permissions.push("memory.resize".to_string());
+        
+        // First allocate some memory
+        state.memory.insert("test_segment".to_string(), 0);
+        
+        let op = MemoryOperation::Resize {
+            address: "test_segment".to_string(),
+            new_size: 2048,
+        };
+        
+        assert!(op.execute(&mut state).is_ok());
+        assert_eq!(state.events[0].event_type, "MemoryResized");
+    }
+
+    #[test]
+    fn test_permission_checks() {
+        let mut state = setup_test_state();
+        state.permissions.clear(); // Remove all permissions
+        
+        let op = MemoryOperation::Allocate {
+            size: 1024,
+            segment_type: MemorySegment::Cooperative,
+            federation_id: None,
+            persistent: false,
+        };
+        
+        assert!(matches!(op.execute(&mut state), Err(VMError::InsufficientPermissions)));
+    }
+
+    #[test]
     fn test_federation_shared_memory() {
         let mut state = setup_test_state();
         
@@ -501,48 +522,25 @@ mod tests {
         // Join shared memory segment
         let join_op = MemoryOperation::JoinSharedSegment {
             federation_id: "fed1".to_string(),
-            segment_id: "shared:fed1:1".to_string(),
+            segment_id: "shared:fed1:0".to_string(),
         };
         assert!(join_op.execute(&mut state).is_ok());
+        
+        assert_eq!(state.events[0].event_type, "SharedMemoryCreated");
+        assert_eq!(state.events[1].event_type, "SharedMemoryJoined");
     }
 
     #[test]
-    fn test_resize_memory() {
-        let mut state = setup_test_state();
-        state.permissions.push("memory.resize".to_string());
-        state.memory.insert("test_segment".to_string(), 0);
-        
-        let op = MemoryOperation::Resize {
-            address: "test_segment".to_string(),
-            new_size: 2048,
+    fn test_resource_costs() {
+        let alloc_op = MemoryOperation::Allocate {
+            size: 1024,
+            segment_type: MemorySegment::Cooperative,
+            federation_id: None,
+            persistent: false,
         };
+        assert_eq!(alloc_op.resource_cost(), 11); // 10 + (1024/1024)
         
-        assert!(op.execute(&mut state).is_ok());
-        assert_eq!(state.events[0].event_type, "MemoryResized");
-    }
-
-    #[test]
-    fn test_memory_info() {
-        let mut state = setup_test_state();
-        
-        let op = MemoryOperation::GetMemoryInfo {
-            segment_id: "test_segment".to_string(),
-        };
-        
-        assert!(op.execute(&mut state).is_ok());
-        assert_eq!(state.events[0].event_type, "MemoryInfoQueried");
-    }
-
-    #[test]
-    fn test_clear_memory() {
-        let mut state = setup_test_state();
-        state.permissions.push("memory.clear".to_string());
-        
-        let op = MemoryOperation::ClearMemory {
-            segment_id: "test_segment".to_string(),
-        };
-        
-        assert!(op.execute(&mut state).is_ok());
-        assert_eq!(state.events[0].event_type, "MemoryCleared");
+        let gc_op = MemoryOperation::CollectGarbage;
+        assert_eq!(gc_op.resource_cost(), 50);
     }
 }

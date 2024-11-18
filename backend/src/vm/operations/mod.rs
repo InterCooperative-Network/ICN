@@ -60,7 +60,7 @@ pub fn ensure_permissions(required: &[String], available: &[String]) -> VMResult
     Ok(())
 }
 
-/// Helper function to check reputation requirements
+/// Helper function to check reputation requirements 
 pub fn ensure_reputation(required: i64, available: i64) -> VMResult<()> {
     if available < required {
         Err(VMError::InsufficientReputation)
@@ -90,6 +90,7 @@ pub fn emit_event(state: &mut VMState, event_type: String, data: HashMap<String,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::AtomicU64;
 
     #[test]
     fn test_ensure_stack_size() {
@@ -116,11 +117,20 @@ mod tests {
 
     #[test]
     fn test_emit_event() {
-        let mut state = VMState::new(
-            "test".to_string(),
-            1,
-            1000,
-        );
+        let mut state = VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did: "test".to_string(),
+            block_number: 1,
+            timestamp: 1000,
+            permissions: vec![],
+            memory_limit: 1024 * 1024,
+            memory_address_counter: AtomicU64::new(0),
+        };
+        
         let mut data = HashMap::new();
         data.insert("test_key".to_string(), "test_value".to_string());
         
