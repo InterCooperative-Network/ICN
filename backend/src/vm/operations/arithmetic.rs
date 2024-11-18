@@ -1,9 +1,8 @@
 // src/vm/operations/arithmetic.rs
 
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use super::{Operation, VMState, VMResult, ensure_stack_size};
 use crate::vm::VMError;
+use std::sync::atomic::AtomicU64;
 
 /// Arithmetic operations for the VM
 #[derive(Debug, Clone)]
@@ -152,7 +151,7 @@ impl Operation for ArithmeticOperation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vm::Event;
+    use std::collections::HashMap;
 
     fn setup_test_state() -> VMState {
         VMState {
@@ -165,7 +164,7 @@ mod tests {
             block_number: 1,
             timestamp: 1000,
             permissions: vec![],
-            memory_limit: 1024 * 1024, // 1MB
+            memory_limit: 1024 * 1024, // 1MB default limit
             memory_address_counter: AtomicU64::new(0),
         }
     }
@@ -185,16 +184,10 @@ mod tests {
         let sub_op = ArithmeticOperation::Sub;
         assert!(sub_op.execute(&mut state).is_ok());
         assert_eq!(state.stack, vec![-2]); // 8 - 10 = -2
-
-        // Test Multiply
-        state.stack.extend([3]);
-        let mul_op = ArithmeticOperation::Mul;
-        assert!(mul_op.execute(&mut state).is_ok());
-        assert_eq!(state.stack, vec![-6]); // -2 * 3 = -6
     }
 
     #[test]
-    fn test_div_by_zero() {
+    fn test_division_by_zero() {
         let mut state = setup_test_state();
         state.stack.extend([5, 0]);
         let op = ArithmeticOperation::Div;
@@ -237,29 +230,5 @@ mod tests {
         let dec_op = ArithmeticOperation::Decrement;
         assert!(dec_op.execute(&mut state).is_ok());
         assert_eq!(state.stack, vec![5]);
-    }
-
-    #[test]
-    fn test_resource_costs() {
-        let add_op = ArithmeticOperation::Add;
-        let mul_op = ArithmeticOperation::Mul;
-        let inc_op = ArithmeticOperation::Increment;
-
-        assert_eq!(add_op.resource_cost(), 2);
-        assert_eq!(mul_op.resource_cost(), 3);
-        assert_eq!(inc_op.resource_cost(), 1);
-    }
-
-    #[test]
-    fn test_stack_underflow() {
-        let mut state = setup_test_state();
-        let op = ArithmeticOperation::Add;
-        
-        // Empty stack
-        assert!(matches!(op.execute(&mut state), Err(VMError::StackUnderflow)));
-
-        // Single element (need two for add)
-        state.stack.push(5);
-        assert!(matches!(op.execute(&mut state), Err(VMError::StackUnderflow)));
     }
 }

@@ -1,7 +1,9 @@
 // src/vm/operations/stack.rs
 
+use std::collections::HashMap;
 use super::{Operation, VMState, VMResult, ensure_stack_size};
 use crate::vm::VMError;
+use std::sync::atomic::AtomicU64;
 
 /// Stack manipulation operations
 pub enum StackOperation {
@@ -123,6 +125,8 @@ mod tests {
             block_number: 1,
             timestamp: 1000,
             permissions: vec![],
+            memory_limit: 1024 * 1024, // 1MB default limit
+            memory_address_counter: AtomicU64::new(0),
         }
     }
 
