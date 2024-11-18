@@ -15,12 +15,9 @@ pub use contract::Contract;
 pub use vm::VM;
 pub use execution_context::ExecutionContext;
 pub use event::Event;
-
-// Re-export core operation traits
 pub use operations::Operation;
 pub use std::result::Result as OperationResult;
 
-// Error type for VM operations
 #[derive(Debug, Clone, PartialEq)]
 pub enum VMError {
     StackUnderflow,
@@ -66,7 +63,6 @@ impl From<VMError> for String {
 
 pub type VMResult<T> = Result<T, VMError>;
 
-/// Represents the complete state of the VM during execution
 #[derive(Default)]
 pub struct VMState {
     /// Current stack
