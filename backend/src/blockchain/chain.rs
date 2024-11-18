@@ -9,8 +9,7 @@ use crate::reputation::ReputationSystem;
 use crate::vm::{VM, Contract, ExecutionContext, Event};
 use crate::blockchain::{Block, Transaction};
 use crate::blockchain::transaction::{TransactionType, ResourceAllocation};
-use crate::relationship::{RelationshipSystem, Contribution, MutualAidInteraction, Relationship};
-use crate::vm::operations::relationship::RelationType;
+use crate::relationship::{RelationshipSystem, RelationshipType, Contribution, MutualAidInteraction, Relationship};
 
 pub struct Blockchain {
     pub chain: Vec<Block>,
@@ -165,7 +164,7 @@ impl Blockchain {
                 let relationship = Relationship {
                     member_one: tx.sender.clone(),
                     member_two: member_two.clone(),
-                    relationship_type: RelationType::Custom(relationship_type.clone()),
+                    relationship_type: RelationshipType::new(relationship_type),
                     started: chrono::Utc::now(),
                     story: story.clone(),
                     interactions: vec![],
@@ -174,7 +173,7 @@ impl Blockchain {
                 };
                 
                 if let Some(interaction_data) = interaction {
-                    let _ = interaction_data;
+                    // Handle interaction data if needed
                 }
                 
                 relationship_system.update_relationship(relationship)?;
