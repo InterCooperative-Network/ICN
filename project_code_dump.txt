@@ -1,4 +1,4 @@
-Project Code Dump - Generated Mon Nov 18 10:11:04 AM UTC 2024
+Project Code Dump - Generated Mon Nov 18 05:06:07 PM UTC 2024
 ======================================
 
 Project Tree:
@@ -4273,7 +4273,8 @@ File: ./backend/src/vm/operations/mod.rs
 // src/vm/operations/mod.rs
 
 use std::collections::HashMap;
-use crate::vm::{VMError, VMState, VMResult, Event};
+use std::sync::atomic::Ordering;
+use crate::vm::{VMError, VMResult, Event};
 
 // Re-export all operation modules
 pub mod stack;
@@ -4297,9 +4298,46 @@ pub use reputation::ReputationOperation;
 pub use relationship::RelationshipOperation;
 pub use system::SystemOperation;
 pub use data::DataOperation;
-pub use memory::MemoryOperation;
+pub use memory::{MemoryOperation, MemorySegment};
 pub use network::NetworkOperation;
 pub use federation::FederationOperation;
+
+/// VM state structure
+#[derive(Default)]
+pub struct VMState {
+    /// Current stack
+    pub stack: Vec<i64>,
+    
+    /// Memory storage
+    pub memory: HashMap<String, i64>,
+    
+    /// Events emitted during execution
+    pub events: Vec<Event>,
+    
+    /// Current instruction pointer
+    pub instruction_pointer: usize,
+    
+    /// Reputation scores for participating DIDs
+    pub reputation_context: HashMap<String, i64>,
+    
+    /// Currently executing DID
+    pub caller_did: String,
+    
+    /// Current block number
+    pub block_number: u64,
+    
+    /// Current timestamp
+    pub timestamp: u64,
+    
+    /// Available permissions
+    pub permissions: Vec<String>,
+    
+    /// Maximum memory usage in bytes
+    pub memory_limit: u64,
+    
+    /// Counter for generating unique memory addresses
+    pub memory_address_counter: std::sync::atomic::AtomicU64,
+}
 
 /// Trait for implementable VM operations
 pub trait Operation {
@@ -4362,7 +4400,6 @@ pub fn emit_event(state: &mut VMState, event_type: String, data: HashMap<String,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::AtomicU64;
 
     #[test]
     fn test_ensure_stack_size() {
@@ -4385,31 +4422,6 @@ mod tests {
     fn test_ensure_reputation() {
         assert!(ensure_reputation(10, 20).is_ok());
         assert!(ensure_reputation(20, 10).is_err());
-    }
-
-    #[test]
-    fn test_emit_event() {
-        let mut state = VMState {
-            stack: Vec::new(),
-            memory: HashMap::new(),
-            events: Vec::new(),
-            instruction_pointer: 0,
-            reputation_context: HashMap::new(),
-            caller_did: "test".to_string(),
-            block_number: 1,
-            timestamp: 1000,
-            permissions: vec![],
-            memory_limit: 1024 * 1024,
-            memory_address_counter: AtomicU64::new(0),
-        };
-        
-        let mut data = HashMap::new();
-        data.insert("test_key".to_string(), "test_value".to_string());
-        
-        emit_event(&mut state, "test_event".to_string(), data);
-        
-        assert_eq!(state.events.len(), 1);
-        assert_eq!(state.events[0].event_type, "test_event");
     }
 }
 
@@ -5860,8 +5872,8 @@ use crate::vm::operations::{
     RelationshipOperation,
     MemoryOperation,
 };
-use crate::relationship::RelationshipType;
 use crate::blockchain::Block;
+use std::sync::atomic::AtomicU64;
 
 /// Virtual Machine implementation for executing cooperative operations
 pub struct VM {
@@ -5876,7 +5888,7 @@ pub struct VM {
 impl VM {
     /// Creates a new VM instance
     pub fn new(instruction_limit: usize, reputation_context: HashMap<String, i64>) -> Self {
-        let mut state = VMState {
+        let state = VMState {
             stack: Vec::new(),
             memory: HashMap::new(),
             events: Vec::new(),
@@ -5887,7 +5899,7 @@ impl VM {
             timestamp: 1000,
             permissions: vec![],
             memory_limit: 1024 * 1024, // 1MB default limit
-            memory_address_counter: std::sync::atomic::AtomicU64::new(0),
+            memory_address_counter: AtomicU64::new(0),
         };
         
         VM {
@@ -5945,13 +5957,29 @@ impl VM {
             OpCode::Mod => ArithmeticOperation::Mod.execute(&mut self.state),
 
             OpCode::Store(key) => {
-                let request = MemoryOperation::AllocationRequest {
+                // Create allocation request for memory operation
+                let allocation = MemoryOperation::Allocate {
                     size: 64,
                     segment_type: MemoryOperation::MemorySegment::Scratch,
                     federation_id: None,
                     persistent: false,
                 };
-                MemoryOperation::Allocate { request }.execute(&mut self.state)
+                allocation.execute(&mut self.state)?;
+                
+                // Store the key-value pair
+                if let Some(value) = self.state.stack.pop() {
+                    self.state.memory.insert(key.clone(), value);
+                }
+                Ok(())
+            },
+
+            OpCode::Load(key) => {
+                if let Some(&value) = self.state.memory.get(key) {
+                    self.state.stack.push(value);
+                    Ok(())
+                } else {
+                    Err(VMError::InvalidMemoryAccess)
+                }
             },
 
             OpCode::RecordContribution { description, impact_story, context, tags } => {
@@ -5963,22 +5991,22 @@ impl VM {
                 }.execute(&mut self.state)
             },
 
-            OpCode::RecordMutualAid { receiver, description, impact_story, reciprocity_notes } => {
+            OpCode::RecordMutualAid { receiver, description, impact_story, reciprocity_notes, tags } => {
                 RelationshipOperation::RecordMutualAid {
                     receiver_did: receiver.clone(),
                     description: description.clone(),
                     impact_story: impact_story.clone(),
                     reciprocity_notes: reciprocity_notes.clone(),
-                    tags: vec![],
+                    tags: tags.clone(),
                 }.execute(&mut self.state)
             },
 
-            OpCode::UpdateRelationship { member_two, relationship_type, story } => {
+            OpCode::UpdateRelationship { member_two, relationship_type, story, interaction } => {
                 RelationshipOperation::UpdateRelationship {
                     member_two: member_two.clone(),
                     relationship_type: relationship_type.clone(),
                     story: story.clone(),
-                    interaction: None,
+                    interaction: interaction.clone(),
                 }.execute(&mut self.state)
             },
 
@@ -5991,14 +6019,18 @@ impl VM {
             OpCode::Halt => SystemOperation::Halt.execute(&mut self.state),
             OpCode::Nop => Ok(()),
             
-            _ => Err(VMError::InvalidOperand),
+            op => Err(VMError::InvalidOperand(format!("Unknown opcode: {:?}", op))),
         }
     }
 
     /// Validates a contract before execution
     fn validate_contract(&self, contract: &Contract) -> VMResult<bool> {
         // Check reputation requirement
-        if self.state.get_reputation() < contract.required_reputation {
+        let reputation = self.state.reputation_context.get(&self.state.caller_did)
+            .copied()
+            .unwrap_or(0);
+            
+        if reputation < contract.required_reputation {
             return Ok(false);
         }
 
@@ -6658,6 +6690,7 @@ File: ./backend/src/vm/opcode.rs
 // src/vm/opcode.rs
 
 use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
 
 /// Enum representing the various operations (`OpCode`) that can be executed in the virtual machine.
 /// Each variant is an operation that affects the VM stack, memory, or interacts with other subsystems.
@@ -6699,133 +6732,163 @@ pub enum OpCode {
 
     // Cooperative Operations
     /// Create a new cooperative entity.
-    CreateCooperative,
+    CreateCooperative {
+        name: String,
+        description: String,
+        resources: HashMap<String, u64>,
+        federation_id: Option<String>,
+    },
     /// Join an existing cooperative.
-    JoinCooperative,
+    JoinCooperative {
+        cooperative_id: String,
+        role: String,
+        commitment: String,
+    },
     /// Leave a cooperative.
-    LeaveCooperative,
+    LeaveCooperative {
+        cooperative_id: String,
+        reason: String,
+    },
     /// Allocate resources within a cooperative.
-    AllocateResource,
+    AllocateResource {
+        resource_type: String,
+        amount: u64,
+        recipient: String,
+        purpose: String,
+    },
     /// Transfer resources within or between cooperatives.
-    TransferResource,
-    /// Update cooperative metadata.
-    UpdateCooperativeMetadata,
-    /// Add a member to a cooperative.
-    AddCooperativeMember,
-    /// Remove a member from a cooperative.
-    RemoveCooperativeMember,
-    /// Set a specific role for a cooperative member.
-    SetMemberRole,
+    TransferResource {
+        from_cooperative: String,
+        to_cooperative: String,
+        resource_type: String,
+        amount: u64,
+        purpose: String,
+    },
 
     // Governance Operations
-    /// Create a new proposal in governance.
-    CreateProposal,
+    /// Create a new governance proposal.
+    CreateProposal {
+        title: String,
+        description: String,
+        proposal_type: String,
+        voting_period: u64,
+        required_reputation: i64,
+    },
     /// Cast a vote on a proposal.
-    CastVote,
+    CastVote {
+        proposal_id: String,
+        approve: bool,
+        comment: Option<String>,
+    },
     /// Delegate voting rights to another member.
-    DelegateVotes,
+    DelegateVotes {
+        delegate_to: String,
+        scope: String,
+        duration: Option<u64>,
+    },
     /// Execute an approved proposal.
-    ExecuteProposal,
-    /// Update the quorum requirements for voting.
-    UpdateQuorum,
-    /// Cancel an existing proposal.
-    CancelProposal,
-    /// Extend the voting period for a proposal.
-    ExtendVotingPeriod,
-    /// Calculate the weight of a vote based on metrics.
-    CalculateVotingWeight,
+    ExecuteProposal {
+        proposal_id: String,
+    },
 
     // Reputation Operations
-    /// Update a member's reputation by a specified value.
-    UpdateReputation(i64),
-    /// Retrieve a member's reputation.
-    GetReputation,
-    /// Transfer reputation between members.
-    TransferReputation,
-    /// Burn (remove) a certain amount of reputation.
-    BurnReputation,
-    /// Mint (create) a certain amount of reputation.
-    MintReputation,
-
-    // Identity Operations
-    /// Verify a Decentralized Identifier (DID).
-    VerifyDID,
-    /// Update a DID document.
-    UpdateDIDDocument,
-    /// Create a new credential.
-    CreateCredential,
-    /// Verify a credential.
-    VerifyCredential,
-    /// Revoke a credential.
-    RevokeCredential,
-
-    // Federation Operations
-    /// Initiate federation process.
-    InitiateFederation,
-    /// Join an existing federation.
-    JoinFederation,
-    /// Leave a federation.
-    LeaveFederation,
-    /// Synchronize federation state.
-    SyncFederationState,
-    /// Validate federation action.
-    ValidateFederationAction,
-
-    // Transaction Operations
-    /// Create a new transaction.
-    CreateTransaction,
-    /// Validate a transaction.
-    ValidateTransaction,
-    /// Sign a transaction.
-    SignTransaction,
-    /// Broadcast a transaction.
-    BroadcastTransaction,
+    /// Update a member's reputation by a specific amount.
+    UpdateReputation {
+        target: String,
+        amount: i64,
+        reason: String,
+        context: String,
+    },
+    /// Get the current reputation of a member.
+    GetReputation {
+        target: String,
+    },
+    /// Burn (remove) reputation from a member.
+    BurnReputation {
+        amount: i64,
+        reason: String,
+    },
 
     // Relationship Operations
-    /// Record a contribution with impact story
+    /// Record a contribution with impact story.
     RecordContribution {
         description: String,
         impact_story: String,
         context: String,
         tags: Vec<String>,
     },
-    /// Record mutual aid interaction
+    /// Record mutual aid interaction between members.
     RecordMutualAid {
-        description: String,
         receiver: String,
+        description: String,
         impact_story: Option<String>,
         reciprocity_notes: Option<String>,
+        tags: Vec<String>,
     },
-    /// Update relationship between members
+    /// Update relationship between members.
     UpdateRelationship {
         member_two: String,
         relationship_type: String,
         story: String,
+        interaction: Option<String>,
     },
-    /// Add endorsement to relationship
+    /// Add endorsement to a relationship.
     AddEndorsement {
         to_did: String,
         content: String,
         context: String,
         skills: Vec<String>,
     },
-    /// Record relationship interaction
+    /// Record a relationship interaction.
     RecordInteraction {
         with_did: String,
         description: String,
         impact: Option<String>,
         interaction_type: String,
     },
-    /// Add witness to contribution
-    AddWitness {
-        contribution_id: String,
-        witness_did: String,
+
+    // Identity Operations
+    /// Verify a Decentralized Identifier (DID).
+    VerifyDID {
+        did: String,
     },
-    /// Add feedback to contribution
-    AddFeedback {
-        contribution_id: String,
-        content: String,
-        endorsement_type: String,
+    /// Update a DID document.
+    UpdateDIDDocument {
+        did: String,
+        updates: HashMap<String, String>,
+    },
+    /// Create a new credential.
+    CreateCredential {
+        recipient: String,
+        credential_type: String,
+        claims: HashMap<String, String>,
+    },
+    /// Verify a credential.
+    VerifyCredential {
+        credential_id: String,
+    },
+
+    // Federation Operations
+    /// Initiate a new federation.
+    InitiateFederation {
+        name: String,
+        description: String,
+        rules: Vec<String>,
+        initial_members: Vec<String>,
+    },
+    /// Join an existing federation.
+    JoinFederation {
+        federation_id: String,
+        commitment: Vec<String>,
+    },
+    /// Leave a federation.
+    LeaveFederation {
+        federation_id: String,
+        reason: String,
+    },
+    /// Synchronize federation state.
+    SyncFederationState {
+        federation_id: String,
     },
 
     // System Operations
@@ -6834,7 +6897,10 @@ pub enum OpCode {
     /// Halt execution.
     Halt,
     /// Emit an event.
-    EmitEvent(String),
+    EmitEvent {
+        event_type: String,
+        data: HashMap<String, String>,
+    },
     /// Get current block number.
     GetBlockNumber,
     /// Get current timestamp.
@@ -6863,6 +6929,120 @@ pub enum OpCode {
     // No Operation
     /// No operation (used for padding or delays).
     Nop,
+}
+
+impl OpCode {
+    /// Returns the gas cost of executing this operation
+    pub fn gas_cost(&self) -> u64 {
+        match self {
+            // Stack operations are cheap
+            OpCode::Push(_) | OpCode::Pop | OpCode::Dup | OpCode::Swap => 1,
+            
+            // Arithmetic operations have fixed costs
+            OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div | OpCode::Mod => 2,
+            
+            // Memory operations are more expensive
+            OpCode::Store(_) | OpCode::Load(_) => 5,
+            
+            // Control flow has moderate cost
+            OpCode::Jump(_) | OpCode::JumpIf(_) => 8,
+            
+            // Cooperative operations are expensive
+            OpCode::CreateCooperative { .. } => 1000,
+            OpCode::JoinCooperative { .. } => 500,
+            OpCode::LeaveCooperative { .. } => 200,
+            OpCode::AllocateResource { .. } => 300,
+            OpCode::TransferResource { .. } => 400,
+            
+            // Governance operations have high costs
+            OpCode::CreateProposal { .. } => 1000,
+            OpCode::CastVote { .. } => 100,
+            OpCode::DelegateVotes { .. } => 200,
+            OpCode::ExecuteProposal { .. } => 500,
+            
+            // Reputation operations are moderate
+            OpCode::UpdateReputation { .. } => 200,
+            OpCode::GetReputation { .. } => 50,
+            OpCode::BurnReputation { .. } => 300,
+            
+            // Relationship operations
+            OpCode::RecordContribution { .. } => 200,
+            OpCode::RecordMutualAid { .. } => 150,
+            OpCode::UpdateRelationship { .. } => 100,
+            OpCode::AddEndorsement { .. } => 100,
+            OpCode::RecordInteraction { .. } => 50,
+            
+            // Identity operations are expensive
+            OpCode::VerifyDID { .. } => 300,
+            OpCode::UpdateDIDDocument { .. } => 500,
+            OpCode::CreateCredential { .. } => 400,
+            OpCode::VerifyCredential { .. } => 200,
+            
+            // Federation operations
+            OpCode::InitiateFederation { .. } => 1000,
+            OpCode::JoinFederation { .. } => 500,
+            OpCode::LeaveFederation { .. } => 200,
+            OpCode::SyncFederationState { .. } => 300,
+            
+            // System operations are cheap
+            OpCode::Log(_) => 5,
+            OpCode::Halt => 1,
+            OpCode::EmitEvent { .. } => 10,
+            OpCode::GetBlockNumber | OpCode::GetTimestamp | OpCode::GetCaller => 1,
+            
+            // Basic operations are very cheap
+            OpCode::Equal | OpCode::NotEqual | OpCode::GreaterThan | OpCode::LessThan => 1,
+            OpCode::And | OpCode::Or | OpCode::Not => 1,
+            OpCode::Nop => 1,
+        }
+    }
+
+    /// Returns whether this operation modifies state
+    pub fn is_state_modifying(&self) -> bool {
+        !matches!(self,
+            OpCode::GetReputation { .. } |
+            OpCode::GetBlockNumber |
+            OpCode::GetTimestamp |
+            OpCode::GetCaller |
+            OpCode::Equal |
+            OpCode::NotEqual |
+            OpCode::GreaterThan |
+            OpCode::LessThan |
+            OpCode::Nop
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gas_costs() {
+        // Test basic operations
+        assert_eq!(OpCode::Push(1).gas_cost(), 1);
+        assert_eq!(OpCode::Add.gas_cost(), 2);
+        
+        // Test expensive operations
+        assert_eq!(OpCode::CreateCooperative {
+            name: "test".to_string(),
+            description: "test".to_string(),
+            resources: HashMap::new(),
+            federation_id: None,
+        }.gas_cost(), 1000);
+    }
+
+    #[test]
+    fn test_state_modification() {
+        assert!(!OpCode::GetBlockNumber.is_state_modifying());
+        assert!(OpCode::CreateProposal {
+            title: "test".to_string(),
+            description: "test".to_string(),
+            proposal_type: "test".to_string(),
+            voting_period: 100,
+            required_reputation: 10,
+        }.is_state_modifying());
+    }
 }
 
 ===================
@@ -7848,20 +8028,8 @@ File: ./backend/src/relationship/mod.rs
 //! This module implements the core relationship tracking functionality for ICN,
 //! focusing on human connections, mutual aid, and cooperative bonds rather than
 //! purely transactional interactions.
-//!
-//! The system tracks:
-//! - Contributions with their impact stories and peer verification
-//! - Mutual aid interactions and reciprocity
-//! - Ongoing relationships between members and cooperatives
-//! - Endorsements and skill recognition
-//!
-//! Key principles:
-//! - Emphasize qualitative relationships over quantitative metrics
-//! - Support story-based impact documentation
-//! - Enable peer recognition and verification
-//! - Facilitate mutual aid coordination
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use crate::monitoring::energy::{EnergyAware, EnergyMonitor};
@@ -7870,7 +8038,6 @@ mod types;
 pub use types::RelationshipType;
 
 /// Records a concrete contribution made to the cooperative community.
-/// Focuses on capturing both the action and its impact through storytelling.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Contribution {
     /// DID of the contributing member
@@ -7885,7 +8052,7 @@ pub struct Contribution {
     /// When the contribution occurred
     pub date: DateTime<Utc>,
     
-    /// Context or category of the contribution (e.g., "education", "food-security")
+    /// Context or category of the contribution
     pub context: String,
     
     /// DIDs of members who witnessed or verified the contribution
@@ -7898,7 +8065,6 @@ pub struct Contribution {
     pub tags: Vec<String>,
 }
 
-/// Qualitative feedback on a contribution from community members
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Feedback {
     /// DID of the member providing feedback
@@ -7914,7 +8080,6 @@ pub struct Feedback {
     pub endorsement_type: EndorsementType,
 }
 
-/// Categories of endorsements that can be given
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EndorsementType {
     /// Confirms the contribution occurred as described
@@ -7930,7 +8095,6 @@ pub enum EndorsementType {
     Skill,
 }
 
-/// Documents mutual aid and resource sharing between members
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MutualAidInteraction {
     /// When the interaction occurred
@@ -7955,7 +8119,6 @@ pub struct MutualAidInteraction {
     pub tags: Vec<String>,
 }
 
-/// Represents an ongoing relationship between members
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Relationship {
     /// DID of the first member
@@ -7983,7 +8146,6 @@ pub struct Relationship {
     pub notes: Vec<RelationshipNote>,
 }
 
-/// Records individual interactions within a relationship
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Interaction {
     /// When the interaction occurred
@@ -7999,7 +8161,6 @@ pub struct Interaction {
     pub interaction_type: InteractionType,
 }
 
-/// Categories of interactions between members
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InteractionType {
     /// Working together
@@ -8021,7 +8182,6 @@ pub enum InteractionType {
     Other(String),
 }
 
-/// Endorsement of skills or qualities
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Endorsement {
     /// DID of the endorsing member
@@ -8040,7 +8200,6 @@ pub struct Endorsement {
     pub skills: Vec<String>,
 }
 
-/// Notes about a relationship
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelationshipNote {
     /// DID of the note author
@@ -8056,7 +8215,6 @@ pub struct RelationshipNote {
     pub visibility: Visibility,
 }
 
-/// Visibility levels for relationship notes
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Visibility {
     /// Visible to everyone
@@ -8086,6 +8244,9 @@ pub struct RelationshipSystem {
     /// Internal trust scores for security validation
     /// Not exposed to users - used only for system security
     security_trust_scores: HashMap<String, i64>,
+    
+    /// Cached member validation info
+    valid_members: HashSet<String>,
 }
 
 impl RelationshipSystem {
@@ -8096,6 +8257,7 @@ impl RelationshipSystem {
             mutual_aid: Vec::new(),
             relationships: HashMap::new(),
             security_trust_scores: HashMap::new(),
+            valid_members: HashSet::new(),
         }
     }
 
@@ -8115,31 +8277,33 @@ impl RelationshipSystem {
 
     /// Records mutual aid interaction between members
     pub fn record_mutual_aid(&mut self, interaction: MutualAidInteraction) -> Result<(), String> {
+        // Validate both members
         if !self.is_valid_member(&interaction.provider_did) || 
            !self.is_valid_member(&interaction.receiver_did) {
             return Err("Invalid member DID".to_string());
         }
 
-        // Update relationship if it exists
+        // Update relationship
         self.update_or_create_relationship(
             &interaction.provider_did,
             &interaction.receiver_did,
             &interaction.description,
         );
 
-        // Record the interaction
+        // Record interaction
         self.mutual_aid.push(interaction);
         Ok(())
     }
 
     /// Creates or updates a relationship between members
     pub fn update_relationship(&mut self, relationship: Relationship) -> Result<(), String> {
+        // Make relationship key consistent
         let key = self.make_relationship_key(
             &relationship.member_one,
             &relationship.member_two
         );
         
-        // Validate both members exist
+        // Validate members
         if !self.is_valid_member(&relationship.member_one) || 
            !self.is_valid_member(&relationship.member_two) {
             return Err("Invalid member DID".to_string());
@@ -8168,39 +8332,39 @@ impl RelationshipSystem {
 
     /// Gets member's contribution history with impact stories
     pub fn get_member_contributions(&self, did: &str) -> Vec<&Contribution> {
-        self.contributions
-            .iter()
+        self.contributions.iter()
             .filter(|c| c.contributor_did == did)
             .collect()
     }
 
     /// Gets mutual aid history for a member
     pub fn get_mutual_aid_history(&self, did: &str) -> Vec<&MutualAidInteraction> {
-        self.mutual_aid
-            .iter()
+        self.mutual_aid.iter()
             .filter(|m| m.provider_did == did || m.receiver_did == did)
             .collect()
     }
 
     /// Gets all relationships for a member
     pub fn get_member_relationships(&self, did: &str) -> Vec<&Relationship> {
-        self.relationships
-            .values()
+        self.relationships.values()
             .filter(|r| r.member_one == did || r.member_two == did)
             .collect()
+    }
+
+    /// Register a valid member DID
+    pub fn register_member(&mut self, did: String) {
+        self.valid_members.insert(did);
     }
 
     // Internal helper methods
 
     /// Validates that a member exists in the system
-    fn is_valid_member(&self, _did: &str) -> bool {
-        // In a real implementation, this would check against your identity system
-        true // Simplified for example
+    fn is_valid_member(&self, did: &str) -> bool {
+        self.valid_members.contains(did)
     }
 
     /// Creates a consistent key for relationships regardless of member order
     fn make_relationship_key(&self, member_one: &str, member_two: &str) -> (String, String) {
-        // Ensure consistent ordering
         if member_one < member_two {
             (member_one.to_string(), member_two.to_string())
         } else {
@@ -8210,8 +8374,7 @@ impl RelationshipSystem {
 
     /// Updates internal security score
     fn update_security_score(&mut self, did: &str, amount: i64) {
-        let score = self.security_trust_scores.entry(did.to_string()).or_insert(0);
-        *score += amount;
+        *self.security_trust_scores.entry(did.to_string()).or_insert(0) += amount;
     }
 
     /// Creates or updates a relationship based on an interaction
@@ -8224,12 +8387,13 @@ impl RelationshipSystem {
         let key = self.make_relationship_key(member_one, member_two);
         
         if let Some(relationship) = self.relationships.get_mut(&key) {
-            relationship.interactions.push(Interaction {
+            let interaction = Interaction {
                 date: Utc::now(),
                 description: context.to_string(),
                 impact: None,
                 interaction_type: InteractionType::ResourceExchange,
-            });
+            };
+            relationship.interactions.push(interaction);
         } else {
             let new_relationship = Relationship {
                 member_one: member_one.to_string(),
@@ -8251,7 +8415,6 @@ impl RelationshipSystem {
     }
 }
 
-// Implement the energy awareness trait
 impl EnergyAware for RelationshipSystem {
     fn record_energy_metrics(&self, monitor: &EnergyMonitor) {
         // Record basic operations
@@ -8264,6 +8427,71 @@ impl EnergyAware for RelationshipSystem {
         // Record contribution operations
         let contributions_size = (self.contributions.len() * std::mem::size_of::<Contribution>()) as u64;
         monitor.record_memory_operation(contributions_size);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_system() -> RelationshipSystem {
+        let mut system = RelationshipSystem::new();
+        system.register_member("test_did".to_string());
+        system.register_member("test_did2".to_string());
+        system
+    }
+
+    #[test]
+    fn test_record_contribution() {
+        let mut system = setup_test_system();
+        
+        let contribution = Contribution {
+            contributor_did: "test_did".to_string(),
+            description: "Test contribution".to_string(),
+            impact_story: "Made an impact".to_string(),
+            date: Utc::now(),
+            context: "test".to_string(),
+            witnesses: vec![],
+            feedback: vec![],
+            tags: vec!["test".to_string()],
+        };
+
+        assert!(system.record_contribution(contribution).is_ok());
+    }
+
+    #[test]
+    fn test_mutual_aid() {
+        let mut system = setup_test_system();
+        
+        let interaction = MutualAidInteraction {
+            date: Utc::now(),
+            provider_did: "test_did".to_string(),
+            receiver_did: "test_did2".to_string(),
+            description: "Helped with project".to_string(),
+            impact_story: Some("Great collaboration".to_string()),
+            reciprocity_notes: None,
+            tags: vec!["help".to_string()],
+        };
+
+        assert!(system.record_mutual_aid(interaction).is_ok());
+    }
+
+    #[test]
+    fn test_invalid_member() {
+        let mut system = setup_test_system();
+        
+        let contribution = Contribution {
+            contributor_did: "invalid_did".to_string(),
+            description: "Test".to_string(),
+            impact_story: "Test".to_string(),
+            date: Utc::now(),
+            context: "test".to_string(),
+            witnesses: vec![],
+            feedback: vec![],
+            tags: vec![],
+        };
+
+        assert!(system.record_contribution(contribution).is_err());
     }
 }
 

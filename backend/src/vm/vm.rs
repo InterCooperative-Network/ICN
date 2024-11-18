@@ -11,8 +11,8 @@ use crate::vm::operations::{
     RelationshipOperation,
     MemoryOperation,
 };
-use crate::relationship::RelationshipType;
 use crate::blockchain::Block;
+use std::sync::atomic::AtomicU64;
 
 /// Virtual Machine implementation for executing cooperative operations
 pub struct VM {
@@ -27,7 +27,7 @@ pub struct VM {
 impl VM {
     /// Creates a new VM instance
     pub fn new(instruction_limit: usize, reputation_context: HashMap<String, i64>) -> Self {
-        let mut state = VMState {
+        let state = VMState {
             stack: Vec::new(),
             memory: HashMap::new(),
             events: Vec::new(),
@@ -38,7 +38,7 @@ impl VM {
             timestamp: 1000,
             permissions: vec![],
             memory_limit: 1024 * 1024, // 1MB default limit
-            memory_address_counter: std::sync::atomic::AtomicU64::new(0),
+            memory_address_counter: AtomicU64::new(0),
         };
         
         VM {
@@ -96,13 +96,29 @@ impl VM {
             OpCode::Mod => ArithmeticOperation::Mod.execute(&mut self.state),
 
             OpCode::Store(key) => {
-                let request = MemoryOperation::AllocationRequest {
+                // Create allocation request for memory operation
+                let allocation = MemoryOperation::Allocate {
                     size: 64,
                     segment_type: MemoryOperation::MemorySegment::Scratch,
                     federation_id: None,
                     persistent: false,
                 };
-                MemoryOperation::Allocate { request }.execute(&mut self.state)
+                allocation.execute(&mut self.state)?;
+                
+                // Store the key-value pair
+                if let Some(value) = self.state.stack.pop() {
+                    self.state.memory.insert(key.clone(), value);
+                }
+                Ok(())
+            },
+
+            OpCode::Load(key) => {
+                if let Some(&value) = self.state.memory.get(key) {
+                    self.state.stack.push(value);
+                    Ok(())
+                } else {
+                    Err(VMError::InvalidMemoryAccess)
+                }
             },
 
             OpCode::RecordContribution { description, impact_story, context, tags } => {
@@ -114,22 +130,22 @@ impl VM {
                 }.execute(&mut self.state)
             },
 
-            OpCode::RecordMutualAid { receiver, description, impact_story, reciprocity_notes } => {
+            OpCode::RecordMutualAid { receiver, description, impact_story, reciprocity_notes, tags } => {
                 RelationshipOperation::RecordMutualAid {
                     receiver_did: receiver.clone(),
                     description: description.clone(),
                     impact_story: impact_story.clone(),
                     reciprocity_notes: reciprocity_notes.clone(),
-                    tags: vec![],
+                    tags: tags.clone(),
                 }.execute(&mut self.state)
             },
 
-            OpCode::UpdateRelationship { member_two, relationship_type, story } => {
+            OpCode::UpdateRelationship { member_two, relationship_type, story, interaction } => {
                 RelationshipOperation::UpdateRelationship {
                     member_two: member_two.clone(),
                     relationship_type: relationship_type.clone(),
                     story: story.clone(),
-                    interaction: None,
+                    interaction: interaction.clone(),
                 }.execute(&mut self.state)
             },
 
@@ -142,14 +158,18 @@ impl VM {
             OpCode::Halt => SystemOperation::Halt.execute(&mut self.state),
             OpCode::Nop => Ok(()),
             
-            _ => Err(VMError::InvalidOperand),
+            op => Err(VMError::InvalidOperand(format!("Unknown opcode: {:?}", op))),
         }
     }
 
     /// Validates a contract before execution
     fn validate_contract(&self, contract: &Contract) -> VMResult<bool> {
         // Check reputation requirement
-        if self.state.get_reputation() < contract.required_reputation {
+        let reputation = self.state.reputation_context.get(&self.state.caller_did)
+            .copied()
+            .unwrap_or(0);
+            
+        if reputation < contract.required_reputation {
             return Ok(false);
         }
 
