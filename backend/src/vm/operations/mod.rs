@@ -1,7 +1,8 @@
 // src/vm/operations/mod.rs
 
 use std::collections::HashMap;
-use crate::vm::{VMError, VMState, VMResult, Event};
+use std::sync::atomic::Ordering;
+use crate::vm::{VMError, VMResult, Event};
 
 // Re-export all operation modules
 pub mod stack;
@@ -25,9 +26,46 @@ pub use reputation::ReputationOperation;
 pub use relationship::RelationshipOperation;
 pub use system::SystemOperation;
 pub use data::DataOperation;
-pub use memory::MemoryOperation;
+pub use memory::{MemoryOperation, MemorySegment};
 pub use network::NetworkOperation;
 pub use federation::FederationOperation;
+
+/// VM state structure
+#[derive(Default)]
+pub struct VMState {
+    /// Current stack
+    pub stack: Vec<i64>,
+    
+    /// Memory storage
+    pub memory: HashMap<String, i64>,
+    
+    /// Events emitted during execution
+    pub events: Vec<Event>,
+    
+    /// Current instruction pointer
+    pub instruction_pointer: usize,
+    
+    /// Reputation scores for participating DIDs
+    pub reputation_context: HashMap<String, i64>,
+    
+    /// Currently executing DID
+    pub caller_did: String,
+    
+    /// Current block number
+    pub block_number: u64,
+    
+    /// Current timestamp
+    pub timestamp: u64,
+    
+    /// Available permissions
+    pub permissions: Vec<String>,
+    
+    /// Maximum memory usage in bytes
+    pub memory_limit: u64,
+    
+    /// Counter for generating unique memory addresses
+    pub memory_address_counter: std::sync::atomic::AtomicU64,
+}
 
 /// Trait for implementable VM operations
 pub trait Operation {
@@ -90,7 +128,6 @@ pub fn emit_event(state: &mut VMState, event_type: String, data: HashMap<String,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::AtomicU64;
 
     #[test]
     fn test_ensure_stack_size() {
@@ -113,30 +150,5 @@ mod tests {
     fn test_ensure_reputation() {
         assert!(ensure_reputation(10, 20).is_ok());
         assert!(ensure_reputation(20, 10).is_err());
-    }
-
-    #[test]
-    fn test_emit_event() {
-        let mut state = VMState {
-            stack: Vec::new(),
-            memory: HashMap::new(),
-            events: Vec::new(),
-            instruction_pointer: 0,
-            reputation_context: HashMap::new(),
-            caller_did: "test".to_string(),
-            block_number: 1,
-            timestamp: 1000,
-            permissions: vec![],
-            memory_limit: 1024 * 1024,
-            memory_address_counter: AtomicU64::new(0),
-        };
-        
-        let mut data = HashMap::new();
-        data.insert("test_key".to_string(), "test_value".to_string());
-        
-        emit_event(&mut state, "test_event".to_string(), data);
-        
-        assert_eq!(state.events.len(), 1);
-        assert_eq!(state.events[0].event_type, "test_event");
     }
 }

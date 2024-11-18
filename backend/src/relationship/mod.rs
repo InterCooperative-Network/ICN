@@ -3,20 +3,8 @@
 //! This module implements the core relationship tracking functionality for ICN,
 //! focusing on human connections, mutual aid, and cooperative bonds rather than
 //! purely transactional interactions.
-//!
-//! The system tracks:
-//! - Contributions with their impact stories and peer verification
-//! - Mutual aid interactions and reciprocity
-//! - Ongoing relationships between members and cooperatives
-//! - Endorsements and skill recognition
-//!
-//! Key principles:
-//! - Emphasize qualitative relationships over quantitative metrics
-//! - Support story-based impact documentation
-//! - Enable peer recognition and verification
-//! - Facilitate mutual aid coordination
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use crate::monitoring::energy::{EnergyAware, EnergyMonitor};
@@ -25,7 +13,6 @@ mod types;
 pub use types::RelationshipType;
 
 /// Records a concrete contribution made to the cooperative community.
-/// Focuses on capturing both the action and its impact through storytelling.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Contribution {
     /// DID of the contributing member
@@ -40,7 +27,7 @@ pub struct Contribution {
     /// When the contribution occurred
     pub date: DateTime<Utc>,
     
-    /// Context or category of the contribution (e.g., "education", "food-security")
+    /// Context or category of the contribution
     pub context: String,
     
     /// DIDs of members who witnessed or verified the contribution
@@ -53,7 +40,6 @@ pub struct Contribution {
     pub tags: Vec<String>,
 }
 
-/// Qualitative feedback on a contribution from community members
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Feedback {
     /// DID of the member providing feedback
@@ -69,7 +55,6 @@ pub struct Feedback {
     pub endorsement_type: EndorsementType,
 }
 
-/// Categories of endorsements that can be given
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EndorsementType {
     /// Confirms the contribution occurred as described
@@ -85,7 +70,6 @@ pub enum EndorsementType {
     Skill,
 }
 
-/// Documents mutual aid and resource sharing between members
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MutualAidInteraction {
     /// When the interaction occurred
@@ -110,7 +94,6 @@ pub struct MutualAidInteraction {
     pub tags: Vec<String>,
 }
 
-/// Represents an ongoing relationship between members
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Relationship {
     /// DID of the first member
@@ -138,7 +121,6 @@ pub struct Relationship {
     pub notes: Vec<RelationshipNote>,
 }
 
-/// Records individual interactions within a relationship
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Interaction {
     /// When the interaction occurred
@@ -154,7 +136,6 @@ pub struct Interaction {
     pub interaction_type: InteractionType,
 }
 
-/// Categories of interactions between members
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InteractionType {
     /// Working together
@@ -176,7 +157,6 @@ pub enum InteractionType {
     Other(String),
 }
 
-/// Endorsement of skills or qualities
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Endorsement {
     /// DID of the endorsing member
@@ -195,7 +175,6 @@ pub struct Endorsement {
     pub skills: Vec<String>,
 }
 
-/// Notes about a relationship
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelationshipNote {
     /// DID of the note author
@@ -211,7 +190,6 @@ pub struct RelationshipNote {
     pub visibility: Visibility,
 }
 
-/// Visibility levels for relationship notes
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Visibility {
     /// Visible to everyone
@@ -241,6 +219,9 @@ pub struct RelationshipSystem {
     /// Internal trust scores for security validation
     /// Not exposed to users - used only for system security
     security_trust_scores: HashMap<String, i64>,
+    
+    /// Cached member validation info
+    valid_members: HashSet<String>,
 }
 
 impl RelationshipSystem {
@@ -251,6 +232,7 @@ impl RelationshipSystem {
             mutual_aid: Vec::new(),
             relationships: HashMap::new(),
             security_trust_scores: HashMap::new(),
+            valid_members: HashSet::new(),
         }
     }
 
@@ -270,31 +252,33 @@ impl RelationshipSystem {
 
     /// Records mutual aid interaction between members
     pub fn record_mutual_aid(&mut self, interaction: MutualAidInteraction) -> Result<(), String> {
+        // Validate both members
         if !self.is_valid_member(&interaction.provider_did) || 
            !self.is_valid_member(&interaction.receiver_did) {
             return Err("Invalid member DID".to_string());
         }
 
-        // Update relationship if it exists
+        // Update relationship
         self.update_or_create_relationship(
             &interaction.provider_did,
             &interaction.receiver_did,
             &interaction.description,
         );
 
-        // Record the interaction
+        // Record interaction
         self.mutual_aid.push(interaction);
         Ok(())
     }
 
     /// Creates or updates a relationship between members
     pub fn update_relationship(&mut self, relationship: Relationship) -> Result<(), String> {
+        // Make relationship key consistent
         let key = self.make_relationship_key(
             &relationship.member_one,
             &relationship.member_two
         );
         
-        // Validate both members exist
+        // Validate members
         if !self.is_valid_member(&relationship.member_one) || 
            !self.is_valid_member(&relationship.member_two) {
             return Err("Invalid member DID".to_string());
@@ -323,39 +307,39 @@ impl RelationshipSystem {
 
     /// Gets member's contribution history with impact stories
     pub fn get_member_contributions(&self, did: &str) -> Vec<&Contribution> {
-        self.contributions
-            .iter()
+        self.contributions.iter()
             .filter(|c| c.contributor_did == did)
             .collect()
     }
 
     /// Gets mutual aid history for a member
     pub fn get_mutual_aid_history(&self, did: &str) -> Vec<&MutualAidInteraction> {
-        self.mutual_aid
-            .iter()
+        self.mutual_aid.iter()
             .filter(|m| m.provider_did == did || m.receiver_did == did)
             .collect()
     }
 
     /// Gets all relationships for a member
     pub fn get_member_relationships(&self, did: &str) -> Vec<&Relationship> {
-        self.relationships
-            .values()
+        self.relationships.values()
             .filter(|r| r.member_one == did || r.member_two == did)
             .collect()
+    }
+
+    /// Register a valid member DID
+    pub fn register_member(&mut self, did: String) {
+        self.valid_members.insert(did);
     }
 
     // Internal helper methods
 
     /// Validates that a member exists in the system
-    fn is_valid_member(&self, _did: &str) -> bool {
-        // In a real implementation, this would check against your identity system
-        true // Simplified for example
+    fn is_valid_member(&self, did: &str) -> bool {
+        self.valid_members.contains(did)
     }
 
     /// Creates a consistent key for relationships regardless of member order
     fn make_relationship_key(&self, member_one: &str, member_two: &str) -> (String, String) {
-        // Ensure consistent ordering
         if member_one < member_two {
             (member_one.to_string(), member_two.to_string())
         } else {
@@ -365,8 +349,7 @@ impl RelationshipSystem {
 
     /// Updates internal security score
     fn update_security_score(&mut self, did: &str, amount: i64) {
-        let score = self.security_trust_scores.entry(did.to_string()).or_insert(0);
-        *score += amount;
+        *self.security_trust_scores.entry(did.to_string()).or_insert(0) += amount;
     }
 
     /// Creates or updates a relationship based on an interaction
@@ -379,12 +362,13 @@ impl RelationshipSystem {
         let key = self.make_relationship_key(member_one, member_two);
         
         if let Some(relationship) = self.relationships.get_mut(&key) {
-            relationship.interactions.push(Interaction {
+            let interaction = Interaction {
                 date: Utc::now(),
                 description: context.to_string(),
                 impact: None,
                 interaction_type: InteractionType::ResourceExchange,
-            });
+            };
+            relationship.interactions.push(interaction);
         } else {
             let new_relationship = Relationship {
                 member_one: member_one.to_string(),
@@ -406,7 +390,6 @@ impl RelationshipSystem {
     }
 }
 
-// Implement the energy awareness trait
 impl EnergyAware for RelationshipSystem {
     fn record_energy_metrics(&self, monitor: &EnergyMonitor) {
         // Record basic operations
@@ -419,5 +402,70 @@ impl EnergyAware for RelationshipSystem {
         // Record contribution operations
         let contributions_size = (self.contributions.len() * std::mem::size_of::<Contribution>()) as u64;
         monitor.record_memory_operation(contributions_size);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_system() -> RelationshipSystem {
+        let mut system = RelationshipSystem::new();
+        system.register_member("test_did".to_string());
+        system.register_member("test_did2".to_string());
+        system
+    }
+
+    #[test]
+    fn test_record_contribution() {
+        let mut system = setup_test_system();
+        
+        let contribution = Contribution {
+            contributor_did: "test_did".to_string(),
+            description: "Test contribution".to_string(),
+            impact_story: "Made an impact".to_string(),
+            date: Utc::now(),
+            context: "test".to_string(),
+            witnesses: vec![],
+            feedback: vec![],
+            tags: vec!["test".to_string()],
+        };
+
+        assert!(system.record_contribution(contribution).is_ok());
+    }
+
+    #[test]
+    fn test_mutual_aid() {
+        let mut system = setup_test_system();
+        
+        let interaction = MutualAidInteraction {
+            date: Utc::now(),
+            provider_did: "test_did".to_string(),
+            receiver_did: "test_did2".to_string(),
+            description: "Helped with project".to_string(),
+            impact_story: Some("Great collaboration".to_string()),
+            reciprocity_notes: None,
+            tags: vec!["help".to_string()],
+        };
+
+        assert!(system.record_mutual_aid(interaction).is_ok());
+    }
+
+    #[test]
+    fn test_invalid_member() {
+        let mut system = setup_test_system();
+        
+        let contribution = Contribution {
+            contributor_did: "invalid_did".to_string(),
+            description: "Test".to_string(),
+            impact_story: "Test".to_string(),
+            date: Utc::now(),
+            context: "test".to_string(),
+            witnesses: vec![],
+            feedback: vec![],
+            tags: vec![],
+        };
+
+        assert!(system.record_contribution(contribution).is_err());
     }
 }
