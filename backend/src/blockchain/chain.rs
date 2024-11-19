@@ -405,7 +405,7 @@ mod tests {
         assert_eq!(blockchain.pending_transactions.len(), 0);
     }
 
-    #[tokio::test]
+#[tokio::test]
     async fn test_transaction_processing() {
         let mut blockchain = setup_test_blockchain().await;
         
