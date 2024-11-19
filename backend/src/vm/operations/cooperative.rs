@@ -2,8 +2,6 @@
 
 use std::collections::HashMap;
 use super::{Operation, VMState, VMResult, ensure_permissions, ensure_reputation, emit_event};
-use crate::vm::cooperative_metadata::CooperativeMetadata;
-use std::sync::atomic::AtomicU64;
 
 /// Types of operations that can be performed on cooperatives
 pub enum CooperativeOperation {

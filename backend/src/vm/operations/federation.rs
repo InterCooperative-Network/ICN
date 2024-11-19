@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 use super::{Operation, VMState, VMResult, ensure_permissions, ensure_reputation, emit_event};
-use crate::vm::VMError;
 
 /// Types of federation that can be formed
 #[derive(Debug, Clone, PartialEq)]
