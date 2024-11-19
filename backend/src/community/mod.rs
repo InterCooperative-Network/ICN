@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use crate::claims::Claim;
-use crate::governance::Proposal;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Community {

@@ -25,7 +25,7 @@ pub use vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
 pub use websocket::WebSocketHandler;
 pub use monitoring::energy::{EnergyAware, EnergyMonitor};
 pub use relationship::RelationshipSystem;
-use relationship::{Contribution, MutualAidInteraction, Relationship};
+use relationship::{Contribution, MutualAidInteraction};
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;

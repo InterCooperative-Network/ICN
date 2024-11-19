@@ -7,7 +7,6 @@ use crate::vm::operations::{
     ArithmeticOperation,
     SystemOperation,
     RelationshipOperation,
-    MemoryOperation,
 };
 use std::sync::atomic::AtomicU64;
 

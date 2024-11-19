@@ -2,7 +2,6 @@
 
 use super::{Operation, VMState, VMResult, ensure_stack_size};
 use crate::vm::VMError;
-use std::collections::HashMap;
 
 /// Arithmetic operations for the VM
 #[derive(Debug, Clone)]
