@@ -2,16 +2,59 @@ site_name: "ICN Documentation"
 theme:
   name: material
 
+plugins:
+  - search
+  - mermaid2
+
 nav:
-  - Home: index.md
+  - Home: README.md
+  - API Documentation: 
+      - Overview: api/index.md
   - Architecture:
       - Overview: architecture/overview.md
-      - Backend: architecture/backend.md
+      - Backend: architecture/backend/backend.md
       - Diagrams:
-          - Component Diagram: architecture/diagrams/component.md
+          - Component Diagram: architecture/diagrams/component/component.md
+          - System Diagram: architecture/diagrams/system/system.md
   - Specifications:
-      - Reputation System: specifications/core/2024-11-01-reputation-system.md
+      - API Governance: specifications/api/governance-api.md
+      - Audit System: specifications/core/audit-system.md
+      - Blockchain System: specifications/core/blockchain-system.md
+      - Consensus System: specifications/core/consensus-system.md
+      - Federation System: specifications/core/federation-system.md
+      - Governance System: specifications/core/governance-system.md
+      - Identity System: specifications/core/identity-system.md
+      - Proof of Cooperation: specifications/core/proof-of-cooperation.md
+      - Reputation System: specifications/core/reputation-system.md
+      - Resource Allocation: specifications/core/resource-allocation-system.md
+      - Resource Sharing: specifications/core/resource-sharing-system.md
+      - Transaction System: specifications/core/transaction-system.md
+      - VM System: specifications/core/vm-system.md
+      - Voting System: specifications/core/voting-system.md
   - Development:
+      - Contributing: development/guides/contributing.md
       - Documentation Standards: development/guides/documentation-standards.md
-  - User:
-      - User Guide: user/guides/
+      - Development Setup: development/setup/development-setup-guide.md
+      - Test Strategy: development/guides/test-strategy.md
+      - CI/CD Pipeline: development/plans/ci_cd-pipeline.md
+      - Development Roadmap: development/plans/development-roadmap.md
+      - Testing Roadmap: development/plans/testing-roadmap.md
+  - User Documentation:
+      - User Guides:
+          - Onboarding Guide: user/guides/onboarding-guide.md
+          - Resource Management Guide: user/guides/resource-management.md
+      - Tutorials: user/tutorials/index.md
+  - Guides:
+      - Getting Started: guides/getting-started.md
+      - Governance Guide: guides/governance-guide.md
+      - Reputation Management: guides/reputation-management.md
+  - Templates:
+      - API Template: templates/api-template.md
+      - Core Component Template: templates/core-component-template.md
+      - Protocol Template: templates/protocol-template.md
+
+docs_dir: "."
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/your-repo

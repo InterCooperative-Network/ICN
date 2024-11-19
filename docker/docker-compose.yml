@@ -3,17 +3,17 @@ version: '3.8'
 services:
   backend:
     build:
-      context: ../backend                        # Path to the backend source with Cargo.toml
-      dockerfile: ../docker/backend.Dockerfile   # Path to backend Dockerfile in `docker`
+      context: ../backend                        
+      dockerfile: ../docker/backend.Dockerfile   
     ports:
-      - "8081:8081"  # WebSocket
+      - "8081:8081"  
     environment:
       - DATABASE_URL=postgres://icnuser:icnpass@db:5432/icndb
 
   frontend:
     build:
-      context: ../frontend                       # Path to frontend source code
-      dockerfile: ../docker/frontend.Dockerfile  # Path to frontend Dockerfile in `docker`
+      context: ../frontend                       
+      dockerfile: ../docker/frontend.Dockerfile  
     ports:
       - "3000:3000"
 
@@ -29,8 +29,8 @@ services:
   docs:
     image: squidfunk/mkdocs-material:latest
     volumes:
-      - ../docs:/docs
+      - ../docs:/docs          
     ports:
       - "8000:8000"
     working_dir: /docs
-    command: serve -a 0.0.0.0:8000
+    command: /bin/sh -c "pip install mkdocs-mermaid2-plugin && mkdocs serve -a 0.0.0.0:8000"
