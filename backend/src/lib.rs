@@ -24,7 +24,8 @@ pub use vm::{VM, Contract, ExecutionContext};
 pub use vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
 pub use websocket::WebSocketHandler;
 pub use monitoring::energy::{EnergyAware, EnergyMonitor};
-pub use relationship::{Contribution, MutualAidInteraction, RelationshipSystem};
+pub use relationship::RelationshipSystem;
+use relationship::{Contribution, MutualAidInteraction, Relationship};
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
@@ -302,7 +303,7 @@ impl CooperativeManager {
     pub async fn create_cooperative(
         &self, 
         creator_did: String, 
-        _name: String,
+        name: String,
         purpose: String
     ) -> Result<String, String> {
         let metadata = CooperativeMetadata {
