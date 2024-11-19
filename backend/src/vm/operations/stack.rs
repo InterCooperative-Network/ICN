@@ -1,9 +1,7 @@
 // src/vm/operations/stack.rs
 
-use std::collections::HashMap;
 use super::{Operation, VMState, VMResult, ensure_stack_size};
 use crate::vm::VMError;
-use std::sync::atomic::AtomicU64;
 
 /// Stack manipulation operations
 pub enum StackOperation {
@@ -126,7 +124,7 @@ mod tests {
             timestamp: 1000,
             permissions: vec![],
             memory_limit: 1024 * 1024, // 1MB default limit
-            memory_address_counter: AtomicU64::new(0),
+            memory_address_counter: std::sync::atomic::AtomicU64::new(0),
         }
     }
 
@@ -197,5 +195,27 @@ mod tests {
         let op = StackOperation::Clear;
         assert!(op.execute(&mut state).is_ok());
         assert!(state.stack.is_empty());
+    }
+
+    #[test]
+    fn test_stack_overflow() {
+        let mut state = setup_test_state();
+        for i in 0..1024 {
+            state.stack.push(i);
+        }
+        let op = StackOperation::Push(1024);
+        assert!(matches!(op.execute(&mut state), Err(VMError::StackOverflow)));
+    }
+
+    #[test]
+    fn test_resource_costs() {
+        let push_op = StackOperation::Push(1);
+        assert_eq!(push_op.resource_cost(), 1);
+
+        let rotate_op = StackOperation::Rotate(3);
+        assert_eq!(rotate_op.resource_cost(), 4); // 1 + 3
+
+        let dupn_op = StackOperation::DupN(2);
+        assert_eq!(dupn_op.resource_cost(), 3); // 1 + 2
     }
 }
