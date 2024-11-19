@@ -1,4 +1,4 @@
-Project Docs Dump - Generated Mon Nov 18 07:53:55 PM UTC 2024
+Project Docs Dump - Generated Tue Nov 19 02:39:40 AM UTC 2024
 ======================================
 
 Docs Tree:
@@ -6,33 +6,47 @@ Docs Tree:
 ./docs
 ├── INDEX.md
 ├── README.md
+├── api
+│   └── index.md
 ├── architecture
-│   ├── backend.md
-│   ├── diagrams
-│   │   ├── component
-│   │   │   └── component.md
-│   │   └── component.md
-│   └── overview.md
+│   └── diagrams
+│       ├── images
+│       │   └── component-diagram.png
+│       └── mermaid
+│           └── component-diagram.mermaid
 ├── development
-│   └── guides
-│       └── documentation-standards.md
-├── docs
-│   └── index.md
+│   ├── guides
+│   │   ├── contributing.md
+│   │   ├── documentation-standards.md
+│   │   └── test-strategy.md
+│   ├── plans
+│   │   ├── ci_cd-pipeline.md
+│   │   ├── development-roadmap.md
+│   │   └── testing-roadmap.md
+│   └── setup
+│       └── development-setup-guide.md
 ├── guides
-│   └── index.md
+│   ├── getting-started.md
+│   ├── governance-guide.md
+│   └── reputation-management.md
 ├── mkdocs.yml
 ├── specifications
 │   ├── api
 │   │   └── governance-api.md
 │   └── core
-│       ├── 2024-11-01-reputation-system.md
+│       ├── audit-system.md
 │       ├── blockchain-system.md
+│       ├── consensus-system.md
+│       ├── federation-system.md
 │       ├── governance-system.md
 │       ├── identity-system.md
 │       ├── proof-of-cooperation.md
 │       ├── reputation-system.md
+│       ├── resource-allocation-system.md
+│       ├── resource-sharing-system.md
 │       ├── transaction-system.md
-│       └── vm-system.md
+│       ├── vm-system.md
+│       └── voting-system.md
 ├── templates
 │   ├── api-template.md
 │   ├── core-component-template.md
@@ -43,44 +57,25 @@ Docs Tree:
         ├── onboarding-guide.md
         └── resource-management.md
 
-14 directories, 25 files
+17 directories, 36 files
 
 
 ===================
-File: ./docs/docs/index.md
+File: ./docs/guides/getting-started.md
 ===================
-# Welcome to MkDocs
-
-For full documentation visit [mkdocs.org](https://www.mkdocs.org).
-
-## Commands
-
-* `mkdocs new [dir-name]` - Create a new project.
-* `mkdocs serve` - Start the live-reloading docs server.
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
-
-## Project layout
-
-    mkdocs.yml    # The configuration file.
-    docs/
-        index.md  # The documentation homepage.
-        ...       # Other markdown pages, images and other files.
+# Getting Started
 
 
 ===================
-File: ./docs/guides/index.md
+File: ./docs/guides/reputation-management.md
 ===================
-# User Guides
+# Reputation Management
 
-The following guides provide step-by-step instructions for using the ICN platform effectively.
 
-## Contents
-- [Getting Started](getting-started.md): Introduction to accessing and navigating the ICN platform.
-- [Governance Guide](governance-guide.md): Detailed steps on participating in cooperative governance.
-- [Reputation Management](reputation-management.md): Overview of how reputation influences roles and decision-making.
-
-Additional guides will cover specific ICN features and best practices.
+===================
+File: ./docs/guides/governance-guide.md
+===================
+# Governance Guide
 
 
 ===================
@@ -89,9 +84,36 @@ File: ./docs/INDEX.md
 # Documentation Index
 
 
+## Guide
+
+- [Development Setup Guide](development/setup/development-setup-guide.md) (v1.0.0, draft)
+- [Documentation Standards Guide](development/guides/documentation-standards.md) (v1.0.0, draft)
+- [ICN CI/CD Pipeline Guide](development/plans/ci_cd-pipeline.md) (v1.0.0, draft)
+- [ICN Contribution Guide](development/guides/contributing.md) (v1.0.0, draft)
+- [ICN Development Roadmap](development/plans/development-roadmap.md) (v1.0.0, draft)
+- [ICN Testing Strategy Guide](development/guides/test-strategy.md) (v1.0.0, draft)
+
+## Plan
+
+- [ICN Testing Roadmap](development/plans/testing-roadmap.md) (v1.0.0, draft)
+
+## Api
+
+- [Governance API](specifications/api/governance-api.md) (v1.0.0, draft)
+
 ## Specification
 
-- [Reputation System](specifications/core/2024-11-01-reputation-system.md) (v1.0.0, draft)
+- [Audit System Specification](specifications/core/audit-system.md) (v1.0.0, draft)
+- [Blockchain System](specifications/core/blockchain-system.md) (v1.0.0, draft)
+- [Consensus System Specification](specifications/core/consensus-system.md) (v1.0.0, draft)
+- [Federation System Specification](specifications/core/federation-system.md) (v1.0.0, draft)
+- [Governance System Specification](specifications/core/governance-system.md) (v1.0.0, draft)
+- [Identity System Specification](specifications/core/identity-system.md) (v1.2.0, draft)
+- [Reputation System Specification](specifications/core/reputation-system.md) (v1.0.0, draft)
+- [Resource Allocation System Specification](specifications/core/resource-allocation-system.md) (v1.0.0, draft)
+- [Resource Sharing System Specification](specifications/core/resource-sharing-system.md) (v1.0.0, draft)
+- [Transaction Lifecycle System](specifications/core/transaction-system.md) (v1.0.0, draft)
+- [Voting System Specification](specifications/core/voting-system.md) (v1.0.0, draft)
 
 
 ===================
@@ -168,63 +190,1140 @@ As a cooperative member, you can vote on proposals:
 
 
 ===================
+File: ./docs/api/index.md
+===================
+<EMPTY FILE>
+
+
+===================
 File: ./docs/development/guides/documentation-standards.md
 ===================
-# Documentation Standards
+---
+authors:
+  - Matt Faherty
+date: '2024-11-18'
+status: draft
+title: Documentation Standards Guide
+type: guide
+version: 1.0.0
+---
 
-## File Organization
+# ICN Documentation Standards Guide
 
-- Use appropriate directory for document type
-- Follow naming conventions
-- Include required metadata
+## Overview
 
-## Writing Style
+Effective documentation is crucial for the success of the Inter-Cooperative Network (ICN). It ensures that developers, contributors, and users understand how to use, modify, and extend the system. This guide provides the standards and best practices that all contributors must follow when documenting code, APIs, and other technical details within the ICN project.
 
-- Be clear and concise
-- Include code examples where appropriate
-- Keep documentation up to date
-- Use proper Markdown formatting
+### Purpose
+- **Consistency**: Maintain a consistent style and format across all documentation.
+- **Clarity**: Ensure that all documentation is easy to understand and navigate for both technical and non-technical audiences.
+- **Comprehensiveness**: Provide sufficient information without overwhelming the reader, covering both conceptual and practical aspects.
 
-## Review Process
+## 1. Documentation Types
 
-1. Create new document using tools
-2. Submit for review
-3. Address feedback
-4. Update documentation index
+### 1.1 Code Documentation
+This type refers to inline comments, function headers, and detailed explanations within the source code.
+- **Inline Comments**: Should be used to explain the purpose and flow of complex logic or non-obvious code segments.
+- **Function Headers**: Include a description of the function, input parameters, output values, and any potential exceptions.
 
-## Templates
+#### Example Function Header
+```rust
+/// Calculates the reputation score for a member.
+///
+/// # Arguments
+///
+/// * `did` - The Decentralized Identifier of the member.
+///
+/// # Returns
+///
+/// * `i32` - The computed reputation score.
+///
+/// # Errors
+///
+/// Will return an error if the member does not exist in the database.
+fn calculate_reputation(did: &str) -> Result<i32, String> {
+    // Function implementation here
+}
+```
 
-Use provided templates in `docs/templates/` for new documents.
+### 1.2 API Documentation
+All public-facing APIs must be documented to ensure developers can integrate with ICN effectively.
+- **Endpoint Description**: Provide a summary of what the endpoint does.
+- **Parameters**: List all parameters, including their types, requirements, and descriptions.
+- **Response Structure**: Include examples of both success and error responses.
+- **Authentication**: Specify if authentication is required and what type.
+
+#### Example API Documentation
+```markdown
+### GET /api/v1/resources/{resource_id}
+
+**Description**: Retrieves details for a specific resource.
+
+**Parameters**:
+- `resource_id` (path, required): The ID of the resource to retrieve.
+
+**Response**:
+- **200 OK**:
+  ```json
+  {
+    "resource_id": "abc123",
+    "type": "physical",
+    "availability": "Available",
+    "owner": "did:icn:123456"
+  }
+  ```
+- **404 Not Found**: Resource not found.
+
+**Authentication**: Requires Bearer token.
+```
+
+### 1.3 User Guides
+User guides are written for non-technical users to understand the functionality of ICN services.
+- **Step-by-Step Instructions**: Break down processes into easy-to-follow steps.
+- **Visual Aids**: Where applicable, include diagrams, screenshots, or flowcharts.
+
+### 1.4 Development Guides
+Development guides are aimed at helping developers contribute to ICN.
+- **Environment Setup**: How to configure a local development environment.
+- **Coding Standards**: Details of language-specific standards that developers should adhere to.
+- **Contribution Workflow**: Guide on creating pull requests, writing unit tests, and ensuring code quality.
+
+## 2. Formatting Standards
+
+### 2.1 Markdown Conventions
+- **Headings**: Use heading levels consistently (e.g., `#` for main sections, `##` for subsections).
+- **Code Blocks**: Use triple backticks for code blocks and specify the language where applicable.
+- **Lists**: Use hyphens (`-`) for bullet points and numbers (`1.`) for ordered lists.
+- **Links**: Always use descriptive text for links rather than raw URLs.
+
+#### Example Markdown Structure
+```markdown
+# Introduction
+
+This is a high-level overview of the ICN governance system.
+
+## Features
+- **Democratic Decision-Making**: All members participate in governance.
+- **Transparency**: Decisions are publicly recorded in the audit log.
+```
+
+### 2.2 Naming Conventions
+- **File Names**: Use lowercase letters with hyphens as separators (e.g., `resource-sharing-system.md`).
+- **Variable Names**: Use `snake_case` for variables and function names in Rust, and `camelCase` for JavaScript variables.
+- **Document Titles**: Should be concise, descriptive, and reflect the document’s content.
+
+## 3. Best Practices
+
+### 3.1 Write for Your Audience
+- **Technical Readers**: For developers, provide detailed code explanations, examples, and technical diagrams.
+- **Non-Technical Readers**: For general users, focus on how to achieve tasks without delving into implementation details.
+
+### 3.2 Keep Documentation Up-to-Date
+- Update relevant documentation whenever a code change affects functionality or API behavior.
+- Use version numbers and change logs to track major updates in documents.
+
+### 3.3 Use Active Voice
+Write in the active voice to keep sentences clear and direct.
+
+**Example**:
+- **Passive**: "The resource is allocated by the system."
+- **Active**: "The system allocates the resource."
+
+### 3.4 Short Paragraphs and Bullet Points
+Use short paragraphs, bullet points, and numbered lists to improve readability. Avoid large blocks of text.
+
+## 4. Review Process
+
+### 4.1 Peer Review
+All new documentation should go through a peer review process before being merged. Reviewers should verify:
+- **Clarity**: Is the information presented in a clear and understandable manner?
+- **Accuracy**: Are the technical details correct?
+- **Consistency**: Does the documentation conform to the standards outlined in this guide?
+
+### 4.2 Automated Linting Tools
+Use tools like `markdownlint` to check for common formatting issues in Markdown files.
+- **Install with npm**: `npm install -g markdownlint-cli`
+- **Run Lint Check**: `markdownlint *.md`
+
+## 5. Tools and Resources
+
+### 5.1 Diagram Tools
+- **Mermaid**: Use for creating system diagrams and flowcharts in `.mermaid` format.
+- **Mermaid**: Preferred for creating sequence diagrams and other technical visualizations within code.
+
+### 5.2 Writing Aids
+- **Grammarly**: Use for grammar and spelling checks.
+- **Vale**: A command-line tool to enforce style rules and ensure consistency across documentation.
+
+### 5.3 Markdown Editors
+- **Typora**: A popular WYSIWYG editor for Markdown.
+- **Visual Studio Code**: With extensions like `Markdown All in One` for a seamless writing experience.
+
+## Appendix
+
+### A. Additional Resources
+- **ICN Contribution Guide**: [Contribution Guide](./contributing.md)
+- **Rust API Guidelines**: [https://rust-lang.github.io/api-guidelines/](https://rust-lang.github.io/api-guidelines/)
+- **Markdown Guide**: [https://www.markdownguide.org/](https://www.markdownguide.org/)
+
+
+
+===================
+File: ./docs/development/guides/contributing.md
+===================
+---
+authors:
+  - Matt Faherty
+date: '2024-11-18'
+status: draft
+title: ICN Contribution Guide
+type: guide
+version: 1.0.0
+---
+
+# ICN Contribution Guide
+
+## Overview
+
+Thank you for your interest in contributing to the Inter-Cooperative Network (ICN)! Contributions are essential to the growth and success of ICN, and we welcome community members of all experience levels to get involved. This guide outlines how you can start contributing, coding standards, the contribution workflow, and best practices to ensure a smooth process for everyone.
+
+### Purpose
+- **Inclusivity**: Provide guidelines to make contributing accessible to new and experienced developers alike.
+- **Quality**: Maintain high code quality through consistent standards and peer reviews.
+- **Efficiency**: Streamline the contribution process to make it efficient for both contributors and maintainers.
+
+## 1. Getting Started
+
+### 1.1 Prerequisites
+- **Development Environment**: Set up your local development environment by following the [Development Setup Guide](../setup/development-setup-guide.md).
+- **Familiarity with ICN**: Review the [ICN Overview](../../architecture/overview.md) to understand the purpose and architecture of the network.
+- **GitHub Account**: Ensure you have a GitHub account, as contributions are managed via pull requests on GitHub.
+
+### 1.2 Contribution Areas
+You can contribute to ICN in various ways:
+- **Code Contributions**: Add new features, fix bugs, or improve existing code.
+- **Documentation**: Enhance the quality and accuracy of ICN documentation.
+- **Testing**: Write unit, integration, or end-to-end tests.
+- **Discussion and Ideas**: Share your insights in our [Community Discussion Board](https://community.icncoop.org/).
+
+## 2. Issue Management
+
+### 2.1 Finding an Issue
+Browse our [GitHub Issues](https://github.com/your-repo/icn/issues) to find something that interests you. Issues are typically labeled to help you decide where to contribute:
+- **Good First Issue**: These are suitable for new contributors.
+- **Bug**: Issues describing a problem that needs fixing.
+- **Feature Request**: Ideas for new functionality.
+- **Documentation**: Improvements to ICN’s documentation.
+
+### 2.2 Reporting an Issue
+If you’ve found a bug or have an idea for a new feature, you can create a new issue:
+1. **Check Existing Issues**: Avoid duplicates by searching for existing issues.
+2. **Create a New Issue**: Use our [Issue Template](https://github.com/your-repo/icn/issues/new) to ensure all necessary details are provided.
+
+## 3. Development Workflow
+
+### 3.1 Fork the Repository
+Start by forking the main ICN repository to your GitHub account.
+
+```bash
+git clone https://github.com/your-username/icn.git
+cd icn
+git remote add upstream https://github.com/your-repo/icn.git
+```
+This creates a local copy of your fork and sets the original repository as the `upstream` remote.
+
+### 3.2 Create a New Branch
+Create a feature or bugfix branch from the latest `main` branch.
+
+```bash
+git checkout -b feature/new-awesome-feature
+```
+- Use descriptive branch names, such as `feature/`, `bugfix/`, or `docs/` prefixes.
+
+### 3.3 Implement Changes
+Make your changes locally. Ensure that your code adheres to the ICN coding standards:
+- **Rust Code**: Run `cargo fmt` and `cargo clippy` to format and lint your Rust code.
+- **JavaScript Code**: Run `eslint` to maintain consistent JS code formatting.
+
+### 3.4 Commit Your Changes
+Write clear, concise commit messages that describe what you have done.
+
+```bash
+git add .
+git commit -m "Implement new reputation calculation method"
+```
+- **Best Practice**: Use the imperative mood in commit messages (e.g., “Add feature” instead of “Added feature”).
+
+### 3.5 Push to Your Fork
+Push your branch to your forked repository on GitHub.
+
+```bash
+git push origin feature/new-awesome-feature
+```
+
+### 3.6 Submit a Pull Request
+Navigate to your repository on GitHub, and you should see an option to create a pull request (PR).
+- **Title**: Use a descriptive title for your PR.
+- **Description**: Provide a detailed description of what the PR does, including the context, approach, and any areas that need special review.
+
+### 3.7 Address PR Feedback
+Your PR will be reviewed by other contributors and maintainers. Be responsive to feedback and make changes as requested.
+- **Discussions**: Use GitHub comments to discuss changes with reviewers.
+- **Revisions**: Push new commits to your branch to address feedback.
+
+## 4. Coding Standards
+
+### 4.1 Rust Standards
+- **Formatting**: Use `cargo fmt` to format code to maintain consistency.
+- **Linting**: Use `cargo clippy` to identify common errors and style violations.
+- **Documentation**: All public functions should be documented using Rust doc comments (`///`).
+
+### 4.2 JavaScript Standards
+- **Formatting**: Use ESLint with the provided configuration.
+- **Naming Conventions**: Use `camelCase` for variables and functions.
+- **Avoid Mutability**: Prefer `const` and `let` instead of `var`. Write pure functions when possible.
+
+## 5. Testing Guidelines
+
+### 5.1 Write Unit Tests
+All new features must include unit tests to validate functionality.
+- **Rust**: Use the built-in `cargo test` framework.
+- **JavaScript**: Write tests using `jest` to verify logic for front-end components.
+
+### 5.2 Run All Tests Before Submitting a PR
+Ensure all tests pass locally before submitting your PR.
+
+```bash
+cargo test
+npm test
+```
+- **Continuous Integration**: All pull requests are automatically tested by our CI/CD pipeline. Make sure your changes are compatible.
+
+## 6. Code Review Process
+
+### 6.1 Peer Review
+All contributions must be reviewed by at least one other contributor before they are merged.
+- **What Reviewers Look For**: Code correctness, adherence to standards, clarity, and whether the changes align with ICN’s overall architecture.
+- **Suggestions**: Reviewers may suggest changes that improve performance, readability, or maintainability.
+
+### 6.2 Merging Pull Requests
+- Once approved, a maintainer will merge your PR. The `main` branch must always be stable, so PRs should only be merged after all tests pass.
+
+## 7. Best Practices for Contributors
+
+### 7.1 Communication
+- **Ask Questions**: If you’re unsure about something, feel free to ask questions on GitHub or our [Community Discussion Board](https://community.icncoop.org/).
+- **Be Respectful**: Provide constructive feedback and appreciate the efforts of others.
+
+### 7.2 Stay Updated
+- **Sync with Upstream**: Regularly update your fork with changes from the `upstream` repository to stay up-to-date.
+
+```bash
+git fetch upstream
+git checkout main
+git merge upstream/main
+```
+
+## Appendix
+
+### A. Additional Resources
+- **Development Setup Guide**: [Development Setup Guide](../setup/development-setup-guide.md)
+- **ICN Documentation Standards**: [Documentation Standards](./documentation-standards.md)
+- **Rust API Guidelines**: [https://rust-lang.github.io/api-guidelines/](https://rust-lang.github.io/api-guidelines/)
+- **GitHub Flow**: [Understanding GitHub Flow](https://guides.github.com/introduction/flow/)
+
+
+
+===================
+File: ./docs/development/guides/test-strategy.md
+===================
+---
+authors:
+  - Matt Faherty
+date: '2024-11-18'
+status: draft
+title: ICN Testing Strategy Guide
+type: guide
+version: 1.0.0
+---
+
+# ICN Testing Strategy Guide
+
+## Overview
+
+The ICN Testing Strategy ensures the quality and reliability of the Inter-Cooperative Network through structured, automated, and thorough testing processes. The goal is to guarantee that all ICN components, from the backend to the frontend, work cohesively and as intended while maintaining robustness during system updates. This guide outlines the methodologies and tools used for testing ICN at various stages of development and deployment.
+
+### Purpose
+- **Quality Assurance**: Verify that each component meets its intended purpose without introducing errors.
+- **Risk Mitigation**: Identify and fix bugs before they reach staging or production environments.
+- **Maintainability**: Ensure that code changes do not negatively impact existing functionality.
+
+## 1. Types of Testing
+
+### 1.1 Unit Testing
+Unit tests validate the smallest components of the application in isolation to ensure they perform as intended.
+
+- **Backend (Rust)**: Use `cargo test` for validating individual functions and modules within the Rust codebase.
+- **Frontend (JavaScript)**: Use `jest` for unit testing JavaScript functions and React components, ensuring each piece behaves as expected.
+
+#### Best Practices
+- **Isolated Tests**: Tests should not have dependencies on other units to avoid cascading failures.
+- **Fast Execution**: Unit tests should run quickly, allowing for fast feedback during development.
+
+### 1.2 Integration Testing
+Integration tests ensure that different ICN modules interact correctly with one another.
+
+- **API Testing**: Validate that API endpoints respond correctly and that the backend services communicate as expected using `reqwest` in Rust or `axios` in JavaScript.
+- **Kubernetes Integration**: Deploy ICN services in a local Minikube cluster to confirm their interoperability.
+
+#### Best Practices
+- **Data Consistency**: Use a consistent set of mock data to ensure tests are repeatable and results are reliable.
+- **Testing Dependencies**: Check how components react to both positive and negative outcomes of dependent services.
+
+### 1.3 End-to-End (E2E) Testing
+E2E tests simulate real-world scenarios by testing the entire workflow, from the user interface to backend services.
+
+- **Tools**: Use Cypress for simulating and validating complete user flows, including user registration, voting, and resource allocation.
+- **Purpose**: Ensure that features like voting, reputation adjustment, or resource transactions behave correctly when used in full workflows.
+
+#### Best Practices
+- **User Perspective**: Write tests from the perspective of end-users to validate that features work as expected.
+- **Run in CI/CD**: Include E2E tests as part of the CI/CD pipeline to catch workflow issues early.
+
+## 2. Testing Environments
+
+### 2.1 Local Environment
+Developers can run unit and basic integration tests locally before pushing code.
+
+- **Unit Tests**: Run locally using `cargo test` or `npm test` for Rust and JavaScript code respectively.
+- **Dockerized Services**: Use Docker Compose to spin up required services (e.g., databases) for testing interactions locally.
+
+### 2.2 Staging Environment
+Staging is a pre-production environment used to validate how new changes affect the entire system.
+
+- **Integration Tests**: Deploy services to a Kubernetes cluster in Minikube or a cloud-based staging environment.
+- **Manual QA**: Maintainers and QA engineers perform manual exploratory testing to validate UI/UX consistency and usability.
+
+## 3. CI/CD Testing Integration
+
+### 3.1 Linting and Static Analysis
+- **GitHub Actions**: Linting and static analysis are the first steps of the CI pipeline to ensure that the code adheres to formatting and quality standards.
+- **Rust Tools**: Use `cargo fmt` and `cargo clippy` to automatically format and lint Rust code.
+- **JavaScript Tools**: Use `eslint` to check for JavaScript code quality and consistency.
+
+### 3.2 Automated Test Execution
+Testing is automated within the CI/CD pipeline to catch regressions early.
+
+- **Unit Tests**: Automatically run using GitHub Actions on every push and pull request.
+- **Integration Tests**: Triggered once unit tests pass, focusing on backend and API interactions.
+- **E2E Tests**: Scheduled to run after integration tests, verifying entire workflows with Cypress.
+
+### 3.3 Test Coverage
+- **Codecov Integration**: Test coverage is monitored via Codecov to ensure that changes do not reduce the quality of the test coverage.
+- **Coverage Targets**: Aim for at least 80% coverage for new code. Critical modules (e.g., identity, governance) should have close to 100% coverage.
+
+## 4. Test Data Management
+
+### 4.1 Mock Data
+Mock data is used extensively to ensure tests are deterministic.
+
+- **Backend Tests**: Mock databases and API responses using tools like `mockall` in Rust.
+- **Frontend Tests**: Use libraries like `nock` to mock HTTP requests in JavaScript tests.
+
+### 4.2 Test Databases
+- **Dockerized Database**: Spin up a test database using Docker, seeded with initial data required for integration tests.
+- **Data Reset**: Ensure that each test run resets the state to maintain isolation and prevent tests from affecting each other.
+
+## 5. Performance and Load Testing
+
+### 5.1 Load Testing
+Load testing is crucial to understanding how ICN performs under high usage.
+
+- **Tools**: Use `k6` to simulate multiple concurrent users accessing services such as voting, reputation calculations, or resource requests.
+- **Metrics Captured**: Response times, throughput, and error rates under different load conditions.
+
+### 5.2 Stress Testing
+Stress tests identify the system’s breaking point and help in understanding the recovery process.
+
+- **Approach**: Increase load gradually until system failure occurs. Capture logs to determine failure points and evaluate strategies for resilience.
+
+## 6. Testing Best Practices
+
+### 6.1 Test-Driven Development (TDD)
+Encourage TDD practices where feasible to ensure that functionality is clearly defined before implementation begins.
+
+- **Write Tests First**: Write unit tests before implementing new functionality to define expected behavior.
+
+### 6.2 Consistent Testing Standards
+- **Code Review**: Ensure that all code submissions include appropriate tests and that those tests meet the quality bar established by ICN.
+- **Test Naming Conventions**: Use descriptive names for test cases that clearly indicate the purpose and expected result (e.g., `test_calculate_reputation_with_valid_input`).
+
+### 6.3 CI/CD Pipeline Integration
+All tests, from unit to E2E, should be integrated into the CI/CD pipeline to provide automated feedback on code quality.
+
+- **Fast Feedback**: Ensure unit tests provide rapid feedback, ideally within a few minutes, while integration and E2E tests may take longer.
+
+## 7. Manual Testing and QA
+
+### 7.1 Exploratory Testing
+Manual QA involves exploratory testing in both the staging environment and during development sprints to identify UI/UX issues, edge cases, and usability problems.
+
+- **Focus Areas**: Test critical user paths like resource allocation, voting, and onboarding to ensure they work seamlessly.
+
+### 7.2 User Acceptance Testing (UAT)
+UAT ensures that the product meets the needs of real users before production deployment.
+
+- **Beta Users**: Invite a select group of cooperative members to test new features and gather feedback.
+- **Feedback Integration**: Use feedback from UAT to improve usability and address any gaps before release.
+
+## Appendix
+
+### A. Testing Tools Summary
+- **Rust Unit Testing**: `cargo test`
+- **JavaScript Unit Testing**: `jest`, `react-testing-library`
+- **E2E Testing**: Cypress
+- **API Integration**: `reqwest` (Rust), `axios` (JavaScript)
+- **Load Testing**: `k6`
+- **Mocking Libraries**: `mockall` (Rust), `nock` (JavaScript)
+
+### B. Additional Resources
+- **GitHub Actions Documentation**: [GitHub Actions Docs](https://docs.github.com/en/actions)
+- **Cypress Documentation**: [Cypress Docs](https://docs.cypress.io/)
+- **k6 Load Testing**: [k6 Docs](https://k6.io/docs/)
+- **Codecov Documentation**: [Codecov Docs](https://docs.codecov.io/)
+
+
+
+===================
+File: ./docs/development/setup/development-setup-guide.md
+===================
+---
+authors:
+  - Matt Faherty
+date: '2024-11-18'
+status: draft
+title: Development Setup Guide
+type: guide
+version: 1.0.0
+---
+
+# ICN Development Setup Guide
+
+## Overview
+
+Welcome to the development setup guide for the Inter-Cooperative Network (ICN). This guide will walk you through setting up your local development environment to contribute effectively to ICN. The goal is to ensure that all developers can start coding with a minimal setup process, ensuring consistency across environments.
+
+### Prerequisites
+- Familiarity with Rust, Docker, and Kubernetes.
+- Basic understanding of Git and version control.
+- Linux-based development environment (Ubuntu recommended).
+
+## 1. System Requirements
+
+### 1.1 Hardware Requirements
+- **CPU**: 4 cores minimum (Intel i5/AMD Ryzen 3 or higher recommended).
+- **RAM**: 8GB minimum (16GB recommended).
+- **Storage**: 100GB SSD (ensure sufficient space for containers, dependencies, and builds).
+
+### 1.2 Software Requirements
+- **OS**: Linux-based distribution (Ubuntu 24.04 or similar).
+- **Docker**: Version 20.x or higher.
+- **Kubernetes (Minikube)**: Version 1.26 or higher.
+- **Rust**: Latest stable version.
+- **Node.js & npm**: Version 16.x or higher (for front-end integration).
+- **Git**: Version 2.34 or higher.
+
+## 2. Setting Up Your Development Environment
+
+### 2.1 Install Rust
+The ICN backend is primarily built using Rust. Ensure you have the latest stable version installed.
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+rustup update stable
+```
+
+### 2.2 Install Docker
+Docker is used for containerizing ICN services. Install Docker by running:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y docker.io
+sudo usermod -aG docker $USER
+```
+> Note: You may need to log out and log back in for Docker permissions to apply.
+
+### 2.3 Set Up Kubernetes (Minikube)
+Minikube helps in running a local Kubernetes cluster for testing ICN services.
+
+```bash
+curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+sudo install minikube-linux-amd64 /usr/local/bin/minikube
+minikube start --driver=docker
+```
+
+### 2.4 Install Node.js and npm (Front-End Development)
+The ICN frontend is built using modern JavaScript frameworks that require Node.js and npm.
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+sudo apt-get install -y nodejs
+npm install -g npm
+```
+
+### 2.5 Clone the Repository
+Use Git to clone the ICN repository to your local machine:
+
+```bash
+git clone https://github.com/your-repo/icn.git
+cd icn
+```
+
+### 2.6 Install Project Dependencies
+Navigate to the backend and frontend directories and install the necessary dependencies.
+
+#### Backend Dependencies
+```bash
+cd backend
+cargo build
+```
+
+#### Frontend Dependencies
+```bash
+cd ../frontend
+npm install
+```
+
+### 2.7 Configure Environment Variables
+The ICN project requires specific environment variables for local development.
+Create a `.env` file in the root of the repository and configure the following:
+
+```env
+DATABASE_URL=postgresql://icn_user:password@localhost:5432/icn_db
+NODE_ENV=development
+API_KEY=your-api-key-here
+```
+
+> Note: Refer to `env.example` for a full list of environment variables.
+
+## 3. Running the Development Environment
+
+### 3.1 Start the Backend
+To start the backend services, navigate to the backend directory and run:
+
+```bash
+cargo run
+```
+
+This command will start the ICN backend services locally, making them accessible at `http://localhost:8000` by default.
+
+### 3.2 Start the Frontend
+Navigate to the frontend directory and run:
+
+```bash
+npm start
+```
+
+The frontend will start on `http://localhost:3000` by default, and it will connect to the backend services running locally.
+
+### 3.3 Deploying with Minikube
+To test the full ICN deployment using Kubernetes, use Minikube to deploy both the backend and frontend.
+
+```bash
+minikube kubectl -- apply -f deployment/icn-deployment.yaml
+```
+
+> Note: Ensure your Docker images are built locally and tagged correctly before deploying with Minikube.
+
+## 4. Debugging and Troubleshooting
+
+### 4.1 Common Issues
+- **Docker Permission Denied**: If you encounter permission errors with Docker, ensure you have added your user to the Docker group and restarted your terminal.
+- **Kubernetes Pod CrashLoopBackOff**: This usually indicates a configuration or resource issue. Run `minikube kubectl -- get pods` to inspect the status and logs.
+- **Missing Dependencies**: Run `cargo check` and `npm audit` to check for any missing dependencies.
+
+### 4.2 Logging
+- **Backend**: Logs are output to the console by default. Use `RUST_LOG=debug cargo run` to see more detailed logs.
+- **Frontend**: Browser console logs and terminal output provide insights into frontend issues.
+
+## 5. Testing Your Setup
+
+### 5.1 Running Unit Tests
+Ensure your setup is functioning correctly by running the unit tests included in the backend and frontend.
+
+#### Backend Tests
+```bash
+cargo test
+```
+
+#### Frontend Tests
+```bash
+npm test
+```
+
+### 5.2 Integration Tests
+Integration tests verify that the frontend and backend communicate correctly.
+To run integration tests, use:
+
+```bash
+cargo test --features integration
+```
+
+## 6. Contributing to ICN
+
+### 6.1 Development Workflow
+- **Fork the repository** on GitHub and create a new branch for your feature or bugfix.
+- **Write unit tests** for new code and ensure all existing tests pass before making a pull request.
+- **Submit a pull request** with a detailed description of your changes.
+
+### 6.2 Code Standards
+- **Rust**: Follow the Rust community guidelines and use `cargo fmt` to format your code.
+- **JavaScript**: Adhere to the ES6 standards and use `eslint` to check your code.
+
+## Appendix
+
+### A. Useful Commands
+- **Start Minikube Dashboard**: `minikube dashboard`
+- **Access Minikube Services**: `minikube service list`
+- **Run Backend in Watch Mode**: `cargo watch -x run`
+
+### B. Additional Resources
+- **Rust Documentation**: [https://doc.rust-lang.org/](https://doc.rust-lang.org/)
+- **Docker Documentation**: [https://docs.docker.com/](https://docs.docker.com/)
+- **Node.js Documentation**: [https://nodejs.org/en/docs/](https://nodejs.org/en/docs/)
+
+
+
+===================
+File: ./docs/development/plans/development-roadmap.md
+===================
+---
+authors:
+  - Matt Faherty
+date: '2024-11-18'
+status: draft
+title: ICN Development Roadmap
+type: guide
+version: 1.0.0
+---
+
+# ICN Development Roadmap
+
+## Overview
+
+The ICN Development Roadmap provides a strategic plan for the growth and implementation of the Inter-Cooperative Network (ICN). It outlines major phases of development, short-term goals, long-term vision, and key milestones that the project aims to achieve. The roadmap will help ensure the efforts of developers, contributors, and stakeholders are coordinated towards building a robust, scalable, and cooperative system.
+
+### Purpose
+- **Direction**: Provide a clear path for development phases and the logical progression of ICN features.
+- **Milestones**: Establish tangible milestones to measure progress against both short-term and long-term goals.
+- **Coordination**: Align the efforts of contributors with strategic project goals to enhance efficiency and productivity.
+
+## 1. Development Phases
+
+### 1.1 Phase 1: Core Infrastructure Development
+**Timeline**: Q1 - Q2 2024
+
+- **Identity and Reputation System**: Complete implementation of decentralized identity (DID) services and core reputation mechanisms.
+- **Blockchain and VM Integration**: Establish a basic blockchain layer with an embedded virtual machine (VM) to handle ICN-specific operations and transaction validations.
+- **Proof of Cooperation Consensus**: Develop and integrate the Proof of Cooperation (PoC) consensus mechanism for validating transactions in a cooperative model.
+- **Basic Resource Sharing**: Implement the foundation for resource registration, availability management, and allocation across cooperatives.
+- **Testing & Feedback Loop**: Conduct initial unit and integration testing to validate core functionality and gather early user feedback.
+
+### 1.2 Phase 2: Federation and Governance Enhancements
+**Timeline**: Q3 - Q4 2024
+
+- **Federation System**: Enable multiple cooperatives to form federations with shared resource management capabilities.
+- **Voting and Proposal System**: Launch the voting system for governance, enabling cooperatives to initiate and decide on proposals democratically.
+- **Governance Dashboard**: Develop a governance dashboard to provide cooperative members with an intuitive interface for managing proposals, voting, and monitoring cooperative activities.
+- **Security Enhancements**: Introduce improved cryptographic methods to ensure secure identity management and voting processes.
+- **Public Release**: Prepare a beta release of ICN, allowing for broader participation and testing by interested cooperatives.
+
+### 1.3 Phase 3: Full Integration and Ecosystem Expansion
+**Timeline**: Q1 - Q3 2025
+
+- **Resource Sharing and Marketplace Integration**: Expand the resource-sharing mechanism into a full cooperative marketplace, where cooperatives can exchange goods, services, and labor using ICN’s tokenized system.
+- **Advanced Consensus Features**: Introduce multi-layered consensus models to support diverse federation types with varying governance requirements.
+- **Multi-Community Reputation Systems**: Implement multi-dimensional reputation categories (e.g., governance, contribution, resource sharing) to provide nuanced trust metrics across the ICN.
+- **Cross-Federation Collaboration**: Enable federations to collaborate and share resources, establishing cross-cooperative relationships with transparency and accountability.
+- **Developer APIs**: Launch developer APIs to facilitate third-party integrations and encourage the development of custom tools and extensions.
+
+### 1.4 Phase 4: Scalability, Automation, and User Engagement
+**Timeline**: Q4 2025 - Q2 2026
+
+- **Sharding and Scalability Improvements**: Introduce sharding mechanisms to enable ICN to scale as more cooperatives join the network.
+- **Reputation-Based Automation**: Develop automation tools that trigger resource allocation, federation decisions, or governance actions based on reputation thresholds.
+- **User Engagement Modules**: Create modules to encourage user engagement, including educational content and interactive tutorials for onboarding new members.
+- **Mobile Accessibility**: Develop a mobile version of key ICN features to increase accessibility, especially for cooperatives in resource-constrained environments.
+
+## 2. Key Milestones
+
+### 2.1 Core Release Milestones
+- **Core Infrastructure Complete** (Q2 2024): Launch the initial version of ICN's infrastructure, including identity, reputation, and blockchain layers.
+- **Federation System Beta** (Q4 2024): Release a beta version of ICN with federation capabilities and governance features.
+- **Marketplace Launch** (Q3 2025): Full release of the cooperative marketplace feature for resource sharing and non-monetary exchanges.
+
+### 2.2 Testing and Quality Milestones
+- **Initial Unit and Integration Testing** (Q2 2024): Complete comprehensive unit tests for core modules and establish an integration test suite.
+- **Community Testing Feedback** (Q4 2024): Open beta testing for cooperatives to gather feedback on usability and performance.
+- **Load Testing and Optimization** (Q1 2025): Conduct load tests to ensure the system can handle increased network traffic and cooperative participation.
+
+### 2.3 Community and Ecosystem Milestones
+- **Early Adopter Onboarding** (Q3 2024): Onboard early adopter cooperatives to serve as pilot members for testing and providing feedback.
+- **Public Launch Event** (Q4 2024): Host a virtual launch event to introduce ICN’s beta version to a broader audience and solicit feedback.
+- **Educational Campaign** (Q1 2025): Launch a series of webinars, tutorials, and written guides to educate new members about using ICN effectively.
+
+## 3. Long-Term Vision
+
+### 3.1 Cooperative Sovereignty
+ICN aims to provide cooperatives with true sovereignty over their governance, economics, and operations. By continuing to refine governance, reputation, and resource-sharing tools, ICN will empower communities to manage themselves without dependence on centralized authorities.
+
+### 3.2 Ethical Data Usage
+Implement privacy-preserving mechanisms that allow data sharing without sacrificing individual or cooperative privacy. Long-term, ICN aims to develop advanced zero-knowledge proof (ZKP) techniques to balance transparency with confidentiality.
+
+### 3.3 Expansion Beyond Cooperatives
+While ICN’s primary focus is cooperatives, the long-term goal is to expand the platform to serve any community seeking decentralized, equitable governance structures. ICN could be a model for ethical digital infrastructure across sectors, including education, healthcare, and local government.
+
+## Appendix
+
+### A. Tools for Roadmap Tracking
+- **GitHub Projects**: Used for tracking tasks, issues, and progress for individual phases.
+- **Jira**: To be used for long-term planning and managing sprints across different development teams.
+- **Gantt Charts**: Included in the documentation for visualizing timelines and dependencies.
+
+### B. Additional Resources
+- **Contribution Guide**: [Contribution Guide](../guides/contributing.md)
+- **Community Discussion Board**: [Community Board](https://community.icncoop.org/)
+
+
+
+===================
+File: ./docs/development/plans/testing-roadmap.md
+===================
+---
+authors:
+  - Matt Faherty
+date: '2024-11-18'
+status: draft
+title: ICN Testing Roadmap
+type: plan
+version: 1.0.0
+---
+
+# ICN Testing Roadmap
+
+## Overview
+
+The ICN Testing Roadmap provides a structured plan for expanding and improving the testing infrastructure of the Inter-Cooperative Network. This roadmap aims to guide the development of a comprehensive testing suite, achieving higher test coverage, automating as many processes as possible, and ensuring robust system reliability through structured timelines and well-defined milestones.
+
+### Purpose
+- **Coverage Expansion**: Systematically improve test coverage to include all components of ICN.
+- **Automation Goals**: Automate key testing stages to reduce manual effort and accelerate release cycles.
+- **Reliability Improvements**: Implement new testing approaches to identify and address reliability issues before deployment.
+
+## 1. Testing Roadmap Phases
+
+### 1.1 Phase 1: Foundation of Testing Suite
+**Timeline**: Q1 2024 - Q2 2024
+
+- **Unit Test Coverage Expansion**:
+  - Focus on key backend modules: Identity, Reputation, and Voting systems.
+  - Aim for 80% coverage across all core modules.
+- **CI/CD Integration**:
+  - Establish automated unit testing within GitHub Actions.
+  - Configure Codecov to track and report coverage metrics on all pull requests.
+- **Basic Integration Testing**:
+  - Implement initial integration tests for API endpoints, focusing on core transactions and responses.
+
+### 1.2 Phase 2: Integration and Load Testing
+**Timeline**: Q3 2024 - Q4 2024
+
+- **Full Integration Test Suite**:
+  - Create integration tests covering all backend services, including Resource Allocation and Federation.
+  - Deploy tests in a Kubernetes environment using Minikube.
+- **E2E Test Development**:
+  - Develop end-to-end (E2E) tests using Cypress to validate user flows: onboarding, voting, and resource sharing.
+- **Load Testing Framework**:
+  - Implement load testing using `k6` to evaluate system behavior under high concurrency scenarios.
+  - Capture and analyze metrics such as response time, latency, and system throughput.
+
+### 1.3 Phase 3: Comprehensive Performance and Security Testing
+**Timeline**: Q1 2025 - Q2 2025
+
+- **Stress and Performance Testing**:
+  - Expand on load testing with stress tests to determine breaking points.
+  - Develop benchmarks for transaction speeds and scalability metrics.
+- **Security Testing**:
+  - Conduct penetration testing and vulnerability scans.
+  - Develop automated tests for access control and ensure that permissions function as intended across services.
+- **Data Integrity Tests**:
+  - Create tests to verify the consistency of blockchain transactions and state data during integration and after updates.
+
+### 1.4 Phase 4: Automation and Regression Testing
+**Timeline**: Q3 2025 - Q4 2025
+
+- **Full Regression Test Suite**:
+  - Build a regression test suite to automate the testing of previously validated features whenever new changes are introduced.
+  - Automate deployment and testing cycles using GitHub Actions and Kubernetes.
+- **Automated Rollbacks**:
+  - Integrate automated rollback testing for Kubernetes deployments, ensuring seamless rollback if issues arise in production.
+- **Test Data Automation**:
+  - Develop scripts for generating and managing test data automatically, ensuring consistency and reducing manual setup time.
+
+## 2. Key Milestones
+
+### 2.1 Coverage Milestones
+- **80% Unit Test Coverage** (Q2 2024): Achieve 80% unit test coverage for core backend and frontend components.
+- **95% Critical Coverage** (Q1 2025): Achieve close to 95% coverage for critical modules, including Governance and Reputation systems.
+
+### 2.2 Test Automation Milestones
+- **CI/CD Automated Testing Integration** (Q2 2024): Integrate unit, integration, and E2E tests into the CI/CD pipeline for every pull request.
+- **Automated Load Testing** (Q4 2024): Set up automated load testing for key workflows (e.g., voting, onboarding).
+
+### 2.3 Reliability and Stability Milestones
+- **Comprehensive Stress Testing** (Q2 2025): Complete stress testing for backend services and assess system recovery capabilities.
+- **Continuous Regression Testing** (Q4 2025): Fully automate regression testing as part of every release cycle to avoid introducing regressions.
+
+## 3. Testing Expansion Goals
+
+### 3.1 Increase Test Coverage for Edge Cases
+- **Unhappy Paths**: Expand tests to cover failure scenarios, such as invalid inputs, network failures, and permission issues.
+- **Boundary Conditions**: Ensure that tests include boundary value analysis for numerical inputs and constraints.
+
+### 3.2 UI/UX Testing Automation
+- **Visual Regression Testing**: Use tools like Percy or BackstopJS to automate visual checks, ensuring that UI changes do not inadvertently break user interfaces.
+- **Usability Tests**: Develop automated tests for common user flows to validate accessibility and usability, particularly for onboarding and critical interactions.
+
+### 3.3 Real-World Simulation Tests
+- **User Behavior Simulation**: Implement E2E tests that simulate typical user behavior under different load conditions, including varying network speeds.
+- **Cross-Device Testing**: Ensure compatibility by expanding Cypress tests to cover different devices (desktop, tablet, mobile) and browsers.
+
+## 4. Challenges and Considerations
+
+### 4.1 Handling Flaky Tests
+- **Identify Causes**: Track and analyze flaky tests, particularly in integration and E2E tests, to determine root causes.
+- **Retry Mechanism**: Implement test retries in CI/CD for non-deterministic failures, but strive to fix the root causes rather than mask issues.
+
+### 4.2 Managing Test Data
+- **Data Isolation**: Ensure that test data is isolated for each run to prevent data corruption or race conditions.
+- **Dynamic Data Generation**: Develop utilities that dynamically generate data based on the context of the test to improve flexibility and reliability.
+
+## 5. Future Directions
+
+### 5.1 AI-Driven Testing
+- **Automated Test Generation**: Investigate AI-based solutions to generate unit and integration tests based on code analysis.
+- **Intelligent Test Prioritization**: Use machine learning to prioritize tests that are most likely to identify defects based on changes in the codebase.
+
+### 5.2 Community Involvement
+- **Testing Sprints**: Host community-driven testing sprints to engage cooperative members in validating features and sharing usability feedback.
+- **Open Bug Bounty**: Introduce a bug bounty program to incentivize external testers to identify vulnerabilities and issues in the system.
+
+## Appendix
+
+### A. Testing Tools Summary
+- **Unit Testing**: `cargo test` (Rust), `jest` (JavaScript)
+- **E2E Testing**: Cypress
+- **Load and Stress Testing**: `k6`
+- **Security Testing**: OWASP ZAP, custom penetration scripts
+- **Visual Testing**: Percy, BackstopJS
+
+### B. Additional Resources
+- **Cypress Documentation**: [Cypress Docs](https://docs.cypress.io/)
+- **k6 Load Testing**: [k6 Docs](https://k6.io/docs/)
+- **GitHub Actions Documentation**: [GitHub Actions Docs](https://docs.github.com/en/actions)
+- **OWASP ZAP**: [OWASP ZAP Docs](https://www.zaproxy.org/docs/)
+
+
+
+===================
+File: ./docs/development/plans/ci_cd-pipeline.md
+===================
+---
+authors:
+  - Matt Faherty
+date: '2024-11-18'
+status: draft
+title: ICN CI/CD Pipeline Guide
+type: guide
+version: 1.0.0
+---
+
+# ICN CI/CD Pipeline Guide
+
+## Overview
+
+The Continuous Integration and Continuous Deployment (CI/CD) pipeline is a vital component of the ICN development process. It helps ensure code quality, automate testing, and streamline the deployment of new features and updates. This guide provides an overview of the CI/CD practices in ICN, including how new contributions are tested, built, and released.
+
+### Purpose
+- **Automate Testing**: Ensure that new code is properly tested before being merged.
+- **Efficient Deployment**: Automate the deployment process to minimize human error and expedite releases.
+- **Quality Assurance**: Enforce code quality and integration standards to keep ICN stable and reliable.
+
+## 1. Tools and Technologies
+
+### 1.1 GitHub Actions
+GitHub Actions is used as the primary CI/CD tool for managing workflows related to code testing, linting, and deployment.
+
+- **Workflows**: Defined in the `.github/workflows` directory as YAML files.
+- **Trigger Events**: Actions are triggered on specific events, such as `push`, `pull_request`, or on a scheduled basis.
+
+### 1.2 Docker
+Docker is used to containerize ICN applications, ensuring consistency between development, testing, and production environments.
+
+- **Docker Images**: Built automatically during the CI process to verify that applications work as expected in a containerized environment.
+
+### 1.3 Kubernetes (Minikube)
+For testing in a simulated production environment, Minikube is used to create a local Kubernetes cluster to manage container orchestration.
+
+- **Integration Testing**: Kubernetes is used to validate services interacting within ICN, ensuring that the orchestration layer works as intended.
+
+### 1.4 Codecov
+Codecov is used for test coverage analysis, ensuring that new contributions maintain or improve overall test coverage.
+
+- **Reports**: Automatically generated and linked to pull requests, providing transparency on the quality of test coverage.
+
+## 2. CI/CD Pipeline Stages
+
+### 2.1 Continuous Integration (CI)
+
+#### 2.1.1 Linting and Formatting
+The first step in the CI process is to validate that all code follows ICN’s style guides and formatting standards.
+
+- **Rust**: `cargo fmt` and `cargo clippy` are used to enforce Rust coding standards.
+- **JavaScript**: `eslint` is used to ensure consistency in JavaScript code.
+
+#### 2.1.2 Unit Testing
+All code changes must pass unit tests to verify individual components' behavior.
+
+- **Rust Unit Tests**: Triggered via `cargo test` to validate backend components.
+- **JavaScript Unit Tests**: Executed using `jest` for front-end logic and React components.
+
+#### 2.1.3 Build Verification
+A Docker image is built as part of the CI process to verify that the application builds correctly.
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+    - name: Build Docker image
+      run: docker build -t icn-app:latest .
+```
+
+### 2.2 Continuous Deployment (CD)
+
+#### 2.2.1 Integration Testing
+Integration tests verify that ICN services interact correctly.
+
+- **Minikube Deployment**: Services are deployed on a local Minikube cluster to validate the full environment.
+- **Service Verification**: Automated tests check that key services can communicate and perform intended operations (e.g., identity verification, resource allocation).
+
+#### 2.2.2 Staging Environment Deployment
+After successful integration tests, changes are deployed to the staging environment for further validation.
+
+- **Docker Compose**: Used for orchestrating multi-service environments in staging.
+- **Manual QA**: Maintainers and QA contributors manually test newly deployed features in staging to catch edge cases and usability issues.
+
+#### 2.2.3 Production Deployment
+If all tests pass in the staging environment, code is merged into the `main` branch and automatically deployed to production.
+
+- **Rolling Deployments**: Kubernetes is used to perform rolling updates to avoid downtime and ensure seamless upgrades.
+- **Deployment Monitoring**: Grafana and Prometheus are used to monitor the health of production services during and after deployment.
+
+## 3. Writing and Running Tests
+
+### 3.1 Unit Tests
+- **Backend**: Write unit tests for all new Rust code using `cargo test`. Every public function should have corresponding tests.
+- **Frontend**: Use `jest` for JavaScript testing, with `react-testing-library` for React components.
+
+### 3.2 Integration Tests
+Integration tests should cover the interaction between ICN components.
+
+- **REST API Testing**: Use `reqwest` in Rust or `axios` in JavaScript to simulate API calls and validate responses.
+- **Kubernetes Testing**: Use `kubectl` scripts to deploy components on Minikube and check for correct orchestration.
+
+### 3.3 End-to-End Testing
+End-to-end (E2E) tests simulate real-world user interactions across multiple services to verify full workflow integrity.
+
+- **Cypress**: Use Cypress for testing front-end and backend integrations by simulating user interactions in a browser.
+
+## 4. Best Practices for CI/CD
+
+### 4.1 Fail Fast
+The pipeline should fail as early as possible to avoid wasting time on subsequent steps if there is a critical issue.
+
+- **Early Linting**: Run linting and formatting checks before executing any build processes.
+- **Parallel Jobs**: Run independent tests (e.g., unit tests, integration tests) in parallel to speed up the CI process.
+
+### 4.2 Automate Rollbacks
+If an issue is detected in production after deployment, an automated rollback is initiated.
+
+- **Kubernetes Rollbacks**: Use Kubernetes `kubectl rollout undo` to revert to a previous stable version.
+
+### 4.3 Use Secrets Securely
+Sensitive information (e.g., API keys, credentials) must be stored securely in GitHub Secrets or Kubernetes Secrets.
+
+- **Access Management**: Limit access to secrets to only the stages or jobs that require them.
+
+## 5. Setting Up the CI/CD Pipeline
+
+### 5.1 GitHub Actions Configuration
+Create or modify YAML workflows under `.github/workflows/` to define CI/CD processes.
+
+#### Example Workflow Configuration
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: Run Linter
+      run: |
+        cargo fmt --all -- --check
+        cargo clippy -- -D warnings
+        npm run lint
+```
+
+### 5.2 Kubernetes Deployment Scripts
+Use `kubectl` deployment scripts to automate staging and production deployments.
+
+- **Staging Deployment**: `kubectl apply -f k8s/staging/`
+- **Production Deployment**: `kubectl apply -f k8s/production/`
+
+## Appendix
+
+### A. Troubleshooting
+- **Pipeline Failures**: Review logs in GitHub Actions to determine at what stage the failure occurred.
+- **Docker Build Issues**: Ensure that Dockerfiles are up-to-date and all dependencies are correctly specified.
+- **Kubernetes Issues**: Use `kubectl describe pod` to debug failing pods during Minikube testing.
+
+### B. Additional Resources
+- **GitHub Actions Documentation**: [GitHub Actions Docs](https://docs.github.com/en/actions)
+- **Docker Documentation**: [Docker Docs](https://docs.docker.com/)
+- **Kubernetes Documentation**: [Kubernetes Docs](https://kubernetes.io/docs/)
+- **Codecov Integration**: [Codecov Docs](https://docs.codecov.io/)
+
 
 
 ===================
 File: ./docs/README.md
 ===================
-# ICN Documentation
-
-## Structure
-
-- `architecture/` - System architecture documentation
-- `specifications/` - Technical specifications
-- `development/` - Development guides and plans
-- `user/` - User documentation and tutorials
-
-## Getting Started
-
-1. Install documentation tools:
-   ```bash
-   cd tools
-   pip install -r requirements.txt
-   ```
-
-2. Generate documentation index:
-   ```bash
-   python tools/doctools/docmanager.py index
-   ```
-
-## Documentation Standards
-
-Please refer to `development/guides/documentation-standards.md` for our documentation guidelines.
+<EMPTY FILE>
 
 
 ===================
@@ -340,6 +1439,160 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
     "description": "Allocate resources for new development",
     "duration": 60
   }
+
+
+===================
+File: ./docs/specifications/core/consensus-system.md
+===================
+---
+authors:
+  - Matt Faherty
+date: '2024-11-18'
+status: draft
+title: Consensus System Specification
+type: specification
+version: 1.0.0
+---
+
+# Consensus System Documentation
+
+## Overview
+
+The Consensus System is a fundamental component of the Inter-Cooperative Network (ICN). It ensures agreement across the network for proposals, resource sharing, and decision-making. The consensus mechanism used by ICN is designed to be resilient, scalable, and align with cooperative values, fostering a democratic and inclusive governance model.
+
+### Purpose
+- **Collective Decision-Making**: Provide a robust process for cooperatives to reach collective agreements.
+- **Trustless Validation**: Enable nodes to reach consensus without relying on centralized authority, maintaining decentralization.
+- **Accountability and Transparency**: Ensure that all consensus decisions are auditable and traceable to maintain the integrity of the network.
+
+## 1. Consensus Types
+
+### 1.1 Proof of Cooperation (PoC)
+Proof of Cooperation is the core consensus mechanism used within ICN. It leverages a cooperative model where validators, called `cooperators`, work together to validate transactions and reach consensus.
+- **Use Case**: General-purpose agreement for governance, resource allocation, and proposal approvals.
+- **Validator Selection**: Validators are chosen based on reputation scores and cooperative involvement.
+
+### 1.2 Federated Consensus
+Federated consensus is used for specific federations within ICN that require more localized decision-making. This mechanism allows federated groups to reach agreement independently of the broader network.
+- **Use Case**: Federations making autonomous decisions about local resource allocation or governance.
+
+## 2. System Components
+
+### 2.1 Consensus Nodes
+Consensus nodes, known as `cooperators`, are responsible for participating in consensus rounds. Each cooperative in the network can nominate one or more nodes to act as cooperators.
+
+- **Validator Eligibility**: Nodes must meet minimum reputation and contribution criteria to be eligible as cooperators.
+- **Validator Roles**: Validators propose, validate, and finalize transactions and proposals.
+
+### 2.2 Consensus Round Lifecycle
+The consensus process is divided into distinct rounds:
+- **Proposal Stage**: A proposal or transaction is initiated by a member and broadcast to cooperators.
+- **Validation Stage**: Cooperators validate the proposed changes to ensure compliance with cooperative standards and policies.
+- **Voting Stage**: Cooperators vote on the proposal. A threshold must be reached for consensus.
+- **Finalization Stage**: Upon successful voting, the proposal is finalized and committed to the network.
+
+### 2.3 Quorum and Thresholds
+- **Quorum Requirement**: A minimum number of cooperators must participate in each round to proceed.
+- **Approval Threshold**: The number of affirmative votes required to achieve consensus can vary based on the proposal type (e.g., 50%, 66%, or 75%).
+
+## 3. Key Methods
+
+### 3.1 Initiating a Consensus Round
+Any cooperative member can initiate a consensus round by creating a proposal. The proposal is then broadcast to all validators for review.
+
+#### Initiate Consensus
+```rust
+pub struct ConsensusProposal {
+    pub proposal_id: String,
+    pub proposer: String,
+    pub description: String,
+    pub created_at: u64,
+    pub status: ConsensusStatus,
+}
+```
+- **Input**: `proposal_id` (unique identifier), `proposer` (DID of proposer), `description` (proposal details).
+- **Functionality**: Creates and broadcasts a proposal to cooperators for review.
+
+### 3.2 Voting on a Proposal
+Validators participate in voting to determine whether a proposal should be accepted or rejected.
+
+#### Cast Validator Vote
+```rust
+pub fn cast_validator_vote(&mut self, proposal_id: &str, validator: &str, approve: bool) -> Result<(), String> {
+    if !self.is_eligible(validator) {
+        return Err("Validator not eligible".to_string());
+    }
+    let vote = Vote {
+        validator: validator.to_string(),
+        approve,
+        timestamp: current_timestamp(),
+    };
+    if let Some(proposal) = self.proposals.get_mut(proposal_id) {
+        proposal.votes.push(vote);
+        Ok(())
+    } else {
+        Err("Proposal not found".to_string())
+    }
+}
+```
+- **Input**: `proposal_id` (ID of the proposal), `validator` (DID of the validator), `approve` (approval or rejection).
+- **Functionality**: Records a vote for the proposal.
+
+### 3.3 Finalizing Consensus
+After reaching the required threshold, the proposal can be finalized.
+
+#### Finalize Proposal
+```rust
+pub fn finalize_proposal(&mut self, proposal_id: &str) -> Result<(), String> {
+    if let Some(proposal) = self.proposals.get_mut(proposal_id) {
+        if self.has_reached_threshold(proposal) {
+            proposal.status = ConsensusStatus::Finalized;
+            Ok(())
+        } else {
+            Err("Threshold not reached".to_string())
+        }
+    } else {
+        Err("Proposal not found".to_string())
+    }
+}
+```
+- **Input**: `proposal_id` (ID of the proposal).
+- **Functionality**: Marks the proposal as finalized if consensus is achieved.
+
+## 4. Security Considerations
+
+### 4.1 Sybil Attack Prevention
+- **Reputation-Based Eligibility**: Only nodes with sufficient reputation can act as validators, reducing the risk of Sybil attacks where malicious actors create multiple identities to influence consensus.
+- **Contribution Verification**: Nodes must prove ongoing contributions to maintain their validator status.
+
+### 4.2 Byzantine Fault Tolerance
+The consensus mechanism is designed to be resilient against Byzantine faults, with redundancy and multiple cooperators ensuring that no single point of failure can compromise the system.
+
+## 5. Implementation Guidelines
+
+### 5.1 Performance Requirements
+- **Efficient Validator Selection**: Use indexed data structures for rapid selection of eligible validators.
+- **Scalability**: Ensure that the consensus mechanism can accommodate an increasing number of validators without a drop in performance.
+
+### 5.2 Testing Requirements
+- **Unit Testing**: Include tests for consensus initiation, validator voting, and proposal finalization methods.
+- **Network Simulation**: Simulate different network conditions, including validator failures, to ensure that the system behaves as expected.
+
+## 6. Future Considerations
+
+### 6.1 Dynamic Validator Pools
+Implement dynamic adjustments to the validator pool size based on network conditions to ensure optimal performance and resilience.
+
+### 6.2 Cross-Federation Consensus
+Develop mechanisms for enabling federations to coordinate on large-scale decisions involving multiple independent federations, facilitating shared initiatives.
+
+## Appendix
+
+### A. Summary of Consensus Methods
+- **Initiate Consensus**: Begins a new consensus round for a proposal.
+- **Cast Validator Vote**: Allows a validator to vote on a proposal.
+- **Finalize Proposal**: Marks a proposal as finalized once it meets the approval threshold.
+
 
 
 ===================
@@ -754,233 +2007,866 @@ You can save this file as `vm-system.md` in your `./docs/specifications/core/` d
 **Let me know if you'd like to further refine any section or if you have additional components you'd like to develop!**
 
 ===================
-File: ./docs/specifications/core/2024-11-01-reputation-system.md
+File: ./docs/specifications/core/audit-system.md
 ===================
 ---
 authors:
-- Developer Name
-date: '2024-11-01'
-last_updated: '2024-11-01 00:48:30'
-related_docs: []
-reviewers:
-- Tech Lead
+  - Matt Faherty
+date: '2024-11-18'
 status: draft
-title: Reputation System
+title: Audit System Specification
 type: specification
 version: 1.0.0
-
 ---
 
-# Reputation System
+# Audit System Documentation
 
-## 1. Overview
+## Overview
 
-### 1.1 Purpose
+The Audit System is a crucial component of the Inter-Cooperative Network (ICN), designed to provide transparency, accountability, and verification of actions, transactions, and decisions made across the network. It allows cooperative members to independently verify activities, ensuring integrity and adherence to cooperative principles. The system also supports dispute resolution by providing a comprehensive audit trail.
 
-### 1.2 Core Components
+### Purpose
+- **Transparency**: Ensure all decisions, actions, and resource allocations are openly documented and accessible for review by cooperative members.
+- **Accountability**: Hold members and entities accountable for their actions through immutable audit logs.
+- **Dispute Resolution**: Provide verified historical data that can be used to resolve disputes fairly and efficiently.
 
-## 2. Detailed Specifications
+## 1. System Components
 
-### 2.1 Data Structures
+### 1.1 Audit Log
+The Audit Log is an immutable record of all significant events and actions taken within the ICN. This includes proposals, votes, resource allocations, and policy implementations.
 
-### 2.2 Interfaces
+#### Audit Log Structure
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditLog {
+    pub entry_id: String,
+    pub timestamp: u64,
+    pub entity: String,
+    pub action: String,
+    pub details: String,
+}
+```
+- **entry_id**: Unique identifier for each log entry.
+- **timestamp**: Time when the action occurred.
+- **entity**: DID of the entity responsible for the action.
+- **action**: Type of action taken (e.g., ProposalSubmission, VoteCast).
+- **details**: Additional information about the action.
 
-### 2.3 Behaviors
+### 1.2 Verifiable Claims
+Verifiable claims are cryptographic assertions that provide proof of actions taken. These can be used to verify the validity of actions recorded in the Audit Log.
 
-## 3. Implementation Guidelines
+#### Verifiable Claim Structure
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerifiableClaim {
+    pub claim_id: String,
+    pub issuer: String,
+    pub subject: String,
+    pub claim_type: String,
+    pub proof: String,
+    pub issued_at: u64,
+}
+```
+- **claim_id**: Unique identifier for the claim.
+- **issuer**: DID of the entity issuing the claim.
+- **subject**: DID of the entity subject to the claim.
+- **claim_type**: Type of claim (e.g., VoteProof, ResourceAllocation).
+- **proof**: Cryptographic proof supporting the claim.
+- **issued_at**: Time when the claim was issued.
 
-### 3.1 Performance Requirements
+## 2. Key Methods
 
-### 3.2 Security Requirements
+### 2.1 Creating an Audit Entry
+All significant actions in ICN are recorded by creating a new entry in the Audit Log.
 
-### 3.3 Error Handling
+#### Create Audit Entry
+```rust
+pub fn create_audit_entry(&mut self, entry: AuditLog) {
+    self.entries.insert(entry.entry_id.clone(), entry);
+}
+```
+- **Input**: `entry` (AuditLog structure).
+- **Functionality**: Adds an immutable record to the audit log.
 
-## 4. Testing Requirements
+### 2.2 Generating a Verifiable Claim
+A verifiable claim can be generated for any action taken. This provides cryptographic proof of the action.
 
-## 5. Monitoring and Metrics
+#### Generate Claim
+```rust
+pub fn generate_claim(&mut self, claim: VerifiableClaim) {
+    self.claims.insert(claim.claim_id.clone(), claim);
+}
+```
+- **Input**: `claim` (VerifiableClaim structure).
+- **Functionality**: Adds a verifiable claim to the system, providing proof of the recorded action.
 
-## 6. Future Considerations
+### 2.3 Querying the Audit Log
+Members can query the audit log to review historical actions, verify compliance, or resolve disputes.
+
+#### Query Audit Log
+```rust
+pub fn query_audit_log(&self, entry_id: &str) -> Option<&AuditLog> {
+    self.entries.get(entry_id)
+}
+```
+- **Input**: `entry_id` (ID of the audit entry).
+- **Output**: The audit log entry, if found.
+
+### 2.4 Verifying Claims
+Claims can be verified to ensure that the recorded action is valid and has not been tampered with.
+
+#### Verify Claim
+```rust
+pub fn verify_claim(&self, claim_id: &str) -> Result<bool, String> {
+    if let Some(claim) = self.claims.get(claim_id) {
+        // Logic to verify the cryptographic proof
+        Ok(true)
+    } else {
+        Err("Claim not found".to_string())
+    }
+}
+```
+- **Input**: `claim_id` (ID of the claim).
+- **Output**: A boolean indicating whether the claim is valid.
+
+## 3. Security Considerations
+
+### 3.1 Immutable Audit Trail
+- **Tamper Resistance**: All entries in the audit log are immutable, ensuring that no entity can alter historical records.
+- **Secure Cryptographic Proofs**: Claims are backed by cryptographic proofs that prevent unauthorized modifications.
+
+### 3.2 Privacy and Data Protection
+- **Pseudonymous Entries**: Audit log entries use DIDs to maintain participant privacy while ensuring accountability.
+- **Access Control**: Only authorized members can generate claims or query sensitive audit entries.
+
+## 4. Implementation Guidelines
+
+### 4.1 Performance Requirements
+- **Efficient Log Access**: Use indexed data structures to enable efficient lookup of audit entries.
+- **Scalable Claim Generation**: Ensure that the system can generate and verify claims efficiently, even as the number of actions recorded grows.
+
+### 4.2 Testing Requirements
+- **Unit Testing**: Include tests for audit entry creation, claim generation, and verification methods.
+- **Integrity Testing**: Ensure that all audit log entries remain immutable and verifiable over time, even under adverse conditions.
+
+## 5. Future Considerations
+
+### 5.1 Advanced Querying and Filtering
+Develop advanced querying capabilities, allowing members to filter audit entries by action type, date range, or entity. This will enhance usability and aid in quickly finding relevant information.
+
+### 5.2 Zero-Knowledge Proofs
+Consider integrating zero-knowledge proofs (ZKPs) to allow members to prove the validity of certain claims without revealing sensitive information, further enhancing privacy.
+
+## Appendix
+
+### A. Summary of Audit Methods
+- **Create Audit Entry**: Adds a new entry to the audit log.
+- **Generate Claim**: Creates a cryptographic proof of an action.
+- **Query Audit Log**: Retrieves an audit entry based on its unique identifier.
+- **Verify Claim**: Verifies the authenticity of a recorded claim.
+
+
+
+===================
+File: ./docs/specifications/core/federation-system.md
+===================
+---
+authors:
+  - Matt Faherty
+date: '2024-11-18'
+status: draft
+title: Federation System Specification
+type: specification
+version: 1.0.0
+---
+
+# Federation System Documentation
+
+## Overview
+
+The Federation System is a key component of the Inter-Cooperative Network (ICN), designed to facilitate collaboration and resource sharing between cooperatives and communities. This system supports the formation, governance, and coordination of federations, enabling entities to pool resources, share governance responsibilities, and promote joint initiatives.
+
+### Purpose
+- **Facilitating Collective Action**: Enable cooperatives and communities to join forces for common objectives, creating federations for resource sharing and collective decision-making.
+- **Modular Governance**: Support customized governance frameworks within federations, allowing each cooperative or community to set its own rules and commitments.
+- **Secure Resource Management**: Establish agreements that define how resources are contributed, managed, and accessed within federations.
+
+## 1. System Components
+
+### 1.1 Federation Types
+Federations can take various forms based on the entities involved and their objectives.
+
+- **Cooperative Federation**: Formed between multiple cooperatives to share resources or collaborate on joint projects.
+- **Community Federation**: Created by multiple communities to coordinate civic responsibilities and governance.
+- **Hybrid Federation**: Combines both cooperatives and communities to address broader socio-economic goals.
+
+### 1.2 Federation Terms
+Federation agreements define the rules and expectations for participants. Key terms include:
+- **Minimum Reputation Requirements**: Specifies the reputation required to join or participate in a federation.
+- **Resource Sharing Policies**: Guidelines on how resources can be shared, allocated, and managed within the federation.
+- **Governance Rules**: Defines the decision-making processes, such as voting mechanisms, required quorums, and approval thresholds.
+- **Duration**: Duration of the federation agreement, which can be temporary or indefinite based on the needs of participants.
+
+## 2. Key Operations
+
+### 2.1 Federation Initiation
+A federation can be initiated by a cooperative or community by specifying the type, partner entities, and terms of the agreement.
+
+#### Initiate Federation
+```rust
+pub enum FederationOperation {
+    InitiateFederation {
+        federation_type: FederationType,
+        partner_id: String,
+        terms: FederationTerms,
+    },
+}
+```
+- **Input**: `federation_type` (type of federation), `partner_id` (ID of the partner entity), `terms` (terms of the agreement).
+- **Functionality**: Creates a new federation and notifies partner entities about the proposed terms.
+
+### 2.2 Joining an Existing Federation
+Participants can join an existing federation by committing to the terms set by the initiators.
+
+#### Join Federation
+```rust
+pub enum FederationOperation {
+    JoinFederation {
+        federation_id: String,
+        commitment: Vec<String>,
+    },
+}
+```
+- **Input**: `federation_id` (ID of the federation), `commitment` (list of commitments being made by the joining entity).
+- **Functionality**: Adds the participant to the federation, provided that they meet all requirements.
+
+### 2.3 Leaving a Federation
+Federation members may leave a federation for various reasons. The `LeaveFederation` operation formalizes the exit.
+
+#### Leave Federation
+```rust
+pub enum FederationOperation {
+    LeaveFederation {
+        federation_id: String,
+        reason: String,
+    },
+}
+```
+- **Input**: `federation_id` (ID of the federation), `reason` (string explaining why the member is leaving).
+- **Functionality**: Removes the member from the federation and updates the federation's state accordingly.
+
+### 2.4 Proposing Actions within a Federation
+Members can propose actions, which are subject to voting by other members.
+
+#### Propose Action
+```rust
+pub enum FederationOperation {
+    ProposeAction {
+        federation_id: String,
+        action_type: String,
+        description: String,
+        resources: HashMap<String, u64>,
+    },
+}
+```
+- **Input**: `federation_id` (ID of the federation), `action_type` (type of action), `description` (details), `resources` (resources required for the action).
+- **Functionality**: Creates a proposal that can be voted on by other members of the federation.
+
+### 2.5 Voting on Proposals
+Voting mechanisms within federations ensure democratic decision-making.
+
+#### Vote on Proposal
+```rust
+pub enum FederationOperation {
+    VoteOnProposal {
+        federation_id: String,
+        proposal_id: String,
+        approve: bool,
+        notes: Option<String>,
+    },
+}
+```
+- **Input**: `federation_id` (ID of the federation), `proposal_id` (ID of the proposal), `approve` (boolean indicating approval or rejection), `notes` (optional comments).
+- **Functionality**: Allows members to vote on pending proposals. Proposal outcomes are determined based on federation-specific rules.
+
+### 2.6 Sharing Resources
+Members can share resources within the federation, which is critical for collaborative efforts.
+
+#### Share Resources
+```rust
+pub enum FederationOperation {
+    ShareResources {
+        federation_id: String,
+        resource_type: String,
+        amount: u64,
+        recipient_id: String,
+    },
+}
+```
+- **Input**: `federation_id` (ID of the federation), `resource_type` (type of resource), `amount` (quantity of the resource), `recipient_id` (ID of the recipient).
+- **Functionality**: Shares specified resources among federation members as per the federation agreement.
+
+### 2.7 Updating Federation Terms
+Federation terms can be updated through consensus among members.
+
+#### Update Federation Terms
+```rust
+pub enum FederationOperation {
+    UpdateFederationTerms {
+        federation_id: String,
+        new_terms: FederationTerms,
+    },
+}
+```
+- **Input**: `federation_id` (ID of the federation), `new_terms` (updated terms).
+- **Functionality**: Updates the federation terms, provided all members agree to the new conditions.
+
+## 3. Security Considerations
+
+### 3.1 Permission and Access Control
+Access to federation operations is permission-based. Entities must have appropriate permissions to propose, vote, or update federation-related actions. The `IdentitySystem` module enforces these permissions based on each DID's assigned roles.
+
+### 3.2 Reputation Thresholds
+Federation participation may require members to maintain a minimum reputation score, ensuring that only trusted members have influence within the federation.
+
+## 4. Implementation Guidelines
+
+### 4.1 Scalability
+- **Efficient Membership Management**: Ensure that adding or removing federation members is an O(1) operation through the use of hash maps.
+- **Distributed Governance**: Use event-driven architectures to ensure that proposals, votes, and actions are processed asynchronously, minimizing bottlenecks.
+
+### 4.2 Security and Verification
+- **Secure Communication**: Use DIDs and cryptographic signatures to verify the identity of entities initiating or participating in federations.
+- **Auditability**: Maintain an immutable record of all federation activities, including proposals, votes, and updates, to ensure transparency and accountability.
+
+## 5. Future Considerations
+
+### 5.1 Enhanced Dispute Resolution
+Implement a robust dispute resolution mechanism to handle disagreements or conflicts that may arise within federations. This could include mediation processes and trusted third-party arbitration.
+
+### 5.2 Cross-Federation Coordination
+Enable federations to coordinate with each other for larger initiatives, such as shared resource pools across multiple federations, or federated governance for issues of common interest.
+
+## Appendix
+
+### A. Summary of Federation Operations
+- **Initiate Federation**: Start a new federation with specific terms.
+- **Join Federation**: Commit to and join an existing federation.
+- **Leave Federation**: Exit a federation, providing reasons.
+- **Propose Action**: Suggest new actions to be undertaken by the federation.
+- **Vote on Proposal**: Participate in voting on proposed actions.
+- **Share Resources**: Contribute resources to other federation members.
+- **Update Terms**: Modify the terms of the federation agreement.
+
+
+
+===================
+File: ./docs/specifications/core/resource-allocation-system.md
+===================
+---
+authors:
+  - Matt Faherty
+date: '2024-11-18'
+status: draft
+title: Resource Allocation System Specification
+type: specification
+version: 1.0.0
+---
+
+# Resource Allocation System Documentation
+
+## Overview
+
+The Resource Allocation System is an integral part of the Inter-Cooperative Network (ICN), designed to facilitate the fair and efficient distribution of resources across cooperatives and federations. This system ensures that all members have equitable access to shared resources based on need, contribution, and cooperative priorities. Resource allocation decisions are made transparently to uphold the principles of fairness and accountability.
+
+### Purpose
+- **Fair Distribution**: Allocate resources in a way that meets the needs of members equitably, preventing monopolization or unfair usage.
+- **Efficient Utilization**: Ensure resources are used effectively, maximizing the benefit for the entire cooperative network.
+- **Transparency and Accountability**: Maintain transparency in allocation decisions, ensuring that members understand how and why resources are distributed.
+
+## 1. System Components
+
+### 1.1 Resource Request
+Members of the cooperative can request resources by specifying the type and intended use. Requests are reviewed based on availability, necessity, and contribution.
+
+#### Resource Request Structure
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceRequest {
+    pub request_id: String,
+    pub requester: String,
+    pub resource_type: String,
+    pub quantity: u64,
+    pub reason: String,
+    pub requested_at: u64,
+}
+```
+- **request_id**: Unique identifier for the resource request.
+- **requester**: DID of the member requesting the resource.
+- **resource_type**: The type of resource being requested.
+- **quantity**: The amount of the resource requested.
+- **reason**: The reason for the resource request.
+- **requested_at**: Timestamp of when the request was made.
+
+### 1.2 Allocation Policies
+The Resource Allocation System supports different policies to decide how resources should be distributed among members:
+- **Contribution-Based Allocation**: Allocation decisions based on the contributions of members to the cooperative.
+- **Need-Based Allocation**: Allocation decisions based on demonstrated need, ensuring those in critical situations receive necessary resources.
+- **Quota-Based Allocation**: Maximum quotas can be set to prevent any one member from consuming an unfair portion of shared resources.
+
+## 2. Key Methods
+
+### 2.1 Submitting a Resource Request
+Members can submit a request for resources, specifying what they need and why.
+
+#### Submit Resource Request
+```rust
+pub fn submit_request(&mut self, request: ResourceRequest) {
+    self.requests.insert(request.request_id.clone(), request);
+}
+```
+- **Input**: `request` (ResourceRequest structure).
+- **Functionality**: Adds the resource request to the system for review and allocation.
+
+### 2.2 Evaluating a Request
+Each resource request is evaluated based on current availability and allocation policies.
+
+#### Evaluate Request
+```rust
+pub fn evaluate_request(&self, request_id: &str) -> Result<ResourceAllocation, String> {
+    if let Some(request) = self.requests.get(request_id) {
+        // Logic to evaluate request based on policies and availability
+        let allocation = ResourceAllocation {
+            allocation_id: generate_id(),
+            request_id: request_id.to_string(),
+            status: AllocationStatus::Approved,
+            allocated_quantity: request.quantity,
+            allocated_at: current_timestamp(),
+        };
+        Ok(allocation)
+    } else {
+        Err("Request not found".to_string())
+    }
+}
+```
+- **Input**: `request_id` (ID of the request).
+- **Output**: Returns a `ResourceAllocation` indicating whether the request is approved and the allocated quantity.
+
+### 2.3 Resource Allocation
+Approved requests are processed, and resources are allocated accordingly. Allocated resources are updated in the Resource Registry.
+
+#### Allocate Resource
+```rust
+pub fn allocate_resource(&mut self, allocation: ResourceAllocation) -> Result<(), String> {
+    if allocation.status == AllocationStatus::Approved {
+        // Logic to update resource availability and allocation status
+        self.allocations.insert(allocation.allocation_id.clone(), allocation);
+        Ok(())
+    } else {
+        Err("Allocation not approved".to_string())
+    }
+}
+```
+- **Input**: `allocation` (ResourceAllocation structure).
+- **Functionality**: Allocates the requested resource, provided the request has been approved.
+
+### 2.4 Monitoring Resource Usage
+Allocated resources are tracked to ensure they are used effectively and returned (if applicable) once no longer needed.
+
+#### Monitor Allocation
+```rust
+pub fn monitor_allocation(&self, allocation_id: &str) -> Result<&ResourceAllocation, String> {
+    self.allocations.get(allocation_id).ok_or("Allocation not found".to_string())
+}
+```
+- **Input**: `allocation_id` (ID of the resource allocation).
+- **Output**: Returns the `ResourceAllocation` details if found.
+
+## 3. Security Considerations
+
+### 3.1 Preventing Resource Hoarding
+- **Quota Enforcement**: Implement quotas to ensure no single member can request more than their fair share of resources.
+- **Allocation Limits**: Requests are reviewed against contribution records and network needs to prevent abuse.
+
+### 3.2 Fairness and Transparency
+- **Auditable Allocations**: All resource requests and allocations are recorded in the audit log to ensure transparency.
+- **Review by Governance Board**: Resource requests that exceed set limits or involve high-value resources are reviewed by the Governance Board to ensure fairness.
+
+## 4. Implementation Guidelines
+
+### 4.1 Performance Requirements
+- **Efficient Request Handling**: Use indexed data structures to enable efficient evaluation and processing of resource requests.
+- **Scalability**: Ensure the system can handle multiple simultaneous requests and allocations without performance degradation.
+
+### 4.2 Testing Requirements
+- **Unit Testing**: Include unit tests for request submission, evaluation, and resource allocation.
+- **Load Testing**: Test the system under high demand to ensure that allocation remains fair and efficient when resources are scarce.
+
+## 5. Future Considerations
+
+### 5.1 Automated Resource Matching
+Develop automated matching algorithms to connect resource requests with available resources more effectively, minimizing manual intervention.
+
+### 5.2 Dynamic Allocation Policies
+Introduce dynamic allocation policies that adapt based on network activity, resource scarcity, and member contribution, ensuring that allocation remains fair and relevant.
+
+## Appendix
+
+### A. Summary of Resource Allocation Methods
+- **Submit Resource Request**: Adds a new resource request to the system.
+- **Evaluate Request**: Reviews a request based on policies and availability.
+- **Allocate Resource**: Allocates resources to fulfill an approved request.
+- **Monitor Allocation**: Tracks allocated resources to ensure proper usage.
 
 
 
 ===================
 File: ./docs/specifications/core/identity-system.md
 ===================
-Apologies for the oversight. Here is the complete documentation for the Identity System, entirely within a code block so you can easily copy and paste it into your documentation folder.
-
----
-
-**File: `./docs/specifications/core/identity-system.md`**
-
-```markdown
 ---
 authors:
-  - Your Name
-date: '2024-11-03'
+  - Matt Faherty
+date: '2024-11-18'
 status: draft
-title: Identity System
+title: Identity System Specification
+type: specification
+version: 1.2.0
+---
+
+# Identity System Documentation
+
+## Overview
+The Identity System is a core component of the Inter-Cooperative Network (ICN). It provides decentralized identity management through the use of Decentralized Identifiers (DIDs). This system facilitates secure interactions and permissions management across the network, allowing for authentication and authorization of cooperative members.
+
+### Purpose
+- **Decentralized Identity Management**: The Identity System provides a framework for creating and managing DIDs for all participants in the network.
+- **Authentication and Access Control**: It supports secure authentication processes and manages permissions associated with each DID.
+- **Integration with Cooperative Services**: The system ties into other ICN services like resource sharing, governance, and consensus.
+
+## 1. System Components
+
+### 1.1 Decentralized Identifiers (DIDs)
+A DID is a cryptographic identifier representing users or entities within the ICN. DIDs are generated using cryptographic primitives for uniqueness and security.
+
+#### DID Structure
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DID {
+    pub id: String,
+    #[serde(serialize_with = "serialize_public_key")]
+    #[serde(deserialize_with = "deserialize_public_key")]
+    pub public_key: PublicKey,
+}
+```
+- **id**: A unique identifier for each DID.
+- **public_key**: The public key used for identity verification.
+
+### 1.2 Identity System
+The Identity System tracks registered DIDs, manages their permissions, and supports verification processes.
+
+#### Identity System Structure
+```rust
+#[derive(Clone)]
+pub struct IdentitySystem {
+    permissions: HashMap<String, Vec<String>>,
+    registered_dids: HashMap<String, DID>,
+}
+```
+- **permissions**: Maps each DID to its assigned permissions.
+- **registered_dids**: Stores the registered DIDs for verification and reference.
+
+## 2. Key Methods
+
+### 2.1 DID Generation
+DIDs are generated using cryptographic methods to ensure both uniqueness and security. The function `generate_random` is used to create a new DID with an associated secret key.
+
+```rust
+pub fn generate_random(id: String) -> (DID, SecretKey) {
+    let secp = Secp256k1::new();
+    let mut rng = thread_rng();
+    let mut secret_key_bytes = [0u8; 32];
+    rng.fill_bytes(&mut secret_key_bytes);
+    let secret_key = SecretKey::from_slice(&secret_key_bytes).expect("Valid key");
+    let public_key = PublicKey::from_secret_key(&secp, &secret_key);
+    (DID { id, public_key }, secret_key)
+}
+```
+- **Input**: `id` - A string identifier for the DID.
+- **Output**: A tuple containing the generated `DID` and its associated `SecretKey`.
+
+### 2.2 Register DID
+The `register_did` method registers a DID with the Identity System and assigns it permissions.
+
+```rust
+pub fn register_did(&mut self, did: DID, permissions: Vec<String>) {
+    self.permissions.insert(did.id.clone(), permissions);
+    self.registered_dids.insert(did.id.clone(), did);
+}
+```
+- **Input**: `did` - The DID to be registered, `permissions` - A list of permissions to assign.
+- **Functionality**: Adds the DID and permissions to the Identity System for future reference.
+
+### 2.3 Get Permissions
+The `get_permissions` method retrieves the permissions associated with a particular DID.
+
+```rust
+pub fn get_permissions(&self, did: &str) -> Vec<String> {
+    self.permissions.get(did).cloned().unwrap_or_default()
+}
+```
+- **Input**: `did` - The identifier for the DID.
+- **Output**: A list of strings representing the permissions associated with the DID.
+
+### 2.4 Verify DID Registration
+The `is_registered` method checks if a DID is registered with the Identity System.
+
+```rust
+pub fn is_registered(&self, did: &str) -> bool {
+    self.registered_dids.contains_key(did)
+}
+```
+- **Input**: `did` - The DID to verify.
+- **Output**: A boolean indicating whether the DID is registered.
+
+### 2.5 Authentication
+The Identity System authenticates DIDs using cryptographic verification. The `verify_did` function checks if the DID’s public key matches the stored public key.
+
+```rust
+pub fn verify_did(&self, did: &str) -> Result<bool, String> {
+    if let Some(did_obj) = self.registered_dids.get(did) {
+        // Verification logic
+        Ok(true)
+    } else {
+        Err("DID not registered".to_string())
+    }
+}
+```
+- **Input**: `did` - The DID to verify.
+- **Output**: A result indicating whether the DID is valid or an error message.
+
+## 3. Permission Management
+
+### 3.1 Adding and Removing Permissions
+The Identity System allows dynamic updating of permissions for registered DIDs.
+
+#### Add Permission
+```rust
+pub fn add_permission(&mut self, did: &str, permission: String) {
+    if let Some(perms) = self.permissions.get_mut(did) {
+        if !perms.contains(&permission) {
+            perms.push(permission);
+        }
+    }
+}
+```
+- **Input**: `did` - The DID to update, `permission` - The permission to add.
+
+#### Remove Permission
+```rust
+pub fn remove_permission(&mut self, did: &str, permission: &str) {
+    if let Some(perms) = self.permissions.get_mut(did) {
+        perms.retain(|p| p != permission);
+    }
+}
+```
+- **Input**: `did` - The DID to update, `permission` - The permission to remove.
+
+## 4. Security Considerations
+
+### 4.1 Reputation-Based Access
+Reputation scores are integrated into the Identity System to enhance security and ensure responsible access. Users must maintain a positive reputation to retain or gain permissions for critical operations.
+
+### 4.2 Cryptographic Security
+The Identity System uses Secp256k1 for generating DIDs and verifying public keys. Future updates may integrate quantum-resistant cryptographic methods to ensure long-term security.
+
+### 4.3 Graceful Error Handling
+The Identity System handles errors gracefully, providing meaningful error messages that aid in debugging while maintaining security.
+
+## 5. Implementation Guidelines
+
+### 5.1 Performance Requirements
+- **Efficient Data Retrieval**: Use hash maps for O(1) lookup times for DID verification and permission retrieval.
+- **Scalability**: Ensure the system is optimized for handling thousands of DIDs without significant performance overhead.
+
+### 5.2 Testing Requirements
+- **Unit Tests**: Cover all core methods such as `register_did`, `add_permission`, and `verify_did`.
+- **Integration Tests**: Verify that the Identity System integrates smoothly with other components like governance and reputation modules.
+
+## 6. Future Considerations
+
+### 6.1 Quantum-Resistant Keys
+To future-proof the system against advancements in quantum computing, a migration to quantum-resistant algorithms (e.g., CRYSTALS-Dilithium) is under consideration.
+
+### 6.2 DID Lifecycle Management
+Adding lifecycle management for DIDs, including deactivation, expiration, and renewal, will enhance security and prevent unauthorized use of stale identities.
+
+## Appendix
+
+### A. Summary of Methods
+- **Generate DID**: Creates a new decentralized identifier.
+- **Register DID**: Adds a DID to the registry with permissions.
+- **Verify DID**: Confirms a DID’s validity via cryptographic checks.
+- **Permission Management**: Add or remove permissions for a DID as roles change.
+
+
+
+===================
+File: ./docs/specifications/core/voting-system.md
+===================
+---
+authors:
+  - Matt Faherty
+date: '2024-11-18'
+status: draft
+title: Voting System Specification
 type: specification
 version: 1.0.0
 ---
 
-# Identity System Specification
+# Voting System Documentation
 
-## 1. Overview
+## Overview
 
-### 1.1 Purpose
+The Voting System is an essential component of the Inter-Cooperative Network (ICN). It provides the mechanisms for decision-making within cooperatives and federations, allowing all members to participate in governance processes. The system supports a variety of voting types and includes measures to ensure fairness, transparency, and alignment with cooperative values.
 
-The Identity System is responsible for managing Decentralized Identifiers (DIDs) within the Inter-Cooperative Network (ICN). It ensures secure authentication and authorization for users, cooperatives, and nodes by leveraging cryptographic key pairs. The system supports both Elliptic Curve Cryptography (ECC) and quantum-resistant algorithms to future-proof security.
+### Purpose
+- **Democratic Decision-Making**: Ensure all members have an opportunity to participate in governance through a fair and transparent voting process.
+- **Weighted Influence**: Allow certain decisions to be influenced by participant contributions, while maintaining core democratic equality in key votes.
+- **Efficient Governance**: Facilitate the approval or rejection of proposals in a structured and systematic manner.
 
-### 1.2 Core Components
+## 1. Voting Types
 
-- **DID Management**: Creation, retrieval, and update of DIDs.
-- **Authentication Service**: Verifies identities through cryptographic signatures.
-- **Authorization Mechanism**: Controls access to resources based on roles and permissions.
+### 1.1 Simple Majority Voting
+In simple majority voting, a proposal is approved if more than 50% of the votes cast are in favor.
+- **Use Case**: Routine decisions that impact the cooperative but do not involve sensitive or irreversible changes.
 
-## 2. Detailed Specifications
+### 1.2 Supermajority Voting
+Supermajority voting requires a larger consensus, typically 66% or 75% of the votes.
+- **Use Case**: Decisions that impact cooperative bylaws, membership changes, or resource allocation that affects other members significantly.
 
-### 2.1 Data Structures
+### 1.3 Weighted Voting
+Weighted voting adjusts voting power based on reputation or contribution. While ensuring equality in core decisions, weighted voting helps reflect contributions in non-critical proposals.
+- **Use Case**: Decisions involving economic contributions, cooperative expansion, or technical upgrades.
 
-#### 2.1.1 DID Document
+## 2. System Components
 
-```json
-{
-  "id": "did:icn:unique_identifier",
-  "publicKey": "base64_encoded_public_key",
-  "authentication": "authentication_method",
-  "created": "timestamp",
-  "updated": "timestamp"
+### 2.1 Proposal Lifecycle
+A proposal passes through several phases from initiation to final decision.
+
+- **Initiation**: A member creates a proposal, specifying the action, goals, and resource requirements.
+- **Discussion**: Members debate and discuss the proposal, with revisions permitted before the voting stage.
+- **Voting**: The voting window is set, and eligible members cast their votes.
+- **Result**: Votes are counted and the result is announced, followed by any necessary implementation steps.
+
+### 2.2 Proposal Types
+- **Policy Proposals**: Proposals that affect governance policies, cooperative rules, or federated guidelines.
+- **Resource Allocation Proposals**: Involve the distribution or commitment of cooperative resources.
+- **Membership Proposals**: Include adding or removing members, modifying membership rights, or imposing sanctions.
+
+### 2.3 Voting Requirements
+Voting requirements depend on the type of proposal:
+- **Quorum**: A minimum number of participants must cast their votes for the result to be considered valid.
+- **Eligibility**: Participants must have a minimum reputation score to vote on certain proposals, ensuring informed decision-making.
+
+## 3. Key Methods
+
+### 3.1 Creating a Proposal
+Any eligible member can create a proposal, detailing the objectives, expected outcomes, and resource requirements.
+
+#### Create Proposal
+```rust
+pub struct Proposal {
+    pub proposal_id: String,
+    pub proposer: String,
+    pub proposal_type: String,
+    pub description: String,
+    pub resources: Option<HashMap<String, u64>>,
+    pub created_at: u64,
+    pub status: ProposalStatus,
 }
 ```
+- **Input**: `proposal_id` (unique identifier), `proposer` (DID of proposer), `proposal_type` (type of proposal), `description` (details), `resources` (optional, resource requirements).
+- **Functionality**: Initializes a new proposal with relevant details.
 
-- **id**: Unique identifier following the `did:icn:` namespace.
-- **publicKey**: The public key associated with the DID, encoded in base64.
-- **authentication**: Method used for verifying the DID owner.
-- **created**: Timestamp of when the DID was created.
-- **updated**: Timestamp of the last update to the DID document.
+### 3.2 Voting on a Proposal
+Eligible members can cast their votes for a proposal. Each proposal specifies the type of vote required (simple majority, supermajority, etc.).
 
-### 2.2 Interfaces
-
-#### 2.2.1 API Endpoints
-
-##### Create DID
-
-- **Endpoint**: `POST /api/identity/did`
-- **Description**: Registers a new DID in the network.
-- **Request Body**:
-
-  ```json
-  {
-    "publicKey": "base64_encoded_public_key"
-  }
-  ```
-
-- **Response**:
-
-  ```json
-  {
-    "did": "did:icn:unique_identifier"
-  }
-  ```
-
-##### Resolve DID
-
-- **Endpoint**: `GET /api/identity/did/{did}`
-- **Description**: Retrieves the DID document for the specified DID.
-- **Response**:
-
-  ```json
-  {
-    "didDocument": {
-      "id": "did:icn:unique_identifier",
-      "publicKey": "base64_encoded_public_key",
-      "authentication": "authentication_method",
-      "created": "timestamp",
-      "updated": "timestamp"
+#### Cast Vote
+```rust
+pub fn cast_vote(&mut self, proposal_id: &str, voter: &str, approve: bool) -> Result<(), String> {
+    if !self.is_eligible(voter) {
+        return Err("Voter not eligible".to_string());
     }
-  }
-  ```
+    let vote = Vote {
+        voter: voter.to_string(),
+        approve,
+        timestamp: current_timestamp(),
+    };
+    if let Some(proposal) = self.proposals.get_mut(proposal_id) {
+        proposal.votes.push(vote);
+        Ok(())
+    } else {
+        Err("Proposal not found".to_string())
+    }
+}
+```
+- **Input**: `proposal_id` (ID of the proposal), `voter` (DID of the voter), `approve` (approval or rejection).
+- **Functionality**: Records the vote, provided that the voter is eligible.
 
-##### Authenticate
+### 3.3 Counting Votes
+After the voting period ends, the votes are counted to determine if the proposal is approved or rejected.
 
-- **Endpoint**: `POST /api/identity/authenticate`
-- **Description**: Verifies the identity and issues an authentication token.
-- **Request Body**:
+#### Count Votes
+```rust
+pub fn count_votes(&self, proposal_id: &str) -> Result<(u32, u32), String> {
+    if let Some(proposal) = self.proposals.get(proposal_id) {
+        let approvals = proposal.votes.iter().filter(|v| v.approve).count() as u32;
+        let rejections = proposal.votes.len() as u32 - approvals;
+        Ok((approvals, rejections))
+    } else {
+        Err("Proposal not found".to_string())
+    }
+}
+```
+- **Input**: `proposal_id` (ID of the proposal).
+- **Output**: A tuple with the number of approvals and rejections.
 
-  ```json
-  {
-    "did": "did:icn:unique_identifier",
-    "signature": "base64_encoded_signature",
-    "nonce": "server_provided_nonce"
-  }
-  ```
+## 4. Security Considerations
 
-- **Response**:
+### 4.1 Vote Integrity
+- **Identity Verification**: Votes can only be cast by verified members with DIDs, ensuring that only valid participants influence decision-making.
+- **Immutable Voting Record**: Once cast, votes are recorded in an immutable format to prevent tampering or alteration.
 
-  ```json
-  {
-    "token": "jwt_token"
-  }
-  ```
+### 4.2 Prevention of Voting Fraud
+- **Minimum Reputation Requirement**: Only members who meet a minimum reputation threshold are eligible to vote, reducing the risk of vote manipulation.
+- **Quorum Enforcement**: Proposals require a quorum to prevent a small number of participants from passing significant decisions without broader consensus.
 
-### 2.3 Behaviors
+## 5. Implementation Guidelines
 
-#### 2.3.1 DID Creation Workflow
+### 5.1 Performance Requirements
+- **Efficient Proposal Lookup**: Use hash maps for efficient access to proposals and voting data.
+- **Scalability**: Ensure the system can handle multiple concurrent votes and proposals without a performance drop, even as the cooperative network grows.
 
-1. **Key Generation**: The user generates a key pair locally, choosing between ECC or quantum-resistant algorithms.
-2. **Public Key Submission**: The user sends the public key to the Identity System via the `Create DID` endpoint.
-3. **DID Registration**: The system creates a unique DID, stores the DID document, and returns the DID to the user.
-
-#### 2.3.2 Authentication Workflow
-
-1. **Nonce Request**: The user requests a nonce from the server to prevent replay attacks.
-2. **Signature Generation**: The user signs the nonce with their private key.
-3. **Authentication Request**: The user sends the DID, signature, and nonce to the server.
-4. **Verification**: The server verifies the signature using the public key from the DID document.
-5. **Token Issuance**: Upon successful verification, the server issues a JWT token for authenticated sessions.
-
-## 3. Implementation Guidelines
-
-### 3.1 Performance Requirements
-
-- **Scalability**: The system should handle a large number of DID registrations and authentication requests concurrently.
-- **Low Latency**: Authentication and DID resolution should occur with minimal delay to ensure a smooth user experience.
-
-### 3.2 Security Requirements
-
-- **Key Security**: Users must securely store their private keys; the system should never have access to private keys.
-- **Replay Attack Prevention**: Use nonces or timestamps during authentication to prevent replay attacks.
-- **Quantum Resistance**: Support for quantum-resistant algorithms like CRYSTALS-Dilithium and CRYSTALS-Kyber should be implemented to future-proof the system.
-
-### 3.3 Error Handling
-
-- **Detailed Error Messages**: Provide clear and actionable error messages without revealing sensitive information.
-- **Failure Modes**: Gracefully handle failures in DID creation, resolution, and authentication.
-
-## 4. Testing Requirements
-
-- **Unit Tests**: Cover all functions related to DID management and authentication.
-- **Integration Tests**: Test the interaction between the Identity System and other modules like the Reputation System and Governance Module.
-- **Security Tests**: Perform vulnerability assessments and penetration testing to ensure robust security measures are in place.
-
-## 5. Monitoring and Metrics
-
-- **Audit Logs**: Maintain logs for DID creation, updates, and authentication attempts for auditing purposes.
-- **Performance Metrics**: Monitor response times for API endpoints and system load.
-- **Security Alerts**: Implement alerts for suspicious activities, such as repeated failed authentication attempts.
+### 5.2 Testing Requirements
+- **Unit Testing**: Include unit tests for critical methods, such as `create_proposal`, `cast_vote`, and `count_votes`.
+- **Simulated Scenarios**: Test the voting system under different scenarios, including edge cases like tied votes or missed quorums, to ensure robustness.
 
 ## 6. Future Considerations
 
-- **DID Deactivation**: Provide a mechanism for users to deactivate or revoke their DIDs in case of key compromise.
-- **Metadata Integration**: Include optional metadata in DID documents, such as reputation scores and cooperative affiliations.
-- **Cross-Network Compatibility**: Ensure the Identity System is compatible with other decentralized networks for broader interoperability.
-```
+### 6.1 Integration with Reputation
+Integrate the reputation system so that participants with a higher reputation may have more influence in non-critical decisions, while maintaining an egalitarian approach for essential votes.
 
----
+### 6.2 Delegated Voting
+Implement a mechanism for delegated voting, where members can assign their voting rights to trusted representatives, ensuring that all voices are represented even if participants cannot vote directly.
 
-You can save this file as `identity-system.md` in your `./docs/specifications/core/` directory.
+## Appendix
 
-Would you like me to provide documentation for other components as well? If so, please let me know which one you'd like to work on next, and I'll prepare it accordingly.
+### A. Summary of Voting Methods
+- **Create Proposal**: Initializes a proposal for consideration.
+- **Cast Vote**: Allows an eligible member to vote on a proposal.
+- **Count Votes**: Tallies votes to determine the outcome of a proposal.
+
+
 
 ===================
 File: ./docs/specifications/core/proof-of-cooperation.md
@@ -1183,51 +3069,155 @@ File: ./docs/specifications/core/reputation-system.md
 ===================
 ---
 authors:
-- Matt Faherty
-date: '2024-11-03'
+  - Matt Faherty
+date: '2024-11-18'
 status: draft
-title: Reputation System
+title: Reputation System Specification
 type: specification
 version: 1.0.0
 ---
 
-# Reputation System
+# Reputation System Documentation
 
 ## Overview
-The Reputation System provides a non-transferable measure of trust and engagement within ICN. Reputation scores influence voting power, cooperative roles, and the ability to initiate proposals.
+
+The Reputation System is a foundational component of the Inter-Cooperative Network (ICN). It is designed to track and quantify the contributions of individuals and entities, thereby providing a dynamic reputation score. This score influences governance participation, resource access, and eligibility for cooperative activities, ensuring that stakeholders are held accountable and incentivized to act in ways that benefit the community.
 
 ### Purpose
-- **Incentivize Positive Behavior**: Encourage cooperative engagement and responsible voting.
-- **Access Control**: Regulate participation based on reputation thresholds.
-- **Transparent Governance**: Use reputation as a metric for cooperative influence.
+- **Trust Mechanism**: Establish a measurable trust mechanism to distinguish reliable contributors from malicious actors.
+- **Incentive Alignment**: Encourage positive behavior by rewarding constructive contributions with reputation points.
+- **Access Control**: Gate access to certain activities or permissions based on reputation to ensure only trustworthy actors participate in critical governance processes.
 
-## Data Structures
+## 1. System Components
 
-### Reputation System
-- **scores**: `HashMap<String, i64>` - Maps DIDs to reputation scores.
+### 1.1 Reputation Score
+A reputation score is an integer value associated with each Decentralized Identifier (DID). It fluctuates based on an entity’s actions, contributions, and compliance with community standards.
 
-### Reputation Score
-- **Minimum**: Define lower thresholds to prevent negative reputation abuse.
-- **Decay (planned)**: Implement periodic decay to maintain active engagement.
+#### Reputation Score Attributes
+- **Initial Score**: New participants start with a baseline reputation score, typically set to 0.
+- **Dynamic Adjustment**: The reputation score changes in response to specific actions, which can be positive (increasing reputation) or negative (decreasing reputation).
+- **Decay Rate**: Reputation decays over time if there are no recent contributions, ensuring ongoing community engagement.
 
-## Methods
+### 1.2 Reputation Ledger
+The Reputation Ledger maintains an immutable history of all reputation changes associated with each DID.
 
-### Increase Reputation
-Increases reputation for actions like voting, creating proposals, or contributing resources.
+#### Ledger Structure
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReputationLedger {
+    pub changes: Vec<ReputationChange>,
+}
 
-### Decrease Reputation
-Penalizes reputation for actions deemed harmful or against cooperative rules.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReputationChange {
+    pub did: String,
+    pub change: i32,
+    pub reason: String,
+    pub timestamp: u64,
+}
+```
+- **changes**: A list of reputation changes, including increase or decrease values, reasons, and timestamps.
 
-### Reward Voting Participation
-Rewards active participation in voting, providing an incentive to engage in governance.
+## 2. Key Methods
 
-## Implementation Guidelines
-- **Reputation Decay**: Decay inactive accounts periodically to prevent influence stagnation.
-- **Thresholds**: Set thresholds for actions, e.g., minimum score for creating proposals.
+### 2.1 Adjusting Reputation
+Reputation can be adjusted for various actions, such as contributions to governance, resource sharing, or verified claims.
 
-## Monitoring and Metrics
-- **Reputation Trends**: Track changes to analyze member engagement.
-- **Vote Influence Analysis**: Record how reputation impacts voting outcomes.
+#### Modify Reputation
+```rust
+pub fn modify_reputation(&mut self, did: &str, change: i32, reason: String) {
+    let entry = ReputationChange {
+        did: did.to_string(),
+        change,
+        reason,
+        timestamp: current_timestamp(),
+    };
+    self.changes.push(entry);
+}
+```
+- **Input**: `did` (identifier of the entity), `change` (positive or negative reputation adjustment), `reason` (description).
+- **Functionality**: Adds a reputation change entry to the ledger.
+
+### 2.2 Fetching Reputation Score
+This method returns the current reputation score for a given DID by summing the changes recorded in the ledger.
+
+#### Get Reputation Score
+```rust
+pub fn get_reputation_score(&self, did: &str) -> i32 {
+    self.changes.iter().filter(|c| c.did == did).map(|c| c.change).sum()
+}
+```
+- **Input**: `did` (identifier of the entity).
+- **Output**: An integer representing the current reputation score.
+
+### 2.3 Verifying Eligibility for Operations
+Some operations, such as proposing actions or joining federations, require a minimum reputation score. This method verifies eligibility.
+
+#### Check Reputation Eligibility
+```rust
+pub fn is_eligible(&self, did: &str, min_reputation: i32) -> bool {
+    self.get_reputation_score(did) >= min_reputation
+}
+```
+- **Input**: `did` (identifier of the entity), `min_reputation` (minimum required reputation score).
+- **Output**: Boolean indicating whether the entity is eligible.
+
+## 3. Reputation Adjustments
+
+### 3.1 Positive Contributions
+Entities can gain reputation through activities that benefit the cooperative network.
+
+- **Governance Participation**: Voting or contributing to governance decisions.
+- **Resource Sharing**: Providing resources to other members or federations.
+- **Verified Claims**: Making verifiable claims that are validated by peers.
+
+### 3.2 Negative Adjustments
+Reputation can be reduced for behaviors that harm the network or violate cooperative policies.
+
+- **Misconduct**: Behaviors that undermine trust, such as spamming or dishonesty.
+- **Resource Misuse**: Wasting shared resources or failing to comply with resource-sharing policies.
+- **Failed Proposals**: Proposing actions repeatedly that are rejected by the community due to poor alignment with cooperative values.
+
+### 3.3 Reputation Decay
+If entities are inactive for prolonged periods, their reputation decays to encourage continuous participation.
+
+- **Decay Function**: The decay rate is applied periodically (e.g., monthly) to reduce scores by a small percentage if no positive actions are recorded.
+
+## 4. Security Considerations
+
+### 4.1 Reputation Manipulation Prevention
+- **Collusion Resistance**: To prevent users from inflating reputation scores through collusion, only verified actions (e.g., resource contributions and governance participation) impact the score.
+- **Threshold Limitations**: Reputation changes have thresholds to avoid extreme adjustments from single actions.
+
+### 4.2 Transparency and Accountability
+- **Immutable Ledger**: The Reputation Ledger is immutable, ensuring that all reputation adjustments are recorded transparently and cannot be altered after the fact.
+- **Public Visibility**: Reputation scores and their historical adjustments are accessible to network participants for transparency, promoting accountability.
+
+## 5. Implementation Guidelines
+
+### 5.1 Performance Considerations
+- **Efficient Ledger Access**: Use indexed data structures to enable efficient lookup and aggregation of reputation changes for each DID.
+- **Scalable Design**: The system should support hundreds of thousands of reputation entries, ensuring smooth functioning even as the network scales.
+
+### 5.2 Testing Requirements
+- **Unit Tests**: Include tests for key methods such as `modify_reputation`, `get_reputation_score`, and `is_eligible`.
+- **Scenario-Based Testing**: Develop test scenarios for different participant behaviors, including positive and negative reputation changes, and ensure the system behaves as expected.
+
+## 6. Future Considerations
+
+### 6.1 Integration with Governance and Voting
+Integrate reputation with voting weights, enabling participants with higher reputation scores to have more influence over non-critical decisions, while maintaining democratic equality for essential decisions.
+
+### 6.2 Multi-Dimensional Reputation
+Develop a multi-dimensional reputation system that allows different reputation categories (e.g., governance, resource sharing, technical contributions) to be tracked independently, providing a more nuanced view of each participant's contributions.
+
+## Appendix
+
+### A. Summary of Reputation Methods
+- **Modify Reputation**: Adjusts the reputation score for a given entity, adding a new entry to the ledger.
+- **Get Reputation Score**: Retrieves the current reputation score for a DID.
+- **Check Eligibility**: Verifies if an entity meets the minimum reputation required for a given operation.
+
 
 
 ===================
@@ -1288,130 +3278,373 @@ Computes the hash for each block, securing the data and linking blocks sequentia
 
 
 ===================
-File: ./docs/specifications/core/governance-system.md
+File: ./docs/specifications/core/resource-sharing-system.md
 ===================
 ---
 authors:
-- Matt Faherty
-date: '2024-11-03'
+  - Matt Faherty
+date: '2024-11-18'
 status: draft
-title: Governance System
+title: Resource Sharing System Specification
 type: specification
 version: 1.0.0
 ---
 
-# Governance System
+# Resource Sharing System Documentation
 
 ## Overview
-The Governance System enables cooperative members to create, vote on, and track proposals within ICN. Proposals coordinate resource allocations, policy changes, and initiatives through reputation-weighted voting.
+
+The Resource Sharing System is a critical component of the Inter-Cooperative Network (ICN). It allows cooperatives and federations to share, allocate, and manage resources effectively within the network. This system ensures that resources are utilized in a fair, efficient, and transparent manner, fostering collaboration and collective benefit.
 
 ### Purpose
-- **Decentralized Decision-Making**: Empowers cooperatives with direct influence over decisions.
-- **Transparent Proposal Tracking**: Manages proposals throughout their lifecycle.
-- **Reputation-Based Voting**: Aligns voting power with user contributions and engagement.
+- **Optimal Resource Utilization**: Facilitate the sharing of underutilized resources across the network to maximize value.
+- **Equitable Access**: Ensure that all cooperatives and communities have fair access to shared resources based on their contributions and needs.
+- **Transparent Allocation**: Maintain transparency in resource distribution to uphold trust and accountability among all participants.
 
-## Data Structures
+## 1. System Components
 
-### Proposal
-- **id**: `u64` - Unique proposal identifier.
-- **type**: `ProposalType` - Enum indicating proposal type (e.g., Funding).
-- **status**: `ProposalStatus` - Enum indicating status (e.g., Open, Closed).
-- **votes**: `Vec<(String, i64)>` - List of votes, with voter DID and weighted reputation.
+### 1.1 Resource Types
+The system supports various resource types, which may include:
+- **Physical Resources**: Equipment, raw materials, vehicles, etc.
+- **Digital Resources**: Storage capacity, bandwidth, software licenses.
+- **Human Resources**: Specialized labor, skills, and expertise.
 
-### ProposalHistory
-- **proposals**: `VecDeque<Proposal>` - Queue of proposals.
-- **notifications**: `VecDeque<String>` - Queue of notifications for proposal events.
+### 1.2 Resource Registry
+The Resource Registry maintains an inventory of all shared resources, tracking their availability, ownership, and allocation status.
 
-## Methods
+#### Resource Structure
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Resource {
+    pub resource_id: String,
+    pub resource_type: String,
+    pub owner: String,
+    pub availability: ResourceAvailability,
+    pub description: String,
+}
 
-### Create Proposal
-Creates a proposal, setting parameters (type, description, duration) and initializing with Open status.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ResourceAvailability {
+    Available,
+    Allocated,
+    UnderMaintenance,
+}
+```
+- **resource_id**: Unique identifier for each resource.
+- **resource_type**: Type of the resource (physical, digital, or human).
+- **owner**: DID of the entity owning the resource.
+- **availability**: Current availability status of the resource.
+- **description**: Details about the resource.
 
-### Vote on Proposal
-Registers a vote, using weighted reputation for transparency.
+## 2. Key Methods
 
-### Close Proposal
-Locks in the proposal’s results, preventing further votes.
+### 2.1 Registering a Resource
+Resources can be registered by any cooperative member, adding them to the Resource Registry.
 
-### Send Voting Reminder
-Sends notifications to prompt voting for proposals near closure.
+#### Register Resource
+```rust
+pub fn register_resource(&mut self, resource: Resource) {
+    self.resources.insert(resource.resource_id.clone(), resource);
+}
+```
+- **Input**: `resource` (Resource structure).
+- **Functionality**: Adds the resource to the Resource Registry for potential sharing and allocation.
 
-## Implementation Guidelines
-- **Reputation Requirements**: Define minimum reputation for creating and voting to ensure credibility.
-- **Standard Proposal Types**: Classify proposal types (Funding, PolicyChange) for consistency.
+### 2.2 Requesting a Resource
+Participants can request resources from the registry, specifying their needs and intended use.
 
-## Monitoring and Metrics
-- **Proposal Activity**: Track proposal creation and voting rates.
-- **Outcome Recording**: Log vote distribution and final outcome for cooperative accountability.
+#### Request Resource
+```rust
+pub fn request_resource(&mut self, resource_id: &str, requester: &str) -> Result<(), String> {
+    if let Some(resource) = self.resources.get_mut(resource_id) {
+        if let ResourceAvailability::Available = resource.availability {
+            resource.availability = ResourceAvailability::Allocated;
+            Ok(())
+        } else {
+            Err("Resource not available".to_string())
+        }
+    } else {
+        Err("Resource not found".to_string())
+    }
+}
+```
+- **Input**: `resource_id` (ID of the resource), `requester` (DID of the requester).
+- **Functionality**: Allocates the resource if it is available.
+
+### 2.3 Releasing a Resource
+Once a resource is no longer needed, it must be released back into the pool of available resources.
+
+#### Release Resource
+```rust
+pub fn release_resource(&mut self, resource_id: &str) -> Result<(), String> {
+    if let Some(resource) = self.resources.get_mut(resource_id) {
+        if let ResourceAvailability::Allocated = resource.availability {
+            resource.availability = ResourceAvailability::Available;
+            Ok(())
+        } else {
+            Err("Resource is not currently allocated".to_string())
+        }
+    } else {
+        Err("Resource not found".to_string())
+    }
+}
+```
+- **Input**: `resource_id` (ID of the resource).
+- **Functionality**: Marks the resource as available again.
+
+### 2.4 Updating Resource Information
+Resource owners can update resource details, such as availability or description.
+
+#### Update Resource
+```rust
+pub fn update_resource(&mut self, resource_id: &str, description: String, availability: ResourceAvailability) -> Result<(), String> {
+    if let Some(resource) = self.resources.get_mut(resource_id) {
+        resource.description = description;
+        resource.availability = availability;
+        Ok(())
+    } else {
+        Err("Resource not found".to_string())
+    }
+}
+```
+- **Input**: `resource_id` (ID of the resource), `description` (new description), `availability` (new availability status).
+- **Functionality**: Updates the resource information accordingly.
+
+## 3. Resource Sharing Policies
+
+### 3.1 Fair Allocation Rules
+- **Contribution-Based Access**: Members contributing more to the network are given priority access to shared resources.
+- **Need-Based Consideration**: Resources may be allocated based on demonstrated need, ensuring equitable distribution.
+- **Quotas**: Maximum usage quotas may be implemented to prevent overuse by any single participant.
+
+### 3.2 Usage Tracking
+All resource usage is tracked for accountability and transparency. This data helps determine reputation impacts and can inform future allocation decisions.
+
+### 3.3 Maintenance and Downtime
+- **Maintenance Scheduling**: Resources can be marked as `UnderMaintenance` during repair or upkeep.
+- **Downtime Reporting**: Owners must report resource unavailability to prevent allocation during downtime.
+
+## 4. Security Considerations
+
+### 4.1 Preventing Resource Hoarding
+- **Quota Enforcement**: Enforce quotas on resource usage to ensure fair access across the network.
+- **Penalty Mechanisms**: Participants who hold onto resources without justification may receive negative reputation adjustments.
+
+### 4.2 Transparency in Allocation
+- **Public Resource Ledger**: Maintain a ledger that records all allocations, ensuring that resource sharing activities are auditable and transparent.
+
+## 5. Implementation Guidelines
+
+### 5.1 Performance Requirements
+- **Efficient Resource Lookup**: Use hash maps for rapid lookup of available resources.
+- **Scalable Registry Management**: Ensure that the Resource Registry can accommodate a growing number of resources and participants.
+
+### 5.2 Testing Requirements
+- **Unit Testing**: Include tests for resource registration, request, release, and update methods.
+- **Scenario Testing**: Test common scenarios, such as concurrent requests for the same resource, to ensure robustness.
+
+## 6. Future Considerations
+
+### 6.1 Automated Matching
+Develop automated matching algorithms to connect resource requests with available resources, optimizing allocation without manual intervention.
+
+### 6.2 Incentive Structures
+Introduce incentive mechanisms to encourage the sharing of high-value or scarce resources, such as bonus reputation points or cooperative recognition.
+
+## Appendix
+
+### A. Summary of Resource Methods
+- **Register Resource**: Adds a new resource to the registry.
+- **Request Resource**: Allocates an available resource to a requester.
+- **Release Resource**: Returns an allocated resource back to available status.
+- **Update Resource**: Updates the description or availability of a resource.
+
 
 
 ===================
-File: ./docs/architecture/backend.md
+File: ./docs/specifications/core/governance-system.md
 ===================
-# Backend Architecture
+---
+authors:
+  - Matt Faherty
+date: '2024-11-18'
+status: draft
+title: Governance System Specification
+type: specification
+version: 1.0.0
+---
 
-The ICN backend handles core blockchain operations, transaction processing, and governance functionalities.
+# Governance System Documentation
 
-## Modules
-1. **Blockchain Module**: Manages the decentralized ledger for recording transactions.
-2. **Identity and DID Module**: Handles DID (Decentralized Identifiers) for secure, pseudonymous interactions.
-3. **Reputation System**: Tracks and manages reputation scores, influencing governance roles and decision-making.
+## Overview
 
-## Data Flow
-- **Transaction Lifecycle**: Transactions are submitted, validated, and recorded in the blockchain, with reputation updates.
-- **Reputation Tracking**: User actions affect their reputation score, impacting cooperative influence.
+The Governance System is at the heart of the Inter-Cooperative Network (ICN), defining the processes and mechanisms through which cooperatives and federations make decisions, establish policies, and manage their internal and external affairs. The governance system ensures inclusive, fair, and transparent decision-making across ICN, supporting both local and network-wide governance structures.
+
+### Purpose
+- **Democratic Engagement**: Enable all members to participate in decision-making processes, ensuring inclusivity and fairness.
+- **Role Definition and Accountability**: Clearly define roles, responsibilities, and accountability for individuals and entities within the ICN.
+- **Policy Formation and Implementation**: Facilitate the creation, modification, and enforcement of policies that guide cooperative activities.
+
+## 1. Governance Roles
+
+### 1.1 Members
+All cooperative members have the right to participate in governance processes. Members are responsible for:
+- Voting on proposals and policies.
+- Initiating proposals related to cooperative governance.
+- Participating in discussions and providing input on governance matters.
+
+### 1.2 Delegates
+Delegates are members elected or nominated to represent a group of participants within the cooperative.
+- **Role**: Provide informed opinions and cast votes on behalf of the represented members.
+- **Selection**: Delegates are chosen through member voting, typically based on expertise or experience.
+
+### 1.3 Governance Board
+The Governance Board is responsible for overseeing the governance processes and ensuring adherence to established policies.
+- **Responsibilities**: Review proposals, arbitrate conflicts, and oversee policy implementation.
+- **Composition**: Board members are elected by cooperative members through regular voting cycles.
+
+## 2. Governance Processes
+
+### 2.1 Proposal Creation and Submission
+Members can create proposals that address various governance matters such as policy changes, resource allocations, or cooperative agreements.
+
+#### Create Governance Proposal
+```rust
+pub struct GovernanceProposal {
+    pub proposal_id: String,
+    pub proposer: String,
+    pub proposal_type: String,
+    pub description: String,
+    pub created_at: u64,
+    pub status: ProposalStatus,
+}
+```
+- **Input**: `proposal_id` (unique identifier), `proposer` (DID of proposer), `proposal_type` (type of proposal), `description` (details).
+- **Functionality**: Creates a new governance proposal that will be reviewed by members or delegates.
+
+### 2.2 Discussion and Amendment
+Before voting, proposals undergo a discussion phase where members can provide feedback, suggest amendments, or debate the merits of the proposal.
+- **Amendments**: Proposals can be amended based on member feedback before proceeding to voting.
+- **Discussion Boards**: Discussions are facilitated through secure communication channels to maintain transparency.
+
+### 2.3 Voting and Decision Making
+Once the discussion phase is complete, proposals are put to a vote.
+
+#### Voting Mechanism
+- **Simple Majority**: Proposals require more than 50% of the votes to pass.
+- **Supermajority**: For significant decisions, a supermajority (e.g., 66% or 75%) is required.
+- **Unanimity**: In rare cases involving fundamental changes to cooperative bylaws, a unanimous vote may be needed.
+
+### 2.4 Policy Implementation
+Once a proposal is approved, it becomes an active policy.
+- **Execution**: The Governance Board oversees the implementation of approved policies.
+- **Compliance Monitoring**: Policies are enforced, and compliance is monitored to ensure that cooperative goals are met.
+
+## 3. Key Methods
+
+### 3.1 Submitting a Proposal
+Any cooperative member can submit a proposal, which is then reviewed by the Governance Board before being discussed by members.
+
+#### Submit Proposal
+```rust
+pub fn submit_proposal(&mut self, proposal: GovernanceProposal) {
+    self.proposals.insert(proposal.proposal_id.clone(), proposal);
+}
+```
+- **Input**: `proposal` (GovernanceProposal structure).
+- **Functionality**: Adds the proposal to the governance system for review and discussion.
+
+### 3.2 Voting on a Governance Proposal
+Members or delegates can cast votes on proposals that have completed the discussion phase.
+
+#### Cast Vote
+```rust
+pub fn cast_vote(&mut self, proposal_id: &str, voter: &str, approve: bool) -> Result<(), String> {
+    if !self.is_eligible(voter) {
+        return Err("Voter not eligible".to_string());
+    }
+    let vote = Vote {
+        voter: voter.to_string(),
+        approve,
+        timestamp: current_timestamp(),
+    };
+    if let Some(proposal) = self.proposals.get_mut(proposal_id) {
+        proposal.votes.push(vote);
+        Ok(())
+    } else {
+        Err("Proposal not found".to_string())
+    }
+}
+```
+- **Input**: `proposal_id` (ID of the proposal), `voter` (DID of the voter), `approve` (approval or rejection).
+- **Functionality**: Records the vote for the proposal.
+
+### 3.3 Implementing Policies
+Once a proposal is approved, the Governance Board is responsible for executing the policy.
+
+#### Implement Policy
+```rust
+pub fn implement_policy(&self, proposal_id: &str) -> Result<(), String> {
+    if let Some(proposal) = self.proposals.get(proposal_id) {
+        if proposal.status == ProposalStatus::Approved {
+            // Execute policy implementation logic
+            Ok(())
+        } else {
+            Err("Proposal not approved".to_string())
+        }
+    } else {
+        Err("Proposal not found".to_string())
+    }
+}
+```
+- **Input**: `proposal_id` (ID of the approved proposal).
+- **Functionality**: Executes the implementation of the approved policy.
+
+## 4. Security Considerations
+
+### 4.1 Voting Fraud Prevention
+- **Identity Verification**: Votes can only be cast by verified members with Decentralized Identifiers (DIDs), ensuring that voting integrity is maintained.
+- **Eligibility Verification**: Only members meeting specific criteria (e.g., reputation score) can submit proposals or vote, preventing bad actors from influencing decisions.
+
+### 4.2 Transparency and Accountability
+- **Immutable Records**: All proposals, votes, and policy implementations are recorded immutably to ensure transparency.
+- **Auditability**: Governance records are accessible for auditing, ensuring members can review decisions and actions taken by the Governance Board.
+
+## 5. Implementation Guidelines
+
+### 5.1 Performance Requirements
+- **Efficient Proposal Management**: Use hash maps for efficient access to proposals and associated voting data.
+- **Scalability**: Ensure the system can handle an increasing number of proposals and participants without compromising performance.
+
+### 5.2 Testing Requirements
+- **Unit Testing**: Include unit tests for proposal submission, voting, and policy implementation.
+- **End-to-End Testing**: Test the entire governance process, from proposal creation to policy implementation, to ensure that all components interact correctly.
+
+## 6. Future Considerations
+
+### 6.1 Delegated Voting and Proxy Representation
+Introduce mechanisms for members to delegate their voting power to trusted representatives, enhancing participation rates and ensuring that all voices are represented even when members are unable to participate directly.
+
+### 6.2 Dynamic Role Assignment
+Develop a mechanism to dynamically assign governance roles based on reputation, activity, and expertise to ensure that the governance system remains flexible and responsive to changing needs.
+
+## Appendix
+
+### A. Summary of Governance Methods
+- **Submit Proposal**: Adds a new governance proposal to the system.
+- **Cast Vote**: Allows members or delegates to vote on a proposal.
+- **Implement Policy**: Executes an approved policy and oversees its implementation.
+
 
 
 ===================
-File: ./docs/architecture/overview.md
+File: ./docs/architecture/diagrams/mermaid/component-diagram.mermaid
 ===================
-# Architecture Overview
-
-The ICN (Inter-Cooperative Network) platform is designed to support decentralized and cooperative governance, resource allocation, and community-based decision-making. This document outlines the overarching architecture that powers the ICN platform.
-
-## Key Components
-- **Backend Services**: Provides core functionality, including blockchain operations, identity management, and governance processes.
-- **Frontend Interface**: User-facing applications, including the Governance Dashboard and Cooperative Management.
-- **Smart Contracts**: Custom cooperative-specific contracts handled by a virtual machine (VM).
-
-## Interaction Flow
-1. **User Actions**: Users initiate requests through the frontend.
-2. **API Processing**: Requests are routed to backend services via secure API endpoints.
-3. **Blockchain and VM**: Transactions are validated, and cooperative actions are processed on-chain.
-# Architecture Overview
-
-The ICN (Inter-Cooperative Network) platform is designed to support decentralized and cooperative governance, resource allocation, and community-based decision-making. This document outlines the overarching architecture that powers the ICN platform.
-
-## Key Components
-- **Backend Services**: Provides core functionality, including blockchain operations, identity management, and governance processes.
-- **Frontend Interface**: User-facing applications, including the Governance Dashboard and Cooperative Management.
-- **Smart Contracts**: Custom cooperative-specific contracts handled by a virtual machine (VM).
-
-## Interaction Flow
-1. **User Actions**: Users initiate requests through the frontend.
-2. **API Processing**: Requests are routed to backend services via secure API endpoints.
-3. **Blockchain and VM**: Transactions are validated, and cooperative actions are processed on-chain.
+%% Mermaid diagram placeholder
 
 
 ===================
-File: ./docs/architecture/diagrams/component/component.md
-===================
-# Component Diagram
-
-This section provides a visual overview of the ICN's architectural components.
-
-## Diagram
-![Component Diagram](../images/component-diagram.png)
-
-## Description
-The ICN architecture is modular, allowing each component to function independently but interconnect to support cooperative and governance functionalities.
-1. **Frontend Modules**: User interfaces for governance and cooperative management.
-2. **API Gateway**: Manages communication between frontend and backend.
-3. **Blockchain & VM**: Ensures secure transaction processing and execution of smart contracts.
-
-
-===================
-File: ./docs/architecture/diagrams/component.md
+File: ./docs/architecture/diagrams/images/component-diagram.png
 ===================
 <EMPTY FILE>
 
@@ -1423,18 +3656,61 @@ site_name: "ICN Documentation"
 theme:
   name: material
 
+plugins:
+  - search
+  - mermaid2
+
 nav:
-  - Home: index.md
+  - Home: README.md
+  - API Documentation: 
+      - Overview: api/index.md
   - Architecture:
       - Overview: architecture/overview.md
-      - Backend: architecture/backend.md
+      - Backend: architecture/backend/backend.md
       - Diagrams:
-          - Component Diagram: architecture/diagrams/component.md
+          - Component Diagram: architecture/diagrams/component/component.md
+          - System Diagram: architecture/diagrams/system/system.md
   - Specifications:
-      - Reputation System: specifications/core/2024-11-01-reputation-system.md
+      - API Governance: specifications/api/governance-api.md
+      - Audit System: specifications/core/audit-system.md
+      - Blockchain System: specifications/core/blockchain-system.md
+      - Consensus System: specifications/core/consensus-system.md
+      - Federation System: specifications/core/federation-system.md
+      - Governance System: specifications/core/governance-system.md
+      - Identity System: specifications/core/identity-system.md
+      - Proof of Cooperation: specifications/core/proof-of-cooperation.md
+      - Reputation System: specifications/core/reputation-system.md
+      - Resource Allocation: specifications/core/resource-allocation-system.md
+      - Resource Sharing: specifications/core/resource-sharing-system.md
+      - Transaction System: specifications/core/transaction-system.md
+      - VM System: specifications/core/vm-system.md
+      - Voting System: specifications/core/voting-system.md
   - Development:
+      - Contributing: development/guides/contributing.md
       - Documentation Standards: development/guides/documentation-standards.md
-  - User:
-      - User Guide: user/guides/
+      - Development Setup: development/setup/development-setup-guide.md
+      - Test Strategy: development/guides/test-strategy.md
+      - CI/CD Pipeline: development/plans/ci_cd-pipeline.md
+      - Development Roadmap: development/plans/development-roadmap.md
+      - Testing Roadmap: development/plans/testing-roadmap.md
+  - User Documentation:
+      - User Guides:
+          - Onboarding Guide: user/guides/onboarding-guide.md
+          - Resource Management Guide: user/guides/resource-management.md
+      - Tutorials: user/tutorials/index.md
+  - Guides:
+      - Getting Started: guides/getting-started.md
+      - Governance Guide: guides/governance-guide.md
+      - Reputation Management: guides/reputation-management.md
+  - Templates:
+      - API Template: templates/api-template.md
+      - Core Component Template: templates/core-component-template.md
+      - Protocol Template: templates/protocol-template.md
+
+docs_dir: "."
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/your-repo
 
 
