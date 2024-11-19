@@ -3,7 +3,6 @@
 use std::sync::{Arc, Mutex};
 use chrono::Utc;
 use std::collections::HashMap;
-
 use crate::consensus::{ProofOfCooperation, ConsensusRound};
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
@@ -12,9 +11,8 @@ use crate::blockchain::{Block, Transaction};
 use crate::blockchain::transaction::{TransactionType, ResourceAllocation};
 use crate::relationship::{
     RelationshipSystem, Contribution, MutualAidInteraction, 
-    Relationship, RelationshipType
+    Relationship, Interaction, InteractionType, RelationshipType
 };
-use crate::websocket::WebSocketHandler;
 
 /// Main blockchain implementation with cooperative-specific features
 pub struct Blockchain {
@@ -28,6 +26,7 @@ pub struct Blockchain {
     pub current_block_number: u64,
     coordinator_did: String,
 }
+
 
 impl Blockchain {
     /// Creates a new blockchain instance with required subsystems
@@ -189,7 +188,7 @@ impl Blockchain {
                         date: Utc::now(),
                         description: interaction_text.clone(),
                         impact: None,
-                        interaction_type: crate::relationship::InteractionType::Collaboration,
+                        interaction_type: InteractionType::Collaboration,
                     };
                     relationship.interactions.push(new_interaction);
                 }
@@ -382,11 +381,9 @@ mod tests {
         let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
         let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
         let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new()));
-        let ws_handler = Arc::new(WebSocketHandler::new());
-        
         let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
             crate::consensus::types::ConsensusConfig::default(),
-            ws_handler,
+            Arc::new(crate::websocket::WebSocketHandler::new()),
         )));
 
         Blockchain::new(
@@ -405,7 +402,7 @@ mod tests {
         assert_eq!(blockchain.pending_transactions.len(), 0);
     }
 
-#[tokio::test]
+    #[tokio::test]
     async fn test_transaction_processing() {
         let mut blockchain = setup_test_blockchain().await;
         

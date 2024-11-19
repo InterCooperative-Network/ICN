@@ -21,7 +21,6 @@ pub use governance::Proposal;
 pub use consensus::{ProofOfCooperation, types::ConsensusConfig};
 pub use consensus::types::ConsensusRound;
 pub use vm::{VM, Contract, ExecutionContext};
-pub use vm::opcode::OpCode;
 pub use vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
 pub use websocket::WebSocketHandler;
 pub use monitoring::energy::{EnergyAware, EnergyMonitor};
@@ -55,7 +54,6 @@ pub struct ICNCore {
     identity_system: Arc<Mutex<IdentitySystem>>,
     reputation_system: Arc<Mutex<ReputationSystem>>,
     relationship_system: Arc<Mutex<RelationshipSystem>>,
-    ws_handler: Arc<WebSocketHandler>,
     vm: Arc<Mutex<VM>>,
     event_bus: broadcast::Sender<SystemEvent>,
     start_time: DateTime<Utc>,
@@ -95,7 +93,6 @@ impl ICNCore {
             identity_system,
             reputation_system,
             relationship_system,
-            ws_handler,
             vm,
             event_bus: event_tx,
             start_time: Utc::now(),
@@ -128,7 +125,7 @@ impl ICNCore {
         // Create and execute contract
         let contract = Contract {
             id: uuid::Uuid::new_v4().to_string(),
-            code: vec![OpCode::CreateCooperative {
+            code: vec![vm::opcode::OpCode::CreateCooperative {
                 name: metadata.cooperative_id.clone(),
                 description: metadata.purpose.clone(),
                 resources: HashMap::new(),
@@ -305,7 +302,7 @@ impl CooperativeManager {
     pub async fn create_cooperative(
         &self, 
         creator_did: String, 
-        name: String,
+        _name: String,
         purpose: String
     ) -> Result<String, String> {
         let metadata = CooperativeMetadata {
@@ -340,55 +337,6 @@ impl CooperativeManager {
     }
 }
 
-/// Node implementation for the ICN network
-pub struct ICNNode {
-    core: Arc<ICNCore>,
-    node_id: String,
-    peers: Arc<Mutex<HashMap<String, String>>>,
-}
-
-impl ICNNode {
-    pub fn new(core: Arc<ICNCore>, node_id: String) -> Self {
-        ICNNode {
-            core,
-            node_id,
-            peers: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
-
-    pub async fn start(&self) -> Result<(), String> {
-        let mut event_rx = self.core.subscribe_to_events();
-        self.core.start_consensus_round().await?;
-
-        tokio::spawn(async move {
-            while let Ok(event) = event_rx.recv().await {
-                match event {
-                    SystemEvent::BlockCreated(block) => {
-                        println!("New block created: {}", block.index);
-                    }
-                    SystemEvent::ConsensusStarted(round) => {
-                        println!("New consensus round started: {}", round.round_number);
-                    }
-                    _ => {}
-                }
-            }
-        });
-
-        Ok(())
-    }
-
-    pub async fn connect_to_peer(&self, peer_id: String, address: String) -> Result<(), String> {
-        self.peers.lock()
-            .map_err(|_| "Failed to acquire peers lock".to_string())?
-            .insert(peer_id, address);
-        Ok(())
-    }
-
-    pub fn get_peer_count(&self) -> usize {
-        self.peers.lock().map(|peers| peers.len()).unwrap_or(0)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -412,19 +360,6 @@ mod tests {
         ).await;
         
         assert!(result.is_err()); // Should fail because DID not registered
-    }
-
-    #[tokio::test]
-    async fn test_node_connection() {
-        let core = Arc::new(ICNCore::new());
-        let node = ICNNode::new(core, "test-node".to_string());
-        
-        assert!(node.connect_to_peer(
-            "peer1".to_string(),
-            "localhost:8080".to_string()
-        ).await.is_ok());
-        
-        assert_eq!(node.get_peer_count(), 1);
     }
 
     #[test]
