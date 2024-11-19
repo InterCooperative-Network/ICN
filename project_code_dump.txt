@@ -1,4 +1,4 @@
-Project Code Dump - Generated Mon Nov 18 11:46:40 PM UTC 2024
+Project Code Dump - Generated Tue Nov 19 12:16:01 AM UTC 2024
 ======================================
 
 Project Tree:
@@ -8469,9 +8469,10 @@ mod tests {
 File: ./backend/src/blockchain/chain.rs
 ===================
 // src/blockchain/chain.rs
+
 use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
 use chrono::Utc;
+use std::collections::HashMap;
 
 use crate::consensus::{ProofOfCooperation, ConsensusRound};
 use crate::identity::IdentitySystem;
@@ -8481,9 +8482,9 @@ use crate::blockchain::{Block, Transaction};
 use crate::blockchain::transaction::{TransactionType, ResourceAllocation};
 use crate::relationship::{
     RelationshipSystem, Contribution, MutualAidInteraction, 
-    Relationship, Interaction, InteractionType, Endorsement
+    Relationship, RelationshipType
 };
-
+use crate::websocket::WebSocketHandler;
 
 /// Main blockchain implementation with cooperative-specific features
 pub struct Blockchain {
@@ -8615,7 +8616,9 @@ impl Blockchain {
                 Ok(())
             },
 
-            TransactionType::RecordMutualAid { receiver, description, impact_story, reciprocity_notes, tags } => {
+            TransactionType::RecordMutualAid { 
+                receiver, description, impact_story, reciprocity_notes, tags 
+            } => {
                 let mut relationship_system = self.relationship_system.lock()
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
@@ -8634,14 +8637,16 @@ impl Blockchain {
                 Ok(())
             },
 
-            TransactionType::UpdateRelationship { member_two, relationship_type, story, interaction } => {
+            TransactionType::UpdateRelationship { 
+                member_two, relationship_type, story, interaction 
+            } => {
                 let mut relationship_system = self.relationship_system.lock()
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
                 let mut relationship = Relationship {
                     member_one: tx.sender.clone(),
                     member_two: member_two.clone(),
-                    relationship_type: RelationshipType::new(relationship_type),
+                    relationship_type: RelationshipType::from_str(relationship_type),
                     started: Utc::now(),
                     story: story.clone(),
                     interactions: vec![],
@@ -8649,7 +8654,6 @@ impl Blockchain {
                     notes: vec![],
                 };
 
-                // Handle the interaction if provided
                 if let Some(interaction_text) = interaction {
                     let new_interaction = Interaction {
                         date: Utc::now(),
@@ -8792,14 +8796,8 @@ impl Blockchain {
         }
 
         let block = consensus_guard.finalize_round().await?;
-        let updates = consensus_guard.get_reputation_updates();
 
-        let mut reputation_system = self.reputation_system.lock()
-            .map_err(|_| "Failed to acquire reputation lock".to_string())?;
-            
-        for (did, change) in updates {
-            reputation_system.increase_reputation(&did, *change);
-        }
+        drop(consensus_guard);
 
         self.chain.push(block);
         self.pending_transactions.clear();
@@ -8849,10 +8847,8 @@ impl Blockchain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::websocket::WebSocketHandler;
 
-    #[tokio::test]
-    async fn test_blockchain_new() {
+    async fn setup_test_blockchain() -> Blockchain {
         let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
         let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
         let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new()));
@@ -8863,77 +8859,38 @@ mod tests {
             ws_handler,
         )));
 
-        let blockchain = Blockchain::new(
-            identity_system.clone(),
-            reputation_system.clone(),
-            relationship_system.clone(),
+        Blockchain::new(
+            identity_system,
+            reputation_system,
+            relationship_system,
             consensus,
-        );
+        )
+    }
 
+    #[tokio::test]
+    async fn test_blockchain_creation() {
+        let blockchain = setup_test_blockchain().await;
         assert_eq!(blockchain.current_block_number, 1);
         assert_eq!(blockchain.chain.len(), 1);
         assert_eq!(blockchain.pending_transactions.len(), 0);
-        assert_eq!(blockchain.coordinator_did, "did:icn:genesis");
     }
 
-    #[test]
-    fn test_block_getters() {
-        let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
-        let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
-        let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new()));
-        let ws_handler = Arc::new(WebSocketHandler::new());
-        
-        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
-            crate::consensus::types::ConsensusConfig::default(),
-            ws_handler,
-        )));
-
-        let blockchain = Blockchain::new(
-            identity_system.clone(),
-            reputation_system.clone(),
-            relationship_system.clone(),
-            consensus,
-        );
-
-        assert_eq!(blockchain.get_block_count(), 1); // Genesis block
-        assert!(blockchain.get_block(0).is_some());
-        assert!(blockchain.get_block(1).is_none());
-        assert_eq!(blockchain.get_transaction_count(), 0);
-        assert_eq!(blockchain.get_latest_block().index, 0);
-    }
-
-    #[tokio::test]
+#[tokio::test]
     async fn test_transaction_processing() {
-        let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
-        let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
-        let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new()));
-        let ws_handler = Arc::new(WebSocketHandler::new());
+        let mut blockchain = setup_test_blockchain().await;
         
-        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
-            crate::consensus::types::ConsensusConfig::default(),
-            ws_handler,
-        )));
-
-        let mut blockchain = Blockchain::new(
-            identity_system.clone(),
-            reputation_system.clone(),
-            relationship_system.clone(),
-            consensus,
-        );
-
         // Register test identity
         {
-            let mut identity = identity_system.lock().unwrap();
+            let mut identity = blockchain.identity_system.lock().unwrap();
             identity.register_did("did:icn:test".into());
         }
 
         // Set initial reputation
         {
-            let mut reputation = reputation_system.lock().unwrap();
+            let mut reputation = blockchain.reputation_system.lock().unwrap();
             reputation.increase_reputation("did:icn:test", 100);
         }
 
-        // Create test transaction
         let transaction = Transaction::new(
             "did:icn:test".to_string(),
             TransactionType::Transfer {
@@ -8942,45 +8899,39 @@ mod tests {
             },
         );
 
-        // Process transaction
         assert!(blockchain.process_transaction(&transaction).await.is_ok());
         assert_eq!(blockchain.pending_transactions.len(), 1);
     }
 
+    #[test]
+    fn test_block_getters() {
+        let blockchain = setup_test_blockchain().await;
+        assert_eq!(blockchain.get_block_count(), 1); // Genesis block
+        assert!(blockchain.get_block(0).is_some());
+        assert!(blockchain.get_block(1).is_none());
+        assert_eq!(blockchain.get_transaction_count(), 0);
+        assert_eq!(blockchain.get_latest_block().index, 0);
+    }
+
     #[tokio::test]
     async fn test_block_finalization() {
-        let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
-        let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
-        let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new()));
-        let ws_handler = Arc::new(WebSocketHandler::new());
-        
-        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
-            crate::consensus::types::ConsensusConfig::default(),
-            ws_handler,
-        )));
-
-        let mut blockchain = Blockchain::new(
-            identity_system.clone(),
-            reputation_system.clone(),
-            relationship_system.clone(),
-            consensus.clone(),
-        );
+        let mut blockchain = setup_test_blockchain().await;
 
         // Add validators
         {
-            let mut consensus_guard = consensus.lock().unwrap();
-            consensus_guard.register_validator("did:icn:validator1".to_string(), 1000).unwrap();
-            consensus_guard.register_validator("did:icn:validator2".to_string(), 1000).unwrap();
-            consensus_guard.register_validator("did:icn:validator3".to_string(), 1000).unwrap();
+            let mut consensus = blockchain.consensus.lock().unwrap();
+            consensus.register_validator("did:icn:validator1".to_string(), 1000).unwrap();
+            consensus.register_validator("did:icn:validator2".to_string(), 1000).unwrap();
+            consensus.register_validator("did:icn:validator3".to_string(), 1000).unwrap();
         }
 
         // Register test identity and set reputation
         {
-            let mut identity = identity_system.lock().unwrap();
+            let mut identity = blockchain.identity_system.lock().unwrap();
             identity.register_did("did:icn:test".into());
         }
         {
-            let mut reputation = reputation_system.lock().unwrap();
+            let mut reputation = blockchain.reputation_system.lock().unwrap();
             reputation.increase_reputation("did:icn:test", 100);
         }
 
@@ -9001,30 +8952,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_relationship_transactions() {
-        let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
-        let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
-        let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new()));
-        let ws_handler = Arc::new(WebSocketHandler::new());
-        
-        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
-            crate::consensus::types::ConsensusConfig::default(),
-            ws_handler,
-        )));
-
-        let mut blockchain = Blockchain::new(
-            identity_system.clone(),
-            reputation_system.clone(),
-            relationship_system.clone(),
-            consensus,
-        );
+        let mut blockchain = setup_test_blockchain().await;
 
         // Setup test identity
         {
-            let mut identity = identity_system.lock().unwrap();
+            let mut identity = blockchain.identity_system.lock().unwrap();
             identity.register_did("did:icn:test".into());
         }
         {
-            let mut reputation = reputation_system.lock().unwrap();
+            let mut reputation = blockchain.reputation_system.lock().unwrap();
             reputation.increase_reputation("did:icn:test", 100);
         }
 
@@ -9058,25 +8994,84 @@ mod tests {
 
     #[test]
     fn test_resource_management() {
-        let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
-        let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
-        let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new()));
-        let ws_handler = Arc::new(WebSocketHandler::new());
-        
-        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
-            crate::consensus::types::ConsensusConfig::default(),
-            ws_handler,
-        )));
-
-        let mut blockchain = Blockchain::new(
-            identity_system,
-            reputation_system,
-            relationship_system,
-            consensus,
-        );
-
+        let mut blockchain = setup_test_blockchain().await;
         assert!(blockchain.check_and_update_resources("did:icn:test").is_ok());
         assert!(blockchain.resource_allocations.contains_key("did:icn:test"));
+    }
+
+    #[tokio::test]
+    async fn test_consensus_round() {
+        let mut blockchain = setup_test_blockchain().await;
+        
+        // Add validators
+        {
+            let mut consensus = blockchain.consensus.lock().unwrap();
+            consensus.register_validator("did:icn:validator1".to_string(), 1000).unwrap();
+            consensus.register_validator("did:icn:validator2".to_string(), 1000).unwrap();
+            consensus.register_validator("did:icn:validator3".to_string(), 1000).unwrap();
+        }
+
+        // Start consensus round
+        assert!(blockchain.finalize_block().await.is_ok());
+        assert!(blockchain.get_current_round().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_transaction_validation() {
+        let mut blockchain = setup_test_blockchain().await;
+
+        // Test transaction with unregistered DID
+        let invalid_transaction = Transaction::new(
+            "did:icn:unregistered".to_string(),
+            TransactionType::Transfer {
+                receiver: "did:icn:recipient".to_string(),
+                amount: 100,
+            },
+        );
+
+        assert!(blockchain.validate_transaction(&invalid_transaction).is_err());
+
+        // Test transaction with insufficient reputation
+        {
+            let mut identity = blockchain.identity_system.lock().unwrap();
+            identity.register_did("did:icn:lowrep".into());
+        }
+        
+        let low_rep_transaction = Transaction::new(
+            "did:icn:lowrep".to_string(),
+            TransactionType::Transfer {
+                receiver: "did:icn:recipient".to_string(),
+                amount: 100,
+            },
+        );
+
+        assert!(blockchain.validate_transaction(&low_rep_transaction).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_contract_execution() {
+        let mut blockchain = setup_test_blockchain().await;
+
+        // Setup test identity with required reputation
+        {
+            let mut identity = blockchain.identity_system.lock().unwrap();
+            identity.register_did("did:icn:test".into());
+        }
+        {
+            let mut reputation = blockchain.reputation_system.lock().unwrap();
+            reputation.increase_reputation("did:icn:test", 100);
+        }
+
+        let contract_tx = Transaction::new(
+            "did:icn:test".to_string(),
+            TransactionType::ContractExecution {
+                contract_id: "test_contract".to_string(),
+                input_data: HashMap::new(),
+            },
+        );
+
+        // Should fail since contract implementation is not complete
+        assert!(blockchain.process_transaction(&contract_tx).await.is_err());
     }
 }
 

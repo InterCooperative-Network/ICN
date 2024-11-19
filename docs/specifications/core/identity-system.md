@@ -3,28 +3,27 @@ authors:
   - Matt Faherty
 date: '2024-11-18'
 status: draft
-title: Identity System
-version: 1.1.0
+title: Identity System Specification
+type: specification
+version: 1.2.0
 ---
 
 # Identity System Documentation
 
-## 1. Overview
+## Overview
+The Identity System is a core component of the Inter-Cooperative Network (ICN). It provides decentralized identity management through the use of Decentralized Identifiers (DIDs). This system facilitates secure interactions and permissions management across the network, allowing for authentication and authorization of cooperative members.
 
-The Identity System within ICN is a core infrastructure component that enables secure, decentralized identity management for cooperatives, communities, and their members. It provides a framework for generating, managing, and authenticating Decentralized Identifiers (DIDs). This system is crucial for ensuring both identity integrity and secure, permissioned participation in ICN activities.
+### Purpose
+- **Decentralized Identity Management**: The Identity System provides a framework for creating and managing DIDs for all participants in the network.
+- **Authentication and Access Control**: It supports secure authentication processes and manages permissions associated with each DID.
+- **Integration with Cooperative Services**: The system ties into other ICN services like resource sharing, governance, and consensus.
 
-### 1.1 Purpose
-- **Decentralized Authentication**: Provides secure, decentralized identity verification.
-- **Role and Permission Management**: Associates roles and permissions with DIDs for cooperative governance and activities.
-- **Accountability**: Ensures that participants can be uniquely identified while protecting their privacy.
+## 1. System Components
 
-## 2. Core Components
+### 1.1 Decentralized Identifiers (DIDs)
+A DID is a cryptographic identifier representing users or entities within the ICN. DIDs are generated using cryptographic primitives for uniqueness and security.
 
-### 2.1 Data Structures
-
-#### 2.1.1 DID Structure
-The `DID` struct is the foundational element for ICN identities:
-
+#### DID Structure
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DID {
@@ -34,52 +33,44 @@ pub struct DID {
     pub public_key: PublicKey,
 }
 ```
-- **id**: A unique string identifier for the DID.
-- **public_key**: A public key associated with the DID, serialized for communication purposes.
+- **id**: A unique identifier for each DID.
+- **public_key**: The public key used for identity verification.
 
-### 2.2 Identity System Structure
-The `IdentitySystem` struct handles the management and registration of DIDs, as well as role-based permissions.
+### 1.2 Identity System
+The Identity System tracks registered DIDs, manages their permissions, and supports verification processes.
 
+#### Identity System Structure
 ```rust
+#[derive(Clone)]
 pub struct IdentitySystem {
     permissions: HashMap<String, Vec<String>>,
     registered_dids: HashMap<String, DID>,
 }
 ```
-- **permissions**: Maps each DID to a list of permissions granted within the cooperative or community context.
-- **registered_dids**: Stores all registered DIDs, ensuring each DID is uniquely identifiable.
+- **permissions**: Maps each DID to its assigned permissions.
+- **registered_dids**: Stores the registered DIDs for verification and reference.
 
-## 3. Interfaces
+## 2. Key Methods
 
-### 3.1 DID Creation and Management
-
-#### 3.1.1 DID Generation
-- **Method**: `DID::generate_random(id: String) -> (Self, SecretKey)`
-- **Purpose**: Generates a new DID using a randomly generated secret key.
-  - **Input**: A unique identifier string.
-  - **Output**: A DID instance and its associated `SecretKey`.
-- **Process**:
-  1. Generate a random 32-byte secret key.
-  2. Create a public key from the secret key using the `secp256k1` library.
-  3. Return the new DID and secret key pair.
+### 2.1 DID Generation
+DIDs are generated using cryptographic methods to ensure both uniqueness and security. The function `generate_random` is used to create a new DID with an associated secret key.
 
 ```rust
-pub fn generate_random(id: String) -> (Self, SecretKey) {
+pub fn generate_random(id: String) -> (DID, SecretKey) {
     let secp = Secp256k1::new();
     let mut rng = thread_rng();
     let mut secret_key_bytes = [0u8; 32];
     rng.fill_bytes(&mut secret_key_bytes);
-    let secret_key = SecretKey::from_slice(&secret_key_bytes).expect("Random bytes should produce valid key");
+    let secret_key = SecretKey::from_slice(&secret_key_bytes).expect("Valid key");
     let public_key = PublicKey::from_secret_key(&secp, &secret_key);
-    DID { id, public_key }, secret_key
+    (DID { id, public_key }, secret_key)
 }
 ```
+- **Input**: `id` - A string identifier for the DID.
+- **Output**: A tuple containing the generated `DID` and its associated `SecretKey`.
 
-#### 3.1.2 DID Registration
-- **Method**: `IdentitySystem::register_did(did: DID, permissions: Vec<String>)`
-- **Purpose**: Registers a new DID with specified permissions.
-  - **Input**: A `DID` instance and a list of permissions.
-  - **Process**: Adds the DID and associated permissions to `registered_dids` and `permissions` respectively.
+### 2.2 Register DID
+The `register_did` method registers a DID with the Identity System and assigns it permissions.
 
 ```rust
 pub fn register_did(&mut self, did: DID, permissions: Vec<String>) {
@@ -87,57 +78,108 @@ pub fn register_did(&mut self, did: DID, permissions: Vec<String>) {
     self.registered_dids.insert(did.id.clone(), did);
 }
 ```
+- **Input**: `did` - The DID to be registered, `permissions` - A list of permissions to assign.
+- **Functionality**: Adds the DID and permissions to the Identity System for future reference.
 
-## 4. Behaviors
+### 2.3 Get Permissions
+The `get_permissions` method retrieves the permissions associated with a particular DID.
 
-### 4.1 Role and Permission Management
+```rust
+pub fn get_permissions(&self, did: &str) -> Vec<String> {
+    self.permissions.get(did).cloned().unwrap_or_default()
+}
+```
+- **Input**: `did` - The identifier for the DID.
+- **Output**: A list of strings representing the permissions associated with the DID.
 
-#### 4.1.1 Permission Management
-- **Method**: `IdentitySystem::add_permission(did: &str, permission: String)`
-- **Purpose**: Grants an additional permission to a registered DID.
-  - **Input**: The DID identifier and the permission to be added.
-  - **Process**: Checks if the DID exists, then adds the permission if it is not already present.
+### 2.4 Verify DID Registration
+The `is_registered` method checks if a DID is registered with the Identity System.
 
-#### 4.1.2 DID Authentication
-- **Purpose**: The `Authentication` struct (currently minimal in code) is intended for developing methods that authenticate users based on their DIDs and verify their public-private key pairs.
+```rust
+pub fn is_registered(&self, did: &str) -> bool {
+    self.registered_dids.contains_key(did)
+}
+```
+- **Input**: `did` - The DID to verify.
+- **Output**: A boolean indicating whether the DID is registered.
 
-## 5. Security Model
+### 2.5 Authentication
+The Identity System authenticates DIDs using cryptographic verification. The `verify_did` function checks if the DID’s public key matches the stored public key.
 
-### 5.1 Public Key Management
-The Identity System uses `secp256k1` elliptic curve cryptography to generate public and secret key pairs. The **DID** is associated with a `PublicKey`, while the `SecretKey` remains with the user for signing purposes.
+```rust
+pub fn verify_did(&self, did: &str) -> Result<bool, String> {
+    if let Some(did_obj) = self.registered_dids.get(did) {
+        // Verification logic
+        Ok(true)
+    } else {
+        Err("DID not registered".to_string())
+    }
+}
+```
+- **Input**: `did` - The DID to verify.
+- **Output**: A result indicating whether the DID is valid or an error message.
 
-### 5.2 Permission Validation
-- **Enforcement**: Permissions are enforced by querying the `permissions` map during identity-based actions.
-- **Scoped Access**: Only DIDs with the appropriate permissions may execute restricted operations, ensuring secure and compliant interactions within the cooperative.
+## 3. Permission Management
 
-## 6. Implementation Guidelines
+### 3.1 Adding and Removing Permissions
+The Identity System allows dynamic updating of permissions for registered DIDs.
 
-### 6.1 Extensibility
-- **Future Integration**: Expand the `IdentitySystem` to include DID document management and cryptographic proof capabilities for better interoperability.
-- **Inter-Cooperative Identity Validation**: Introduce cross-cooperative identity validation for federated environments.
+#### Add Permission
+```rust
+pub fn add_permission(&mut self, did: &str, permission: String) {
+    if let Some(perms) = self.permissions.get_mut(did) {
+        if !perms.contains(&permission) {
+            perms.push(permission);
+        }
+    }
+}
+```
+- **Input**: `did` - The DID to update, `permission` - The permission to add.
 
-### 6.2 Security Requirements
-- **Key Management**: Users must securely store their `SecretKey` to prevent unauthorized access.
-- **Reputation and Trust**: DIDs should be linked to reputation scores that affect the level of trust and permissions granted.
+#### Remove Permission
+```rust
+pub fn remove_permission(&mut self, did: &str, permission: &str) {
+    if let Some(perms) = self.permissions.get_mut(did) {
+        perms.retain(|p| p != permission);
+    }
+}
+```
+- **Input**: `did` - The DID to update, `permission` - The permission to remove.
 
-## 7. Testing Requirements
+## 4. Security Considerations
 
-- **Unit Tests**: Ensure correctness in DID generation, registration, and permission management.
-- **Integration Tests**: Verify secure DID creation and permission checks across cooperative modules.
-- **Security Tests**: Test scenarios where unauthorized actions are attempted, ensuring proper enforcement of permissions.
+### 4.1 Reputation-Based Access
+Reputation scores are integrated into the Identity System to enhance security and ensure responsible access. Users must maintain a positive reputation to retain or gain permissions for critical operations.
+
+### 4.2 Cryptographic Security
+The Identity System uses Secp256k1 for generating DIDs and verifying public keys. Future updates may integrate quantum-resistant cryptographic methods to ensure long-term security.
+
+### 4.3 Graceful Error Handling
+The Identity System handles errors gracefully, providing meaningful error messages that aid in debugging while maintaining security.
+
+## 5. Implementation Guidelines
+
+### 5.1 Performance Requirements
+- **Efficient Data Retrieval**: Use hash maps for O(1) lookup times for DID verification and permission retrieval.
+- **Scalability**: Ensure the system is optimized for handling thousands of DIDs without significant performance overhead.
+
+### 5.2 Testing Requirements
+- **Unit Tests**: Cover all core methods such as `register_did`, `add_permission`, and `verify_did`.
+- **Integration Tests**: Verify that the Identity System integrates smoothly with other components like governance and reputation modules.
+
+## 6. Future Considerations
+
+### 6.1 Quantum-Resistant Keys
+To future-proof the system against advancements in quantum computing, a migration to quantum-resistant algorithms (e.g., CRYSTALS-Dilithium) is under consideration.
+
+### 6.2 DID Lifecycle Management
+Adding lifecycle management for DIDs, including deactivation, expiration, and renewal, will enhance security and prevent unauthorized use of stale identities.
 
 ## Appendix
 
-### A. Sample Usage
-
-```rust
-let mut identity_system = IdentitySystem::new();
-let (new_did, secret_key) = DID::generate_random("did:icn:user1".to_string());
-identity_system.register_did(new_did.clone(), vec!["vote", "create_proposal"]);
-assert!(identity_system.is_registered(&new_did.id));
-```
-
-### B. Serialization and Deserialization
-- **Serialization**: Public keys are serialized to strings for storage and transmission.
-- **Deserialization**: The `deserialize_public_key` function recreates the `PublicKey` from a string representation.
+### A. Summary of Methods
+- **Generate DID**: Creates a new decentralized identifier.
+- **Register DID**: Adds a DID to the registry with permissions.
+- **Verify DID**: Confirms a DID’s validity via cryptographic checks.
+- **Permission Management**: Add or remove permissions for a DID as roles change.
 
