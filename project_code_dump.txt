@@ -1,4 +1,4 @@
-Project Code Dump - Generated Wed Nov 20 09:48:31 PM UTC 2024
+Project Code Dump - Generated Wed Nov 20 10:47:41 PM UTC 2024
 ======================================
 
 Project Tree:
@@ -141,16 +141,13 @@ Project Tree:
     ├── activate-docs-env.sh.bak
     ├── doctools
     │   ├── __init__.py
-    │   ├── __pycache__
-    │   │   ├── docmanager.cpython-312.pyc
-    │   │   └── specgen.cpython-312.pyc
     │   ├── docmanager.py
     │   ├── docsctl
     │   └── specgen.py
     ├── install_docsctl.sh
     └── requirements.txt
 
-39 directories, 107 files
+38 directories, 105 files
 
 
 ===================
@@ -10413,28 +10410,25 @@ File: ./backend/src/main.rs
 ===================
 // src/main.rs
 
-mod blockchain;
-mod identity;
-mod reputation;
-mod governance;
-mod utils;
-mod vm;
-mod websocket;
-mod consensus;
-
 use std::sync::{Arc, Mutex};
 use warp::Filter;
-use crate::websocket::WebSocketHandler;
-use crate::blockchain::Blockchain;
-use crate::identity::IdentitySystem;
-use crate::reputation::ReputationSystem;
-use crate::consensus::{ProofOfCooperation, types::ConsensusConfig};
+
+// Import from the icn_backend library
+use icn_backend::{
+    blockchain::Blockchain,
+    consensus::{ProofOfCooperation, types::ConsensusConfig},
+    identity::IdentitySystem,
+    relationship::RelationshipSystem, // Import the RelationshipSystem
+    reputation::ReputationSystem,
+    websocket::WebSocketHandler,
+};
 
 #[tokio::main]
 async fn main() {
     // Initialize core systems
     let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
     let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+    let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new())); // Initialize the RelationshipSystem
     
     // Create WebSocket handler for real-time updates
     let ws_handler = Arc::new(WebSocketHandler::new());
@@ -10449,8 +10443,10 @@ async fn main() {
     let blockchain = Arc::new(Mutex::new(Blockchain::new(
         identity_system.clone(),
         reputation_system.clone(),
+        relationship_system.clone(), // Pass the relationship_system to the Blockchain constructor
         consensus.clone(),
     )));
+
 
     // Define WebSocket route with DID header for user identification
     let ws_handler = ws_handler.clone();
@@ -13431,43 +13427,28 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# Async runtime
-tokio = { version = "1.0", features = ["full"] }
-
-# HTTP and WebSocket handling
-warp = "0.3"
-tokio-tungstenite = { version = "0.20", features = ["native-tls"] }
-url = "2.4"
-http = "0.2"
-
-# Serialization and data handling
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.0", features = ["v4"] }
-
-# Futures and concurrency
-futures = "0.3"
-futures-util = "0.3"
-
-# Random number generation
-rand = "0.8"
-
-# Cryptography
+tokio = { version = "1.41.0", features = ["full"] }
+warp = "0.3.7"
+tokio-tungstenite = { version = "0.21.0", features = ["native-tls"] }
+url = "2.5.2"
+http = "1.1.0"
+serde = { version = "1.0.214", features = ["derive"] }
+serde_json = "1.0.132"
+chrono = { version = "0.4.38", features = ["serde"] }
+uuid = { version = "1.11.0", features = ["v4"] }
+futures = "0.3.31"
+futures-util = "0.3.31"
+rand = "0.8.5"
 secp256k1 = { version = "0.24.3", features = ["rand"] }
-sha2 = "0.10"
+sha2 = "0.10.8"
 
 [dev-dependencies]
-# Used for development tests
-tokio = { version = "1.0", features = ["full"] }
-warp = "0.3"
+tokio = { version = "1.41.0", features = ["full"] }
+warp = "0.3.7"
 
-[features]
-default = []
-
-# Optional Features (if needed for CI or other setups)
-test = []
-
+[[bin]]
+name = "icn-app" 
+path = "src/main.rs"
 
 ===================
 File: ./frontend/package.json
