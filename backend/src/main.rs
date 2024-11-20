@@ -1,27 +1,24 @@
 // src/main.rs
 
-mod blockchain;
-mod identity;
-mod reputation;
-mod governance;
-mod utils;
-mod vm;
-mod websocket;
-mod consensus;
-
 use std::sync::{Arc, Mutex};
 use warp::Filter;
-use crate::websocket::WebSocketHandler;
-use crate::blockchain::Blockchain;
-use crate::identity::IdentitySystem;
-use crate::reputation::ReputationSystem;
-use crate::consensus::{ProofOfCooperation, types::ConsensusConfig};
+
+// Import from the icn_backend library
+use icn_backend::{
+    blockchain::Blockchain,
+    consensus::{ProofOfCooperation, types::ConsensusConfig},
+    identity::IdentitySystem,
+    relationship::RelationshipSystem, // Import the RelationshipSystem
+    reputation::ReputationSystem,
+    websocket::WebSocketHandler,
+};
 
 #[tokio::main]
 async fn main() {
     // Initialize core systems
     let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
     let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+    let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new())); // Initialize the RelationshipSystem
     
     // Create WebSocket handler for real-time updates
     let ws_handler = Arc::new(WebSocketHandler::new());
@@ -36,8 +33,10 @@ async fn main() {
     let blockchain = Arc::new(Mutex::new(Blockchain::new(
         identity_system.clone(),
         reputation_system.clone(),
+        relationship_system.clone(), // Pass the relationship_system to the Blockchain constructor
         consensus.clone(),
     )));
+
 
     // Define WebSocket route with DID header for user identification
     let ws_handler = ws_handler.clone();
