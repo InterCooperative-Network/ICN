@@ -10,10 +10,16 @@ use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
 use crate::vm::{VM, Contract, ExecutionContext, Event};
 
-// Try using icn_backend directly as suggested by compiler
+// Using absolute path from crate root, since relationship is a top-level module
 use crate::relationship::{
-    Contribution, MutualAidInteraction, RelationshipSystem, Relationship, RelationshipType,
-    Interaction, InteractionType, Endorsement,
+    Contribution,
+    MutualAidInteraction,
+    RelationshipSystem,
+    Relationship,
+    RelationshipType,
+    Interaction,
+    InteractionType,
+    Endorsement
 };
 
 

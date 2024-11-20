@@ -24,9 +24,16 @@ pub use governance::Proposal;
 pub use identity::IdentitySystem;
 pub use monitoring::energy::{EnergyAware, EnergyMonitor};
 pub use relationship::{
-    Contribution, MutualAidInteraction, RelationshipSystem,
-    Relationship, RelationshipType,  // Fixed: Changed RelationType to RelationshipType
+    Contribution, 
+    MutualAidInteraction, 
+    RelationshipSystem,
+    Relationship, 
+    RelationshipType,
+    Interaction,
+    InteractionType,
+    Endorsement
 };
+
 pub use reputation::ReputationSystem;
 pub use vm::{Contract, ExecutionContext, VM};
 pub use vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
