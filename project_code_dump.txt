@@ -1,4 +1,4 @@
-Project Code Dump - Generated Tue Nov 19 05:10:15 PM UTC 2024
+Project Code Dump - Generated Wed Nov 20 02:37:47 AM UTC 2024
 ======================================
 
 Project Tree:
@@ -315,8 +315,7 @@ pub use handler::WebSocketHandler;
 ===================
 File: ./backend/src/websocket/handler.rs
 ===================
-// backend/src/websocket/handler.rs
-
+// src/websocket/handler.rs
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use tokio::sync::{broadcast, mpsc};
@@ -326,9 +325,8 @@ use serde::{Serialize, Deserialize};
 use chrono::Utc;
 use tokio::sync::mpsc::Sender;
 use std::sync::atomic::{AtomicU64, Ordering};
-
-use crate::consensus::types::{ConsensusRound, RoundStatus};
-use crate::blockchain::Block;
+use crate::consensus::types::{ConsensusRound, RoundStatus}; 
+use crate::blockchain::Block; 
 use crate::relationship::{Contribution, MutualAidInteraction};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1309,7 +1307,6 @@ File: ./backend/src/vm/operations/federation.rs
 
 use std::collections::HashMap;
 use super::{Operation, VMState, VMResult, ensure_permissions, ensure_reputation, emit_event};
-use crate::vm::VMError;
 
 /// Types of federation that can be formed
 #[derive(Debug, Clone, PartialEq)]
@@ -1777,7 +1774,6 @@ File: ./backend/src/vm/operations/network.rs
 
 use std::collections::HashMap;
 use super::{Operation, VMState, VMResult, ensure_permissions, emit_event};
-use crate::vm::VMError;
 
 /// Types of network messages that can be sent
 #[derive(Debug, Clone, PartialEq)]
@@ -3325,7 +3321,6 @@ File: ./backend/src/vm/operations/arithmetic.rs
 
 use super::{Operation, VMState, VMResult, ensure_stack_size};
 use crate::vm::VMError;
-use std::collections::HashMap;
 
 /// Arithmetic operations for the VM
 #[derive(Debug, Clone)]
@@ -3563,8 +3558,6 @@ File: ./backend/src/vm/operations/cooperative.rs
 
 use std::collections::HashMap;
 use super::{Operation, VMState, VMResult, ensure_permissions, ensure_reputation, emit_event};
-use crate::vm::cooperative_metadata::CooperativeMetadata;
-use std::sync::atomic::AtomicU64;
 
 /// Types of operations that can be performed on cooperatives
 pub enum CooperativeOperation {
@@ -4536,34 +4529,34 @@ pub enum DelegationScope {
 impl Operation for GovernanceOperation {
     fn execute(&self, state: &mut VMState) -> VMResult<()> {
         match self {
-            GovernanceOperation::CreateProposal { 
-                title, 
-                description, 
-                proposal_type, 
-                duration, 
-                required_reputation 
+            GovernanceOperation::CreateProposal {
+                title,
+                description,
+                proposal_type,
+                duration,
+                required_reputation,
             } => {
                 ensure_permissions(&["governance.create_proposal".to_string()], &state.permissions)?;
-                
-                // Check if caller has sufficient reputation
-                let caller_reputation = state.reputation_context
+
+                let reputation = state.reputation_context
                     .get(&state.caller_did)
                     .copied()
                     .unwrap_or(0);
-                
-                if caller_reputation < *required_reputation {
+
+                if reputation < *required_reputation {
                     return Err(VMError::InsufficientReputation);
                 }
 
                 let mut event_data = HashMap::new();
                 event_data.insert("title".to_string(), title.clone());
                 event_data.insert("description".to_string(), description.clone());
+                event_data.insert("proposal_type".to_string(), format!("{:?}", proposal_type));
                 event_data.insert("duration".to_string(), duration.to_string());
                 event_data.insert("required_reputation".to_string(), required_reputation.to_string());
-                
+
                 emit_event(state, "ProposalCreated".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::CastVote { proposal_id, approve, comment } => {
                 ensure_permissions(&["governance.vote".to_string()], &state.permissions)?;
@@ -4584,7 +4577,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "VoteCast".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::DelegateVotes { delegate_to, scope, duration } => {
                 ensure_permissions(&["governance.delegate".to_string()], &state.permissions)?;
@@ -4608,7 +4601,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "VotesDelegated".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::ExecuteProposal { proposal_id } => {
                 ensure_permissions(&["governance.execute".to_string()], &state.permissions)?;
@@ -4619,7 +4612,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "ProposalExecuted".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::CancelProposal { proposal_id, reason } => {
                 ensure_permissions(&["governance.cancel".to_string()], &state.permissions)?;
@@ -4631,7 +4624,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "ProposalCancelled".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::UpdateQuorum { new_quorum, proposal_type } => {
                 ensure_permissions(&["governance.update_quorum".to_string()], &state.permissions)?;
@@ -4649,7 +4642,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "QuorumUpdated".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::ExtendVotingPeriod { proposal_id, additional_time } => {
                 ensure_permissions(&["governance.extend_voting".to_string()], &state.permissions)?;
@@ -4660,7 +4653,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "VotingPeriodExtended".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::GetProposalDetails { proposal_id } => {
                 // In a real implementation, this would query the proposal storage
@@ -4671,7 +4664,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "ProposalDetailsQueried".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::GetVotingStats { proposal_id } => {
                 // Similarly, this would query voting statistics in a real implementation
@@ -4681,7 +4674,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "VotingStatsQueried".to_string(), event_data);
                 Ok(())
-            },
+            }
         }
     }
 
@@ -5369,8 +5362,6 @@ File: ./backend/src/vm/operations/relationship.rs
 
 use std::collections::HashMap;
 use super::{Operation, VMState, VMResult, ensure_permissions, emit_event};
-use crate::relationship::{Contribution, MutualAidInteraction, Relationship, 
-                         Interaction, InteractionType, Endorsement};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RelationType {
@@ -5890,7 +5881,6 @@ use crate::vm::operations::{
     ArithmeticOperation,
     SystemOperation,
     RelationshipOperation,
-    MemoryOperation,
 };
 use std::sync::atomic::AtomicU64;
 
@@ -7949,7 +7939,6 @@ File: ./backend/src/api/mod.rs
 File: ./backend/src/relationship/types.rs
 ===================
 // src/relationship/types.rs
-
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -8020,6 +8009,9 @@ File: ./backend/src/relationship/mod.rs
 //! This module implements the core relationship tracking functionality for ICN,
 //! focusing on human connections, mutual aid, and cooperative bonds rather than
 //! purely transactional interactions.
+
+
+pub struct TestType {}
 
 use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Utc};
@@ -8491,27 +8483,35 @@ mod tests {
 File: ./backend/src/blockchain/chain.rs
 ===================
 // src/blockchain/chain.rs
-
 use std::sync::{Arc, Mutex};
 use chrono::Utc;
 use std::collections::HashMap;
+
+use crate::blockchain::{Block, Transaction};
+use crate::blockchain::transaction::{TransactionType, ResourceAllocation};
 use crate::consensus::{ProofOfCooperation, ConsensusRound};
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
 use crate::vm::{VM, Contract, ExecutionContext, Event};
-use crate::blockchain::{Block, Transaction};
-use crate::blockchain::transaction::{TransactionType, ResourceAllocation};
-use crate::relationship::{
-    RelationshipSystem,
+
+// Import types re-exported at crate root
+use crate::{
     Contribution,
     MutualAidInteraction,
+    RelationshipSystem,
+};
+
+// Then directly from relationship module
+use crate::relationship::{
     Relationship,
     RelationshipType,
     Interaction,
-    InteractionType
+    InteractionType,
+    Endorsement,
 };
 
-/// Main blockchain implementation with cooperative-specific features
+
+/// Main blockchain implementation for cooperative-specific features
 pub struct Blockchain {
     pub chain: Vec<Block>,
     pub pending_transactions: Vec<Transaction>,
@@ -8523,7 +8523,6 @@ pub struct Blockchain {
     pub current_block_number: u64,
     coordinator_did: String,
 }
-
 
 impl Blockchain {
     /// Creates a new blockchain instance with required subsystems
@@ -10711,7 +10710,6 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use crate::claims::Claim;
-use crate::governance::Proposal;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Community {
@@ -10936,36 +10934,39 @@ File: ./backend/src/lib.rs
 
 pub mod blockchain;
 pub mod claims;
-pub mod identity;
-pub mod reputation;
+pub mod community;
+pub mod consensus;
 pub mod governance;
+pub mod identity;
+pub mod monitoring;
+pub mod network;
+pub mod relationship;
+pub mod reputation;
 pub mod utils;
 pub mod vm;
 pub mod websocket;
-pub mod consensus;
-pub mod network;
-pub mod monitoring;
-pub mod relationship;
-pub mod community;
 
 pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
-pub use identity::IdentitySystem;
-pub use reputation::ReputationSystem;
+pub use consensus::{ProofOfCooperation, types::ConsensusConfig, types::ConsensusRound};
 pub use governance::Proposal;
-pub use consensus::{ProofOfCooperation, types::ConsensusConfig};
-pub use consensus::types::ConsensusRound;
-pub use vm::{VM, Contract, ExecutionContext};
+pub use identity::IdentitySystem;
+pub use monitoring::energy::{EnergyAware, EnergyMonitor};
+pub use relationship::{
+    Contribution, MutualAidInteraction, RelationshipSystem,
+    Relationship, RelationshipType,  // Fixed: Changed RelationType to RelationshipType
+};
+pub use reputation::ReputationSystem;
+pub use vm::{Contract, ExecutionContext, VM};
 pub use vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
 pub use websocket::WebSocketHandler;
-pub use monitoring::energy::{EnergyAware, EnergyMonitor};
-pub use relationship::RelationshipSystem;
-use relationship::{Contribution, MutualAidInteraction, Relationship};
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use tokio::sync::broadcast;
 use uuid;
 use chrono::{DateTime, Utc};
+
+// ... rest of the file remains exactly the same ...
 
 /// Events emitted by the ICN system
 #[derive(Clone, Debug)]
@@ -11237,7 +11238,7 @@ impl CooperativeManager {
     pub async fn create_cooperative(
         &self, 
         creator_did: String, 
-        name: String,
+        _name: String,  // Added underscore to acknowledge unused variable
         purpose: String
     ) -> Result<String, String> {
         let metadata = CooperativeMetadata {
@@ -11262,14 +11263,6 @@ impl CooperativeManager {
         self.core.create_cooperative(creator_did, metadata).await
     }
 
-    pub async fn join_cooperative(&self, cooperative_id: String, member_did: String) -> Result<(), String> {
-        let event = SystemEvent::CooperativeJoined {
-            id: cooperative_id,
-            member: member_did,
-        };
-        let _ = self.core.event_bus.send(event);
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -11718,15 +11711,7 @@ pub mod proof_of_cooperation;
 pub mod types;
 
 // Re-export key types and modules
-pub use types::{
-    ConsensusConfig,
-    ConsensusRound,
-    ConsensusError,
-    ValidatorInfo,
-    WeightedVote,
-    RoundStatus,
-};
-
+pub use types::ConsensusRound;
 pub use proof_of_cooperation::core::ProofOfCooperation;
 
 #[cfg(test)]
@@ -11735,6 +11720,7 @@ mod tests {
     use std::sync::Arc;
     use tokio;
     use crate::websocket::WebSocketHandler;
+    use crate::consensus::types::ConsensusConfig;
 
     #[tokio::test]
     async fn test_consensus_integration() {
@@ -11812,10 +11798,9 @@ pub enum ConsensusEvent {
 File: ./backend/src/consensus/proof_of_cooperation/metrics.rs
 ===================
 // src/consensus/proof_of_cooperation/metrics.rs
-
-use crate::monitoring::energy::{EnergyAware, EnergyMonitor};
-use crate::consensus::types::ValidatorInfo;
+use crate::consensus::types::ValidatorInfo; 
 use super::core::ProofOfCooperation;
+use crate::monitoring::energy::{EnergyAware, EnergyMonitor};
 
 impl EnergyAware for ProofOfCooperation {
     fn record_energy_metrics(&self, monitor: &EnergyMonitor) {
@@ -12287,29 +12272,27 @@ pub mod metrics;
 pub mod round;
 pub mod validator;
 
-// Re-export key components
-pub use core::ProofOfCooperation;
-pub use events::ConsensusEvent;
-pub use validator::ValidatorManager;
-pub use round::RoundManager;
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::types::ConsensusConfig;
-    use crate::websocket::WebSocketHandler;
     use std::sync::Arc;
-
-    async fn setup_test_consensus() -> ProofOfCooperation {
-        let ws_handler = Arc::new(WebSocketHandler::new());
-        let config = ConsensusConfig::default();
-        ProofOfCooperation::new(config, ws_handler)
-    }
+    use tokio;
+    use crate::websocket::WebSocketHandler;
+    use crate::consensus::types::ConsensusConfig;
 
     #[tokio::test]
-    async fn test_consensus_initialization() {
-        let consensus = setup_test_consensus().await;
-        assert!(consensus.get_current_round().is_none());
+    async fn test_consensus_integration() {
+        let ws_handler = Arc::new(WebSocketHandler::new());
+        let config = ConsensusConfig::default();
+        
+        let mut consensus = core::ProofOfCooperation::new(config, ws_handler);
+        
+        // Register test validators
+        consensus.register_validator("did:icn:test1".to_string(), 1000).unwrap();
+        consensus.register_validator("did:icn:test2".to_string(), 1000).unwrap();
+        consensus.register_validator("did:icn:test3".to_string(), 1000).unwrap();
+        
+        assert!(consensus.start_round().await.is_ok());
     }
 }
 

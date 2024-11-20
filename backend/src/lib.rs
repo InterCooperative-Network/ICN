@@ -1,37 +1,44 @@
 // src/lib.rs
 
+
+pub mod api;
 pub mod blockchain;
 pub mod claims;
-pub mod identity;
-pub mod reputation;
+pub mod community;
+pub mod consensus;
+pub mod cooperative;
 pub mod governance;
+pub mod identity;
+pub mod monitoring;
+pub mod network;
+pub mod relationship;
+pub mod reputation;
 pub mod utils;
 pub mod vm;
 pub mod websocket;
-pub mod consensus;
-pub mod network;
-pub mod monitoring;
-pub mod relationship;
-pub mod community;
+
 
 pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
-pub use identity::IdentitySystem;
-pub use reputation::ReputationSystem;
+pub use consensus::{ProofOfCooperation, types::ConsensusConfig, types::ConsensusRound};
 pub use governance::Proposal;
-pub use consensus::{ProofOfCooperation, types::ConsensusConfig};
-pub use consensus::types::ConsensusRound;
-pub use vm::{VM, Contract, ExecutionContext};
+pub use identity::IdentitySystem;
+pub use monitoring::energy::{EnergyAware, EnergyMonitor};
+pub use relationship::{
+    Contribution, MutualAidInteraction, RelationshipSystem,
+    Relationship, RelationshipType,  // Fixed: Changed RelationType to RelationshipType
+};
+pub use reputation::ReputationSystem;
+pub use vm::{Contract, ExecutionContext, VM};
 pub use vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
 pub use websocket::WebSocketHandler;
-pub use monitoring::energy::{EnergyAware, EnergyMonitor};
-pub use relationship::RelationshipSystem;
-use relationship::{Contribution, MutualAidInteraction};
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use tokio::sync::broadcast;
 use uuid;
 use chrono::{DateTime, Utc};
+
+// ... rest of the file remains exactly the same ...
 
 /// Events emitted by the ICN system
 #[derive(Clone, Debug)]
@@ -303,7 +310,7 @@ impl CooperativeManager {
     pub async fn create_cooperative(
         &self, 
         creator_did: String, 
-        name: String,
+        _name: String,  // Added underscore to acknowledge unused variable
         purpose: String
     ) -> Result<String, String> {
         let metadata = CooperativeMetadata {
@@ -328,14 +335,6 @@ impl CooperativeManager {
         self.core.create_cooperative(creator_did, metadata).await
     }
 
-    pub async fn join_cooperative(&self, cooperative_id: String, member_did: String) -> Result<(), String> {
-        let event = SystemEvent::CooperativeJoined {
-            id: cooperative_id,
-            member: member_did,
-        };
-        let _ = self.core.event_bus.send(event);
-        Ok(())
-    }
 }
 
 #[cfg(test)]

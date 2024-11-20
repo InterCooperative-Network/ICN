@@ -86,34 +86,34 @@ pub enum DelegationScope {
 impl Operation for GovernanceOperation {
     fn execute(&self, state: &mut VMState) -> VMResult<()> {
         match self {
-            GovernanceOperation::CreateProposal { 
-                title, 
-                description, 
-                proposal_type, 
-                duration, 
-                required_reputation 
+            GovernanceOperation::CreateProposal {
+                title,
+                description,
+                proposal_type,
+                duration,
+                required_reputation,
             } => {
                 ensure_permissions(&["governance.create_proposal".to_string()], &state.permissions)?;
-                
-                // Check if caller has sufficient reputation
-                let caller_reputation = state.reputation_context
+
+                let reputation = state.reputation_context
                     .get(&state.caller_did)
                     .copied()
                     .unwrap_or(0);
-                
-                if caller_reputation < *required_reputation {
+
+                if reputation < *required_reputation {
                     return Err(VMError::InsufficientReputation);
                 }
 
                 let mut event_data = HashMap::new();
                 event_data.insert("title".to_string(), title.clone());
                 event_data.insert("description".to_string(), description.clone());
+                event_data.insert("proposal_type".to_string(), format!("{:?}", proposal_type));
                 event_data.insert("duration".to_string(), duration.to_string());
                 event_data.insert("required_reputation".to_string(), required_reputation.to_string());
-                
+
                 emit_event(state, "ProposalCreated".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::CastVote { proposal_id, approve, comment } => {
                 ensure_permissions(&["governance.vote".to_string()], &state.permissions)?;
@@ -134,7 +134,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "VoteCast".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::DelegateVotes { delegate_to, scope, duration } => {
                 ensure_permissions(&["governance.delegate".to_string()], &state.permissions)?;
@@ -158,7 +158,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "VotesDelegated".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::ExecuteProposal { proposal_id } => {
                 ensure_permissions(&["governance.execute".to_string()], &state.permissions)?;
@@ -169,7 +169,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "ProposalExecuted".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::CancelProposal { proposal_id, reason } => {
                 ensure_permissions(&["governance.cancel".to_string()], &state.permissions)?;
@@ -181,7 +181,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "ProposalCancelled".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::UpdateQuorum { new_quorum, proposal_type } => {
                 ensure_permissions(&["governance.update_quorum".to_string()], &state.permissions)?;
@@ -199,7 +199,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "QuorumUpdated".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::ExtendVotingPeriod { proposal_id, additional_time } => {
                 ensure_permissions(&["governance.extend_voting".to_string()], &state.permissions)?;
@@ -210,7 +210,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "VotingPeriodExtended".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::GetProposalDetails { proposal_id } => {
                 // In a real implementation, this would query the proposal storage
@@ -221,7 +221,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "ProposalDetailsQueried".to_string(), event_data);
                 Ok(())
-            },
+            }
 
             GovernanceOperation::GetVotingStats { proposal_id } => {
                 // Similarly, this would query voting statistics in a real implementation
@@ -231,7 +231,7 @@ impl Operation for GovernanceOperation {
 
                 emit_event(state, "VotingStatsQueried".to_string(), event_data);
                 Ok(())
-            },
+            }
         }
     }
 

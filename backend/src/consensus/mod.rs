@@ -4,15 +4,7 @@ pub mod proof_of_cooperation;
 pub mod types;
 
 // Re-export key types and modules
-pub use types::{
-    ConsensusConfig,
-    ConsensusRound,
-    ConsensusError,
-    ValidatorInfo,
-    WeightedVote,
-    RoundStatus,
-};
-
+pub use types::ConsensusRound;
 pub use proof_of_cooperation::core::ProofOfCooperation;
 
 #[cfg(test)]
@@ -21,6 +13,7 @@ mod tests {
     use std::sync::Arc;
     use tokio;
     use crate::websocket::WebSocketHandler;
+    use crate::consensus::types::ConsensusConfig;
 
     #[tokio::test]
     async fn test_consensus_integration() {
