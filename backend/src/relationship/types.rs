@@ -1,5 +1,4 @@
 // src/relationship/types.rs
-
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

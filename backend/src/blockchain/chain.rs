@@ -1,25 +1,29 @@
 // src/blockchain/chain.rs
-
 use std::sync::{Arc, Mutex};
 use chrono::Utc;
 use std::collections::HashMap;
+
+use crate::blockchain::{Block, Transaction};
+use crate::blockchain::transaction::{TransactionType, ResourceAllocation};
 use crate::consensus::{ProofOfCooperation, ConsensusRound};
 use crate::identity::IdentitySystem;
 use crate::reputation::ReputationSystem;
 use crate::vm::{VM, Contract, ExecutionContext, Event};
-use crate::blockchain::{Block, Transaction};
-use crate::blockchain::transaction::{TransactionType, ResourceAllocation};
+
+// Try using icn_backend directly as suggested by compiler
 use crate::relationship::{
-    RelationshipSystem,
-    Contribution,
-    MutualAidInteraction,
-    Relationship,
-    RelationshipType,
-    Interaction,
-    InteractionType
+    Contribution, MutualAidInteraction, RelationshipSystem, Relationship, RelationshipType,
+    Interaction, InteractionType, Endorsement,
 };
 
-/// Main blockchain implementation with cooperative-specific features
+
+
+
+
+
+
+
+/// Main blockchain implementation for cooperative-specific features
 pub struct Blockchain {
     pub chain: Vec<Block>,
     pub pending_transactions: Vec<Transaction>,
@@ -31,7 +35,6 @@ pub struct Blockchain {
     pub current_block_number: u64,
     coordinator_did: String,
 }
-
 
 impl Blockchain {
     /// Creates a new blockchain instance with required subsystems
@@ -83,7 +86,7 @@ impl Blockchain {
                 Ok(())
             },
 
-            TransactionType::ContractExecution { contract_id, input_data } => {
+            TransactionType::ContractExecution { contract_id, input_data: _ } => {
                 let contract = self.get_contract(contract_id)?;
                 
                 let reputation_context = {
@@ -207,7 +210,7 @@ impl Blockchain {
                 let mut relationship_system = self.relationship_system.lock()
                     .map_err(|_| "Failed to acquire relationship lock".to_string())?;
                 
-                let endorsement = crate::relationship::Endorsement {
+                    let endorsement = Endorsement {
                     from_did: tx.sender.clone(),
                     content: content.clone(),
                     date: Utc::now(),

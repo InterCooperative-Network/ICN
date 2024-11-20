@@ -1,8 +1,8 @@
 // src/consensus/proof_of_cooperation/metrics.rs
-
-use crate::monitoring::energy::{EnergyAware, EnergyMonitor};
-use crate::consensus::types::ValidatorInfo;
+use crate::consensus::types::ValidatorInfo; 
 use super::core::ProofOfCooperation;
+use crate::monitoring::energy::{EnergyAware, EnergyMonitor};
+
 
 impl EnergyAware for ProofOfCooperation {
     fn record_energy_metrics(&self, monitor: &EnergyMonitor) {
