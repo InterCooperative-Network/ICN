@@ -9,6 +9,7 @@ use crate::vm::operations::{
     RelationshipOperation,
 };
 use std::sync::atomic::AtomicU64;
+use crate::state::merkle_tree::MerkleTree;
 
 /// Virtual Machine implementation for executing cooperative operations
 pub struct VM {
@@ -35,7 +36,11 @@ impl VM {
             permissions: vec![],
             memory_limit: 1024 * 1024, // 1MB default limit
             memory_address_counter: AtomicU64::new(0),
+            state_tree: MerkleTree::new(vec![]),
+            state_updates: HashMap::new(),
         };
+        
+        state.state_tree.add_leaf(&format!("init:{}", state.timestamp));
         
         VM {
             state,
@@ -178,6 +183,37 @@ impl VM {
     /// Gets the memory heap
     pub fn get_memory(&self) -> &HashMap<String, i64> {
         &self.state.memory
+    }
+}
+
+impl VMState {
+    pub fn new(caller_did: String, block_number: u64, timestamp: u64) -> Self {
+        let mut state = VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did,
+            block_number,
+            timestamp,
+            permissions: vec![],
+            memory_limit: 1024 * 1024, // 1MB default limit
+            memory_address_counter: AtomicU64::new(0),
+            state_tree: MerkleTree::new(vec![]),
+            state_updates: HashMap::new(),
+        };
+        state.state_tree.add_leaf(&format!("init:{}", timestamp));
+        state
+    }
+
+    pub fn record_state_update(&mut self, key: String, value: String) {
+        self.state_updates.insert(key.clone(), value.clone());
+        self.state_tree.add_leaf(&format!("{}:{}", key, value));
+    }
+
+    pub fn get_state_root(&self) -> Option<String> {
+        self.state_tree.root().cloned()
     }
 }
 

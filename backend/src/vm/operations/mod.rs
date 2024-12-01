@@ -119,6 +119,23 @@ pub fn emit_event(state: &mut VMState, event_type: String, data: HashMap<String,
     });
 }
 
+pub fn validate_state_update(key: &str, value: &str, state: &VMState) -> VMResult<()> {
+    // Validate state update
+    if key.is_empty() || value.is_empty() {
+        return Err(VMError::InvalidOperand);
+    }
+
+    // Generate and verify state proof
+    if let Some(root) = state.get_state_root() {
+        let proof = state.state_tree.generate_proof(state.state_updates.len());
+        if !MerkleTree::validate_proof(&format!("{}:{}", key, value), &root, proof) {
+            return Err(VMError::ValidationError);
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
