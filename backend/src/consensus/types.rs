@@ -218,34 +218,23 @@ impl Default for ConsensusConfig {
 /// Possible consensus-related errors
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ConsensusError {
-    /// Not enough validators available
     InsufficientValidators,
-    
-    /// Invalid coordinator for this round
     InvalidCoordinator,
-    
-    /// Round already in progress
     RoundInProgress,
-    
-    /// No active round found
     NoActiveRound,
-    
-    /// Invalid state for operation
     InvalidRoundState,
-    
-    /// Round timed out
     TimedOut,
-    
-    /// Block validation failed
     ValidationFailed,
-    
-    /// Not a registered validator
     NotValidator,
-    
-    /// Insufficient reputation
     InsufficientReputation,
-    
-    /// Custom error message
+    // Add missing variants
+    InsufficientSignatures,
+    InvalidBlockIndex,
+    InvalidPreviousHash,
+    InvalidTimestamp,
+    InvalidStateTransition,
+    InvalidBlockHash,
+    InvalidValidatorUpdate,
     Custom(String),
 }
 

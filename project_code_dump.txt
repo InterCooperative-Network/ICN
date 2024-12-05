@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sun Dec  1 20:50:37 UTC 2024
+Project Code Dump - Generated Thu Dec  5 21:38:08 UTC 2024
 ======================================
 
 Project Tree:
@@ -73,6 +73,8 @@ Project Tree:
 │   │   ├── reputation
 │   │   │   ├── mod.rs
 │   │   │   └── reputation_system.rs
+│   │   ├── state
+│   │   │   └── merkle_tree.rs
 │   │   ├── utils
 │   │   │   ├── mod.rs
 │   │   │   └── notifications.rs
@@ -103,6 +105,7 @@ Project Tree:
 │   │   │   │   └── vm_tests.rs
 │   │   │   └── vm.rs
 │   │   └── websocket
+│   │       ├── backend.code-workspace
 │   │       ├── handler.rs
 │   │       └── mod.rs
 │   └── tests
@@ -131,6 +134,7 @@ Project Tree:
 │   │           └── RelationshipIntegration.tsx
 │   └── tsconfig.json
 ├── generate_code_dump.sh
+├── inventory_nodes.sh
 ├── project_code_dump.txt
 ├── project_docs_dump.txt
 ├── setup_and_run_script.sh
@@ -149,7 +153,7 @@ Project Tree:
     ├── install_docsctl.sh
     └── requirements.txt
 
-38 directories, 107 files
+39 directories, 110 files
 
 
 ===================
@@ -4271,6 +4275,23 @@ pub fn emit_event(state: &mut VMState, event_type: String, data: HashMap<String,
     });
 }
 
+pub fn validate_state_update(key: &str, value: &str, state: &VMState) -> VMResult<()> {
+    // Validate state update
+    if key.is_empty() || value.is_empty() {
+        return Err(VMError::InvalidOperand);
+    }
+
+    // Generate and verify state proof
+    if let Some(root) = state.get_state_root() {
+        let proof = state.state_tree.generate_proof(state.state_updates.len());
+        if !MerkleTree::validate_proof(&format!("{}:{}", key, value), &root, proof) {
+            return Err(VMError::ValidationError);
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5744,6 +5765,7 @@ use crate::vm::operations::{
     RelationshipOperation,
 };
 use std::sync::atomic::AtomicU64;
+use crate::state::merkle_tree::MerkleTree;
 
 /// Virtual Machine implementation for executing cooperative operations
 pub struct VM {
@@ -5770,7 +5792,11 @@ impl VM {
             permissions: vec![],
             memory_limit: 1024 * 1024, // 1MB default limit
             memory_address_counter: AtomicU64::new(0),
+            state_tree: MerkleTree::new(vec![]),
+            state_updates: HashMap::new(),
         };
+        
+        state.state_tree.add_leaf(&format!("init:{}", state.timestamp));
         
         VM {
             state,
@@ -5913,6 +5939,37 @@ impl VM {
     /// Gets the memory heap
     pub fn get_memory(&self) -> &HashMap<String, i64> {
         &self.state.memory
+    }
+}
+
+impl VMState {
+    pub fn new(caller_did: String, block_number: u64, timestamp: u64) -> Self {
+        let mut state = VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did,
+            block_number,
+            timestamp,
+            permissions: vec![],
+            memory_limit: 1024 * 1024, // 1MB default limit
+            memory_address_counter: AtomicU64::new(0),
+            state_tree: MerkleTree::new(vec![]),
+            state_updates: HashMap::new(),
+        };
+        state.state_tree.add_leaf(&format!("init:{}", timestamp));
+        state
+    }
+
+    pub fn record_state_update(&mut self, key: String, value: String) {
+        self.state_updates.insert(key.clone(), value.clone());
+        self.state_tree.add_leaf(&format!("{}:{}", key, value));
+    }
+
+    pub fn get_state_root(&self) -> Option<String> {
+        self.state_tree.root().cloned()
     }
 }
 
@@ -10123,6 +10180,135 @@ mod tests {
         assert_eq!(system.get_reputation("did:icn:test"), 10);
     }
 }
+
+===================
+File: ./backend/src/state/merkle_tree.rs
+===================
+// src/state/merkle_tree.rs
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+
+#[derive(Debug, Clone)]
+pub struct MerkleTree {
+    leaves: Vec<String>,
+    nodes: Vec<String>,
+    height: usize,
+}
+
+impl MerkleTree {
+    /// Create a new Merkle tree with initial data
+    pub fn new(data: Vec<String>) -> Self {
+        let leaves = data.iter().map(|d| Self::hash(d)).collect::<Vec<_>>();
+        let nodes = Self::build_tree(&leaves);
+        let height = if leaves.is_empty() { 0 } else { nodes.len().ilog2() as usize };
+        MerkleTree {
+            leaves,
+            nodes,
+            height,
+        }
+    }
+
+    /// Add a new leaf to the Merkle tree
+    pub fn add_leaf(&mut self, data: &str) {
+        let hash = Self::hash(data);
+        self.leaves.push(hash.clone());
+        self.nodes = Self::build_tree(&self.leaves);
+        self.height = self.nodes.len().ilog2() as usize;
+    }
+
+    /// Get the root hash of the tree
+    pub fn root(&self) -> Option<&String> {
+        self.nodes.first()
+    }
+
+    /// Generate a proof for a given leaf
+    pub fn generate_proof(&self, index: usize) -> Vec<String> {
+        if index >= self.leaves.len() {
+            return vec![];
+        }
+        let mut proof = vec![];
+        let mut idx = index + self.leaves.len() - 1;
+
+        while idx > 0 {
+            let sibling = if idx % 2 == 0 { idx - 1 } else { idx + 1 };
+            if sibling < self.nodes.len() {
+                proof.push(self.nodes[sibling].clone());
+            }
+            idx = (idx - 1) / 2;
+        }
+        proof
+    }
+
+    /// Validate a proof for a given leaf and root
+    pub fn validate_proof(leaf: &str, root: &str, proof: Vec<String>) -> bool {
+        let mut hash = Self::hash(leaf);
+        for sibling in proof {
+            hash = if hash < sibling {
+                Self::hash(&(hash + &sibling))
+            } else {
+                Self::hash(&(sibling + &hash))
+            };
+        }
+        &hash == root
+    }
+
+    /// Helper function to hash data
+    fn hash(data: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(data);
+        format!("{:x}", hasher.finalize())
+    }
+
+    /// Build the tree nodes from leaves
+    fn build_tree(leaves: &[String]) -> Vec<String> {
+        if leaves.is_empty() {
+            return vec![];
+        }
+
+        let mut nodes = leaves.to_vec();
+        while nodes.len() > 1 {
+            let mut next_level = vec![];
+            for i in (0..nodes.len()).step_by(2) {
+                let left = &nodes[i];
+                let right = if i + 1 < nodes.len() { &nodes[i + 1] } else { left };
+                next_level.push(Self::hash(&(left.clone() + right)));
+            }
+            nodes = next_level;
+        }
+        nodes
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_merkle_tree_creation() {
+        let data = vec!["data1".to_string(), "data2".to_string(), "data3".to_string()];
+        let tree = MerkleTree::new(data.clone());
+        assert!(tree.root().is_some());
+    }
+
+    #[test]
+    fn test_merkle_tree_proof() {
+        let data = vec!["data1".to_string(), "data2".to_string(), "data3".to_string()];
+        let mut tree = MerkleTree::new(data.clone());
+
+        let leaf = &data[1];
+        let proof = tree.generate_proof(1);
+        assert!(MerkleTree::validate_proof(leaf, tree.root().unwrap(), proof));
+    }
+
+    #[test]
+    fn test_add_leaf() {
+        let mut tree = MerkleTree::new(vec!["data1".to_string()]);
+        tree.add_leaf("data2");
+        assert!(tree.root().is_some());
+        assert_eq!(tree.leaves.len(), 2);
+    }
+}
+
 
 ===================
 File: ./backend/src/governance/proposal.rs
