@@ -27,38 +27,20 @@ pub use memory::MemoryOperation;
 /// VM state structure
 #[derive(Default)]
 pub struct VMState {
-    /// Current stack
     pub stack: Vec<i64>,
-    
-    /// Memory storage
     pub memory: HashMap<String, i64>,
-    
-    /// Events emitted during execution
     pub events: Vec<Event>,
-    
-    /// Current instruction pointer
     pub instruction_pointer: usize,
-    
-    /// Reputation scores for participating DIDs
     pub reputation_context: HashMap<String, i64>,
-    
-    /// Currently executing DID
     pub caller_did: String,
-    
-    /// Current block number
     pub block_number: u64,
-    
-    /// Current timestamp
     pub timestamp: u64,
-    
-    /// Available permissions
     pub permissions: Vec<String>,
-    
-    /// Maximum memory usage in bytes
     pub memory_limit: u64,
-    
-    /// Counter for generating unique memory addresses
-    pub memory_address_counter: std::sync::atomic::AtomicU64,
+    pub memory_address_counter: AtomicU64,
+    // Add missing fields
+    pub state_tree: MerkleTree,
+    pub state_updates: HashMap<String, String>,
 }
 
 /// Trait for implementable VM operations
