@@ -4,13 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.41.0", features = ["full"] }
+tokio = { version = "1.35.1", features = ["full"] }
+thiserror = "1.0.50"
 warp = "0.3.7"
 tokio-tungstenite = { version = "0.21.0", features = ["native-tls"] }
-url = "2.5.2"
-http = "1.1.0"
-serde = { version = "1.0.214", features = ["derive"] }
-serde_json = "1.0.132"
+url = "2.5.0"
+http = "1.0.0"
+serde = { version = "1.0.193", features = ["derive"] }
+serde_json = "1.0.108"
 chrono = { version = "0.4.38", features = ["serde"] }
 uuid = { version = "1.11.0", features = ["v4"] }
 futures = "0.3.31"
@@ -19,9 +20,7 @@ rand = "0.8.5"
 secp256k1 = { version = "0.24.3", features = ["rand"] }
 sha2 = "0.10.8"
 
-[dev-dependencies]
-tokio = { version = "1.41.0", features = ["full"] }
-warp = "0.3.7"
+// Remove the [dev-dependencies] section entirely since these are already in main dependencies
 
 [[bin]]
 name = "icn-app" 
