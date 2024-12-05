@@ -50,8 +50,15 @@ async fn main() {
             })
         });
 
+    // Health check route
+    let health_route = warp::path("health")
+        .and(warp::get())
+        .map(|| "OK");
+
+    let routes = ws_route.or(health_route);
+
     println!("Starting WebSocket server on localhost:8088");
-    warp::serve(ws_route)
+    warp::serve(routes)
         .run(([127, 0, 0, 1], 8088))
         .await;
 }
