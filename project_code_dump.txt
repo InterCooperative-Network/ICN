@@ -1,4 +1,4 @@
-Project Code Dump - Generated Thu Dec  5 21:38:08 UTC 2024
+Project Code Dump - Generated Thu Dec  5 22:09:11 UTC 2024
 ======================================
 
 Project Tree:
@@ -74,7 +74,8 @@ Project Tree:
 │   │   │   ├── mod.rs
 │   │   │   └── reputation_system.rs
 │   │   ├── state
-│   │   │   └── merkle_tree.rs
+│   │   │   ├── merkle_tree.rs
+│   │   │   └── mod.rs
 │   │   ├── utils
 │   │   │   ├── mod.rs
 │   │   │   └── notifications.rs
@@ -134,6 +135,7 @@ Project Tree:
 │   │           └── RelationshipIntegration.tsx
 │   └── tsconfig.json
 ├── generate_code_dump.sh
+├── improved-setup.sh
 ├── inventory_nodes.sh
 ├── project_code_dump.txt
 ├── project_docs_dump.txt
@@ -149,11 +151,24 @@ Project Tree:
     │   ├── __init__.py
     │   ├── docmanager.py
     │   ├── docsctl
-    │   └── specgen.py
+    │   ├── specgen.py
+    │   └── venv
+    │       ├── bin
+    │       │   ├── Activate.ps1
+    │       │   ├── activate
+    │       │   ├── activate.csh
+    │       │   ├── activate.fish
+    │       │   ├── pip
+    │       │   ├── pip3
+    │       │   ├── pip3.12
+    │       │   ├── python -> python3
+    │       │   ├── python3 -> /usr/bin/python3
+    │       │   └── python3.12 -> python3
+    │       └── pyvenv.cfg
     ├── install_docsctl.sh
     └── requirements.txt
 
-39 directories, 110 files
+41 directories, 123 files
 
 
 ===================
@@ -4157,76 +4172,58 @@ File: ./backend/src/vm/operations/mod.rs
 // src/vm/operations/mod.rs
 
 use std::collections::HashMap;
+use std::sync::atomic::AtomicU64;
+use crate::state::merkle_tree::MerkleTree;
 use crate::vm::{VMError, VMResult};
 use crate::vm::event::Event;
 
-// Re-export operation modules
-pub mod stack;
-pub mod arithmetic;
-pub mod cooperative;
-pub mod governance;
-pub mod reputation;
-pub mod relationship;
-pub mod system;
-pub mod data;
-pub mod memory;
-pub mod network;
-pub mod federation;
-
-// Re-export necessary operation types
-pub use stack::StackOperation;
-pub use arithmetic::ArithmeticOperation;
-pub use system::SystemOperation;
-pub use relationship::RelationshipOperation;
-pub use memory::MemoryOperation;
-
-/// VM state structure
 #[derive(Default)]
 pub struct VMState {
-    /// Current stack
     pub stack: Vec<i64>,
-    
-    /// Memory storage
     pub memory: HashMap<String, i64>,
-    
-    /// Events emitted during execution
     pub events: Vec<Event>,
-    
-    /// Current instruction pointer
     pub instruction_pointer: usize,
-    
-    /// Reputation scores for participating DIDs
     pub reputation_context: HashMap<String, i64>,
-    
-    /// Currently executing DID
     pub caller_did: String,
-    
-    /// Current block number
     pub block_number: u64,
-    
-    /// Current timestamp
     pub timestamp: u64,
-    
-    /// Available permissions
     pub permissions: Vec<String>,
-    
-    /// Maximum memory usage in bytes
     pub memory_limit: u64,
-    
-    /// Counter for generating unique memory addresses
-    pub memory_address_counter: std::sync::atomic::AtomicU64,
+    pub memory_address_counter: AtomicU64,
+    pub state_tree: MerkleTree,
+    pub state_updates: HashMap<String, String>,
 }
 
-/// Trait for implementable VM operations
-pub trait Operation {
-    /// Execute the operation on the given state
-    fn execute(&self, state: &mut VMState) -> VMResult<()>;
-    
-    /// Get the resource cost of this operation
-    fn resource_cost(&self) -> u64;
-    
-    /// Get required permissions for this operation
-    fn required_permissions(&self) -> Vec<String>;
+impl VMState {
+    pub fn new(caller_did: String, block_number: u64, timestamp: u64) -> Self {
+        let mut state = VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did,
+            block_number,
+            timestamp,
+            permissions: Vec::new(),
+            memory_limit: 1024 * 1024, // 1MB default limit
+            memory_address_counter: AtomicU64::new(0),
+            state_tree: MerkleTree::default(),
+            state_updates: HashMap::new(),
+        };
+        
+        state.state_tree.add_leaf(&format!("init:{}", timestamp));
+        state
+    }
+
+    pub fn record_state_update(&mut self, key: String, value: String) {
+        self.state_updates.insert(key.clone(), value.clone());
+        self.state_tree.add_leaf(&format!("{}:{}", key, value));
+    }
+
+    pub fn get_state_root(&self) -> Option<String> {
+        self.state_tree.root().cloned()
+    }
 }
 
 /// Helper function to check stack has enough items
@@ -4276,12 +4273,10 @@ pub fn emit_event(state: &mut VMState, event_type: String, data: HashMap<String,
 }
 
 pub fn validate_state_update(key: &str, value: &str, state: &VMState) -> VMResult<()> {
-    // Validate state update
     if key.is_empty() || value.is_empty() {
         return Err(VMError::InvalidOperand);
     }
 
-    // Generate and verify state proof
     if let Some(root) = state.get_state_root() {
         let proof = state.state_tree.generate_proof(state.state_updates.len());
         if !MerkleTree::validate_proof(&format!("{}:{}", key, value), &root, proof) {
@@ -4290,34 +4285,6 @@ pub fn validate_state_update(key: &str, value: &str, state: &VMState) -> VMResul
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_ensure_stack_size() {
-        let stack = vec![1, 2, 3];
-        assert!(ensure_stack_size(&stack, 3).is_ok());
-        assert!(ensure_stack_size(&stack, 4).is_err());
-    }
-
-    #[test]
-    fn test_ensure_permissions() {
-        let required = vec!["test.permission".to_string()];
-        let available = vec!["test.permission".to_string()];
-        assert!(ensure_permissions(&required, &available).is_ok());
-
-        let available = vec!["other.permission".to_string()];
-        assert!(ensure_permissions(&required, &available).is_err());
-    }
-
-    #[test]
-    fn test_ensure_reputation() {
-        assert!(ensure_reputation(10, 20).is_ok());
-        assert!(ensure_reputation(20, 10).is_err());
-    }
 }
 
 ===================
@@ -10184,51 +10151,45 @@ mod tests {
 ===================
 File: ./backend/src/state/merkle_tree.rs
 ===================
-// src/state/merkle_tree.rs
+// backend/src/state/merkle_tree.rs
+
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MerkleTree {
     leaves: Vec<String>,
     nodes: Vec<String>,
-    height: usize,
 }
 
 impl MerkleTree {
-    /// Create a new Merkle tree with initial data
     pub fn new(data: Vec<String>) -> Self {
-        let leaves = data.iter().map(|d| Self::hash(d)).collect::<Vec<_>>();
+        let leaves = data.iter()
+            .map(|d| Self::hash(d))
+            .collect();
         let nodes = Self::build_tree(&leaves);
-        let height = if leaves.is_empty() { 0 } else { nodes.len().ilog2() as usize };
-        MerkleTree {
-            leaves,
-            nodes,
-            height,
-        }
+        
+        MerkleTree { leaves, nodes }
     }
 
-    /// Add a new leaf to the Merkle tree
     pub fn add_leaf(&mut self, data: &str) {
         let hash = Self::hash(data);
-        self.leaves.push(hash.clone());
+        self.leaves.push(hash);
         self.nodes = Self::build_tree(&self.leaves);
-        self.height = self.nodes.len().ilog2() as usize;
     }
 
-    /// Get the root hash of the tree
     pub fn root(&self) -> Option<&String> {
         self.nodes.first()
     }
 
-    /// Generate a proof for a given leaf
     pub fn generate_proof(&self, index: usize) -> Vec<String> {
         if index >= self.leaves.len() {
             return vec![];
         }
-        let mut proof = vec![];
+        
+        let mut proof = Vec::new();
         let mut idx = index + self.leaves.len() - 1;
-
+        
         while idx > 0 {
             let sibling = if idx % 2 == 0 { idx - 1 } else { idx + 1 };
             if sibling < self.nodes.len() {
@@ -10236,30 +10197,30 @@ impl MerkleTree {
             }
             idx = (idx - 1) / 2;
         }
+        
         proof
     }
 
-    /// Validate a proof for a given leaf and root
     pub fn validate_proof(leaf: &str, root: &str, proof: Vec<String>) -> bool {
         let mut hash = Self::hash(leaf);
+        
         for sibling in proof {
             hash = if hash < sibling {
-                Self::hash(&(hash + &sibling))
+                Self::hash(&format!("{}{}", hash, sibling))
             } else {
-                Self::hash(&(sibling + &hash))
+                Self::hash(&format!("{}{}", sibling, hash))
             };
         }
+        
         &hash == root
     }
 
-    /// Helper function to hash data
     fn hash(data: &str) -> String {
         let mut hasher = Sha256::new();
-        hasher.update(data);
+        hasher.update(data.as_bytes());
         format!("{:x}", hasher.finalize())
     }
 
-    /// Build the tree nodes from leaves
     fn build_tree(leaves: &[String]) -> Vec<String> {
         if leaves.is_empty() {
             return vec![];
@@ -10267,11 +10228,11 @@ impl MerkleTree {
 
         let mut nodes = leaves.to_vec();
         while nodes.len() > 1 {
-            let mut next_level = vec![];
-            for i in (0..nodes.len()).step_by(2) {
-                let left = &nodes[i];
-                let right = if i + 1 < nodes.len() { &nodes[i + 1] } else { left };
-                next_level.push(Self::hash(&(left.clone() + right)));
+            let mut next_level = Vec::new();
+            for chunk in nodes.chunks(2) {
+                let left = &chunk[0];
+                let right = chunk.get(1).unwrap_or(left);
+                next_level.push(Self::hash(&format!("{}{}", left, right)));
             }
             nodes = next_level;
         }
@@ -10279,36 +10240,191 @@ impl MerkleTree {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+===================
+File: ./backend/src/state/mod.rs
+===================
+// backend/src/state/mod.rs
 
-    #[test]
-    fn test_merkle_tree_creation() {
-        let data = vec!["data1".to_string(), "data2".to_string(), "data3".to_string()];
-        let tree = MerkleTree::new(data.clone());
-        assert!(tree.root().is_some());
+mod merkle_tree;
+mod persistence;
+mod validation;
+
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use serde::{Serialize, Deserialize};
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum StateError {
+    #[error("Invalid state transition")]
+    InvalidTransition,
+    #[error("State validation failed: {0}")]
+    ValidationFailed(String),
+    #[error("Merkle proof verification failed")]
+    ProofVerificationFailed,
+    #[error("Storage error: {0}")]
+    StorageError(String),
+    #[error("Concurrent modification detected")]
+    ConcurrencyError,
+}
+
+pub type StateResult<T> = Result<T, StateError>;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StateTransition {
+    pub previous_root: String,
+    pub next_root: String,
+    pub changes: Vec<StateChange>,
+    pub timestamp: u64,
+    pub validator_signatures: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StateChange {
+    pub key: String,
+    pub value: String,
+    pub proof: Vec<String>,
+}
+
+pub struct StateManager {
+    current_state: Arc<RwLock<SystemState>>,
+    merkle_tree: merkle_tree::MerkleTree,
+    persistence: persistence::StatePersistence,
+    validator: validation::StateValidator,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SystemState {
+    pub root_hash: String,
+    pub block_height: u64,
+    pub timestamp: u64,
+    pub values: std::collections::HashMap<String, String>,
+}
+
+impl StateManager {
+    pub fn new() -> Self {
+        Self {
+            current_state: Arc::new(RwLock::new(SystemState::default())),
+            merkle_tree: merkle_tree::MerkleTree::default(),
+            persistence: persistence::StatePersistence::new(),
+            validator: validation::StateValidator::new(),
+        }
     }
 
-    #[test]
-    fn test_merkle_tree_proof() {
-        let data = vec!["data1".to_string(), "data2".to_string(), "data3".to_string()];
-        let mut tree = MerkleTree::new(data.clone());
+    pub async fn apply_transition(&mut self, transition: StateTransition) -> StateResult<()> {
+        // Validate transition
+        self.validator.validate_transition(&transition)?;
 
-        let leaf = &data[1];
-        let proof = tree.generate_proof(1);
-        assert!(MerkleTree::validate_proof(leaf, tree.root().unwrap(), proof));
+        // Verify merkle proofs
+        for change in &transition.changes {
+            if !self.merkle_tree.validate_proof(&change.value, &transition.next_root, change.proof.clone()) {
+                return Err(StateError::ProofVerificationFailed);
+            }
+        }
+
+        // Acquire write lock and update state
+        let mut state = self.current_state.write().await;
+        
+        // Ensure no concurrent modifications
+        if state.root_hash != transition.previous_root {
+            return Err(StateError::ConcurrencyError);
+        }
+
+        // Apply changes
+        for change in transition.changes {
+            state.values.insert(change.key, change.value);
+        }
+
+        // Update state metadata
+        state.root_hash = transition.next_root;
+        state.block_height += 1;
+        state.timestamp = transition.timestamp;
+
+        // Persist state
+        self.persistence.store_transition(&transition)?;
+
+        Ok(())
     }
 
-    #[test]
-    fn test_add_leaf() {
-        let mut tree = MerkleTree::new(vec!["data1".to_string()]);
-        tree.add_leaf("data2");
-        assert!(tree.root().is_some());
-        assert_eq!(tree.leaves.len(), 2);
+    pub async fn get_value(&self, key: &str) -> StateResult<Option<String>> {
+        let state = self.current_state.read().await;
+        Ok(state.values.get(key).cloned())
+    }
+
+    pub async fn get_proof(&self, key: &str) -> StateResult<Vec<String>> {
+        let state = self.current_state.read().await;
+        if let Some(value) = state.values.get(key) {
+            Ok(self.merkle_tree.generate_proof(format!("{}:{}", key, value)))
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    pub async fn verify_state(&self) -> StateResult<bool> {
+        let state = self.current_state.read().await;
+        self.validator.verify_invariants(&state)
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::test;
+
+    #[test]
+    async fn test_state_transitions() {
+        let mut manager = StateManager::new();
+        
+        let transition = StateTransition {
+            previous_root: "0".to_string(),
+            next_root: "1".to_string(),
+            changes: vec![
+                StateChange {
+                    key: "test_key".to_string(),
+                    value: "test_value".to_string(),
+                    proof: vec![],
+                }
+            ],
+            timestamp: 1000,
+            validator_signatures: vec![],
+        };
+
+        assert!(manager.apply_transition(transition).await.is_ok());
+        
+        let value = manager.get_value("test_key").await.unwrap();
+        assert_eq!(value, Some("test_value".to_string()));
+    }
+
+    #[test]
+    async fn test_concurrent_modifications() {
+        let mut manager = StateManager::new();
+        
+        // Apply first transition
+        let transition1 = StateTransition {
+            previous_root: "0".to_string(),
+            next_root: "1".to_string(),
+            changes: vec![],
+            timestamp: 1000,
+            validator_signatures: vec![],
+        };
+        
+        assert!(manager.apply_transition(transition1).await.is_ok());
+
+        // Try to apply transition with old root
+        let transition2 = StateTransition {
+            previous_root: "0".to_string(), // Should be "1"
+            next_root: "2".to_string(),
+            changes: vec![],
+            timestamp: 1001,
+            validator_signatures: vec![],
+        };
+        
+        assert!(matches!(
+            manager.apply_transition(transition2).await,
+            Err(StateError::ConcurrencyError)
+        ));
+    }
+}
 
 ===================
 File: ./backend/src/governance/proposal.rs
@@ -10996,7 +11112,6 @@ File: ./backend/src/lib.rs
 ===================
 // src/lib.rs
 
-
 pub mod api;
 pub mod blockchain;
 pub mod claims;
@@ -11009,10 +11124,10 @@ pub mod monitoring;
 pub mod network;
 pub mod relationship;
 pub mod reputation;
+pub mod state;  // New state module
 pub mod utils;
 pub mod vm;
 pub mod websocket;
-
 
 pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
 pub use consensus::{ProofOfCooperation, types::ConsensusConfig, types::ConsensusRound};
@@ -11029,7 +11144,6 @@ pub use relationship::{
     InteractionType,
     Endorsement
 };
-
 pub use reputation::ReputationSystem;
 pub use vm::{Contract, ExecutionContext, VM};
 pub use vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
@@ -11040,8 +11154,6 @@ use std::collections::HashMap;
 use tokio::sync::broadcast;
 use uuid;
 use chrono::{DateTime, Utc};
-
-// ... rest of the file remains exactly the same ...
 
 /// Events emitted by the ICN system
 #[derive(Clone, Debug)]
@@ -11057,322 +11169,6 @@ pub enum SystemEvent {
     ContributionRecorded(Contribution),
     MutualAidProvided(MutualAidInteraction),
     RelationshipUpdated { member_one: String, member_two: String },
-}
-
-/// Core system for the Inter-Cooperative Network
-pub struct ICNCore {
-    blockchain: Arc<Mutex<Blockchain>>,
-    identity_system: Arc<Mutex<IdentitySystem>>,
-    reputation_system: Arc<Mutex<ReputationSystem>>,
-    relationship_system: Arc<Mutex<RelationshipSystem>>,
-    vm: Arc<Mutex<VM>>,
-    event_bus: broadcast::Sender<SystemEvent>,
-    start_time: DateTime<Utc>,
-}
-
-impl ICNCore {
-    /// Creates a new instance of the ICN core system
-    pub fn new() -> Self {
-        let (event_tx, _) = broadcast::channel(100);
-        
-        let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
-        let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
-        let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new()));
-        let ws_handler = Arc::new(WebSocketHandler::new());
-
-        let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
-            ConsensusConfig::default(),
-            ws_handler.clone(),
-        )));
-
-        let blockchain = Arc::new(Mutex::new(Blockchain::new(
-            identity_system.clone(),
-            reputation_system.clone(),
-            relationship_system.clone(),
-            consensus.clone()
-        )));
-
-        let reputation_context = reputation_system.lock()
-            .unwrap()
-            .get_reputation_context();
-            
-        let vm = VM::new(1000, reputation_context);
-        let vm = Arc::new(Mutex::new(vm));
-
-        ICNCore {
-            blockchain,
-            identity_system,
-            reputation_system,
-            relationship_system,
-            vm,
-            event_bus: event_tx,
-            start_time: Utc::now(),
-        }
-    }
-
-    /// Creates a new cooperative with the given creator and metadata
-    pub async fn create_cooperative(
-        &self,
-        creator_did: String,
-        metadata: CooperativeMetadata
-    ) -> Result<String, String> {
-        // Validate creator's identity
-        let identity = self.identity_system.lock()
-            .map_err(|_| "Failed to acquire identity lock".to_string())?;
-        if !identity.is_registered(&creator_did) {
-            return Err("Creator DID not registered".to_string());
-        }
-        drop(identity);
-
-        // Check reputation requirements
-        let reputation = self.reputation_system.lock()
-            .map_err(|_| "Failed to acquire reputation lock".to_string())?;
-        if reputation.get_reputation(&creator_did) < 100 {
-            return Err("Insufficient reputation to create cooperative".to_string());
-        }
-        let reputation_score = reputation.get_reputation(&creator_did);
-        drop(reputation);
-
-        // Create and execute contract
-        let contract = Contract {
-            id: uuid::Uuid::new_v4().to_string(),
-            code: vec![vm::opcode::OpCode::CreateCooperative {
-                name: metadata.cooperative_id.clone(),
-                description: metadata.purpose.clone(),
-                resources: HashMap::new(),
-                federation_id: metadata.federation_id.clone(),
-            }],
-            state: HashMap::new(),
-            required_reputation: 100,
-            cooperative_metadata: metadata.clone(),
-            version: "1.0.0".to_string(),
-            dependencies: vec![],
-            permissions: vec!["cooperative.create".to_string()],
-        };
-
-        let context = ExecutionContext {
-            caller_did: creator_did.clone(),
-            cooperative_id: contract.id.clone(),
-            timestamp: Utc::now().timestamp() as u64,
-            block_number: {
-                let blockchain = self.blockchain.lock()
-                    .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
-                blockchain.current_block_number
-            },
-            reputation_score,
-            permissions: vec!["cooperative.create".to_string()],
-        };
-
-        // Execute contract
-        {
-            let mut vm = self.vm.lock()
-                .map_err(|_| "Failed to acquire VM lock".to_string())?;
-            vm.set_execution_context(context);
-            vm.execute_contract(&contract)?;
-        }
-
-        // Create and submit transaction
-        let transaction = Transaction::new(
-            creator_did.clone(),
-            TransactionType::ContractExecution {
-                contract_id: contract.id.clone(),
-                input_data: HashMap::new(),
-            },
-        );
-
-        {
-            let mut blockchain = self.blockchain.lock()
-                .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
-            blockchain.add_transaction(transaction).await?;
-        }
-
-        // Emit creation event
-        let event = SystemEvent::CooperativeCreated {
-            id: contract.id.clone(),
-            creator: creator_did,
-        };
-        let _ = self.event_bus.send(event);
-
-        Ok(contract.id)
-    }
-
-    /// Records a new contribution in the system
-    pub async fn record_contribution(
-        &self,
-        contribution: Contribution
-    ) -> Result<(), String> {
-        let mut relationship_system = self.relationship_system.lock()
-            .map_err(|_| "Failed to acquire relationship lock".to_string())?;
-        
-        relationship_system.record_contribution(contribution.clone())?;
-
-        let event = SystemEvent::ContributionRecorded(contribution);
-        let _ = self.event_bus.send(event);
-
-        Ok(())
-    }
-
-    /// Records a mutual aid interaction between members
-    pub async fn record_mutual_aid(
-        &self,
-        interaction: MutualAidInteraction
-    ) -> Result<(), String> {
-        let mut relationship_system = self.relationship_system.lock()
-            .map_err(|_| "Failed to acquire relationship lock".to_string())?;
-        
-        relationship_system.record_mutual_aid(interaction.clone())?;
-
-        let event = SystemEvent::MutualAidProvided(interaction);
-        let _ = self.event_bus.send(event);
-
-        Ok(())
-    }
-
-    /// Starts a new consensus round
-    pub async fn start_consensus_round(&self) -> Result<(), String> {
-        let blockchain = self.blockchain.lock()
-            .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
-        
-        if let Some(round) = blockchain.get_current_round() {
-            drop(blockchain);
-            let event = SystemEvent::ConsensusStarted(round);
-            let _ = self.event_bus.send(event);
-        }
-
-        Ok(())
-    }
-
-    /// Submits a new proposal for voting
-    pub async fn submit_proposal(
-        &self,
-        creator_did: String,
-        proposal: Proposal
-    ) -> Result<u64, String> {
-        let reputation = self.reputation_system.lock()
-            .map_err(|_| "Failed to acquire reputation lock".to_string())?;
-        
-        if reputation.get_reputation(&creator_did) < proposal.required_reputation {
-            return Err("Insufficient reputation to create proposal".to_string());
-        }
-        drop(reputation);
-
-        let transaction = Transaction::new(
-            creator_did,
-            TransactionType::ContractExecution {
-                contract_id: "governance".to_string(),
-                input_data: HashMap::new(),
-            },
-        );
-
-        {
-            let mut blockchain = self.blockchain.lock()
-                .map_err(|_| "Failed to acquire blockchain lock".to_string())?;
-            blockchain.add_transaction(transaction).await?;
-        }
-
-        let event = SystemEvent::ProposalSubmitted(proposal.clone());
-        let _ = self.event_bus.send(event);
-
-        Ok(proposal.id)
-    }
-
-    /// Subscribes to system events
-    pub fn subscribe_to_events(&self) -> broadcast::Receiver<SystemEvent> {
-        self.event_bus.subscribe()
-    }
-
-    /// Gets system uptime in seconds
-    pub fn get_uptime(&self) -> i64 {
-        (Utc::now() - self.start_time).num_seconds()
-    }
-
-    /// Gets system statistics
-    pub fn get_stats(&self) -> HashMap<String, String> {
-        let mut stats = HashMap::new();
-        stats.insert("uptime".to_string(), self.get_uptime().to_string());
-        
-        if let Ok(blockchain) = self.blockchain.lock() {
-            stats.insert("block_count".to_string(), blockchain.get_block_count().to_string());
-            stats.insert("tx_count".to_string(), blockchain.get_transaction_count().to_string());
-        }
-
-        stats
-    }
-}
-
-/// Manager for cooperative-specific operations
-pub struct CooperativeManager {
-    core: Arc<ICNCore>,
-}
-
-impl CooperativeManager {
-    pub fn new(core: Arc<ICNCore>) -> Self {
-        CooperativeManager { core }
-    }
-
-    pub async fn create_cooperative(
-        &self, 
-        creator_did: String, 
-        _name: String,  // Added underscore to acknowledge unused variable
-        purpose: String
-    ) -> Result<String, String> {
-        let metadata = CooperativeMetadata {
-            creator_did: creator_did.clone(),
-            cooperative_id: uuid::Uuid::new_v4().to_string(),
-            purpose,
-            resource_impact: ResourceImpact {
-                cpu_intensity: 1,
-                memory_usage: 1,
-                network_usage: 1,
-                storage_usage: 1,
-                bandwidth_usage: 1,
-            },
-            federation_id: None,
-            creation_timestamp: Utc::now().timestamp() as u64,
-            last_updated: Utc::now().timestamp() as u64,
-            member_count: 1,
-            resource_allocation: HashMap::new(),
-            energy_usage: HashMap::new(),
-        };
-
-        self.core.create_cooperative(creator_did, metadata).await
-    }
-
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_icn_core_creation() {
-        let core = ICNCore::new();
-        let _receiver = core.subscribe_to_events();
-        assert!(core.get_uptime() >= 0);
-    }
-
-    #[tokio::test]
-    async fn test_cooperative_creation() {
-        let core = Arc::new(ICNCore::new());
-        let manager = CooperativeManager::new(core);
-        
-        let result = manager.create_cooperative(
-            "did:icn:test".to_string(),
-            "Test Cooperative".to_string(),
-            "Test Purpose".to_string()
-        ).await;
-        
-        assert!(result.is_err()); // Should fail because DID not registered
-    }
-
-    #[test]
-    fn test_system_stats() {
-        let core = ICNCore::new();
-        let stats = core.get_stats();
-        assert!(stats.contains_key("uptime"));
-        assert!(stats.contains_key("block_count"));
-        assert!(stats.contains_key("tx_count"));
-    }
 }
 
 ===================
@@ -11443,252 +11239,26 @@ File: ./backend/src/consensus/types.rs
 ===================
 // src/consensus/types.rs
 
-use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
-use crate::blockchain::Block;
 
-/// Events emitted during consensus process
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum ConsensusEvent {
-    /// Round started event
-    RoundStarted {
-        round: u64,
-        coordinator: String,
-        timeout: u64,
-    },
-    
-    /// Block proposed event
-    BlockProposed {
-        round: u64,
-        proposer: String,
-        block_hash: String,
-        transactions: usize,
-    },
-    
-    /// Vote received event
-    VoteReceived {
-        round: u64,
-        validator: String,
-        approve: bool,
-        voting_power: f64,
-    },
-    
-    /// Round completed event
-    RoundCompleted {
-        round: u64,
-        block_hash: String,
-        validators: Vec<String>,
-        duration_ms: u64,
-    },
-    
-    /// Round failed event
-    RoundFailed {
-        round: u64,
-        reason: String,
-    },
-    
-    /// Validator status update
-    ValidatorUpdate {
-        did: String,
-        reputation: i64,
-        voting_power: f64,
-        performance_score: f64,
-    },
-}
-
-/// Information about a validator in the network
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ValidatorInfo {
-    /// Decentralized Identifier of the validator
-    pub did: String,
-    
-    /// Current reputation score
-    pub reputation: i64,
-    
-    /// Calculated voting power (0.0 to 1.0)
-    pub voting_power: f64,
-    
-    /// Last consensus round the validator participated in
-    pub last_active_round: u64,
-    
-    /// Number of consecutive rounds missed
-    pub consecutive_missed_rounds: u32,
-    
-    /// Total number of blocks validated
-    pub total_blocks_validated: u64,
-    
-    /// Performance score based on historical participation (0.0 to 1.0)
-    pub performance_score: f64,
-}
-
-/// Statistics for a consensus round
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConsensusRoundStats {
-    /// Total available voting power in the round
-    pub total_voting_power: f64,
-    
-    /// Percentage of validators who participated
-    pub participation_rate: f64,
-    
-    /// Percentage of voting power that approved the block
-    pub approval_rate: f64,
-    
-    /// Duration of the round in milliseconds
-    pub round_duration_ms: u64,
-    
-    /// Number of validators eligible to participate
-    pub validator_count: usize,
-}
-
-/// A vote cast by a validator
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WeightedVote {
-    /// DID of the validator casting the vote
-    pub validator: String,
-    
-    /// Whether the validator approves the block
-    pub approve: bool,
-    
-    /// Voting power of the validator
-    pub voting_power: f64,
-    
-    /// When the vote was cast
-    pub timestamp: DateTime<Utc>,
-    
-    /// Cryptographic signature of the vote
-    pub signature: String,
-}
-
-/// State of a consensus round
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConsensusRound {
-    /// Sequential number of this round
-    pub round_number: u64,
-    
-    /// DID of the coordinator for this round
-    pub coordinator: String,
-    
-    /// When the round started
-    pub start_time: DateTime<Utc>,
-    
-    /// When the round will timeout
-    pub timeout: DateTime<Utc>,
-    
-    /// Current status of the round
-    pub status: RoundStatus,
-    
-    /// The block being proposed (if any)
-    pub proposed_block: Option<Block>,
-    
-    /// Votes received, keyed by validator DID
-    pub votes: HashMap<String, WeightedVote>,
-    
-    /// Statistics for the round
-    pub stats: ConsensusRoundStats,
-}
-
-/// Status of a consensus round
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum RoundStatus {
-    /// Waiting for block proposal
-    Proposing,
-    
-    /// Collecting votes from validators
-    Voting,
-    
-    /// Preparing to commit the block
-    Finalizing,
-    
-    /// Round successfully completed
-    Completed,
-    
-    /// Round failed to reach consensus
-    Failed,
-}
-
-/// Configuration parameters for the consensus mechanism
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConsensusConfig {
-    /// Minimum reputation required to be a validator
-    pub min_validator_reputation: i64,
-    
-    /// Maximum voting power any validator can have
-    pub max_voting_power: f64,
-    
-    /// Minimum participation required for valid consensus
-    pub min_participation_rate: f64,
-    
-    /// Minimum approval required for valid consensus
-    pub min_approval_rate: f64,
-    
-    /// How long before a round times out (milliseconds)
-    pub round_timeout_ms: u64,
-    
-    /// Base reputation reward for participation
-    pub base_reward: i64,
-    
-    /// Multiplier for consecutive missed rounds
-    pub penalty_factor: f64,
-    
-    /// Minimum number of validators needed
-    pub min_validators: usize,
-    
-    /// Maximum consecutive missed rounds before ejection
-    pub max_missed_rounds: u32,
-    
-    /// Minimum performance score to remain eligible 
-    pub min_performance_score: f64,
-}
-
-impl Default for ConsensusConfig {
-    fn default() -> Self {
-        ConsensusConfig {
-            min_validator_reputation: 100,
-            max_voting_power: 0.1,
-            min_participation_rate: 0.67,  // 2/3 participation required
-            min_approval_rate: 0.67,       // 2/3 approval required
-            round_timeout_ms: 30_000,      // 30 second timeout
-            base_reward: 10,
-            penalty_factor: 1.5,
-            min_validators: 3,
-            max_missed_rounds: 5,
-            min_performance_score: 0.5,
-        }
-    }
-}
-
-/// Possible consensus-related errors
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ConsensusError {
-    /// Not enough validators available
     InsufficientValidators,
-    
-    /// Invalid coordinator for this round
     InvalidCoordinator,
-    
-    /// Round already in progress
     RoundInProgress,
-    
-    /// No active round found
     NoActiveRound,
-    
-    /// Invalid state for operation
     InvalidRoundState,
-    
-    /// Round timed out
     TimedOut,
-    
-    /// Block validation failed
     ValidationFailed,
-    
-    /// Not a registered validator
     NotValidator,
-    
-    /// Insufficient reputation
     InsufficientReputation,
-    
-    /// Custom error message
+    InsufficientSignatures,
+    InvalidBlockIndex,
+    InvalidPreviousHash,
+    InvalidTimestamp,
+    InvalidStateTransition,
+    InvalidBlockHash,
+    InvalidValidatorUpdate,
     Custom(String),
 }
 
@@ -11713,67 +11283,22 @@ impl std::fmt::Display for ConsensusError {
                 write!(f, "Not a registered validator"),
             ConsensusError::InsufficientReputation => 
                 write!(f, "Insufficient reputation for operation"),
-            ConsensusError::Custom(msg) => 
-                write!(f, "{}", msg),
+            ConsensusError::InsufficientSignatures =>
+                write!(f, "Insufficient validator signatures"),
+            ConsensusError::InvalidBlockIndex =>
+                write!(f, "Invalid block index"),
+            ConsensusError::InvalidPreviousHash =>
+                write!(f, "Invalid previous block hash"),
+            ConsensusError::InvalidTimestamp =>
+                write!(f, "Invalid block timestamp"),
+            ConsensusError::InvalidStateTransition =>
+                write!(f, "Invalid state transition"),
+            ConsensusError::InvalidBlockHash =>
+                write!(f, "Invalid block hash"),
+            ConsensusError::InvalidValidatorUpdate =>
+                write!(f, "Invalid validator update"),
+            ConsensusError::Custom(msg) => write!(f, "{}", msg),
         }
-    }
-}
-
-impl std::error::Error for ConsensusError {}
-
-impl From<ConsensusError> for String {
-    fn from(error: ConsensusError) -> String {
-        error.to_string()
-    }
-}
-
-/// Utility functions for consensus calculations
-pub mod utils {
-    /// Calculate voting power based on reputation
-    pub fn calculate_voting_power(reputation: i64, total_reputation: i64, max_power: f64) -> f64 {
-        let raw_power = reputation as f64 / total_reputation as f64;
-        raw_power.min(max_power)
-    }
-
-    /// Calculate penalty for missed rounds
-    pub fn calculate_penalty(base_penalty: i64, consecutive_misses: u32, factor: f64) -> i64 {
-        -(base_penalty as f64 * factor * consecutive_misses as f64) as i64
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[test]
-    fn test_voting_power_calculation() {
-        let power = utils::calculate_voting_power(500, 1000, 0.1);
-        assert!(power <= 0.1);
-        assert!(power > 0.0);
-        assert_eq!(power, 0.1); // Should be capped at max_power
-        
-        let power = utils::calculate_voting_power(100, 1000, 0.1);
-        assert_eq!(power, 0.1);
-    }
-
-    #[test]
-    fn test_penalty_calculation() {
-        let penalty = utils::calculate_penalty(10, 3, 1.5);
-        assert_eq!(penalty, -45); // -10 * 1.5 * 3
-
-        let penalty1 = utils::calculate_penalty(10, 1, 1.5);
-        let penalty2 = utils::calculate_penalty(10, 2, 1.5);
-        assert!(penalty2 < penalty1); 
-    }
-
-    #[test]
-    fn test_consensus_config_default() {
-        let config = ConsensusConfig::default();
-        assert_eq!(config.min_validator_reputation, 100);
-        assert_eq!(config.max_voting_power, 0.1);
-        assert_eq!(config.min_participation_rate, 0.67);
-        assert_eq!(config.min_approval_rate, 0.67);
-        assert_eq!(config.round_timeout_ms, 30_000);
     }
 }
 
