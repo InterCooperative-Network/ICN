@@ -1,90 +1,182 @@
-// src/state/mod.rs
-pub mod merkle_tree;
+// backend/src/state/mod.rs
 
-// src/state/merkle_tree.rs
-use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+mod merkle_tree;
+mod persistence;
+mod validation;
 
-#[derive(Debug, Clone)]
-pub struct MerkleTree {
-    leaves: Vec<String>,
-    nodes: Vec<String>,
-    height: usize,
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use serde::{Serialize, Deserialize};
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum StateError {
+    #[error("Invalid state transition")]
+    InvalidTransition,
+    #[error("State validation failed: {0}")]
+    ValidationFailed(String),
+    #[error("Merkle proof verification failed")]
+    ProofVerificationFailed,
+    #[error("Storage error: {0}")]
+    StorageError(String),
+    #[error("Concurrent modification detected")]
+    ConcurrencyError,
 }
 
-impl MerkleTree {
-    pub fn new(data: Vec<String>) -> Self {
-        let leaves = data.iter().map(|d| Self::hash(d)).collect::<Vec<_>>();
-        let nodes = Self::build_tree(&leaves);
-        let height = if leaves.is_empty() { 0 } else { nodes.len().ilog2() as usize };
-        MerkleTree {
-            leaves,
-            nodes,
-            height,
+pub type StateResult<T> = Result<T, StateError>;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StateTransition {
+    pub previous_root: String,
+    pub next_root: String,
+    pub changes: Vec<StateChange>,
+    pub timestamp: u64,
+    pub validator_signatures: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StateChange {
+    pub key: String,
+    pub value: String,
+    pub proof: Vec<String>,
+}
+
+pub struct StateManager {
+    current_state: Arc<RwLock<SystemState>>,
+    merkle_tree: merkle_tree::MerkleTree,
+    persistence: persistence::StatePersistence,
+    validator: validation::StateValidator,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SystemState {
+    pub root_hash: String,
+    pub block_height: u64,
+    pub timestamp: u64,
+    pub values: std::collections::HashMap<String, String>,
+}
+
+impl StateManager {
+    pub fn new() -> Self {
+        Self {
+            current_state: Arc::new(RwLock::new(SystemState::default())),
+            merkle_tree: merkle_tree::MerkleTree::default(),
+            persistence: persistence::StatePersistence::new(),
+            validator: validation::StateValidator::new(),
         }
     }
 
-    pub fn add_leaf(&mut self, data: &str) {
-        let hash = Self::hash(data);
-        self.leaves.push(hash.clone());
-        self.nodes = Self::build_tree(&self.leaves);
-        self.height = self.nodes.len().ilog2() as usize;
-    }
+    pub async fn apply_transition(&mut self, transition: StateTransition) -> StateResult<()> {
+        // Validate transition
+        self.validator.validate_transition(&transition)?;
 
-    pub fn root(&self) -> Option<&String> {
-        self.nodes.first()
-    }
-
-    pub fn generate_proof(&self, index: usize) -> Vec<String> {
-        if index >= self.leaves.len() {
-            return vec![];
-        }
-        let mut proof = vec![];
-        let mut idx = index + self.leaves.len() - 1;
-
-        while idx > 0 {
-            let sibling = if idx % 2 == 0 { idx - 1 } else { idx + 1 };
-            if sibling < self.nodes.len() {
-                proof.push(self.nodes[sibling].clone());
+        // Verify merkle proofs
+        for change in &transition.changes {
+            if !self.merkle_tree.validate_proof(&change.value, &transition.next_root, change.proof.clone()) {
+                return Err(StateError::ProofVerificationFailed);
             }
-            idx = (idx - 1) / 2;
         }
-        proof
+
+        // Acquire write lock and update state
+        let mut state = self.current_state.write().await;
+        
+        // Ensure no concurrent modifications
+        if state.root_hash != transition.previous_root {
+            return Err(StateError::ConcurrencyError);
+        }
+
+        // Apply changes
+        for change in transition.changes {
+            state.values.insert(change.key, change.value);
+        }
+
+        // Update state metadata
+        state.root_hash = transition.next_root;
+        state.block_height += 1;
+        state.timestamp = transition.timestamp;
+
+        // Persist state
+        self.persistence.store_transition(&transition)?;
+
+        Ok(())
     }
 
-    pub fn validate_proof(data: &str, root: &str, proof: Vec<String>) -> bool {
-        let mut hash = Self::hash(data);
-        for sibling in proof {
-            hash = if hash < sibling {
-                Self::hash(&(hash + &sibling))
-            } else {
-                Self::hash(&(sibling + &hash))
-            };
-        }
-        &hash == root
+    pub async fn get_value(&self, key: &str) -> StateResult<Option<String>> {
+        let state = self.current_state.read().await;
+        Ok(state.values.get(key).cloned())
     }
 
-    fn hash(data: &str) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(data);
-        format!("{:x}", hasher.finalize())
+    pub async fn get_proof(&self, key: &str) -> StateResult<Vec<String>> {
+        let state = self.current_state.read().await;
+        if let Some(value) = state.values.get(key) {
+            Ok(self.merkle_tree.generate_proof(format!("{}:{}", key, value)))
+        } else {
+            Ok(vec![])
+        }
     }
 
-    fn build_tree(leaves: &[String]) -> Vec<String> {
-        if leaves.is_empty() {
-            return vec![];
-        }
+    pub async fn verify_state(&self) -> StateResult<bool> {
+        let state = self.current_state.read().await;
+        self.validator.verify_invariants(&state)
+    }
+}
 
-        let mut nodes = leaves.to_vec();
-        while nodes.len() > 1 {
-            let mut next_level = vec![];
-            for i in (0..nodes.len()).step_by(2) {
-                let left = &nodes[i];
-                let right = if i + 1 < nodes.len() { &nodes[i + 1] } else { left };
-                next_level.push(Self::hash(&(left.clone() + right)));
-            }
-            nodes = next_level;
-        }
-        nodes
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::test;
+
+    #[test]
+    async fn test_state_transitions() {
+        let mut manager = StateManager::new();
+        
+        let transition = StateTransition {
+            previous_root: "0".to_string(),
+            next_root: "1".to_string(),
+            changes: vec![
+                StateChange {
+                    key: "test_key".to_string(),
+                    value: "test_value".to_string(),
+                    proof: vec![],
+                }
+            ],
+            timestamp: 1000,
+            validator_signatures: vec![],
+        };
+
+        assert!(manager.apply_transition(transition).await.is_ok());
+        
+        let value = manager.get_value("test_key").await.unwrap();
+        assert_eq!(value, Some("test_value".to_string()));
+    }
+
+    #[test]
+    async fn test_concurrent_modifications() {
+        let mut manager = StateManager::new();
+        
+        // Apply first transition
+        let transition1 = StateTransition {
+            previous_root: "0".to_string(),
+            next_root: "1".to_string(),
+            changes: vec![],
+            timestamp: 1000,
+            validator_signatures: vec![],
+        };
+        
+        assert!(manager.apply_transition(transition1).await.is_ok());
+
+        // Try to apply transition with old root
+        let transition2 = StateTransition {
+            previous_root: "0".to_string(), // Should be "1"
+            next_root: "2".to_string(),
+            changes: vec![],
+            timestamp: 1001,
+            validator_signatures: vec![],
+        };
+        
+        assert!(matches!(
+            manager.apply_transition(transition2).await,
+            Err(StateError::ConcurrencyError)
+        ));
     }
 }
