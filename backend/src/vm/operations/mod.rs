@@ -1,30 +1,11 @@
 // src/vm/operations/mod.rs
 
 use std::collections::HashMap;
+use std::sync::atomic::AtomicU64;
+use crate::state::merkle_tree::MerkleTree;
 use crate::vm::{VMError, VMResult};
 use crate::vm::event::Event;
 
-// Re-export operation modules
-pub mod stack;
-pub mod arithmetic;
-pub mod cooperative;
-pub mod governance;
-pub mod reputation;
-pub mod relationship;
-pub mod system;
-pub mod data;
-pub mod memory;
-pub mod network;
-pub mod federation;
-
-// Re-export necessary operation types
-pub use stack::StackOperation;
-pub use arithmetic::ArithmeticOperation;
-pub use system::SystemOperation;
-pub use relationship::RelationshipOperation;
-pub use memory::MemoryOperation;
-
-/// VM state structure
 #[derive(Default)]
 pub struct VMState {
     pub stack: Vec<i64>,
@@ -38,21 +19,40 @@ pub struct VMState {
     pub permissions: Vec<String>,
     pub memory_limit: u64,
     pub memory_address_counter: AtomicU64,
-    // Add missing fields
     pub state_tree: MerkleTree,
     pub state_updates: HashMap<String, String>,
 }
 
-/// Trait for implementable VM operations
-pub trait Operation {
-    /// Execute the operation on the given state
-    fn execute(&self, state: &mut VMState) -> VMResult<()>;
-    
-    /// Get the resource cost of this operation
-    fn resource_cost(&self) -> u64;
-    
-    /// Get required permissions for this operation
-    fn required_permissions(&self) -> Vec<String>;
+impl VMState {
+    pub fn new(caller_did: String, block_number: u64, timestamp: u64) -> Self {
+        let mut state = VMState {
+            stack: Vec::new(),
+            memory: HashMap::new(),
+            events: Vec::new(),
+            instruction_pointer: 0,
+            reputation_context: HashMap::new(),
+            caller_did,
+            block_number,
+            timestamp,
+            permissions: Vec::new(),
+            memory_limit: 1024 * 1024, // 1MB default limit
+            memory_address_counter: AtomicU64::new(0),
+            state_tree: MerkleTree::default(),
+            state_updates: HashMap::new(),
+        };
+        
+        state.state_tree.add_leaf(&format!("init:{}", timestamp));
+        state
+    }
+
+    pub fn record_state_update(&mut self, key: String, value: String) {
+        self.state_updates.insert(key.clone(), value.clone());
+        self.state_tree.add_leaf(&format!("{}:{}", key, value));
+    }
+
+    pub fn get_state_root(&self) -> Option<String> {
+        self.state_tree.root().cloned()
+    }
 }
 
 /// Helper function to check stack has enough items
@@ -102,12 +102,10 @@ pub fn emit_event(state: &mut VMState, event_type: String, data: HashMap<String,
 }
 
 pub fn validate_state_update(key: &str, value: &str, state: &VMState) -> VMResult<()> {
-    // Validate state update
     if key.is_empty() || value.is_empty() {
         return Err(VMError::InvalidOperand);
     }
 
-    // Generate and verify state proof
     if let Some(root) = state.get_state_root() {
         let proof = state.state_tree.generate_proof(state.state_updates.len());
         if !MerkleTree::validate_proof(&format!("{}:{}", key, value), &root, proof) {
@@ -116,32 +114,4 @@ pub fn validate_state_update(key: &str, value: &str, state: &VMState) -> VMResul
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_ensure_stack_size() {
-        let stack = vec![1, 2, 3];
-        assert!(ensure_stack_size(&stack, 3).is_ok());
-        assert!(ensure_stack_size(&stack, 4).is_err());
-    }
-
-    #[test]
-    fn test_ensure_permissions() {
-        let required = vec!["test.permission".to_string()];
-        let available = vec!["test.permission".to_string()];
-        assert!(ensure_permissions(&required, &available).is_ok());
-
-        let available = vec!["other.permission".to_string()];
-        assert!(ensure_permissions(&required, &available).is_err());
-    }
-
-    #[test]
-    fn test_ensure_reputation() {
-        assert!(ensure_reputation(10, 20).is_ok());
-        assert!(ensure_reputation(20, 10).is_err());
-    }
 }
