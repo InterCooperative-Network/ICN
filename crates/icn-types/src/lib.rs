@@ -1,19 +1,29 @@
 mod block;
 mod transaction;
-mod did;
+mod identity;
 mod relationship;
 mod reputation;
 
 pub use block::Block;
 pub use transaction::{Transaction, TransactionType};
-pub use did::{DID, DIDDocument};
+pub use identity::DID;
 pub use relationship::{Relationship, RelationshipType};
-pub use reputation::ReputationScore;
+pub use reputation::{ReputationSystem, ReputationContext, ReputationScore};
 
-use serde::{Serialize, Deserialize};
-use chrono::{DateTime, Utc};
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Invalid data: {0}")]
+    InvalidData(String),
+    
+    #[error("Crypto error: {0}")]
+    CryptoError(String),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 pub trait Validate {
-    type Error;
-    fn validate(&self) -> Result<(), Self::Error>;
+    fn validate(&self) -> Result<()>;
 }

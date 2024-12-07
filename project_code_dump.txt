@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sat Dec  7 10:33:35 UTC 2024
+Project Code Dump - Generated Sat Dec  7 11:01:34 UTC 2024
 ======================================
 
 LLM Context Information
@@ -29,35 +29,36 @@ File Organization:
 Project Tree:
 =============
 .
+├── Cargo.toml
 ├── ICN.code-workspace
-├── backend
-│   ├── Cargo.lock
-│   ├── Cargo.toml
-│   ├── lib.rs,old
-│   └── src
-│       ├── api
-│       ├── blockchain
-│       ├── claims
-│       ├── community
-│       ├── config
-│       ├── consensus
-│       ├── cooperative
-│       ├── governance
-│       ├── identity
-│       ├── lib.rs
-│       ├── main.rs
-│       ├── monitoring
-│       ├── network
-│       ├── relationship
-│       ├── reputation
-│       ├── state
-│       ├── utils
-│       ├── vm
-│       └── websocket
 ├── contracts
 │   ├── cooperative
 │   │   └── src
 │   └── governance
+├── crates
+│   ├── icn-consensus
+│   │   ├── Cargo.toml
+│   │   └── src
+│   ├── icn-core
+│   │   ├── Cargo.lock
+│   │   ├── Cargo.toml
+│   │   ├── lib.rs,old
+│   │   └── src
+│   ├── icn-crypto
+│   │   ├── Cargo.toml
+│   │   └── src
+│   ├── icn-p2p
+│   │   ├── Cargo.toml
+│   │   └── src
+│   ├── icn-runtime
+│   │   ├── Cargo.toml
+│   │   └── src
+│   ├── icn-storage
+│   │   ├── Cargo.toml
+│   │   └── src
+│   └── icn-types
+│       ├── Cargo.toml
+│       └── src
 ├── create_docs_dump.sh
 ├── docker
 │   ├── backend.Dockerfile
@@ -75,8 +76,69 @@ Project Tree:
 │   │   └── styles
 │   └── tsconfig.json
 ├── generate_code_dump.sh
+├── icn_backup_20241207.tar.gz
 ├── improved-setup.sh
 ├── inventory_nodes.sh
+├── old_src_backup
+│   ├── api
+│   │   ├── cooperative.rs
+│   │   └── mod.rs
+│   ├── blockchain
+│   │   ├── block.rs
+│   │   ├── chain.rs
+│   │   ├── mod.rs
+│   │   └── transaction.rs
+│   ├── claims
+│   │   └── mod.rs
+│   ├── community
+│   │   └── mod.rs
+│   ├── config
+│   ├── consensus
+│   ├── cooperative
+│   │   └── mod.rs
+│   ├── governance
+│   │   ├── mod.rs
+│   │   └── proposal.rs
+│   ├── identity
+│   │   ├── authentication.rs
+│   │   ├── did.rs
+│   │   ├── identity_manager.rs
+│   │   ├── identity_system.rs
+│   │   ├── key_pair.rs
+│   │   └── mod.rs
+│   ├── lib.rs
+│   ├── main.rs
+│   ├── monitoring
+│   │   ├── energy.rs
+│   │   ├── metrics.rs
+│   │   ├── mod.rs
+│   │   ├── prometheus.rs
+│   │   └── service.rs
+│   ├── network
+│   ├── relationship
+│   │   ├── mod.rs
+│   │   ├── models
+│   │   ├── system.rs
+│   │   └── types.rs
+│   ├── reputation
+│   │   ├── mod.rs
+│   │   └── reputation_system.rs
+│   ├── state
+│   │   ├── merkle_tree.rs
+│   │   ├── migrations.rs
+│   │   ├── mod.rs
+│   │   ├── persistence.rs
+│   │   ├── state_migrations.rs
+│   │   └── validation.rs
+│   ├── storage
+│   ├── utils
+│   │   ├── mod.rs
+│   │   └── notifications.rs
+│   ├── vm
+│   └── websocket
+│       ├── backend.code-workspace
+│       ├── handler.rs
+│       └── mod.rs
 ├── project_code_dump.txt
 ├── project_docs_dump.txt
 ├── setup_and_run_script.sh
@@ -97,191 +159,6 @@ Project Tree:
     └── requirements.txt
 
 ===================
-File: ./backend/Cargo.toml
-Size: 723 bytes
-Modified: 2024-12-05 22:16:29.921464962 +0000
-
-===================
-```toml
-[package]
-name = "icn-backend"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-tokio = { version = "1.35.1", features = ["full"] }
-thiserror = "1.0.50"
-warp = "0.3.7"
-tokio-tungstenite = { version = "0.21.0", features = ["native-tls"] }
-url = "2.5.0"
-http = "1.0.0"
-serde = { version = "1.0.193", features = ["derive"] }
-serde_json = "1.0.108"
-chrono = { version = "0.4.38", features = ["serde"] }
-uuid = { version = "1.11.0", features = ["v4"] }
-futures = "0.3.31"
-futures-util = "0.3.31"
-rand = "0.8.5"
-secp256k1 = { version = "0.24.3", features = ["rand"] }
-sha2 = "0.10.8"
-
-// Remove the [dev-dependencies] section entirely since these are already in main dependencies
-
-[[bin]]
-name = "icn-app" 
-path = "src/main.rs"```
-
-===================
-File: ./backend/src/lib.rs
-Size: 1723 bytes
-Modified: 2024-12-05 21:57:38.922020627 +0000
-Dependencies:
-use chrono::{DateTime, Utc};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use tokio::sync::broadcast;
-use uuid;
-
-===================
-```rs
-// src/lib.rs
-
-pub mod api;
-pub mod blockchain;
-pub mod claims;
-pub mod community;
-pub mod consensus;
-pub mod cooperative;
-pub mod governance;
-pub mod identity;
-pub mod monitoring;
-pub mod network;
-pub mod relationship;
-pub mod reputation;
-pub mod state;  // New state module
-pub mod utils;
-pub mod vm;
-pub mod websocket;
-
-pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
-pub use consensus::{ProofOfCooperation, types::ConsensusConfig, types::ConsensusRound};
-pub use governance::Proposal;
-pub use identity::IdentitySystem;
-pub use monitoring::energy::{EnergyAware, EnergyMonitor};
-pub use relationship::{
-    Contribution, 
-    MutualAidInteraction, 
-    RelationshipSystem,
-    Relationship, 
-    RelationshipType,
-    Interaction,
-    InteractionType,
-    Endorsement
-};
-pub use reputation::ReputationSystem;
-pub use vm::{Contract, ExecutionContext, VM};
-pub use vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
-pub use websocket::WebSocketHandler;
-
-use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
-use tokio::sync::broadcast;
-use uuid;
-use chrono::{DateTime, Utc};
-
-/// Events emitted by the ICN system
-#[derive(Clone, Debug)]
-pub enum SystemEvent {
-    BlockCreated(Block),
-    ProposalSubmitted(Proposal),
-    VoteCast { proposal_id: u64, voter: String, vote: bool },
-    ReputationChanged { did: String, change: i64, reason: String },
-    ConsensusStarted(ConsensusRound),
-    ConsensusFinished(Block),
-    CooperativeCreated { id: String, creator: String },
-    CooperativeJoined { id: String, member: String },
-    ContributionRecorded(Contribution),
-    MutualAidProvided(MutualAidInteraction),
-    RelationshipUpdated { member_one: String, member_two: String },
-}```
-
-===================
-File: ./backend/src/main.rs
-Size: 2127 bytes
-Modified: 2024-12-05 22:16:28.750308239 +0000
-Dependencies:
-use icn_backend::{
-use std::sync::{Arc, Mutex};
-use warp::Filter;
-
-===================
-```rs
-// src/main.rs
-
-use std::sync::{Arc, Mutex};
-use warp::Filter;
-
-// Import from the icn_backend library
-use icn_backend::{
-    blockchain::Blockchain,
-    consensus::{ProofOfCooperation, types::ConsensusConfig},
-    identity::IdentitySystem,
-    relationship::RelationshipSystem, // Import the RelationshipSystem
-    reputation::ReputationSystem,
-    websocket::WebSocketHandler,
-};
-
-#[tokio::main]
-async fn main() {
-    // Initialize core systems
-    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
-    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
-    let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new())); // Initialize the RelationshipSystem
-    
-    // Create WebSocket handler for real-time updates
-    let ws_handler = Arc::new(WebSocketHandler::new());
-    
-    // Initialize consensus system
-    let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
-        ConsensusConfig::default(),
-        ws_handler.clone(),
-    )));
-
-    // Initialize the blockchain with all required systems
-    let blockchain = Arc::new(Mutex::new(Blockchain::new(
-        identity_system.clone(),
-        reputation_system.clone(),
-        relationship_system.clone(), // Pass the relationship_system to the Blockchain constructor
-        consensus.clone(),
-    )));
-
-
-    // Define WebSocket route with DID header for user identification
-    let ws_handler = ws_handler.clone();
-    let ws_route = warp::path("ws")
-        .and(warp::ws())
-        .and(warp::header::<String>("X-DID"))
-        .and(warp::any().map(move || ws_handler.clone()))
-        .map(|ws: warp::ws::Ws, did: String, handler: Arc<WebSocketHandler>| {
-            ws.on_upgrade(move |socket| async move {
-                handler.handle_connection(socket, did).await;
-            })
-        });
-
-    // Health check route
-    let health_route = warp::path("health")
-        .and(warp::get())
-        .map(|| "OK");
-
-    let routes = ws_route.or(health_route);
-
-    println!("Starting WebSocket server on localhost:8088");
-    warp::serve(routes)
-        .run(([127, 0, 0, 1], 8088))
-        .await;
-}```
-
-===================
 File: ./docker/docker-compose.yml
 Size: 829 bytes
 Modified: 2024-11-20 22:07:42.247802666 +0000
@@ -289,9 +166,166 @@ Modified: 2024-11-20 22:07:42.247802666 +0000
 ===================
 
 ===================
-File: ./backend/src/main.rs
+File: ./crates/icn-storage/src/lib.rs
+Size: 75 bytes
+Modified: 2024-12-07 10:58:37.659642469 +0000
+Dependencies:
+use icn_types::*;
+
+===================
+```rs
+pub mod state;
+pub mod persistence;
+pub mod migrations;
+
+use icn_types::*;
+```
+
+===================
+File: ./crates/icn-crypto/src/lib.rs
+Size: 177 bytes
+Modified: 2024-12-07 10:51:04.870587319 +0000
+Dependencies:
+mod tests {
+
+===================
+```rs
+//! ICN crypto crate
+
+pub fn init() {
+    println!("Initializing icn-crypto");
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_works() {
+        assert_eq!(2 + 2, 4);
+    }
+}
+```
+
+===================
+File: ./crates/icn-types/src/lib.rs
+Size: 431 bytes
+Modified: 2024-12-07 10:59:30.266169242 +0000
+Dependencies:
+mod block;
+mod did;
+mod relationship;
+mod reputation;
+mod transaction;
+use chrono::{DateTime, Utc};
+use serde::{Serialize, Deserialize};
+
+===================
+```rs
+mod block;
+mod transaction;
+mod did;
+mod relationship;
+mod reputation;
+
+pub use block::Block;
+pub use transaction::{Transaction, TransactionType};
+pub use did::{DID, DIDDocument};
+pub use relationship::{Relationship, RelationshipType};
+pub use reputation::ReputationScore;
+
+use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Utc};
+
+pub trait Validate {
+    type Error;
+    fn validate(&self) -> Result<(), Self::Error>;
+}
+```
+
+===================
+File: ./crates/icn-p2p/src/lib.rs
+Size: 56 bytes
+Modified: 2024-12-07 10:58:37.661642490 +0000
+Dependencies:
+use icn_types::*;
+
+===================
+```rs
+pub mod protocol;
+pub mod websocket;
+
+use icn_types::*;
+```
+
+===================
+File: ./crates/icn-runtime/src/lib.rs
+Size: 49 bytes
+Modified: 2024-12-07 10:58:37.663642511 +0000
+Dependencies:
+use icn_types::*;
+
+===================
+```rs
+pub mod vm;
+pub mod executor;
+
+use icn_types::*;
+```
+
+===================
+File: ./crates/icn-consensus/src/lib.rs
+Size: 890 bytes
+Modified: 2024-12-07 11:01:01.080982352 +0000
+Dependencies:
+mod metrics;
+mod proof_of_cooperation;
+use async_trait::async_trait;
+use icn_types as types;
+use serde::{Serialize, Deserialize};
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+===================
+```rs
+mod proof_of_cooperation;
+mod metrics;
+
+use icn_types as types;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use serde::{Serialize, Deserialize};
+use async_trait::async_trait;
+
+pub struct ConsensusConfig {
+    pub min_validators: usize,
+    pub round_timeout: std::time::Duration,
+    pub threshold: f64,
+}
+
+impl Default for ConsensusConfig {
+    fn default() -> Self {
+        Self {
+            min_validators: 3,
+            round_timeout: std::time::Duration::from_secs(30),
+            threshold: 0.66,
+        }
+    }
+}
+
+pub use proof_of_cooperation::ProofOfCooperation;
+pub use metrics::ConsensusMetrics;
+
+#[async_trait]
+pub trait ConsensusEngine: Send + Sync {
+    async fn start_round(&mut self) -> anyhow::Result<()>;
+    async fn propose_block(&mut self, block: types::Block) -> anyhow::Result<()>;
+    async fn verify_block(&self, block: &types::Block) -> anyhow::Result<()>;
+}
+```
+
+===================
+File: ./crates/icn-core/src/main.rs
 Size: 2127 bytes
-Modified: 2024-12-05 22:16:28.750308239 +0000
+Modified: 2024-12-07 10:58:28.585547044 +0000
 Dependencies:
 use icn_backend::{
 use std::sync::{Arc, Mutex};
@@ -365,76 +399,27 @@ async fn main() {
 }```
 
 ===================
-File: ./backend/src/lib.rs
-Size: 1723 bytes
-Modified: 2024-12-05 21:57:38.922020627 +0000
+File: ./crates/icn-core/src/lib.rs
+Size: 198 bytes
+Modified: 2024-12-07 10:58:37.655642427 +0000
 Dependencies:
-use chrono::{DateTime, Utc};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use tokio::sync::broadcast;
-use uuid;
+use icn_consensus as consensus;
+use icn_p2p as p2p;
+use icn_runtime as runtime;
+use icn_storage as storage;
+use icn_types::*;
 
 ===================
 ```rs
-// src/lib.rs
-
 pub mod api;
-pub mod blockchain;
-pub mod claims;
-pub mod community;
-pub mod consensus;
 pub mod cooperative;
 pub mod governance;
-pub mod identity;
-pub mod monitoring;
-pub mod network;
-pub mod relationship;
-pub mod reputation;
-pub mod state;  // New state module
-pub mod utils;
-pub mod vm;
-pub mod websocket;
+pub mod service;
 
-pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
-pub use consensus::{ProofOfCooperation, types::ConsensusConfig, types::ConsensusRound};
-pub use governance::Proposal;
-pub use identity::IdentitySystem;
-pub use monitoring::energy::{EnergyAware, EnergyMonitor};
-pub use relationship::{
-    Contribution, 
-    MutualAidInteraction, 
-    RelationshipSystem,
-    Relationship, 
-    RelationshipType,
-    Interaction,
-    InteractionType,
-    Endorsement
-};
-pub use reputation::ReputationSystem;
-pub use vm::{Contract, ExecutionContext, VM};
-pub use vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
-pub use websocket::WebSocketHandler;
-
-use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
-use tokio::sync::broadcast;
-use uuid;
-use chrono::{DateTime, Utc};
-
-/// Events emitted by the ICN system
-#[derive(Clone, Debug)]
-pub enum SystemEvent {
-    BlockCreated(Block),
-    ProposalSubmitted(Proposal),
-    VoteCast { proposal_id: u64, voter: String, vote: bool },
-    ReputationChanged { did: String, change: i64, reason: String },
-    ConsensusStarted(ConsensusRound),
-    ConsensusFinished(Block),
-    CooperativeCreated { id: String, creator: String },
-    CooperativeJoined { id: String, member: String },
-    ContributionRecorded(Contribution),
-    MutualAidProvided(MutualAidInteraction),
-    RelationshipUpdated { member_one: String, member_two: String },
-}```
+use icn_types::*;
+use icn_consensus as consensus;
+use icn_storage as storage;
+use icn_p2p as p2p;
+use icn_runtime as runtime;
+```
 
