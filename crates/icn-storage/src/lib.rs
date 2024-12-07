@@ -1,13 +1,5 @@
-//! ICN storage crate
+pub mod state;
+pub mod persistence;
+pub mod migrations;
 
-pub fn init() {
-    println!("Initializing icn-storage");
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+use icn_types::*;
