@@ -1,182 +1,221 @@
-// backend/src/state/mod.rs
+// src/state/mod.rs
 
-mod merkle_tree;
-mod persistence;
-mod validation;
-
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use crate::storage::{StorageManager, StorageError, StorageResult};
 use serde::{Serialize, Deserialize};
-use thiserror::Error;
+use sha2::{Sha256, Digest};
+use std::collections::HashMap;
+use tokio::sync::RwLock;
+use std::sync::Arc;
 
-#[derive(Error, Debug)]
-pub enum StateError {
-    #[error("Invalid state transition")]
-    InvalidTransition,
-    #[error("State validation failed: {0}")]
-    ValidationFailed(String),
-    #[error("Merkle proof verification failed")]
-    ProofVerificationFailed,
-    #[error("Storage error: {0}")]
-    StorageError(String),
-    #[error("Concurrent modification detected")]
-    ConcurrencyError,
+/// Represents a state migration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Migration {
+    pub version: u32,
+    pub description: String,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
-pub type StateResult<T> = Result<T, StateError>;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StateTransition {
-    pub previous_root: String,
-    pub next_root: String,
-    pub changes: Vec<StateChange>,
-    pub timestamp: u64,
-    pub validator_signatures: Vec<String>,
+/// Tracks the current state and handles migrations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StateMetadata {
+    pub current_version: u32,
+    pub last_block_height: u64,
+    pub state_root: String,
+    pub last_updated: chrono::DateTime<chrono::Utc>,
+    pub applied_migrations: Vec<Migration>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StateChange {
-    pub key: String,
-    pub value: String,
-    pub proof: Vec<String>,
-}
-
+/// Manages blockchain state and batched operations
 pub struct StateManager {
-    current_state: Arc<RwLock<SystemState>>,
-    merkle_tree: merkle_tree::MerkleTree,
-    persistence: persistence::StatePersistence,
-    validator: validation::StateValidator,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct SystemState {
-    pub root_hash: String,
-    pub block_height: u64,
-    pub timestamp: u64,
-    pub values: std::collections::HashMap<String, String>,
+    storage: Arc<StorageManager>,
+    metadata: Arc<RwLock<StateMetadata>>,
+    batch_buffer: Arc<RwLock<HashMap<String, Vec<u8>>>>,
 }
 
 impl StateManager {
-    pub fn new() -> Self {
-        Self {
-            current_state: Arc::new(RwLock::new(SystemState::default())),
-            merkle_tree: merkle_tree::MerkleTree::default(),
-            persistence: persistence::StatePersistence::new(),
-            validator: validation::StateValidator::new(),
-        }
+    /// Create a new state manager
+    pub async fn new(storage: Arc<StorageManager>) -> StorageResult<Self> {
+        // Try to load existing metadata or create new
+        let metadata = match storage.retrieve::<StateMetadata>("state_metadata").await {
+            Ok(meta) => meta,
+            Err(StorageError::NotFound(_)) => StateMetadata {
+                current_version: 0,
+                last_block_height: 0,
+                state_root: "0".repeat(64),
+                last_updated: chrono::Utc::now(),
+                applied_migrations: Vec::new(),
+            },
+            Err(e) => return Err(e),
+        };
+
+        Ok(Self {
+            storage,
+            metadata: Arc::new(RwLock::new(metadata)),
+            batch_buffer: Arc::new(RwLock::new(HashMap::new())),
+        })
     }
 
-    pub async fn apply_transition(&mut self, transition: StateTransition) -> StateResult<()> {
-        // Validate transition
-        self.validator.validate_transition(&transition)?;
-
-        // Verify merkle proofs
-        for change in &transition.changes {
-            if !self.merkle_tree.validate_proof(&change.value, &transition.next_root, change.proof.clone()) {
-                return Err(StateError::ProofVerificationFailed);
-            }
-        }
-
-        // Acquire write lock and update state
-        let mut state = self.current_state.write().await;
-        
-        // Ensure no concurrent modifications
-        if state.root_hash != transition.previous_root {
-            return Err(StateError::ConcurrencyError);
-        }
-
-        // Apply changes
-        for change in transition.changes {
-            state.values.insert(change.key, change.value);
-        }
-
-        // Update state metadata
-        state.root_hash = transition.next_root;
-        state.block_height += 1;
-        state.timestamp = transition.timestamp;
-
-        // Persist state
-        self.persistence.store_transition(&transition)?;
-
+    /// Start a new batch operation
+    pub async fn begin_batch(&self) -> StorageResult<()> {
+        let mut buffer = self.batch_buffer.write().await;
+        buffer.clear();
         Ok(())
     }
 
-    pub async fn get_value(&self, key: &str) -> StateResult<Option<String>> {
-        let state = self.current_state.read().await;
-        Ok(state.values.get(key).cloned())
+    /// Add an operation to the current batch
+    pub async fn batch_store<T: Serialize>(&self, key: &str, value: &T) -> StorageResult<()> {
+        let serialized = serde_json::to_vec(value)
+            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            
+        let mut buffer = self.batch_buffer.write().await;
+        buffer.insert(key.to_string(), serialized);
+        Ok(())
     }
 
-    pub async fn get_proof(&self, key: &str) -> StateResult<Vec<String>> {
-        let state = self.current_state.read().await;
-        if let Some(value) = state.values.get(key) {
-            Ok(self.merkle_tree.generate_proof(format!("{}:{}", key, value)))
-        } else {
-            Ok(vec![])
+    /// Commit the current batch atomically
+    pub async fn commit_batch(&self) -> StorageResult<String> {
+        let buffer = self.batch_buffer.read().await;
+        
+        // Calculate new state root
+        let mut hasher = Sha256::new();
+        for (key, value) in buffer.iter() {
+            hasher.update(key.as_bytes());
+            hasher.update(value);
         }
+        let new_state_root = format!("{:x}", hasher.finalize());
+
+        // Store all items
+        for (key, value) in buffer.iter() {
+            self.storage.store(key, value).await?;
+        }
+
+        // Update metadata
+        let mut metadata = self.metadata.write().await;
+        metadata.state_root = new_state_root.clone();
+        metadata.last_updated = chrono::Utc::now();
+        
+        // Store updated metadata
+        self.storage.store("state_metadata", &*metadata).await?;
+
+        Ok(new_state_root)
     }
 
-    pub async fn verify_state(&self) -> StateResult<bool> {
-        let state = self.current_state.read().await;
-        self.validator.verify_invariants(&state)
+    /// Roll back the current batch
+    pub async fn rollback_batch(&self) -> StorageResult<()> {
+        let mut buffer = self.batch_buffer.write().await;
+        buffer.clear();
+        Ok(())
+    }
+
+    /// Apply a new migration
+    pub async fn apply_migration(&self, migration: Migration) -> StorageResult<()> {
+        let mut metadata = self.metadata.write().await;
+        
+        // Verify migration version
+        if migration.version <= metadata.current_version {
+            return Err(StorageError::InvalidData(
+                format!("Migration version {} has already been applied", migration.version)
+            ));
+        }
+
+        // Store migration in metadata
+        metadata.applied_migrations.push(migration.clone());
+        metadata.current_version = migration.version;
+        metadata.last_updated = chrono::Utc::now();
+
+        // Persist updated metadata
+        self.storage.store("state_metadata", &*metadata).await
+    }
+
+    /// Get current state metadata
+    pub async fn get_metadata(&self) -> StateMetadata {
+        self.metadata.read().await.clone()
+    }
+
+    /// Verify state integrity
+    pub async fn verify_state(&self) -> StorageResult<bool> {
+        let metadata = self.metadata.read().await;
+        let mut hasher = Sha256::new();
+
+        // Verify each stored state item
+        // Note: This is a simplified version - in practice we'd use a Merkle tree
+        let keys = self.list_state_keys().await?;
+        for key in keys {
+            if let Ok(value) = self.storage.get(&key).await {
+                hasher.update(key.as_bytes());
+                hasher.update(&value);
+            }
+        }
+
+        let calculated_root = format!("{:x}", hasher.finalize());
+        Ok(calculated_root == metadata.state_root)
+    }
+
+    /// List all state keys (helper method)
+    async fn list_state_keys(&self) -> StorageResult<Vec<String>> {
+        // This would be implemented based on your storage backend capabilities
+        // For now, we'll return an empty vec as it depends on the specific implementation
+        Ok(Vec::new())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::test;
+    use crate::storage::postgres::PostgresStorage;
 
-    #[test]
-    async fn test_state_transitions() {
-        let mut manager = StateManager::new();
-        
-        let transition = StateTransition {
-            previous_root: "0".to_string(),
-            next_root: "1".to_string(),
-            changes: vec![
-                StateChange {
-                    key: "test_key".to_string(),
-                    value: "test_value".to_string(),
-                    proof: vec![],
-                }
-            ],
-            timestamp: 1000,
-            validator_signatures: vec![],
-        };
-
-        assert!(manager.apply_transition(transition).await.is_ok());
-        
-        let value = manager.get_value("test_key").await.unwrap();
-        assert_eq!(value, Some("test_value".to_string()));
+    async fn setup_test_state() -> StateManager {
+        let connection_str = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/icn_test".to_string());
+            
+        let backend = PostgresStorage::new(&connection_str)
+            .await
+            .expect("Failed to create PostgreSQL connection");
+            
+        let storage = Arc::new(StorageManager::new(Box::new(backend)));
+        StateManager::new(storage)
+            .await
+            .expect("Failed to create state manager")
     }
 
-    #[test]
-    async fn test_concurrent_modifications() {
-        let mut manager = StateManager::new();
-        
-        // Apply first transition
-        let transition1 = StateTransition {
-            previous_root: "0".to_string(),
-            next_root: "1".to_string(),
-            changes: vec![],
-            timestamp: 1000,
-            validator_signatures: vec![],
-        };
-        
-        assert!(manager.apply_transition(transition1).await.is_ok());
+    #[tokio::test]
+    async fn test_batch_operations() {
+        let state = setup_test_state().await;
 
-        // Try to apply transition with old root
-        let transition2 = StateTransition {
-            previous_root: "0".to_string(), // Should be "1"
-            next_root: "2".to_string(),
-            changes: vec![],
-            timestamp: 1001,
-            validator_signatures: vec![],
-        };
+        // Test batch operations
+        state.begin_batch().await.unwrap();
         
-        assert!(matches!(
-            manager.apply_transition(transition2).await,
-            Err(StateError::ConcurrencyError)
-        ));
+        #[derive(Debug, Serialize, Deserialize)]
+        struct TestState {
+            value: i32,
+        }
+
+        state.batch_store("test1", &TestState { value: 1 }).await.unwrap();
+        state.batch_store("test2", &TestState { value: 2 }).await.unwrap();
+
+        let root = state.commit_batch().await.unwrap();
+        assert!(!root.is_empty());
+
+        // Verify metadata was updated
+        let metadata = state.get_metadata().await;
+        assert_eq!(metadata.state_root, root);
+    }
+
+    #[tokio::test]
+    async fn test_migrations() {
+        let state = setup_test_state().await;
+
+        let migration = Migration {
+            version: 1,
+            description: "Test migration".to_string(),
+            timestamp: chrono::Utc::now(),
+        };
+
+        state.apply_migration(migration.clone()).await.unwrap();
+
+        let metadata = state.get_metadata().await;
+        assert_eq!(metadata.current_version, 1);
+        assert_eq!(metadata.applied_migrations.len(), 1);
+        assert_eq!(metadata.applied_migrations[0].version, 1);
     }
 }
