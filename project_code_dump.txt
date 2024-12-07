@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sat Dec  7 17:30:55 UTC 2024
+Project Code Dump - Generated Sat Dec  7 23:46:20 UTC 2024
 ======================================
 
 LLM Context Information
@@ -56,6 +56,8 @@ Project Tree:
 │   │   └── src
 │   ├── icn-storage
 │   │   ├── Cargo.toml
+│   │   ├── crates
+│   │   ├── migrations
 │   │   └── src
 │   └── icn-types
 │       ├── Cargo.toml
@@ -168,20 +170,24 @@ Modified: 2024-11-20 22:07:42.247802666 +0000
 
 ===================
 File: ./crates/icn-storage/src/lib.rs
-Size: 147 bytes
-Modified: 2024-12-07 17:29:39.676957756 +0000
+Size: 189 bytes
+Modified: 2024-12-07 17:58:36.564351677 +0000
 Dependencies:
+mod error;
+mod tests;
 
 ===================
 ```rs
-pub mod state;
-pub mod error;
-pub mod migrations;
+// src/lib.rs
+mod error;
 pub mod storage;
+pub mod state;
+#[cfg(test)]
+mod tests;
 
 pub use error::{StorageError, StorageResult};
 pub use storage::StorageManager;
-```
+pub use state::StateManager;```
 
 ===================
 File: ./crates/icn-crypto/src/lib.rs
@@ -209,10 +215,11 @@ mod tests {
 
 ===================
 File: ./crates/icn-types/src/lib.rs
-Size: 678 bytes
-Modified: 2024-12-07 11:09:57.996137179 +0000
+Size: 658 bytes
+Modified: 2024-12-07 23:22:29.894333983 +0000
 Dependencies:
 mod block;
+mod error;  // Add this line
 mod identity;
 mod relationship;
 mod reputation;
@@ -220,36 +227,29 @@ mod transaction;
 
 ===================
 ```rs
+// crates/icn-types/src/lib.rs
+
 mod block;
 mod transaction;
 mod identity;
 mod relationship;
 mod reputation;
+mod error;  // Add this line
 
 pub use block::Block;
 pub use transaction::{Transaction, TransactionType};
 pub use identity::DID;
 pub use relationship::{Relationship, RelationshipType};
 pub use reputation::{ReputationSystem, ReputationContext, ReputationScore};
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Invalid data: {0}")]
-    InvalidData(String),
-    
-    #[error("Crypto error: {0}")]
-    CryptoError(String),
-    
-    #[error("Serialization error: {0}")]
-    SerializationError(String),
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
+// Export error types
+pub use error::{
+    CoreError, StorageError, ConsensusError, NetworkError, IdentityError,
+    CoreResult, StorageResult, ConsensusResult, NetworkResult, IdentityResult,
+};
 
 pub trait Validate {
-    fn validate(&self) -> Result<()>;
-}
-```
+    fn validate(&self) -> CoreResult<()>;  // Updated to use CoreResult
+}```
 
 ===================
 File: ./crates/icn-p2p/src/lib.rs

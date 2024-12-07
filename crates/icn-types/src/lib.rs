@@ -1,29 +1,23 @@
+// crates/icn-types/src/lib.rs
+
 mod block;
 mod transaction;
 mod identity;
 mod relationship;
 mod reputation;
+mod error;  // Add this line
 
 pub use block::Block;
 pub use transaction::{Transaction, TransactionType};
 pub use identity::DID;
 pub use relationship::{Relationship, RelationshipType};
 pub use reputation::{ReputationSystem, ReputationContext, ReputationScore};
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Invalid data: {0}")]
-    InvalidData(String),
-    
-    #[error("Crypto error: {0}")]
-    CryptoError(String),
-    
-    #[error("Serialization error: {0}")]
-    SerializationError(String),
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
+// Export error types
+pub use error::{
+    CoreError, StorageError, ConsensusError, NetworkError, IdentityError,
+    CoreResult, StorageResult, ConsensusResult, NetworkResult, IdentityResult,
+};
 
 pub trait Validate {
-    fn validate(&self) -> Result<()>;
+    fn validate(&self) -> CoreResult<()>;  // Updated to use CoreResult
 }
