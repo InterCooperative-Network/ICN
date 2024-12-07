@@ -13,14 +13,12 @@ impl StorageManager {
         let mut pg_config = PgConfig::new();
         
         if let Some(_) = db_url {
-            // If a URL is provided, use it (not implemented yet)
             pg_config.host("localhost")
                     .port(5432)
                     .dbname("icn")
                     .user("icn")
                     .password("icn_password");
         } else {
-            // Default local development configuration
             pg_config.host("localhost")
                     .port(5432)
                     .dbname("icn")
@@ -51,13 +49,15 @@ impl StorageManager {
     pub async fn store<T: Serialize>(&self, key: &str, value: &T) -> StorageResult<()> {
         let client = self.get_client().await?;
             
-        let value_json = serde_json::to_string(value)
+        // Serialize to a JSON string
+        let json_string = serde_json::to_string(value)
             .map_err(|e| StorageError::SerializationError(e.to_string()))?;
             
+        // Use PostgreSQL's cast to convert the string to JSONB
         client.execute(
-            "INSERT INTO key_value (key, value) VALUES ($1, $2) 
-             ON CONFLICT (key) DO UPDATE SET value = $2",
-            &[&key, &value_json]
+            "INSERT INTO key_value (key, value) VALUES ($1, cast($2 as jsonb))
+             ON CONFLICT (key) DO UPDATE SET value = cast($2 as jsonb), updated_at = NOW()",
+            &[&key, &json_string]
         ).await
         .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         
@@ -67,14 +67,16 @@ impl StorageManager {
     pub async fn retrieve<T: for<'de> Deserialize<'de>>(&self, key: &str) -> StorageResult<T> {
         let client = self.get_client().await?;
             
-        let row = client.query_opt("SELECT value FROM key_value WHERE key = $1", &[&key])
-            .await
-            .map_err(|e| StorageError::DatabaseError(e.to_string()))?
-            .ok_or_else(|| StorageError::KeyNotFound(key.to_string()))?;
+        let row = client.query_opt(
+            "SELECT value::text FROM key_value WHERE key = $1",
+            &[&key]
+        ).await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?
+        .ok_or_else(|| StorageError::KeyNotFound(key.to_string()))?;
             
-        let value_json: String = row.get("value");
-        
-        serde_json::from_str(&value_json)
+        // Get the JSON string and parse it
+        let json_str: String = row.get(0);
+        serde_json::from_str(&json_str)
             .map_err(|e| StorageError::SerializationError(e.to_string()))
     }
 

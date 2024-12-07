@@ -3,7 +3,6 @@ use crate::StorageManager;
 use serde::{Serialize, Deserialize};
 use std::time::Duration;
 use tokio::time::sleep;
-use tokio_postgres::types::Type;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct TestData {
@@ -86,12 +85,12 @@ async fn test_metadata() {
     // Get metadata about stored data using raw query
     let client = storage.get_client().await.expect("Failed to get client");
     let row = client.query_one(
-        "SELECT created_at::timestamp with time zone, updated_at::timestamp with time zone FROM key_value WHERE key = $1",
+        "SELECT created_at, updated_at FROM key_value WHERE key = $1",
         &[&key]
     ).await.expect("Failed to get metadata");
     
-    let created_at: chrono::DateTime<chrono::Utc> = row.get(0);
-    let updated_at: chrono::DateTime<chrono::Utc> = row.get(1);
+    let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
+    let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
     
     // Initially, created_at and updated_at should be very close
     assert!((updated_at - created_at).num_milliseconds() < 1000);
@@ -104,12 +103,12 @@ async fn test_metadata() {
     
     // Check timestamps again
     let row = client.query_one(
-        "SELECT created_at::timestamp with time zone, updated_at::timestamp with time zone FROM key_value WHERE key = $1",
+        "SELECT created_at, updated_at FROM key_value WHERE key = $1",
         &[&key]
     ).await.expect("Failed to get updated metadata");
     
-    let created_at_after: chrono::DateTime<chrono::Utc> = row.get(0);
-    let updated_at_after: chrono::DateTime<chrono::Utc> = row.get(1);
+    let created_at_after: chrono::DateTime<chrono::Utc> = row.get("created_at");
+    let updated_at_after: chrono::DateTime<chrono::Utc> = row.get("updated_at");
     
     // created_at should not change
     assert_eq!(created_at, created_at_after);
