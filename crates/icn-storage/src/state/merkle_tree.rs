@@ -1,9 +1,6 @@
-// backend/src/state/merkle_tree.rs
-
+// src/state/merkle_tree.rs
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
 
-#[derive(Debug, Clone, Default)]
 pub struct MerkleTree {
     leaves: Vec<String>,
     nodes: Vec<String>,
@@ -11,55 +8,29 @@ pub struct MerkleTree {
 
 impl MerkleTree {
     pub fn new(data: Vec<String>) -> Self {
-        let leaves = data.iter()
+        // Hash all leaf data
+        let leaves: Vec<String> = data.iter()
             .map(|d| Self::hash(d))
             .collect();
-        let nodes = Self::build_tree(&leaves);
-        
+
+        // Create initial nodes from leaves
+        let nodes = leaves.clone();
+
         MerkleTree { leaves, nodes }
     }
 
-    pub fn add_leaf(&mut self, data: &str) {
-        let hash = Self::hash(data);
-        self.leaves.push(hash);
-        self.nodes = Self::build_tree(&self.leaves);
+    pub fn get_root(&self) -> Option<String> {
+        self.nodes.last().cloned()
     }
 
-    pub fn root(&self) -> Option<&String> {
-        self.nodes.first()
-    }
+    pub fn verify(&self, data: &str, proof: &[String]) -> bool {
+        let mut hash = Self::hash(data);
 
-    pub fn generate_proof(&self, index: usize) -> Vec<String> {
-        if index >= self.leaves.len() {
-            return vec![];
+        for proof_element in proof {
+            hash = Self::combine_hash(&hash, proof_element);
         }
-        
-        let mut proof = Vec::new();
-        let mut idx = index + self.leaves.len() - 1;
-        
-        while idx > 0 {
-            let sibling = if idx % 2 == 0 { idx - 1 } else { idx + 1 };
-            if sibling < self.nodes.len() {
-                proof.push(self.nodes[sibling].clone());
-            }
-            idx = (idx - 1) / 2;
-        }
-        
-        proof
-    }
 
-    pub fn validate_proof(leaf: &str, root: &str, proof: Vec<String>) -> bool {
-        let mut hash = Self::hash(leaf);
-        
-        for sibling in proof {
-            hash = if hash < sibling {
-                Self::hash(&format!("{}{}", hash, sibling))
-            } else {
-                Self::hash(&format!("{}{}", sibling, hash))
-            };
-        }
-        
-        &hash == root
+        Some(hash) == self.get_root()
     }
 
     fn hash(data: &str) -> String {
@@ -68,21 +39,55 @@ impl MerkleTree {
         format!("{:x}", hasher.finalize())
     }
 
-    fn build_tree(leaves: &[String]) -> Vec<String> {
-        if leaves.is_empty() {
-            return vec![];
-        }
+    fn combine_hash(left: &str, right: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(left.as_bytes());
+        hasher.update(right.as_bytes());
+        format!("{:x}", hasher.finalize())
+    }
 
-        let mut nodes = leaves.to_vec();
-        while nodes.len() > 1 {
+    pub fn build(&mut self) {
+        let mut current_level = self.leaves.clone();
+
+        while current_level.len() > 1 {
             let mut next_level = Vec::new();
-            for chunk in nodes.chunks(2) {
-                let left = &chunk[0];
-                let right = chunk.get(1).unwrap_or(left);
-                next_level.push(Self::hash(&format!("{}{}", left, right)));
+            
+            for chunk in current_level.chunks(2) {
+                match chunk {
+                    [left, right] => {
+                        let combined = Self::combine_hash(left, right);
+                        next_level.push(combined);
+                    }
+                    [left] => {
+                        // Odd number of nodes, promote the last one
+                        next_level.push(left.clone());
+                    }
+                    _ => unreachable!(),
+                }
             }
-            nodes = next_level;
+
+            self.nodes.extend(next_level.clone());
+            current_level = next_level;
         }
-        nodes
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_merkle_tree() {
+        let data = vec![
+            "data1".to_string(),
+            "data2".to_string(),
+            "data3".to_string(),
+            "data4".to_string(),
+        ];
+
+        let mut tree = MerkleTree::new(data);
+        tree.build();
+
+        assert!(tree.get_root().is_some());
     }
 }

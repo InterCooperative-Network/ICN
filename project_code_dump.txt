@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sat Dec  7 11:01:34 UTC 2024
+Project Code Dump - Generated Sat Dec  7 17:30:55 UTC 2024
 ======================================
 
 LLM Context Information
@@ -29,6 +29,7 @@ File Organization:
 Project Tree:
 =============
 .
+├── Cargo.lock
 ├── Cargo.toml
 ├── ICN.code-workspace
 ├── contracts
@@ -167,18 +168,19 @@ Modified: 2024-11-20 22:07:42.247802666 +0000
 
 ===================
 File: ./crates/icn-storage/src/lib.rs
-Size: 75 bytes
-Modified: 2024-12-07 10:58:37.659642469 +0000
+Size: 147 bytes
+Modified: 2024-12-07 17:29:39.676957756 +0000
 Dependencies:
-use icn_types::*;
 
 ===================
 ```rs
 pub mod state;
-pub mod persistence;
+pub mod error;
 pub mod migrations;
+pub mod storage;
 
-use icn_types::*;
+pub use error::{StorageError, StorageResult};
+pub use storage::StorageManager;
 ```
 
 ===================
@@ -207,37 +209,45 @@ mod tests {
 
 ===================
 File: ./crates/icn-types/src/lib.rs
-Size: 431 bytes
-Modified: 2024-12-07 10:59:30.266169242 +0000
+Size: 678 bytes
+Modified: 2024-12-07 11:09:57.996137179 +0000
 Dependencies:
 mod block;
-mod did;
+mod identity;
 mod relationship;
 mod reputation;
 mod transaction;
-use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
 
 ===================
 ```rs
 mod block;
 mod transaction;
-mod did;
+mod identity;
 mod relationship;
 mod reputation;
 
 pub use block::Block;
 pub use transaction::{Transaction, TransactionType};
-pub use did::{DID, DIDDocument};
+pub use identity::DID;
 pub use relationship::{Relationship, RelationshipType};
-pub use reputation::ReputationScore;
+pub use reputation::{ReputationSystem, ReputationContext, ReputationScore};
 
-use serde::{Serialize, Deserialize};
-use chrono::{DateTime, Utc};
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Invalid data: {0}")]
+    InvalidData(String),
+    
+    #[error("Crypto error: {0}")]
+    CryptoError(String),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 pub trait Validate {
-    type Error;
-    fn validate(&self) -> Result<(), Self::Error>;
+    fn validate(&self) -> Result<()>;
 }
 ```
 
@@ -273,26 +283,19 @@ use icn_types::*;
 
 ===================
 File: ./crates/icn-consensus/src/lib.rs
-Size: 890 bytes
-Modified: 2024-12-07 11:01:01.080982352 +0000
+Size: 812 bytes
+Modified: 2024-12-07 17:28:52.373822510 +0000
 Dependencies:
 mod metrics;
-mod proof_of_cooperation;
 use async_trait::async_trait;
 use icn_types as types;
-use serde::{Serialize, Deserialize};
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 ===================
 ```rs
-mod proof_of_cooperation;
+pub mod proof_of_cooperation;
 mod metrics;
 
 use icn_types as types;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use serde::{Serialize, Deserialize};
 use async_trait::async_trait;
 
 pub struct ConsensusConfig {
@@ -324,54 +327,39 @@ pub trait ConsensusEngine: Send + Sync {
 
 ===================
 File: ./crates/icn-core/src/main.rs
-Size: 2127 bytes
-Modified: 2024-12-07 10:58:28.585547044 +0000
+Size: 1379 bytes
+Modified: 2024-12-07 11:02:33.957705740 +0000
 Dependencies:
-use icn_backend::{
-use std::sync::{Arc, Mutex};
+use icn_consensus::{ConsensusConfig, ProofOfCooperation};
+use icn_p2p::websocket::WebSocketHandler;
+use icn_storage::state::StateManager;
+use icn_types::*;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use warp::Filter;
 
 ===================
 ```rs
-// src/main.rs
-
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use warp::Filter;
 
-// Import from the icn_backend library
-use icn_backend::{
-    blockchain::Blockchain,
-    consensus::{ProofOfCooperation, types::ConsensusConfig},
-    identity::IdentitySystem,
-    relationship::RelationshipSystem, // Import the RelationshipSystem
-    reputation::ReputationSystem,
-    websocket::WebSocketHandler,
-};
+use icn_types::*;
+use icn_consensus::{ConsensusConfig, ProofOfCooperation};
+use icn_p2p::websocket::WebSocketHandler;
+use icn_storage::state::StateManager;
 
 #[tokio::main]
 async fn main() {
     // Initialize core systems
-    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
-    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
-    let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new())); // Initialize the RelationshipSystem
-    
-    // Create WebSocket handler for real-time updates
+    let storage = Arc::new(StateManager::new().await);
     let ws_handler = Arc::new(WebSocketHandler::new());
     
     // Initialize consensus system
-    let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
+    let consensus = Arc::new(RwLock::new(ProofOfCooperation::new(
         ConsensusConfig::default(),
         ws_handler.clone(),
     )));
-
-    // Initialize the blockchain with all required systems
-    let blockchain = Arc::new(Mutex::new(Blockchain::new(
-        identity_system.clone(),
-        reputation_system.clone(),
-        relationship_system.clone(), // Pass the relationship_system to the Blockchain constructor
-        consensus.clone(),
-    )));
-
 
     // Define WebSocket route with DID header for user identification
     let ws_handler = ws_handler.clone();
@@ -396,7 +384,8 @@ async fn main() {
     warp::serve(routes)
         .run(([127, 0, 0, 1], 8088))
         .await;
-}```
+}
+```
 
 ===================
 File: ./crates/icn-core/src/lib.rs

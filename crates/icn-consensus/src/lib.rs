@@ -1,10 +1,7 @@
-mod proof_of_cooperation;
+pub mod proof_of_cooperation;
 mod metrics;
 
 use icn_types as types;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use serde::{Serialize, Deserialize};
 use async_trait::async_trait;
 
 pub struct ConsensusConfig {
