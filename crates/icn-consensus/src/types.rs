@@ -1,64 +1,63 @@
-// src/consensus/types.rs
-
+// crates/icn-consensus/src/proof_of_cooperation/types.rs
+use std::time::Instant;
 use serde::{Serialize, Deserialize};
+use icn_types::Block;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum ConsensusError {
-    InsufficientValidators,
-    InvalidCoordinator,
-    RoundInProgress,
-    NoActiveRound,
-    InvalidRoundState,
-    TimedOut,
-    ValidationFailed,
-    NotValidator,
-    InsufficientReputation,
-    InsufficientSignatures,
-    InvalidBlockIndex,
-    InvalidPreviousHash,
-    InvalidTimestamp,
-    InvalidStateTransition,
-    InvalidBlockHash,
-    InvalidValidatorUpdate,
-    Custom(String),
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidatorInfo {
+    pub did: String,
+    pub reputation: i64,
+    pub last_active: i64,
+    pub voting_power: f64,
 }
 
-impl std::fmt::Display for ConsensusError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ConsensusError::InsufficientValidators => 
-                write!(f, "Insufficient number of active validators"),
-            ConsensusError::InvalidCoordinator => 
-                write!(f, "Invalid coordinator for this round"),
-            ConsensusError::RoundInProgress => 
-                write!(f, "Consensus round already in progress"),
-            ConsensusError::NoActiveRound => 
-                write!(f, "No active consensus round"),
-            ConsensusError::InvalidRoundState => 
-                write!(f, "Invalid round state for requested operation"),
-            ConsensusError::TimedOut => 
-                write!(f, "Consensus round timed out"),
-            ConsensusError::ValidationFailed => 
-                write!(f, "Block validation failed"),
-            ConsensusError::NotValidator => 
-                write!(f, "Not a registered validator"),
-            ConsensusError::InsufficientReputation => 
-                write!(f, "Insufficient reputation for operation"),
-            ConsensusError::InsufficientSignatures =>
-                write!(f, "Insufficient validator signatures"),
-            ConsensusError::InvalidBlockIndex =>
-                write!(f, "Invalid block index"),
-            ConsensusError::InvalidPreviousHash =>
-                write!(f, "Invalid previous block hash"),
-            ConsensusError::InvalidTimestamp =>
-                write!(f, "Invalid block timestamp"),
-            ConsensusError::InvalidStateTransition =>
-                write!(f, "Invalid state transition"),
-            ConsensusError::InvalidBlockHash =>
-                write!(f, "Invalid block hash"),
-            ConsensusError::InvalidValidatorUpdate =>
-                write!(f, "Invalid validator update"),
-            ConsensusError::Custom(msg) => write!(f, "{}", msg),
+impl ValidatorInfo {
+    pub fn new(did: String, reputation: i64) -> Self {
+        Self {
+            did,
+            reputation,
+            last_active: chrono::Utc::now().timestamp(),
+            voting_power: reputation as f64 / 100.0,
         }
+    }
+
+    pub fn update_activity(&mut self) {
+        self.last_active = chrono::Utc::now().timestamp();
+    }
+
+    pub fn is_active(&self) -> bool {
+        let now = chrono::Utc::now().timestamp();
+        now - self.last_active < 300 // 5 minutes timeout
+    }
+}
+
+#[derive(Debug)]
+pub struct RoundState {
+    pub round_number: u64,
+    pub start_time: Instant,
+    pub coordinator: Option<String>,
+    pub proposed_block: Option<Block>,
+    pub votes: Vec<(String, bool)>,
+    pub round_complete: bool,
+}
+
+impl RoundState {
+    pub fn new(round_number: u64) -> Self {
+        Self {
+            round_number,
+            start_time: Instant::now(),
+            coordinator: None,
+            proposed_block: None,
+            votes: Vec::new(),
+            round_complete: false,
+        }
+    }
+
+    pub fn duration(&self) -> std::time::Duration {
+        self.start_time.elapsed()
+    }
+
+    pub fn is_timed_out(&self, timeout: std::time::Duration) -> bool {
+        self.duration() > timeout
     }
 }

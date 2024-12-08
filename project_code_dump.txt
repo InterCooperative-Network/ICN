@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sat Dec  7 23:46:20 UTC 2024
+Project Code Dump - Generated Sun Dec  8 11:16:07 UTC 2024
 ======================================
 
 LLM Context Information
@@ -56,7 +56,6 @@ Project Tree:
 │   │   └── src
 │   ├── icn-storage
 │   │   ├── Cargo.toml
-│   │   ├── crates
 │   │   ├── migrations
 │   │   └── src
 │   └── icn-types
@@ -170,15 +169,19 @@ Modified: 2024-11-20 22:07:42.247802666 +0000
 
 ===================
 File: ./crates/icn-storage/src/lib.rs
-Size: 189 bytes
-Modified: 2024-12-07 17:58:36.564351677 +0000
+Size: 908 bytes
+Modified: 2024-12-08 05:34:52.756969543 +0000
 Dependencies:
 mod error;
+mod integration_tests {
 mod tests;
 
 ===================
 ```rs
-// src/lib.rs
+//! ICN Storage implementation
+//! 
+//! This crate provides persistent storage and state management for the ICN network.
+
 mod error;
 pub mod storage;
 pub mod state;
@@ -186,8 +189,31 @@ pub mod state;
 mod tests;
 
 pub use error::{StorageError, StorageResult};
-pub use storage::StorageManager;
-pub use state::StateManager;```
+pub use storage::{StorageManager, StorageConfig};
+pub use state::{StateManager, NetworkState};
+
+/// Initialize the storage system
+pub async fn init(config: StorageConfig) -> StorageResult<StorageManager> {
+    let storage = StorageManager::new(config).await?;
+    
+    // Run any pending migrations
+    storage.run_migrations().await?;
+    
+    Ok(storage)
+}
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    use tokio;
+
+    #[tokio::test]
+    async fn test_storage_initialization() {
+        let config = StorageConfig::default();
+        let storage = init(config).await.unwrap();
+        assert!(storage.get_latest_block_height().await.unwrap() >= 0);
+    }
+}```
 
 ===================
 File: ./crates/icn-crypto/src/lib.rs
@@ -283,109 +309,278 @@ use icn_types::*;
 
 ===================
 File: ./crates/icn-consensus/src/lib.rs
-Size: 812 bytes
-Modified: 2024-12-07 17:28:52.373822510 +0000
+Size: 3406 bytes
+Modified: 2024-12-08 11:12:11.335534728 +0000
 Dependencies:
+mod config;
+mod error;
 mod metrics;
-use async_trait::async_trait;
-use icn_types as types;
+mod proof_of_cooperation;
+mod tests {
+use std::time::Duration;
 
 ===================
 ```rs
-pub mod proof_of_cooperation;
+// src/lib.rs
+
+//! ICN Consensus Library
+//! 
+//! This library implements the Proof of Cooperation consensus mechanism for the
+//! Inter-Cooperative Network (ICN). It provides a Byzantine fault-tolerant consensus
+//! system that uses reputation-weighted voting and energy-aware metrics.
+
+mod config;
+mod error;
 mod metrics;
+mod proof_of_cooperation;
 
-use icn_types as types;
-use async_trait::async_trait;
+use std::time::Duration;
 
-pub struct ConsensusConfig {
-    pub min_validators: usize,
-    pub round_timeout: std::time::Duration,
-    pub threshold: f64,
+pub use config::ConsensusConfig;
+pub use error::{ConsensusError, ConsensusResult};
+pub use metrics::ConsensusMetrics;
+pub use proof_of_cooperation::{ProofOfCooperation, ConsensusEvent};
+
+/// Trait defining the core consensus engine interface
+#[async_trait::async_trait]
+pub trait ConsensusEngine: Send + Sync {
+    /// Start a new consensus round
+    /// 
+    /// This selects a coordinator and initializes the round state.
+    /// Returns an error if there aren't enough active validators.
+    async fn start_round(&mut self) -> ConsensusResult<()>;
+
+    /// Propose a new block for the current round
+    /// 
+    /// The block must be proposed by the current round's coordinator.
+    /// Returns an error if the block is invalid or the proposer isn't authorized.
+    async fn propose_block(&mut self, block: icn_types::Block) -> ConsensusResult<()>;
+
+    /// Verify a proposed block
+    /// 
+    /// Checks the block's validity including:
+    /// - Block structure and signatures
+    /// - Height continuity
+    /// - Timestamp validity
+    /// - Transaction validity
+    async fn verify_block(&self, block: &icn_types::Block) -> ConsensusResult<()>;
+
+    /// Submit a vote for the current round
+    /// 
+    /// Validators can vote to approve or reject the proposed block.
+    /// Returns an error if the validator isn't authorized or has already voted.
+    async fn submit_vote(&mut self, validator_did: String, approve: bool) -> ConsensusResult<()>;
+
+    /// Check if the round has reached consensus
+    /// 
+    /// Returns true if enough weighted votes have been collected to reach
+    /// the consensus threshold.
+    async fn has_consensus(&self) -> ConsensusResult<bool>;
 }
 
-impl Default for ConsensusConfig {
+/// Configuration for the consensus system
+#[derive(Debug, Clone)]
+pub struct ConsensusOpts {
+    /// Minimum number of validators required for consensus
+    pub min_validators: usize,
+    
+    /// Timeout duration for consensus rounds
+    pub round_timeout: Duration,
+    
+    /// Required threshold of weighted votes to reach consensus (0.0-1.0)
+    pub consensus_threshold: f64,
+    
+    /// Maximum time difference allowed for block timestamps
+    pub max_timestamp_diff: Duration,
+    
+    /// Maximum size of the event broadcast channel
+    pub event_channel_size: usize,
+}
+
+impl Default for ConsensusOpts {
     fn default() -> Self {
         Self {
-            min_validators: 3,
-            round_timeout: std::time::Duration::from_secs(30),
-            threshold: 0.66,
+            min_validators: 4,
+            round_timeout: Duration::from_secs(30),
+            consensus_threshold: 0.66,
+            max_timestamp_diff: Duration::from_secs(60),
+            event_channel_size: 1000,
         }
     }
 }
 
-pub use proof_of_cooperation::ProofOfCooperation;
-pub use metrics::ConsensusMetrics;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio;
 
-#[async_trait]
-pub trait ConsensusEngine: Send + Sync {
-    async fn start_round(&mut self) -> anyhow::Result<()>;
-    async fn propose_block(&mut self, block: types::Block) -> anyhow::Result<()>;
-    async fn verify_block(&self, block: &types::Block) -> anyhow::Result<()>;
-}
-```
+    #[tokio::test]
+    async fn test_consensus_opts_defaults() {
+        let opts = ConsensusOpts::default();
+        assert!(opts.min_validators >= 4, "Should require enough validators for BFT");
+        assert!(opts.consensus_threshold > 0.66, "Should require >2/3 consensus");
+        assert!(opts.round_timeout >= Duration::from_secs(30), "Should allow enough time for consensus");
+    }
+}```
 
 ===================
 File: ./crates/icn-core/src/main.rs
-Size: 1379 bytes
-Modified: 2024-12-07 11:02:33.957705740 +0000
+Size: 3811 bytes
+Modified: 2024-12-08 11:07:03.369157426 +0000
 Dependencies:
+use anyhow::Result;
+use config::{Config, File};
 use icn_consensus::{ConsensusConfig, ProofOfCooperation};
 use icn_p2p::websocket::WebSocketHandler;
 use icn_storage::state::StateManager;
 use icn_types::*;
+use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::{info, error, Level};
+use tracing_subscriber::{FmtSubscriber, EnvFilter};
 use warp::Filter;
 
 ===================
 ```rs
+// crates/icn-core/src/main.rs
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use warp::Filter;
+use tracing::{info, error, Level};
+use tracing_subscriber::{FmtSubscriber, EnvFilter};
+use config::{Config, File};
+use anyhow::Result;
+use serde::Deserialize;
 
 use icn_types::*;
 use icn_consensus::{ConsensusConfig, ProofOfCooperation};
 use icn_p2p::websocket::WebSocketHandler;
 use icn_storage::state::StateManager;
 
-#[tokio::main]
-async fn main() {
-    // Initialize core systems
-    let storage = Arc::new(StateManager::new().await);
-    let ws_handler = Arc::new(WebSocketHandler::new());
-    
-    // Initialize consensus system
-    let consensus = Arc::new(RwLock::new(ProofOfCooperation::new(
-        ConsensusConfig::default(),
-        ws_handler.clone(),
-    )));
+#[derive(Debug, Deserialize)]
+struct AppConfig {
+    server: ServerConfig,
+    consensus: ConsensusConfig,
+    storage: StorageConfig,
+}
 
-    // Define WebSocket route with DID header for user identification
-    let ws_handler = ws_handler.clone();
+#[derive(Debug, Deserialize)]
+struct ServerConfig {
+    host: String,
+    port: u16,
+}
+
+#[derive(Debug, Deserialize)]
+struct StorageConfig {
+    url: String,
+    max_connections: u32,
+}
+
+async fn setup_config() -> Result<AppConfig> {
+    let config = Config::builder()
+        .add_source(File::with_name("config/default"))
+        .add_source(File::with_name("config/local").required(false))
+        .build()?;
+
+    Ok(config.try_deserialize()?)
+}
+
+async fn setup_logging() -> Result<()> {
+    let subscriber = FmtSubscriber::builder()
+        .with_env_filter(EnvFilter::from_default_env()
+            .add_directive(Level::INFO.into())
+            .add_directive("icn_core=debug".parse()?))
+        .with_thread_ids(true)
+        .with_target(false)
+        .with_file(true)
+        .with_line_number(true)
+        .pretty()
+        .try_init()?;
+
+    Ok(())
+}
+
+async fn setup_metrics() -> Result<()> {
+    // TODO: Implement metrics setup with prometheus
+    Ok(())
+}
+
+async fn setup_storage(config: &StorageConfig) -> Result<Arc<StateManager>> {
+    let storage = StateManager::with_config(config.url.clone(), config.max_connections).await?;
+    Ok(Arc::new(storage))
+}
+
+async fn setup_consensus(
+    config: ConsensusConfig,
+    ws_handler: Arc<WebSocketHandler>,
+) -> Result<Arc<RwLock<ProofOfCooperation>>> {
+    let consensus = ProofOfCooperation::new(config, ws_handler);
+    Ok(Arc::new(RwLock::new(consensus)))
+}
+
+fn setup_routes(
+    ws_handler: Arc<WebSocketHandler>,
+    storage: Arc<StateManager>,
+    consensus: Arc<RwLock<ProofOfCooperation>>,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     let ws_route = warp::path("ws")
         .and(warp::ws())
         .and(warp::header::<String>("X-DID"))
         .and(warp::any().map(move || ws_handler.clone()))
         .map(|ws: warp::ws::Ws, did: String, handler: Arc<WebSocketHandler>| {
             ws.on_upgrade(move |socket| async move {
-                handler.handle_connection(socket, did).await;
+                if let Err(e) = handler.handle_connection(socket, did).await {
+                    error!("WebSocket connection error: {}", e);
+                }
             })
         });
 
-    // Health check route
     let health_route = warp::path("health")
         .and(warp::get())
         .map(|| "OK");
 
-    let routes = ws_route.or(health_route);
-
-    println!("Starting WebSocket server on localhost:8088");
-    warp::serve(routes)
-        .run(([127, 0, 0, 1], 8088))
-        .await;
+    ws_route.or(health_route)
 }
-```
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Setup phase
+    setup_logging().await?;
+    info!("Starting ICN node...");
+
+    let config = setup_config().await?;
+    info!("Configuration loaded");
+
+    setup_metrics().await?;
+    info!("Metrics initialized");
+
+    // Initialize core systems
+    let storage = setup_storage(&config.storage).await?;
+    info!("Storage system initialized");
+
+    let ws_handler = Arc::new(WebSocketHandler::new());
+    info!("WebSocket handler initialized");
+    
+    let consensus = setup_consensus(config.consensus, ws_handler.clone()).await?;
+    info!("Consensus system initialized");
+
+    // Setup routes
+    let routes = setup_routes(ws_handler, storage, consensus);
+    info!("Routes configured");
+
+    // Start server
+    let addr = format!("{}:{}", config.server.host, config.server.port)
+        .parse()
+        .expect("Invalid address");
+
+    info!("Starting server on {}", addr);
+    warp::serve(routes)
+        .run(addr)
+        .await;
+
+    Ok(())
+}```
 
 ===================
 File: ./crates/icn-core/src/lib.rs
