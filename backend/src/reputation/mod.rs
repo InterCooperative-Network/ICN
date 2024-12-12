@@ -1,4 +1,4 @@
-// src/reputation/mod.rs
+pub mod reputation_system;
 
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
