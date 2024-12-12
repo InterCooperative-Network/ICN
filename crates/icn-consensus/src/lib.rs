@@ -1,21 +1,18 @@
-// crates/icn-consensus/src/lib.rs
-
-//! ICN Consensus implementation
-//! 
-//! This crate provides the consensus mechanism for the Inter-Cooperative Network,
-//! implementing a custom Proof of Cooperation protocol.
-
 mod crypto;
 mod error;
 mod state;
 mod proof_of_cooperation;
 mod engine;
+mod config;
+mod metrics;
 
 pub use crypto::{CryptoManager, CryptoError, CryptoResult};
 pub use error::{ConsensusError, ConsensusResult};
 pub use state::{StateManager, ConsensusState};
 pub use proof_of_cooperation::{ProofOfCooperation, ConsensusEvent, ConsensusConfig, RoundStatus};
 pub use engine::ConsensusEngine;
+pub use config::ConsensusConfig;
+pub use metrics::ConsensusMetrics;
 
 use std::collections::HashMap;
 

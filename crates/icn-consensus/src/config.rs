@@ -1,5 +1,3 @@
-// src/config.rs
-
 use serde::{Serialize, Deserialize};
 use std::time::Duration;
 
@@ -17,6 +15,17 @@ pub struct ConsensusConfig {
 
     /// Metrics configuration
     pub metrics: MetricsConfig,
+}
+
+impl ConsensusConfig {
+    /// Validate the consensus configuration
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        self.validator.validate()?;
+        self.round.validate()?;
+        self.events.validate()?;
+        self.metrics.validate()?;
+        Ok(())
+    }
 }
 
 /// Configuration for validator management
@@ -39,6 +48,25 @@ pub struct ValidatorConfig {
     pub voting_power_multiplier: f64,
 }
 
+impl ValidatorConfig {
+    /// Validate the validator configuration
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        if self.min_validators == 0 {
+            return Err(ConfigError::InvalidValue("min_validators must be greater than 0".into()));
+        }
+        if self.min_reputation < 0 {
+            return Err(ConfigError::InvalidValue("min_reputation cannot be negative".into()));
+        }
+        if self.max_validators < self.min_validators {
+            return Err(ConfigError::InvalidValue("max_validators cannot be less than min_validators".into()));
+        }
+        if self.voting_power_multiplier <= 0.0 {
+            return Err(ConfigError::InvalidValue("voting_power_multiplier must be greater than 0".into()));
+        }
+        Ok(())
+    }
+}
+
 /// Configuration for consensus rounds
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoundConfig {
@@ -57,6 +85,25 @@ pub struct RoundConfig {
     pub max_transactions_per_block: usize,
 }
 
+impl RoundConfig {
+    /// Validate the round configuration
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        if self.round_timeout.as_secs() == 0 {
+            return Err(ConfigError::InvalidValue("round_timeout must be greater than 0".into()));
+        }
+        if self.consensus_threshold <= 0.0 || self.consensus_threshold > 1.0 {
+            return Err(ConfigError::InvalidValue("consensus_threshold must be between 0 and 1".into()));
+        }
+        if self.max_timestamp_diff.as_secs() == 0 {
+            return Err(ConfigError::InvalidValue("max_timestamp_diff must be greater than 0".into()));
+        }
+        if self.max_transactions_per_block == 0 {
+            return Err(ConfigError::InvalidValue("max_transactions_per_block must be greater than 0".into()));
+        }
+        Ok(())
+    }
+}
+
 /// Configuration for the event system
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventConfig {
@@ -67,6 +114,16 @@ pub struct EventConfig {
     pub log_events: bool,
 }
 
+impl EventConfig {
+    /// Validate the event configuration
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        if self.channel_size == 0 {
+            return Err(ConfigError::InvalidValue("channel_size must be greater than 0".into()));
+        }
+        Ok(())
+    }
+}
+
 /// Configuration for metrics collection
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricsConfig {
@@ -75,6 +132,16 @@ pub struct MetricsConfig {
 
     /// Prefix for metric names
     pub prefix: String,
+}
+
+impl MetricsConfig {
+    /// Validate the metrics configuration
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        if self.prefix.is_empty() {
+            return Err(ConfigError::InvalidValue("prefix cannot be empty".into()));
+        }
+        Ok(())
+    }
 }
 
 impl Default for ConsensusConfig {
@@ -149,6 +216,12 @@ mod duration_serde {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum ConfigError {
+    #[error("Invalid configuration value: {0}")]
+    InvalidValue(String),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,4 +231,61 @@ mod tests {
     fn test_default_config() {
         let config = ConsensusConfig::default();
         assert!(config.validator.min_validators >= 4);
-        assert!(config
+        assert!(config.validator.validate().is_ok());
+        assert!(config.round.validate().is_ok());
+        assert!(config.events.validate().is_ok());
+        assert!(config.metrics.validate().is_ok());
+    }
+
+    #[test]
+    fn test_invalid_validator_config() {
+        let mut config = ValidatorConfig::default();
+        config.min_validators = 0;
+        assert!(config.validate().is_err());
+
+        config.min_validators = 4;
+        config.min_reputation = -1;
+        assert!(config.validate().is_err());
+
+        config.min_reputation = 100;
+        config.max_validators = 3;
+        assert!(config.validate().is_err());
+
+        config.max_validators = 100;
+        config.voting_power_multiplier = 0.0;
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_invalid_round_config() {
+        let mut config = RoundConfig::default();
+        config.round_timeout = Duration::from_secs(0);
+        assert!(config.validate().is_err());
+
+        config.round_timeout = Duration::from_secs(30);
+        config.consensus_threshold = 0.0;
+        assert!(config.validate().is_err());
+
+        config.consensus_threshold = 0.66;
+        config.max_timestamp_diff = Duration::from_secs(0);
+        assert!(config.validate().is_err());
+
+        config.max_timestamp_diff = Duration::from_secs(60);
+        config.max_transactions_per_block = 0;
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_invalid_event_config() {
+        let mut config = EventConfig::default();
+        config.channel_size = 0;
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_invalid_metrics_config() {
+        let mut config = MetricsConfig::default();
+        config.prefix = String::new();
+        assert!(config.validate().is_err());
+    }
+}
