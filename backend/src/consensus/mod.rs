@@ -1,5 +1,3 @@
-// src/consensus/mod.rs
-
 pub mod proof_of_cooperation;
 pub mod types;
 
