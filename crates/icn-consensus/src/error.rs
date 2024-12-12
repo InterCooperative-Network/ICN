@@ -1,136 +1,111 @@
-// src/error.rs
+// crates/icn-consensus/src/error.rs
 
 use thiserror::Error;
+use std::result;
+
+/// Custom error types for consensus operations
+#[derive(Debug, Error)]
+pub enum ConsensusError {
+    #[error("Insufficient active validators (required: {required}, current: {current})")]
+    InsufficientValidators { required: usize, current: usize },
+
+    #[error("No active consensus round")]
+    NoActiveRound,
+
+    #[error("Invalid block height")]
+    InvalidBlockHeight,
+
+    #[error("Invalid previous block hash")]
+    InvalidPreviousHash,
+
+    #[error("Invalid block timestamp")]
+    InvalidTimestamp,
+
+    #[error("Unauthorized block proposer")]
+    UnauthorizedProposer,
+
+    #[error("Duplicate vote from validator")]
+    DuplicateVote,
+
+    #[error("Unknown validator")]
+    UnknownValidator,
+
+    #[error("Invalid signature")]
+    InvalidSignature,
+
+    #[error("Invalid DID format")]
+    InvalidDID,
+
+    #[error("Insufficient reputation (required: {required}, current: {current})")]
+    InsufficientReputation { required: i64, current: i64 },
+
+    #[error("No eligible coordinator available")]
+    NoEligibleCoordinator,
+
+    #[error("Round timeout")]
+    RoundTimeout,
+
+    #[error("Transaction validation failed: {0}")]
+    TransactionValidation(String),
+
+    #[error("Signature verification failed: {0}")]
+    SignatureVerification(String),
+
+    #[error("State error: {0}")]
+    StateError(String),
+
+    #[error("Storage error: {0}")]
+    StorageError(String),
+}
 
 /// Result type for consensus operations
-pub type ConsensusResult<T> = Result<T, ConsensusError>;
+pub type ConsensusResult<T> = result::Result<T, ConsensusError>;
 
-/// Errors that can occur during consensus operations
-#[derive(Error, Debug)]
-pub enum ConsensusError {
-    #[error("Invalid block: {0}")]
-    InvalidBlock(String),
+// crates/icn-consensus/src/engine.rs
 
-    #[error("Invalid state transition: {0}")]
-    InvalidState(String),
+use tokio::sync::RwLock;
+use std::sync::Arc;
+use crate::error::{ConsensusError, ConsensusResult};
+use crate::proof_of_cooperation::ProofOfCooperation;
+use crate::state::StateManager;
 
-    #[error("Not enough active validators (required: {required}, actual: {actual})")]
-    InsufficientValidators {
-        required: usize,
-        actual: usize,
-    },
-
-    #[error("Validator not found: {0}")]
-    ValidatorNotFound(String),
-
-    #[error("Validator {0} is already registered")]
-    ValidatorAlreadyRegistered(String),
-
-    #[error("Unauthorized proposer: {0}")]
-    UnauthorizedProposer(String),
-
-    #[error("Invalid block height: expected {expected}, got {actual}")]
-    InvalidBlockHeight {
-        expected: u64,
-        actual: u64,
-    },
-
-    #[error("Invalid block timestamp: {0}")]
-    InvalidTimestamp(String),
-
-    #[error("Round timeout after {duration_secs} seconds")]
-    RoundTimeout {
-        duration_secs: u64,
-    },
-
-    #[error("Insufficient voting power (required: {required}, actual: {actual})")]
-    InsufficientVotingPower {
-        required: f64,
-        actual: f64,
-    },
-
-    #[error("Invalid vote: {0}")]
-    InvalidVote(String),
-
-    #[error("Consensus failed: {0}")]
-    ConsensusFailed(String),
-
-    #[error("Event channel error: {0}")]
-    EventError(String),
-
-    #[error("Internal error: {0}")]
-    Internal(String),
-
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
+/// Core consensus engine implementation
+pub struct ConsensusEngine {
+    consensus: Arc<RwLock<ProofOfCooperation>>,
+    state: Arc<StateManager>,
+    initialized: bool,
 }
 
-impl ConsensusError {
-    /// Returns true if the error represents a timeout
-    pub fn is_timeout(&self) -> bool {
-        matches!(self, ConsensusError::RoundTimeout { .. })
+impl ConsensusEngine {
+    /// Creates a new consensus engine instance
+    pub async fn new(config: crate::ConsensusConfig) -> ConsensusResult<Self> {
+        let state = Arc::new(StateManager::new().await?);
+        let (consensus, _) = ProofOfCooperation::new(config);
+        
+        Ok(Self {
+            consensus: Arc::new(RwLock::new(consensus)),
+            state,
+            initialized: true,
+        })
     }
 
-    /// Returns true if the error is related to validator issues
-    pub fn is_validator_error(&self) -> bool {
-        matches!(
-            self,
-            ConsensusError::ValidatorNotFound(_) |
-            ConsensusError::ValidatorAlreadyRegistered(_) |
-            ConsensusError::UnauthorizedProposer(_) |
-            ConsensusError::InsufficientValidators { .. } |
-            ConsensusError::InsufficientVotingPower { .. }
-        )
+    /// Returns whether the engine is properly initialized
+    pub fn is_initialized(&self) -> bool {
+        self.initialized
     }
 
-    /// Returns true if the error is related to block validation
-    pub fn is_block_error(&self) -> bool {
-        matches!(
-            self,
-            ConsensusError::InvalidBlock(_) |
-            ConsensusError::InvalidBlockHeight { .. } |
-            ConsensusError::InvalidTimestamp(_)
-        )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_error_categories() {
-        let timeout_err = ConsensusError::RoundTimeout { duration_secs: 30 };
-        assert!(timeout_err.is_timeout());
-        assert!(!timeout_err.is_validator_error());
-        assert!(!timeout_err.is_block_error());
-
-        let validator_err = ConsensusError::ValidatorNotFound("did:icn:test".into());
-        assert!(!validator_err.is_timeout());
-        assert!(validator_err.is_validator_error());
-        assert!(!validator_err.is_block_error());
-
-        let block_err = ConsensusError::InvalidBlockHeight { 
-            expected: 1,
-            actual: 2,
-        };
-        assert!(!block_err.is_timeout());
-        assert!(!block_err.is_validator_error());
-        assert!(block_err.is_block_error());
+    /// Starts the consensus engine
+    pub async fn start(&self) -> ConsensusResult<()> {
+        let mut consensus = self.consensus.write().await;
+        consensus.start_round().await
     }
 
-    #[test]
-    fn test_error_messages() {
-        let err = ConsensusError::InsufficientValidators {
-            required: 4,
-            actual: 2,
-        };
-        assert_eq!(
-            err.to_string(),
-            "Not enough active validators (required: 4, actual: 2)"
-        );
-
-        let err = ConsensusError::InvalidBlock("missing signatures".into());
-        assert_eq!(err.to_string(), "Invalid block: missing signatures");
+    /// Stops the consensus engine
+    pub async fn stop(&self) -> ConsensusResult<()> {
+        let mut consensus = self.consensus.write().await;
+        if let Some(round) = consensus.get_current_round().await {
+            consensus.fail_round(format!("Engine shutdown")).await?;
+        }
+        Ok(())
     }
 }

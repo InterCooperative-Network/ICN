@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sun Dec  8 11:35:59 UTC 2024
+Project Code Dump - Generated Thu Dec 12 04:10:13 UTC 2024
 ======================================
 
 LLM Context Information
@@ -217,27 +217,163 @@ mod integration_tests {
 
 ===================
 File: ./crates/icn-crypto/src/lib.rs
-Size: 177 bytes
-Modified: 2024-12-07 10:51:04.870587319 +0000
+Size: 4017 bytes
+Modified: 2024-12-08 11:37:39.204130619 +0000
 Dependencies:
+mod config;
+mod error;
+mod metrics;
+mod proof_of_cooperation;
 mod tests {
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
+use tracing::{debug, error, info, warn};
 
 ===================
 ```rs
-//! ICN crypto crate
+// src/lib.rs
 
-pub fn init() {
-    println!("Initializing icn-crypto");
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
+use tracing::{debug, error, info, warn};
+
+mod config;
+mod error;
+mod metrics;
+mod proof_of_cooperation;
+
+pub use config::ConsensusConfig;
+pub use error::{ConsensusError, ConsensusResult};
+pub use metrics::ConsensusMetrics;
+pub use proof_of_cooperation::{ProofOfCooperation, ConsensusEvent};
+
+/// Atomic round counter for unique round identification
+static ROUND_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Core consensus engine interface
+#[async_trait::async_trait]
+pub trait ConsensusEngine: Send + Sync {
+    async fn start_round(&mut self) -> ConsensusResult<()>;
+    async fn propose_block(&mut self, block: icn_types::Block) -> ConsensusResult<()>;
+    async fn verify_block(&self, block: &icn_types::Block) -> ConsensusResult<()>;
+    async fn submit_vote(&mut self, validator_did: String, approve: bool, signature: Vec<u8>) -> ConsensusResult<()>;
+    async fn has_consensus(&self) -> ConsensusResult<bool>;
+}
+
+/// Vote tracking with signature verification
+#[derive(Debug, Clone)]
+struct Vote {
+    validator: String,
+    approve: bool,
+    signature: Vec<u8>,
+    timestamp: Instant,
+}
+
+/// Round state management
+#[derive(Debug)]
+pub struct ConsensusRound {
+    id: u64,
+    start_time: Instant,
+    timeout: Duration,
+    votes: RwLock<HashMap<String, Vote>>,
+    proposed_block: Option<icn_types::Block>,
+    finalized: bool,
+}
+
+impl ConsensusRound {
+    fn new(timeout: Duration) -> Self {
+        Self {
+            id: ROUND_COUNTER.fetch_add(1, Ordering::SeqCst),
+            start_time: Instant::now(),
+            timeout,
+            votes: RwLock::new(HashMap::new()),
+            proposed_block: None,
+            finalized: false,
+        }
+    }
+
+    async fn add_vote(&self, vote: Vote) -> ConsensusResult<()> {
+        let mut votes = self.votes.write().await;
+        
+        // Check for duplicate votes
+        if votes.contains_key(&vote.validator) {
+            return Err(ConsensusError::DuplicateVote);
+        }
+        
+        // Verify vote signature
+        if !self.verify_vote_signature(&vote).await? {
+            return Err(ConsensusError::InvalidSignature);
+        }
+        
+        votes.insert(vote.validator.clone(), vote);
+        Ok(())
+    }
+
+    async fn verify_vote_signature(&self, vote: &Vote) -> ConsensusResult<bool> {
+        // TODO: Implement actual signature verification
+        Ok(true)
+    }
+
+    fn is_timed_out(&self) -> bool {
+        self.start_time.elapsed() > self.timeout
+    }
+}
+
+/// Configuration options
+#[derive(Debug, Clone)]
+pub struct ConsensusOpts {
+    pub min_validators: usize,
+    pub round_timeout: Duration,
+    pub consensus_threshold: f64,
+    pub max_timestamp_diff: Duration,
+    pub event_channel_size: usize,
+    pub signature_verification: bool,
+}
+
+impl Default for ConsensusOpts {
+    fn default() -> Self {
+        Self {
+            min_validators: 4,
+            round_timeout: Duration::from_secs(30),
+            consensus_threshold: 0.66,
+            max_timestamp_diff: Duration::from_secs(60),
+            event_channel_size: 1000,
+            signature_verification: true,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    use super::*;
+    use tokio;
+
+    #[tokio::test]
+    async fn test_consensus_round_voting() {
+        let round = ConsensusRound::new(Duration::from_secs(30));
+        
+        let vote = Vote {
+            validator: "test_validator".to_string(),
+            approve: true,
+            signature: vec![],
+            timestamp: Instant::now(),
+        };
+        
+        assert!(round.add_vote(vote.clone()).await.is_ok());
+        assert!(round.add_vote(vote.clone()).await.is_err()); // Duplicate vote
     }
-}
-```
+
+    #[tokio::test]
+    async fn test_round_timeout() {
+        let round = ConsensusRound::new(Duration::from_millis(1));
+        tokio::time::sleep(Duration::from_millis(2)).await;
+        assert!(round.is_timed_out());
+    }
+}```
 
 ===================
 File: ./crates/icn-types/src/lib.rs
@@ -309,118 +445,44 @@ use icn_types::*;
 
 ===================
 File: ./crates/icn-consensus/src/lib.rs
-Size: 3406 bytes
-Modified: 2024-12-08 11:12:11.335534728 +0000
+Size: 789 bytes
+Modified: 2024-12-10 05:00:22.902056268 +0000
 Dependencies:
-mod config;
+mod crypto;
+mod engine;
 mod error;
-mod metrics;
 mod proof_of_cooperation;
-mod tests {
-use std::time::Duration;
+mod state;
 
 ===================
 ```rs
-// src/lib.rs
+// crates/icn-consensus/src/lib.rs
 
-//! ICN Consensus Library
-//! 
-//! This library implements the Proof of Cooperation consensus mechanism for the
-//! Inter-Cooperative Network (ICN). It provides a Byzantine fault-tolerant consensus
-//! system that uses reputation-weighted voting and energy-aware metrics.
-
-mod config;
+mod crypto;
 mod error;
-mod metrics;
+mod state;
 mod proof_of_cooperation;
+mod engine;
 
-use std::time::Duration;
-
-pub use config::ConsensusConfig;
+pub use crypto::{CryptoManager, CryptoError, CryptoResult};
 pub use error::{ConsensusError, ConsensusResult};
-pub use metrics::ConsensusMetrics;
-pub use proof_of_cooperation::{ProofOfCooperation, ConsensusEvent};
+pub use state::{StateManager, ConsensusState};
+pub use proof_of_cooperation::{ProofOfCooperation, ConsensusEvent, ConsensusConfig, RoundStatus};
+pub use engine::ConsensusEngine;
 
-/// Trait defining the core consensus engine interface
-#[async_trait::async_trait]
-pub trait ConsensusEngine: Send + Sync {
-    /// Start a new consensus round
-    /// 
-    /// This selects a coordinator and initializes the round state.
-    /// Returns an error if there aren't enough active validators.
-    async fn start_round(&mut self) -> ConsensusResult<()>;
+// Re-export main types
+pub type ValidatorSet = std::collections::HashMap<String, ValidatorInfo>;
 
-    /// Propose a new block for the current round
-    /// 
-    /// The block must be proposed by the current round's coordinator.
-    /// Returns an error if the block is invalid or the proposer isn't authorized.
-    async fn propose_block(&mut self, block: icn_types::Block) -> ConsensusResult<()>;
-
-    /// Verify a proposed block
-    /// 
-    /// Checks the block's validity including:
-    /// - Block structure and signatures
-    /// - Height continuity
-    /// - Timestamp validity
-    /// - Transaction validity
-    async fn verify_block(&self, block: &icn_types::Block) -> ConsensusResult<()>;
-
-    /// Submit a vote for the current round
-    /// 
-    /// Validators can vote to approve or reject the proposed block.
-    /// Returns an error if the validator isn't authorized or has already voted.
-    async fn submit_vote(&mut self, validator_did: String, approve: bool) -> ConsensusResult<()>;
-
-    /// Check if the round has reached consensus
-    /// 
-    /// Returns true if enough weighted votes have been collected to reach
-    /// the consensus threshold.
-    async fn has_consensus(&self) -> ConsensusResult<bool>;
-}
-
-/// Configuration for the consensus system
 #[derive(Debug, Clone)]
-pub struct ConsensusOpts {
-    /// Minimum number of validators required for consensus
-    pub min_validators: usize,
-    
-    /// Timeout duration for consensus rounds
-    pub round_timeout: Duration,
-    
-    /// Required threshold of weighted votes to reach consensus (0.0-1.0)
-    pub consensus_threshold: f64,
-    
-    /// Maximum time difference allowed for block timestamps
-    pub max_timestamp_diff: Duration,
-    
-    /// Maximum size of the event broadcast channel
-    pub event_channel_size: usize,
+pub struct ValidatorInfo {
+    pub did: String,
+    pub reputation: i64,
+    pub consecutive_rounds: usize,
 }
 
-impl Default for ConsensusOpts {
-    fn default() -> Self {
-        Self {
-            min_validators: 4,
-            round_timeout: Duration::from_secs(30),
-            consensus_threshold: 0.66,
-            max_timestamp_diff: Duration::from_secs(60),
-            event_channel_size: 1000,
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tokio;
-
-    #[tokio::test]
-    async fn test_consensus_opts_defaults() {
-        let opts = ConsensusOpts::default();
-        assert!(opts.min_validators >= 4, "Should require enough validators for BFT");
-        assert!(opts.consensus_threshold > 0.66, "Should require >2/3 consensus");
-        assert!(opts.round_timeout >= Duration::from_secs(30), "Should allow enough time for consensus");
-    }
+/// Initialize the consensus system
+pub async fn init(config: ConsensusConfig) -> ConsensusResult<ConsensusEngine> {
+    ConsensusEngine::new(config).await
 }```
 
 ===================
