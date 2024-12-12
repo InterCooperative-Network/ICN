@@ -1,5 +1,3 @@
-// src/main.rs
-
 mod blockchain;
 mod identity;
 mod reputation;
