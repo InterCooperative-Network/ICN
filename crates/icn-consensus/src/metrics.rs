@@ -41,3 +41,11 @@ impl Default for ConsensusMetrics {
         Self::new()
     }
 }
+
+impl ConsensusMetrics {
+    pub fn integrate_with_consensus(&self, consensus: &crate::ConsensusEngine) {
+        // Example integration logic
+        self.rounds_total.inc();
+        self.active_validators.set(consensus.get_active_validators_count() as f64);
+    }
+}

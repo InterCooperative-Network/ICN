@@ -1,4 +1,3 @@
-// crates/icn-core/src/main.rs
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use warp::Filter;
@@ -12,6 +11,7 @@ use icn_types::*;
 use icn_consensus::{ConsensusConfig, ProofOfCooperation};
 use icn_p2p::websocket::WebSocketHandler;
 use icn_storage::state::StateManager;
+use icn_core::{Core, ConfigBuilder, SystemEvent, NodeStatus};
 
 #[derive(Debug, Deserialize)]
 struct AppConfig {
