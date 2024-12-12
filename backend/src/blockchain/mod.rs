@@ -1,8 +1,6 @@
-// src/blockchain/mod.rs
-
-mod block;
-mod transaction;
-mod chain;
+pub mod block;
+pub mod chain;
+pub mod transaction;
 
 // Re-export the core types
 pub use block::Block;
