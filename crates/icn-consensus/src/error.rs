@@ -1,5 +1,3 @@
-// crates/icn-consensus/src/error.rs
-
 use thiserror::Error;
 use std::result;
 

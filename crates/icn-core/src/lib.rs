@@ -1,5 +1,3 @@
-// File: crates/icn-core/src/lib.rs
-
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::{debug, error, info, warn};
