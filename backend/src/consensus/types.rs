@@ -1,5 +1,3 @@
-// src/consensus/types.rs
-
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};

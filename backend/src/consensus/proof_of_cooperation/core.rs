@@ -1,5 +1,3 @@
-// src/consensus/proof_of_cooperation/core.rs
-
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use crate::websocket::WebSocketHandler;

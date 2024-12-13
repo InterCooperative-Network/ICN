@@ -1,11 +1,9 @@
-// src/blockchain/block.rs
-
 use std::time::SystemTime;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 
-use super::Transaction;
+use crate::blockchain::Transaction;
 
 /// Represents a block in the blockchain
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -244,21 +242,21 @@ impl Block {
 
         for tx in transactions {
             match &tx.transaction_type {
-                super::TransactionType::RecordContribution { .. } => {
+                crate::blockchain::TransactionType::RecordContribution { .. } => {
                     metadata.contribution_count += 1;
                     participants.insert(tx.sender.clone());
                 }
-                super::TransactionType::RecordMutualAid { receiver, .. } => {
+                crate::blockchain::TransactionType::RecordMutualAid { receiver, .. } => {
                     metadata.mutual_aid_count += 1;
                     participants.insert(tx.sender.clone());
                     participants.insert(receiver.clone());
                 }
-                super::TransactionType::UpdateRelationship { member_two, .. } => {
+                crate::blockchain::TransactionType::UpdateRelationship { member_two, .. } => {
                     metadata.relationship_update_count += 1;
                     participants.insert(tx.sender.clone());
                     participants.insert(member_two.clone());
                 }
-                super::TransactionType::AddEndorsement { to_did, .. } => {
+                crate::blockchain::TransactionType::AddEndorsement { to_did, .. } => {
                     metadata.endorsement_count += 1;
                     participants.insert(tx.sender.clone());
                     participants.insert(to_did.clone());
@@ -359,7 +357,7 @@ mod tests {
 
     #[test]
     fn test_relationship_metadata() {
-        use super::super::TransactionType;
+        use crate::blockchain::TransactionType;
         
         let transactions = vec![
             Transaction::new(

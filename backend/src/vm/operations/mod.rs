@@ -1,5 +1,3 @@
-// src/vm/operations/mod.rs
-
 use std::collections::HashMap;
 use crate::vm::{VMError, VMResult};
 use crate::vm::event::Event;

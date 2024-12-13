@@ -5,10 +5,10 @@ edition = "2021"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.5", features = ["full"] }
 
 # HTTP and WebSocket handling
-warp = "0.3"
+warp = "0.4"
 tokio-tungstenite = { version = "0.20", features = ["native-tls"] }
 url = "2.4"
 http = "0.2"
@@ -32,8 +32,8 @@ sha2 = "0.10"
 
 [dev-dependencies]
 # Used for development tests
-tokio = { version = "1.0", features = ["full"] }
-warp = "0.3"
+tokio = { version = "1.5", features = ["full"] }
+warp = "0.4"
 
 [features]
 default = []
