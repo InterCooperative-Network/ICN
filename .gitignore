@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+/target
+
+
 # Environment and virtual environments
 .env
 .venv
