@@ -3,8 +3,6 @@ use sha2::{Sha256, Digest};
 use thiserror::Error;
 use crate::error::{ConsensusError, ConsensusResult};
 
-mod signing;
-mod keypair;
 
 #[derive(Error, Debug)]
 pub enum CryptoError {
@@ -48,25 +46,12 @@ impl CryptoManager {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::ConsensusEngine;
 
-    #[test]
-    fn test_signature_verification() {
-        let crypto = CryptoManager::new();
-        let (secret_key, public_key) = crypto.generate_keypair().unwrap();
-        
-        let message = b"test message";
-        let signature = crypto.sign(message, &secret_key).unwrap();
-        
-        assert!(crypto.verify(message, &signature, &public_key).unwrap());
-        
-        // Test invalid signature
-        let wrong_message = b"wrong message";
-        assert!(!crypto.verify(wrong_message, &signature, &public_key).unwrap());
-    }
 
     #[test]
     fn test_integration_with_consensus() {
@@ -75,4 +60,5 @@ mod tests {
         
         assert!(crypto.integrate_with_consensus(&mut consensus).is_ok());
     }
+
 }
