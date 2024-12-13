@@ -1,30 +1,52 @@
-// src/consensus/proof_of_cooperation/core.rs
-
 use std::sync::Arc;
 use tokio::sync::broadcast;
+use chrono::Utc;
+use sha2::{Sha256, Digest};
+use serde::{Serialize, Deserialize};
+
 use crate::websocket::WebSocketHandler;
-use crate::blockchain::Block;
-use crate::consensus::types::{ConsensusConfig, ConsensusError, ConsensusRound};
+use crate::blockchain::{Block, Transaction};
+use crate::consensus::types::{
+    ConsensusConfig, ConsensusError, ConsensusRound, RoundStatus,
+    ConsensusRoundStats, ValidatorInfo
+};
 use super::{
     validator::ValidatorManager,
     round::RoundManager,
     events::ConsensusEvent,
 };
+use crate::ICNCore;
+
+/// Represents the state of the cooperative network
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NetworkState {
+    pub block_height: u64,
+    pub state_root: String,
+    pub validator_set: Vec<ValidatorInfo>,
+    pub timestamp: i64,
+    pub merkle_proof: Vec<String>,
+}
 
 pub struct ProofOfCooperation {
-    // Make these public to fix the access error
     pub validator_manager: ValidatorManager,
     pub round_manager: RoundManager,
-    
     config: ConsensusConfig,
     reputation_updates: Vec<(String, i64)>,
     ws_handler: Arc<WebSocketHandler>,
     event_tx: broadcast::Sender<ConsensusEvent>,
+
 }
 
 impl ProofOfCooperation {
-    pub fn new(config: ConsensusConfig, ws_handler: Arc<WebSocketHandler>) -> Self {
+    pub fn new(config: ConsensusConfig, ws_handler: Arc<WebSocketHandler>, icn_core: Arc<ICNCore>) -> Self {
         let (event_tx, _) = broadcast::channel(100);
+        let initial_state = NetworkState {
+            block_height: 0,
+            state_root: "genesis".to_string(),
+            validator_set: Vec::new(),
+            timestamp: Utc::now().timestamp(),
+            merkle_proof: Vec::new(),
+        };
         
         ProofOfCooperation {
             validator_manager: ValidatorManager::new(config.clone()),
@@ -33,14 +55,15 @@ impl ProofOfCooperation {
             reputation_updates: Vec::new(),
             ws_handler,
             event_tx,
+
         }
     }
 
     pub async fn start_round(&mut self) -> Result<(), ConsensusError> {
-        // Clean up inactive validators periodically
+        // Clean up inactive validators
         self.validator_manager.cleanup_inactive_validators();
 
-        // Get active validators meeting reputation threshold
+        // Get active validators meeting requirements
         let active_validators: Vec<_> = self.validator_manager.get_validators().values()
             .filter(|v| v.reputation >= self.config.min_validator_reputation &&
                       v.performance_score >= self.config.min_performance_score)
@@ -50,7 +73,7 @@ impl ProofOfCooperation {
             return Err(ConsensusError::InsufficientValidators);
         }
 
-        // Select coordinator
+        // Select coordinator using weighted reputation
         let coordinator = self.validator_manager.select_coordinator(&active_validators)?;
 
         // Calculate total voting power
@@ -58,13 +81,17 @@ impl ProofOfCooperation {
             .map(|v| v.voting_power)
             .sum();
 
-        // Start new round
+        // Start new consensus round
         let event = self.round_manager.start_round(
             self.get_next_round_number(),
             coordinator.did.clone(),
             total_voting_power,
             active_validators.len(),
         )?;
+
+        // Update state
+        self.state.timestamp = Utc::now().timestamp();
+        self.state.validator_set = active_validators.iter().map(|v| (*v).clone()).collect();
 
         // Broadcast updates
         if let Some(round) = self.round_manager.get_current_round() {
@@ -73,6 +100,39 @@ impl ProofOfCooperation {
         let _ = self.event_tx.send(event);
 
         Ok(())
+    }
+
+    pub fn verify_block_signatures(&self, block: &Block, signatures: &[String]) -> Result<(), ConsensusError> {
+        let block_hash = self.calculate_block_hash(block);
+        
+        // Verify we have enough valid signatures
+        let valid_signatures = signatures.iter()
+            .filter(|sig| self.verify_signature(&block_hash, sig))
+            .count();
+            
+        let required_signatures = (self.config.min_validators as f64 * self.config.min_approval_rate) as usize;
+        
+        if valid_signatures < required_signatures {
+            return Err(ConsensusError::InsufficientSignatures);
+        }
+
+        Ok(())
+    }
+
+    fn verify_signature(&self, message: &str, signature: &str) -> bool {
+        // TODO: Implement actual signature verification
+        // For now, return true for testing
+        true
+    }
+
+    fn calculate_block_hash(&self, block: &Block) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(format!("{}{}{}", 
+            block.index,
+            block.previous_hash,
+            block.timestamp
+        ));
+        format!("{:x}", hasher.finalize())
     }
 
     pub async fn propose_block(&mut self, proposer_did: &str, block: Block) -> Result<(), ConsensusError> {
@@ -84,13 +144,48 @@ impl ProofOfCooperation {
             return Err(ConsensusError::InsufficientReputation);
         }
 
+        // Validate block
+        self.validate_block(&block)?;
+
         // Process proposal
         let event = self.round_manager.propose_block(proposer_did, block.clone())?;
+
+        // Update state
+        self.state.block_height = block.index;
 
         // Broadcast updates
         self.ws_handler.broadcast_block_finalized(&block);
         let _ = self.event_tx.send(event);
 
+        Ok(())
+    }
+
+    fn validate_block(&self, block: &Block) -> Result<(), ConsensusError> {
+        // Verify block index
+        if block.index != self.state.block_height + 1 {
+            return Err(ConsensusError::InvalidBlockIndex);
+        }
+
+        // Verify previous hash
+        if block.previous_hash != self.state.state_root {
+            return Err(ConsensusError::InvalidPreviousHash);
+        }
+
+        // Verify timestamp
+        if block.timestamp <= self.state.timestamp {
+            return Err(ConsensusError::InvalidTimestamp);
+        }
+
+        // Verify transactions
+        for tx in &block.transactions {
+            self.validate_transaction(tx)?;
+        }
+
+        Ok(())
+    }
+
+    fn validate_transaction(&self, transaction: &Transaction) -> Result<(), ConsensusError> {
+        // TODO: Implement full transaction validation
         Ok(())
     }
 
@@ -139,6 +234,9 @@ impl ProofOfCooperation {
             &round.coordinator,
         );
 
+        // Update state root
+        self.state.state_root = self.calculate_block_hash(&block);
+
         // Create round completed event
         let event = ConsensusEvent::RoundCompleted {
             round: round.round_number,
@@ -170,6 +268,10 @@ impl ProofOfCooperation {
         self.event_tx.subscribe()
     }
 
+    pub fn get_network_state(&self) -> &NetworkState {
+        &self.state
+    }
+
     fn get_next_round_number(&self) -> u64 {
         self.round_manager.get_round_history().len() as u64 + 1
     }
@@ -182,7 +284,8 @@ mod tests {
     async fn setup_test_consensus() -> ProofOfCooperation {
         let ws_handler = Arc::new(WebSocketHandler::new());
         let config = ConsensusConfig::default();
-        ProofOfCooperation::new(config, ws_handler)
+        let icn_core = Arc::new(ICNCore::new());
+        ProofOfCooperation::new(config, ws_handler, icn_core)
     }
 
     #[tokio::test]
@@ -196,6 +299,30 @@ mod tests {
         
         assert!(consensus.start_round().await.is_ok());
         assert!(consensus.get_current_round().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_block_validation() {
+        let mut consensus = setup_test_consensus().await;
+        let initial_state = consensus.get_network_state();
+
+        let valid_block = Block::new(
+            initial_state.block_height + 1,
+            initial_state.state_root.clone(),
+            vec![],
+            "test_proposer".to_string(),
+        );
+
+        assert!(consensus.validate_block(&valid_block).is_ok());
+
+        let invalid_block = Block::new(
+            initial_state.block_height + 2, // Wrong index
+            "invalid_hash".to_string(),     // Wrong previous hash
+            vec![],
+            "test_proposer".to_string(),
+        );
+
+        assert!(consensus.validate_block(&invalid_block).is_err());
     }
 
     #[tokio::test]

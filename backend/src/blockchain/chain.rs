@@ -1,4 +1,3 @@
-// src/blockchain/chain.rs
 use std::sync::{Arc, Mutex};
 use chrono::Utc;
 use std::collections::HashMap;
@@ -22,12 +21,11 @@ use crate::relationship::{
     Endorsement
 };
 
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::Path;
 
-
-
-
-
-
+use crate::ICNCore;
 
 /// Main blockchain implementation for cooperative-specific features
 pub struct Blockchain {
@@ -57,6 +55,21 @@ impl Blockchain {
             identity_system,
             reputation_system,
             relationship_system,
+            resource_allocations: HashMap::new(),
+            current_block_number: 1,
+            coordinator_did: "did:icn:genesis".to_string(),
+        }
+    }
+
+    /// Creates a new blockchain instance using the ICNCore system
+    pub fn from_icn_core(icn_core: Arc<ICNCore>) -> Self {
+        Blockchain {
+            chain: vec![Block::new(0, String::from("0"), vec![], String::from("genesis"))],
+            pending_transactions: vec![],
+            consensus: icn_core.consensus.clone(),
+            identity_system: icn_core.identity_system.clone(),
+            reputation_system: icn_core.reputation_system.clone(),
+            relationship_system: icn_core.relationship_system.clone(),
             resource_allocations: HashMap::new(),
             current_block_number: 1,
             coordinator_did: "did:icn:genesis".to_string(),
@@ -273,9 +286,32 @@ impl Blockchain {
     }
 
     /// Retrieves a contract by ID
-    fn get_contract(&self, _contract_id: &str) -> Result<Contract, String> {
-        // TODO: Implement contract storage and retrieval
-        Err("Contract not found".to_string())
+    fn get_contract(&self, contract_id: &str) -> Result<Contract, String> {
+        let path = format!("contracts/{}.contract", contract_id);
+        let path = Path::new(&path);
+
+        if !path.exists() {
+            return Err("Contract not found".to_string());
+        }
+
+        let mut file = File::open(path).map_err(|_| "Failed to open contract file".to_string())?;
+        let mut contract_data = Vec::new();
+        file.read_to_end(&mut contract_data).map_err(|_| "Failed to read contract file".to_string())?;
+
+        let contract: Contract = bincode::deserialize(&contract_data).map_err(|_| "Failed to deserialize contract".to_string())?;
+        Ok(contract)
+    }
+
+    /// Stores a contract by ID
+    fn store_contract(&self, contract_id: &str, contract: &Contract) -> Result<(), String> {
+        let path = format!("contracts/{}.contract", contract_id);
+        let path = Path::new(&path);
+
+        let contract_data = bincode::serialize(contract).map_err(|_| "Failed to serialize contract".to_string())?;
+        let mut file = File::create(path).map_err(|_| "Failed to create contract file".to_string())?;
+        file.write_all(&contract_data).map_err(|_| "Failed to write contract file".to_string())?;
+
+        Ok(())
     }
 
     /// Handles events emitted by the VM

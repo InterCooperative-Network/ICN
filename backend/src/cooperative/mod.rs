@@ -1,10 +1,8 @@
-//! Module for defining cooperative structures, member roles, resources, and policies.
-
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
-use crate::claims::Claim; // Correct import path
-use crate::monitoring::energy::{EnergyAware, EnergyMonitor}; // Ensure this module exists and paths are correct
+use crate::claims::Claim;
+use crate::monitoring::energy::{EnergyAware, EnergyMonitor};
 
 /// Represents a cooperative within the network.
 #[derive(Debug, Clone, Serialize, Deserialize)]
