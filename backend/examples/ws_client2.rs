@@ -1,147 +1,260 @@
 use futures_util::{SinkExt, StreamExt};
+use serde::{Serialize, Deserialize};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+use tokio::sync::mpsc;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use url::Url;
-use serde_json::json;
-use std::time::Duration;
-use std::error::Error;
-use tokio::time::sleep;
 
-const WEBSOCKET_PORT: u16 = 8088; // Updated WebSocket port to match the new branch
-
-#[derive(Debug)]
-struct TestScenario {
-    name: String,
-    messages: Vec<serde_json::Value>,
-    delay: Duration,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let url = format!("ws://127.0.0.1:{}/ws", WEBSOCKET_PORT);
-    let did = "did:icn:testclient2";
+#[derive(Debug, Serialize, Deserialize)]
+struct MutualAidInteraction {
+    receiver: String,
+    description: String,
+    impact_story: Option<String>,
+    reciprocity_notes: Option<String>,
+    tags: Vec<String>,
+}
 
-    println!("Starting WebSocket Client 2");
-    println!("Connecting to {} with DID: {}", url, did);
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+enum ClientMessage {
+    RecordContribution {
+        contribution: Contribution,
+    },
+    RecordMutualAid {
+        interaction: MutualAidInteraction,
+    },
+    Subscribe {
+        events: Vec<String>,
+    },
+}
 
-    // Create connection with custom headers
-    let request = tokio_tungstenite::tungstenite::http::Request::builder()
-        .uri(url)
-        .header("X-DID", did)
-        .body(())?;
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+enum ServerMessage {
+    ContributionRecorded {
+        contribution: Contribution,
+    },
+    MutualAidProvided {
+        interaction: MutualAidInteraction,
+    },
+    RelationshipUpdated {
+        member_one: String,
+        member_two: String,
+        update_type: String,
+    },
+    CommandResponse {
+        command: String,
+        status: String,
+        message: String,
+        data: Option<serde_json::Value>,
+    },
+    Error {
+        code: String,
+        message: String,
+    },
+}
 
-    let (ws_stream, _) = connect_async(request).await?;
-    println!("WebSocket connection established");
+async fn handle_user_input(
+    tx: mpsc::Sender<ClientMessage>, 
+    mut shutdown: mpsc::Receiver<()>
+) -> Result<(), Box<dyn std::error::Error>> {
+    let stdin = tokio::io::stdin();
+    let reader = BufReader::new(stdin);
+    let mut lines = reader.lines();
 
-    let (mut write, mut read) = ws_stream.split();
+    loop {
+        println!("\nICN Relationship Client - Commands:");
+        println!("1. Record a contribution");
+        println!("2. Record mutual aid");
+        println!("3. Subscribe to events");
+        println!("4. Exit");
+        println!("\nEnter command number: ");
 
-    // Define test scenarios
-    let scenarios = vec![
-        TestScenario {
-            name: "Validator Registration".to_string(),
-            messages: vec![
-                json!({
-                    "type": "RegisterValidator",
-                    "did": did,
-                    "initial_reputation": 100
-                })
-            ],
-            delay: Duration::from_secs(2),
-        },
-        TestScenario {
-            name: "Event Subscription".to_string(),
-            messages: vec![
-                json!({
-                    "type": "Subscribe",
-                    "events": ["ConsensusUpdate", "BlockFinalized", "ReputationUpdate"]
-                })
-            ],
-            delay: Duration::from_secs(1),
-        },
-        TestScenario {
-            name: "Transaction Submission".to_string(),
-            messages: vec![
-                json!({
-                    "type": "SubmitTransaction",
-                    "transaction": {
-                        "sender": did,
-                        "receiver": "did:icn:testclient1",
-                        "amount": 50,
-                        "timestamp": chrono::Utc::now().timestamp()
-                    }
-                })
-            ],
-            delay: Duration::from_secs(2),
-        },
-        TestScenario {
-            name: "Voting Simulation".to_string(),
-            messages: vec![
-                json!({
-                    "type": "SubmitVote",
-                    "proposal_id": "1",
-                    "vote": true,
-                    "timestamp": chrono::Utc::now().timestamp()
-                })
-            ],
-            delay: Duration::from_secs(2),
-        },
-    ];
+        tokio::select! {
+            result = lines.next_line() => {
+                match result {
+                    Ok(Some(line)) => {
+                        match line.trim() {
+                            "1" => {
+                                println!("Enter contribution description: ");
+                                let description = match lines.next_line().await? {
+                                    Some(text) => text,
+                                    None => continue,
+                                };
 
-    // Run test scenarios
-    for scenario in scenarios {
-        println!("\nExecuting scenario: {}", scenario.name);
-        
-        for msg in scenario.messages {
-            write.send(Message::Text(msg.to_string())).await?;
-            println!("Sent message: {}", msg);
-            
-            // Wait for and process responses
-            tokio::select! {
-                Some(msg) = read.next() => {
-                    match msg {
-                        Ok(Message::Text(text)) => {
-                            println!("Received response: {}", text);
-                            
-                            // Process specific response types
-                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                                if let Some(msg_type) = json.get("type").and_then(|v| v.as_str()) {
-                                    match msg_type {
-                                        "Error" => {
-                                            eprintln!("Error in scenario {}: {}", scenario.name, text);
-                                        },
-                                        _ => println!("Successful {} response", msg_type)
-                                    }
+                                println!("Enter impact story: ");
+                                let impact_story = match lines.next_line().await? {
+                                    Some(text) => text,
+                                    None => continue,
+                                };
+
+                                println!("Enter context (e.g., technical, social, organizational): ");
+                                let context = match lines.next_line().await? {
+                                    Some(text) => text,
+                                    None => continue,
+                                };
+
+                                println!("Enter tags (comma separated): ");
+                                let tags = match lines.next_line().await? {
+                                    Some(text) => text.split(',')
+                                        .map(|s| s.trim().to_string())
+                                        .collect(),
+                                    None => continue,
+                                };
+
+                                let contribution = Contribution {
+                                    description,
+                                    impact_story,
+                                    context,
+                                    tags,
+                                };
+
+                                let msg = ClientMessage::RecordContribution { contribution };
+                                tx.send(msg).await?;
+                            },
+                            "2" => {
+                                println!("Enter receiver DID: ");
+                                let receiver = match lines.next_line().await? {
+                                    Some(text) => text,
+                                    None => continue,
+                                };
+
+                                println!("Enter description of mutual aid: ");
+                                let description = match lines.next_line().await? {
+                                    Some(text) => text,
+                                    None => continue,
+                                };
+
+                                println!("Enter impact story (optional - press enter to skip): ");
+                                let impact_story = match lines.next_line().await? {
+                                    Some(text) if !text.trim().is_empty() => Some(text),
+                                    _ => None,
+                                };
+
+                                println!("Enter reciprocity notes (optional - press enter to skip): ");
+                                let reciprocity_notes = match lines.next_line().await? {
+                                    Some(text) if !text.trim().is_empty() => Some(text),
+                                    _ => None,
+                                };
+
+                                println!("Enter tags (comma separated): ");
+                                let tags = match lines.next_line().await? {
+                                    Some(text) => text.split(',')
+                                        .map(|s| s.trim().to_string())
+                                        .collect(),
+                                    None => continue,
+                                };
+
+                                let interaction = MutualAidInteraction {
+                                    receiver,
+                                    description,
+                                    impact_story,
+                                    reciprocity_notes,
+                                    tags,
+                                };
+
+                                let msg = ClientMessage::RecordMutualAid { interaction };
+                                tx.send(msg).await?;
+                            },
+                            "3" => {
+                                println!("Available events: contributions, mutual_aid, relationships");
+                                println!("Enter event names (comma separated): ");
+                                if let Ok(Some(events)) = lines.next_line().await {
+                                    let events: Vec<String> = events
+                                        .split(',')
+                                        .map(|s| s.trim().to_string())
+                                        .collect();
+                                    let msg = ClientMessage::Subscribe { events };
+                                    tx.send(msg).await?;
                                 }
-                            }
-                        },
-                        Ok(Message::Close(frame)) => {
-                            println!("Connection closed by server: {:?}", frame);
-                            return Ok(());
-                        },
-                        Err(e) => {
-                            eprintln!("Error receiving message: {}", e);
-                            return Err(Box::new(e));
-                        },
-                        _ => {}
+                            },
+                            "4" => {
+                                println!("Exiting...");
+                                return Ok(());
+                            },
+                            _ => println!("Invalid command"),
+                        }
                     }
-                },
-                _ = sleep(Duration::from_secs(5)) => {
-                    println!("No response received within timeout");
+                    Ok(None) => break,
+                    Err(e) => eprintln!("Error reading input: {}", e),
                 }
             }
+            _ = shutdown.recv() => {
+                println!("Shutting down user input handler...");
+                break;
+            }
         }
-        
-        sleep(scenario.delay).await;
     }
+    Ok(())
+}
 
-    // Keep connection alive to observe events
-    println!("\nAll scenarios completed. Listening for events...");
+async fn handle_server_messages(
+    read: impl StreamExt<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
+) {
+    tokio::pin!(read);
+
     while let Some(msg) = read.next().await {
         match msg {
             Ok(Message::Text(text)) => {
-                println!("Received event: {}", text);
+                match serde_json::from_str::<ServerMessage>(&text) {
+                    Ok(server_msg) => {
+                        match server_msg {
+                            ServerMessage::ContributionRecorded { contribution } => {
+                                println!("\n=== New Contribution ===");
+                                println!("Description: {}", contribution.description);
+                                println!("Impact: {}", contribution.impact_story);
+                                println!("Context: {}", contribution.context);
+                                println!("Tags: {}", contribution.tags.join(", "));
+                                println!("=======================");
+                            },
+                            ServerMessage::MutualAidProvided { interaction } => {
+                                println!("\n=== Mutual Aid Interaction ===");
+                                println!("With: {}", interaction.receiver);
+                                println!("Description: {}", interaction.description);
+                                if let Some(impact) = interaction.impact_story {
+                                    println!("Impact: {}", impact);
+                                }
+                                if let Some(notes) = interaction.reciprocity_notes {
+                                    println!("Reciprocity Notes: {}", notes);
+                                }
+                                println!("Tags: {}", interaction.tags.join(", "));
+                                println!("===========================");
+                            },
+                            ServerMessage::RelationshipUpdated { 
+                                member_one, 
+                                member_two, 
+                                update_type 
+                            } => {
+                                println!("\n=== Relationship Update ===");
+                                println!("Between: {} and {}", member_one, member_two);
+                                println!("Update Type: {}", update_type);
+                                println!("=========================");
+                            },
+                            ServerMessage::CommandResponse { command, status, message, data } => {
+                                println!("\n=== Command Response ===");
+                                println!("Command: {}", command);
+                                println!("Status: {}", status);
+                                println!("Message: {}", message);
+                                if let Some(data) = data {
+                                    println!("Data: {}", data);
+                                }
+                                println!("=====================");
+                            },
+                            ServerMessage::Error { code, message } => {
+                                eprintln!("\n=== Error ===");
+                                eprintln!("Code: {}", code);
+                                eprintln!("Message: {}", message);
+                                eprintln!("=============");
+                            }
+                        }
+                    },
+                    Err(e) => eprintln!("Failed to parse server message: {}", e),
+                }
             },
-            Ok(Message::Close(frame)) => {
-                println!("Connection closed by server: {:?}", frame);
+            Ok(Message::Close(..)) => {
+                println!("Server closed connection");
                 break;
             },
             Err(e) => {
@@ -151,6 +264,45 @@ async fn main() -> Result<(), Box<dyn Error>> {
             _ => {}
         }
     }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Setup DID header for WebSocket connection
+    let mut request = url::Url::parse("ws://localhost:8088/ws")?;
+    request.set_query(Some("X-DID=did:icn:client1"));
+
+    // Connect to WebSocket server
+    let (ws_stream, _) = connect_async(request).await?;
+    println!("Connected to ICN WebSocket server");
+
+    let (write, read) = ws_stream.split();
+    let (tx, rx) = mpsc::channel(32);
+    let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
+
+    // Spawn writer task
+    let writer_task = tokio::spawn(async move {
+        let mut write = write;
+        let mut rx = rx;
+        
+        while let Some(msg) = rx.recv().await {
+            let msg_json = serde_json::to_string(&msg)?;
+            write.send(Message::Text(msg_json)).await?;
+        }
+        
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+    });
+
+    // Spawn reader task
+    let reader_task = tokio::spawn(handle_server_messages(read));
+
+    // Handle user input
+    handle_user_input(tx, shutdown_rx).await?;
+
+    // Cleanup
+    let _ = shutdown_tx.send(()).await;
+    let _ = writer_task.await?;
+    let _ = reader_task.await;
 
     Ok(())
 }
