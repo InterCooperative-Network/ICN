@@ -39,3 +39,20 @@ jobs:
 
     - name: Integration Tests
       run: cargo test --test integration_test --verbose
+
+    - name: Code Coverage
+      run: cargo tarpaulin --out Xml
+
+    - name: Upload Coverage to Codecov
+      uses: codecov/codecov-action@v1
+      with:
+        file: ./coverage/coverage.xml
+
+    - name: Lint Code
+      run: cargo clippy -- -D warnings
+
+    - name: Static Analysis
+      run: cargo check --all-targets
+
+    - name: Documentation Check
+      run: cargo doc --no-deps --all-features

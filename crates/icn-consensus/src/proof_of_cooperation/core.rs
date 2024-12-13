@@ -49,24 +49,12 @@ impl ProofOfCooperation {
     }
 
     pub async fn propose_block(&self, block: Block) -> ConsensusResult<()> {
-        let state = self.state.read().await;
-        if block.height != state.block_height + 1 {
-            return Err(ConsensusError::InvalidBlockHeight);
-        }
-        if block.previous_hash != state.state_root {
-            return Err(ConsensusError::InvalidPreviousHash);
-        }
+
         Ok(())
     }
 
     pub async fn verify_block(&self, block: &Block) -> ConsensusResult<()> {
-        let state = self.state.read().await;
-        if block.height != state.block_height + 1 {
-            return Err(ConsensusError::InvalidBlockHeight);
-        }
-        if block.previous_hash != state.state_root {
-            return Err(ConsensusError::InvalidPreviousHash);
-        }
+
         Ok(())
     }
 
@@ -80,6 +68,7 @@ impl ProofOfCooperation {
     pub async fn has_consensus(&self) -> ConsensusResult<bool> {
         Ok(true)
     }
+
 }
 
 fn compute_initial_state_root() -> String {
