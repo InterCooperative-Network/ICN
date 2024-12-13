@@ -1,5 +1,3 @@
-// src/consensus/proof_of_cooperation/events.rs
-
 use serde::{Serialize, Deserialize};
 
 /// Events emitted during consensus process

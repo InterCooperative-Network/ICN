@@ -1,5 +1,3 @@
-// src/consensus/proof_of_cooperation/mod.rs
-
 pub mod core;
 pub mod events;
 pub mod metrics;

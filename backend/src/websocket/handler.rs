@@ -1,4 +1,3 @@
-// src/websocket/handler.rs
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use tokio::sync::{broadcast, mpsc};

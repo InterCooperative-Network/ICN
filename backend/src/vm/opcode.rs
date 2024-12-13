@@ -1,5 +1,3 @@
-// src/vm/opcode.rs
-
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 

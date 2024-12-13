@@ -1,5 +1,3 @@
-// src/vm/operations/mod.rs
-
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use crate::state::merkle_tree::MerkleTree;
@@ -113,5 +111,3 @@ pub fn validate_state_update(key: &str, value: &str, state: &VMState) -> VMResul
         }
     }
 
-    Ok(())
-}

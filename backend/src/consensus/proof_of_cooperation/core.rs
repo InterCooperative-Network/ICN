@@ -1,5 +1,3 @@
-// src/consensus/proof_of_cooperation/core.rs
-
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use chrono::Utc;
@@ -17,6 +15,7 @@ use super::{
     round::RoundManager,
     events::ConsensusEvent,
 };
+use crate::ICNCore;
 
 /// Represents the state of the cooperative network
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -35,11 +34,11 @@ pub struct ProofOfCooperation {
     reputation_updates: Vec<(String, i64)>,
     ws_handler: Arc<WebSocketHandler>,
     event_tx: broadcast::Sender<ConsensusEvent>,
-    state: NetworkState,
+
 }
 
 impl ProofOfCooperation {
-    pub fn new(config: ConsensusConfig, ws_handler: Arc<WebSocketHandler>) -> Self {
+    pub fn new(config: ConsensusConfig, ws_handler: Arc<WebSocketHandler>, icn_core: Arc<ICNCore>) -> Self {
         let (event_tx, _) = broadcast::channel(100);
         let initial_state = NetworkState {
             block_height: 0,
@@ -56,7 +55,7 @@ impl ProofOfCooperation {
             reputation_updates: Vec::new(),
             ws_handler,
             event_tx,
-            state: initial_state,
+
         }
     }
 
@@ -285,7 +284,8 @@ mod tests {
     async fn setup_test_consensus() -> ProofOfCooperation {
         let ws_handler = Arc::new(WebSocketHandler::new());
         let config = ConsensusConfig::default();
-        ProofOfCooperation::new(config, ws_handler)
+        let icn_core = Arc::new(ICNCore::new());
+        ProofOfCooperation::new(config, ws_handler, icn_core)
     }
 
     #[tokio::test]

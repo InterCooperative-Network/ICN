@@ -1,41 +1,4 @@
-// src/main.rs
 
-use std::sync::{Arc, Mutex};
-use warp::Filter;
-
-// Import from the icn_backend library
-use icn_backend::{
-    blockchain::Blockchain,
-    consensus::{ProofOfCooperation, types::ConsensusConfig},
-    identity::IdentitySystem,
-    relationship::RelationshipSystem, // Import the RelationshipSystem
-    reputation::ReputationSystem,
-    websocket::WebSocketHandler,
-};
-
-#[tokio::main]
-async fn main() {
-    // Initialize core systems
-    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
-    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
-    let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new())); // Initialize the RelationshipSystem
-    
-    // Create WebSocket handler for real-time updates
-    let ws_handler = Arc::new(WebSocketHandler::new());
-    
-    // Initialize consensus system
-    let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
-        ConsensusConfig::default(),
-        ws_handler.clone(),
-    )));
-
-    // Initialize the blockchain with all required systems
-    let blockchain = Arc::new(Mutex::new(Blockchain::new(
-        identity_system.clone(),
-        reputation_system.clone(),
-        relationship_system.clone(), // Pass the relationship_system to the Blockchain constructor
-        consensus.clone(),
-    )));
 
 
     // Define WebSocket route with DID header for user identification

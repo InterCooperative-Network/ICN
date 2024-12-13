@@ -1,5 +1,3 @@
-// src/vm/operations/data.rs
-
 use std::collections::HashMap;
 use super::{Operation, VMState, VMResult, ensure_stack_size, ensure_permissions, emit_event};
 use crate::vm::VMError;

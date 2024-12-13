@@ -1,11 +1,9 @@
-# File: ./backend/src/consensus/tests.rs
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::blockchain::Blockchain;
-    use crate::identity::IdentitySystem;
-    use crate::reputation::ReputationSystem;
+    use icn_result::blockchain::{Blockchain, Transaction, TransactionType};
+    use icn_result::identity::IdentitySystem;
+    use icn_result::reputation::ReputationSystem;
 
     fn setup_test_blockchain() -> Blockchain {
         let identity_system = IdentitySystem::new();

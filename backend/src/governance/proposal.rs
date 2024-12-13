@@ -1,5 +1,3 @@
-// src/governance/proposal.rs
-
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
