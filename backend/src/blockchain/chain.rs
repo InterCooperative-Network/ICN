@@ -25,6 +25,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 
+use crate::ICNCore;
 
 /// Main blockchain implementation for cooperative-specific features
 pub struct Blockchain {
@@ -54,6 +55,21 @@ impl Blockchain {
             identity_system,
             reputation_system,
             relationship_system,
+            resource_allocations: HashMap::new(),
+            current_block_number: 1,
+            coordinator_did: "did:icn:genesis".to_string(),
+        }
+    }
+
+    /// Creates a new blockchain instance using the ICNCore system
+    pub fn from_icn_core(icn_core: Arc<ICNCore>) -> Self {
+        Blockchain {
+            chain: vec![Block::new(0, String::from("0"), vec![], String::from("genesis"))],
+            pending_transactions: vec![],
+            consensus: icn_core.consensus.clone(),
+            identity_system: icn_core.identity_system.clone(),
+            reputation_system: icn_core.reputation_system.clone(),
+            relationship_system: icn_core.relationship_system.clone(),
             resource_allocations: HashMap::new(),
             current_block_number: 1,
             coordinator_did: "did:icn:genesis".to_string(),
