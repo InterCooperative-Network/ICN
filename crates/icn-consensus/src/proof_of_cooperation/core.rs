@@ -49,24 +49,14 @@ impl ProofOfCooperation {
     }
 
     pub async fn propose_block(&self, block: Block) -> ConsensusResult<()> {
-        let state = self.state.read().await;
-        if block.height != state.block_height + 1 {
-            return Err(ConsensusError::InvalidBlockHeight);
-        }
-        if block.previous_hash != state.state_root {
-            return Err(ConsensusError::InvalidPreviousHash);
-        }
+        self.verify_block_height(&block).await?;
+        self.verify_previous_hash(&block).await?;
         Ok(())
     }
 
     pub async fn verify_block(&self, block: &Block) -> ConsensusResult<()> {
-        let state = self.state.read().await;
-        if block.height != state.block_height + 1 {
-            return Err(ConsensusError::InvalidBlockHeight);
-        }
-        if block.previous_hash != state.state_root {
-            return Err(ConsensusError::InvalidPreviousHash);
-        }
+        self.verify_block_height(&block).await?;
+        self.verify_previous_hash(&block).await?;
         Ok(())
     }
 
@@ -79,6 +69,22 @@ impl ProofOfCooperation {
 
     pub async fn has_consensus(&self) -> ConsensusResult<bool> {
         Ok(true)
+    }
+
+    async fn verify_block_height(&self, block: &Block) -> ConsensusResult<()> {
+        let state = self.state.read().await;
+        if block.height != state.block_height + 1 {
+            return Err(ConsensusError::InvalidBlockHeight);
+        }
+        Ok(())
+    }
+
+    async fn verify_previous_hash(&self, block: &Block) -> ConsensusResult<()> {
+        let state = self.state.read().await;
+        if block.previous_hash != state.state_root {
+            return Err(ConsensusError::InvalidPreviousHash);
+        }
+        Ok(())
     }
 }
 
