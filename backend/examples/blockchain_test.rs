@@ -1,9 +1,7 @@
-// examples/blockchain_test.rs
-
 use std::sync::{Arc, Mutex};
 use tokio;
 
-use icn_backend::{
+use icn_result::{
     blockchain::{Blockchain, Transaction, TransactionType},
     identity::{DID, IdentitySystem},
     reputation::ReputationSystem,

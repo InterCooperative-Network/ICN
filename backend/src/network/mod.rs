@@ -1,5 +1,3 @@
-// src/network/mod.rs
-
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use tokio::sync::mpsc;
@@ -9,8 +7,8 @@ use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::blockchain::Block;
-use crate::consensus::ConsensusRound;
+use icn_result::blockchain::Block;
+use icn_result::consensus::types::ConsensusRound;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum NetworkMessage {

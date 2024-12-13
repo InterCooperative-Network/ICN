@@ -1,5 +1,3 @@
-// src/relationship/mod.rs
-
 mod types;
 mod models;
 mod system;
