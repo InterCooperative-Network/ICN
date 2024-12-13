@@ -1,5 +1,3 @@
-// src/consensus/mod.rs
-
 pub mod proof_of_cooperation;
 pub mod types;
 
@@ -12,8 +10,8 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use tokio;
-    use crate::websocket::WebSocketHandler;
-    use crate::consensus::types::ConsensusConfig;
+    use icn_result::websocket::WebSocketHandler;
+    use icn_result::consensus::types::ConsensusConfig;
 
     #[tokio::test]
     async fn test_consensus_integration() {

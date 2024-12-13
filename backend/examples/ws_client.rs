@@ -305,5 +305,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = writer_task.await?;
     let _ = reader_task.await;
 
-    Ok(())
-}
+

@@ -1,4 +1,3 @@
-// src/relationship/models/mod.rs
 mod contribution;
 mod interaction;
 mod relationship;

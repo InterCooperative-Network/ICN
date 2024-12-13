@@ -1,5 +1,3 @@
-// examples/ws_client2.rs
-
 use futures_util::{SinkExt, StreamExt};
 use serde::{Serialize, Deserialize};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
@@ -7,12 +5,6 @@ use tokio::sync::mpsc;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use url::Url;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Contribution {
-    description: String,
-    impact_story: String,
-    context: String,
-    tags: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -1,4 +1,3 @@
-// src/consensus/proof_of_cooperation/metrics.rs
 use crate::consensus::types::ValidatorInfo; 
 use super::core::ProofOfCooperation;
 use crate::monitoring::energy::{EnergyAware, EnergyMonitor};

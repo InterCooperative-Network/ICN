@@ -1,5 +1,3 @@
-// src/consensus/proof_of_cooperation/round.rs
-
 use std::collections::HashMap;
 use chrono::{Utc, Duration};
 use crate::blockchain::Block;
@@ -11,7 +9,7 @@ use crate::consensus::types::{
     ConsensusConfig,
     ConsensusRoundStats
 };
-use super::events::ConsensusEvent;
+use crate::consensus::proof_of_cooperation::events::ConsensusEvent;
 
 pub struct RoundManager {
     config: ConsensusConfig,

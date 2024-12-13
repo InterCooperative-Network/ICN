@@ -1,5 +1,3 @@
-// src/consensus/types.rs
-
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -61,4 +59,3 @@ impl std::fmt::Display for ConsensusError {
             ConsensusError::Custom(msg) => write!(f, "{}", msg),
         }
     }
-}

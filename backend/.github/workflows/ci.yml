@@ -1,0 +1,41 @@
+name: ICN Backend CI/CD
+
+on:
+  push:
+    branches:
+      - result
+  pull_request:
+    branches:
+      - result
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+
+    - name: Cache Cargo
+      uses: actions/cache@v2
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-result
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+
+    - name: Build Backend
+      run: cargo build --verbose
+
+    - name: Run Unit Tests
+      run: cargo test --verbose
+
+    - name: Integration Tests
+      run: cargo test --test integration_test --verbose

@@ -1,5 +1,3 @@
-// src/vm/cooperative_metadata.rs
-
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 

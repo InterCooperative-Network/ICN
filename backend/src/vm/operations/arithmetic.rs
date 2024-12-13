@@ -1,5 +1,3 @@
-// src/vm/operations/arithmetic.rs
-
 use super::{Operation, VMState, VMResult, ensure_stack_size};
 use crate::vm::VMError;
 

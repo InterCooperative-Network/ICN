@@ -1,21 +1,13 @@
-// src/lib.rs
 
 pub mod api;
-pub mod blockchain;
 pub mod claims;
 pub mod community;
-pub mod consensus;
 pub mod cooperative;
 pub mod governance;
-pub mod identity;
 pub mod monitoring;
 pub mod network;
 pub mod relationship;
-pub mod reputation;
-pub mod state;  // New state module
-pub mod utils;
-pub mod vm;
-pub mod websocket;
+
 
 pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
 pub use consensus::{ProofOfCooperation, types::ConsensusConfig, types::ConsensusRound};
@@ -57,4 +49,3 @@ pub enum SystemEvent {
     ContributionRecorded(Contribution),
     MutualAidProvided(MutualAidInteraction),
     RelationshipUpdated { member_one: String, member_two: String },
-}
