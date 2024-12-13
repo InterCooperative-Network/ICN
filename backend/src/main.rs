@@ -1,31 +1,5 @@
-mod blockchain;
-mod identity;
-mod reputation;
-mod governance;
-mod utils;
-mod vm;
-mod websocket;
-mod consensus;
-mod api;
-mod claims;
-mod community;
-mod cooperative;
-mod monitoring;
-mod network;
-mod relationship;
 
-use std::sync::{Arc, Mutex};
-use warp::Filter;
-use crate::websocket::WebSocketHandler;
-use crate::ICNCore;
 
-#[tokio::main]
-async fn main() {
-    // Initialize ICNCore system
-    let icn_core = Arc::new(ICNCore::new());
-
-    // Create WebSocket handler for real-time updates
-    let ws_handler = Arc::new(WebSocketHandler::new());
 
     // Define WebSocket route with DID header for user identification
     let ws_handler = ws_handler.clone();
@@ -39,8 +13,15 @@ async fn main() {
             })
         });
 
+    // Health check route
+    let health_route = warp::path("health")
+        .and(warp::get())
+        .map(|| "OK");
+
+    let routes = ws_route.or(health_route);
+
     println!("Starting WebSocket server on localhost:8088");
-    warp::serve(ws_route)
+    warp::serve(routes)
         .run(([127, 0, 0, 1], 8088))
         .await;
 }
