@@ -8,6 +8,8 @@ pub struct Core {
     network: Arc<dyn NetworkManager>,
     runtime: Arc<dyn RuntimeManager>,
     telemetry: Arc<TelemetryManager>,
+    identity: Arc<dyn IdentityManager>,
+    reputation: Arc<dyn ReputationManager>,
 }
 
 impl Core {
@@ -17,6 +19,8 @@ impl Core {
         network: Arc<dyn NetworkManager>,
         runtime: Arc<dyn RuntimeManager>,
         telemetry: Arc<TelemetryManager>,
+        identity: Arc<dyn IdentityManager>,
+        reputation: Arc<dyn ReputationManager>,
     ) -> Self {
         Core {
             consensus,
@@ -24,6 +28,8 @@ impl Core {
             network,
             runtime,
             telemetry,
+            identity,
+            reputation,
         }
     }
 
@@ -32,6 +38,8 @@ impl Core {
         self.consensus.start().await;
         self.network.start().await;
         self.runtime.start().await;
+        self.identity.start().await;
+        self.reputation.start().await;
         self.telemetry.log("Core started.");
     }
 
@@ -40,6 +48,8 @@ impl Core {
         self.runtime.stop().await;
         self.network.stop().await;
         self.consensus.stop().await;
+        self.identity.stop().await;
+        self.reputation.stop().await;
         self.telemetry.log("Core stopped.");
     }
 
@@ -78,6 +88,22 @@ pub trait RuntimeManager {
     async fn start(&self);
     async fn stop(&self);
     async fn execute_transaction(&self, transaction: Transaction);
+}
+
+#[async_trait]
+pub trait IdentityManager {
+    async fn start(&self);
+    async fn stop(&self);
+    async fn register_did(&self, did: String, public_key: String);
+    async fn verify_did(&self, did: String, signature: String) -> bool;
+}
+
+#[async_trait]
+pub trait ReputationManager {
+    async fn start(&self);
+    async fn stop(&self);
+    async fn adjust_reputation(&self, did: String, change: i64);
+    async fn get_reputation(&self, did: String) -> i64;
 }
 
 pub struct TelemetryManager {
