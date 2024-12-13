@@ -8,6 +8,7 @@ use super::{
     round::RoundManager,
     events::ConsensusEvent,
 };
+use crate::ICNCore;
 
 pub struct ProofOfCooperation {
     // Make these public to fix the access error
@@ -18,10 +19,11 @@ pub struct ProofOfCooperation {
     reputation_updates: Vec<(String, i64)>,
     ws_handler: Arc<WebSocketHandler>,
     event_tx: broadcast::Sender<ConsensusEvent>,
+    icn_core: Arc<ICNCore>,
 }
 
 impl ProofOfCooperation {
-    pub fn new(config: ConsensusConfig, ws_handler: Arc<WebSocketHandler>) -> Self {
+    pub fn new(config: ConsensusConfig, ws_handler: Arc<WebSocketHandler>, icn_core: Arc<ICNCore>) -> Self {
         let (event_tx, _) = broadcast::channel(100);
         
         ProofOfCooperation {
@@ -31,6 +33,7 @@ impl ProofOfCooperation {
             reputation_updates: Vec::new(),
             ws_handler,
             event_tx,
+            icn_core,
         }
     }
 
@@ -180,7 +183,8 @@ mod tests {
     async fn setup_test_consensus() -> ProofOfCooperation {
         let ws_handler = Arc::new(WebSocketHandler::new());
         let config = ConsensusConfig::default();
-        ProofOfCooperation::new(config, ws_handler)
+        let icn_core = Arc::new(ICNCore::new());
+        ProofOfCooperation::new(config, ws_handler, icn_core)
     }
 
     #[tokio::test]
