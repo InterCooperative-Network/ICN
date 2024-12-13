@@ -1,5 +1,3 @@
-// src/consensus/proof_of_cooperation/validator.rs
-
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use rand::{thread_rng, Rng};

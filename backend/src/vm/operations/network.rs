@@ -1,7 +1,5 @@
-// src/vm/operations/network.rs
-
 use std::collections::HashMap;
-use super::{Operation, VMState, VMResult, ensure_permissions, emit_event};
+use crate::vm::{Operation, VMState, VMResult, ensure_permissions, emit_event};
 
 /// Types of network messages that can be sent
 #[derive(Debug, Clone, PartialEq)]

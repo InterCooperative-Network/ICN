@@ -1,5 +1,3 @@
-// src/blockchain/transaction.rs
-
 use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest};
 use chrono::Utc;

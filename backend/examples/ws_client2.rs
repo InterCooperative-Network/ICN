@@ -1,5 +1,3 @@
-// examples/ws_client2.rs
-
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use url::Url;
@@ -8,7 +6,7 @@ use std::time::Duration;
 use std::error::Error;
 use tokio::time::sleep;
 
-const WEBSOCKET_PORT: u16 = 9081; // Using same port as ws_client1
+const WEBSOCKET_PORT: u16 = 8088; // Updated WebSocket port to match the new branch
 
 #[derive(Debug)]
 struct TestScenario {

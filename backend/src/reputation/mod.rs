@@ -3,6 +3,7 @@ pub mod reputation_system;
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
+use crate::identity::DID;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReputationChange {

@@ -1,5 +1,3 @@
-// src/vm/event.rs
-
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};

@@ -1,5 +1,3 @@
-// src/vm/mod.rs
-
 pub mod opcode;
 pub mod contract;
 pub mod execution_context;

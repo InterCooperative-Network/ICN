@@ -1,5 +1,3 @@
-// examples/ws_client.rs
-
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::{
    connect_async,
