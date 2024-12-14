@@ -183,3 +183,16 @@ Adding lifecycle management for DIDs, including deactivation, expiration, and re
 - **Verify DID**: Confirms a DID’s validity via cryptographic checks.
 - **Permission Management**: Add or remove permissions for a DID as roles change.
 
+### B. Modular Structure
+
+The identity management modules are now split into smaller submodules for better separation of concerns. Below is the updated structure:
+
+#### identity/did.rs
+- **creation**: Handles the creation of DIDs.
+- **serialization**: Manages the serialization and deserialization of DIDs.
+- **validation**: Provides methods for signing and verifying messages.
+
+#### identity/identity_system.rs
+- **permission_handling**: Manages permissions associated with DIDs.
+- **role_management**: Handles role assignments and retrievals.
+- **identity_verification**: Provides methods for verifying DIDs using cryptographic signatures.
