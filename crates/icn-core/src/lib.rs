@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use async_trait::async_trait;
 use icn_types::{Block, Transaction};
+use icn_consensus::ProofOfCooperation;
 
 pub struct Core {
     consensus: Arc<dyn ConsensusEngine>,
@@ -14,7 +15,6 @@ pub struct Core {
 
 impl Core {
     pub fn new(
-        consensus: Arc<dyn ConsensusEngine>,
         storage: Arc<dyn StorageManager>,
         network: Arc<dyn NetworkManager>,
         runtime: Arc<dyn RuntimeManager>,
@@ -22,6 +22,7 @@ impl Core {
         identity: Arc<dyn IdentityManager>,
         reputation: Arc<dyn ReputationManager>,
     ) -> Self {
+        let consensus = Arc::new(ProofOfCooperation::new());
         Core {
             consensus,
             storage,
