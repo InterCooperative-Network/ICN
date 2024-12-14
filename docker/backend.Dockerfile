@@ -24,6 +24,7 @@ FROM debian:bullseye-slim AS runner
 WORKDIR /app
 COPY --from=builder /app/target/release/icn-backend /usr/local/bin/icn-backend
 
-EXPOSE 8081
+# Expose only the necessary ports
+EXPOSE 8081  # WebSocket port for backend
 
 CMD ["icn-backend"]

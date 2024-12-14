@@ -147,3 +147,19 @@ Develop mechanisms for enabling federations to coordinate on large-scale decisio
 - **Cast Validator Vote**: Allows a validator to vote on a proposal.
 - **Finalize Proposal**: Marks a proposal as finalized once it meets the approval threshold.
 
+### B. Modular Structure
+
+The consensus system modules are now split into smaller submodules for better separation of concerns. Below is the updated structure:
+
+#### consensus/proof_of_cooperation/mod.rs
+- **round_management**: Handles the management of consensus rounds.
+- **validation**: Manages the validation of proposals and transactions.
+- **timeout_handling**: Provides methods for handling consensus timeouts and error logging.
+
+#### consensus/round.rs
+- **round_initialization**: Handles the initialization of new consensus rounds.
+- **round_finalization**: Manages the finalization of consensus rounds.
+
+#### consensus/validator.rs
+- **validator_selection**: Provides methods for selecting validators based on reputation and contribution.
+- **validator_roles**: Manages the roles and responsibilities of validators.
