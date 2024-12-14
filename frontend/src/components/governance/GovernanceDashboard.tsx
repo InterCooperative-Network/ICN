@@ -28,6 +28,12 @@ type VotingStats = {
   monthlyVotes: Array<{ month: string; votes: number }>
 }
 
+type ReputationUpdate = {
+  did: string
+  change: number
+  newTotal: number
+}
+
 const GovernanceDashboard = () => {
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [votingStats, setVotingStats] = useState<VotingStats>({
@@ -38,6 +44,7 @@ const GovernanceDashboard = () => {
   })
   const [selectedTab, setSelectedTab] = useState('active')
   const [loading, setLoading] = useState(true)
+  const [reputationUpdates, setReputationUpdates] = useState<ReputationUpdate[]>([])
 
   useEffect(() => {
     // Mock data - replace with actual API calls
@@ -82,8 +89,22 @@ const GovernanceDashboard = () => {
       ]
     }
 
+    const mockReputationUpdates: ReputationUpdate[] = [
+      {
+        did: 'did:icn:alice',
+        change: 10,
+        newTotal: 110
+      },
+      {
+        did: 'did:icn:bob',
+        change: -5,
+        newTotal: 95
+      }
+    ]
+
     setProposals(mockProposals)
     setVotingStats(mockStats)
+    setReputationUpdates(mockReputationUpdates)
     setLoading(false)
   }, [])
 
@@ -134,6 +155,29 @@ const GovernanceDashboard = () => {
               <ChevronRight className="h-4 w-4" />
             </Button>
           )}
+        </div>
+      </div>
+    </Card>
+  )
+
+  const ReputationUpdateCard = ({ update }: { update: ReputationUpdate }) => (
+    <Card className="p-4">
+      <div className="flex justify-between items-start mb-4">
+        <div>
+          <h3 className="text-lg font-semibold">Reputation Update</h3>
+          <p className="text-sm text-gray-600">DID: {update.did}</p>
+        </div>
+        <span className={`px-2 py-1 rounded text-sm ${
+          update.change > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+        }`}>
+          {update.change > 0 ? '+' : ''}{update.change}
+        </span>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex justify-between text-sm">
+          <span>New Total</span>
+          <span>{update.newTotal}</span>
         </div>
       </div>
     </Card>
@@ -240,6 +284,17 @@ const GovernanceDashboard = () => {
                 ))}
             </TabsContent>
           </Tabs>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Reputation Updates</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {reputationUpdates.map((update, index) => (
+            <ReputationUpdateCard key={index} update={update} />
+          ))}
         </CardContent>
       </Card>
 

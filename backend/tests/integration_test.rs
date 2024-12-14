@@ -53,3 +53,53 @@ async fn test_integration() {
     assert!(blockchain.add_transaction(transaction).await.is_ok());
     assert_eq!(blockchain.pending_transactions.len(), 1);
 }
+
+#[tokio::test]
+async fn test_multi_dimensional_reputation_tracking() {
+    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+
+    {
+        let mut reputation = reputation_system.lock().unwrap();
+        reputation.adjust_reputation("did:icn:test", 50, "governance".to_string());
+        reputation.adjust_reputation("did:icn:test", 30, "resource_sharing".to_string());
+    }
+
+    {
+        let reputation = reputation_system.lock().unwrap();
+        assert_eq!(reputation.get_reputation("did:icn:test", "governance".to_string()), 50);
+        assert_eq!(reputation.get_reputation("did:icn:test", "resource_sharing".to_string()), 30);
+    }
+}
+
+#[tokio::test]
+async fn test_category_specific_adjustments() {
+    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+
+    {
+        let mut reputation = reputation_system.lock().unwrap();
+        reputation.adjust_reputation("did:icn:test", 20, "technical".to_string());
+        reputation.adjust_reputation("did:icn:test", -10, "governance".to_string());
+    }
+
+    {
+        let reputation = reputation_system.lock().unwrap();
+        assert_eq!(reputation.get_reputation("did:icn:test", "technical".to_string()), 20);
+        assert_eq!(reputation.get_reputation("did:icn:test", "governance".to_string()), -10);
+    }
+}
+
+#[tokio::test]
+async fn test_category_specific_eligibility_checks() {
+    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+
+    {
+        let mut reputation = reputation_system.lock().unwrap();
+        reputation.adjust_reputation("did:icn:test", 40, "governance".to_string());
+    }
+
+    {
+        let reputation = reputation_system.lock().unwrap();
+        assert!(reputation.is_eligible("did:icn:test", 30, "governance".to_string()));
+        assert!(!reputation.is_eligible("did:icn:test", 50, "governance".to_string()));
+    }
+}
