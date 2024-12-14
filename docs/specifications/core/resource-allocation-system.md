@@ -153,3 +153,12 @@ Introduce dynamic allocation policies that adapt based on network activity, reso
 - **Allocate Resource**: Allocates resources to fulfill an approved request.
 - **Monitor Allocation**: Tracks allocated resources to ensure proper usage.
 
+### B. Modular Structure
+
+The resource allocation system modules are now split into smaller submodules for better separation of concerns. Below is the updated structure:
+
+#### cooperative/resource.rs
+- **resource_request**: Handles the creation and management of resource requests.
+- **resource_evaluation**: Manages the evaluation of resource requests based on policies and availability.
+- **resource_allocation**: Provides methods for allocating resources to fulfill approved requests.
+- **resource_monitoring**: Tracks allocated resources to ensure proper usage and return.

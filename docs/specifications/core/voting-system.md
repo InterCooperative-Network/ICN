@@ -151,3 +151,11 @@ Implement a mechanism for delegated voting, where members can assign their votin
 - **Cast Vote**: Allows an eligible member to vote on a proposal.
 - **Count Votes**: Tallies votes to determine the outcome of a proposal.
 
+### B. Modular Structure
+
+The voting management modules are now split into smaller submodules for better separation of concerns. Below is the updated structure:
+
+#### voting/proposal.rs
+- **creation**: Handles the creation of voting proposals.
+- **submission**: Manages the submission and tracking of proposals.
+- **voting**: Provides methods for casting votes and tallying results.

@@ -163,3 +163,17 @@ Develop a multi-dimensional reputation system that allows different reputation c
 - **Get Reputation Score**: Retrieves the current reputation score for a DID.
 - **Check Eligibility**: Verifies if an entity meets the minimum reputation required for a given operation.
 
+### B. Modular Structure
+
+The reputation management modules are now split into smaller submodules for better separation of concerns. Below is the updated structure:
+
+#### reputation/reputation_system.rs
+- **reputation_tracking**: Handles the tracking and updating of reputation scores.
+- **reputation_ledger**: Manages the immutable ledger of reputation changes.
+- **reputation_verification**: Provides methods for verifying eligibility based on reputation scores.
+
+#### relationship/types.rs
+- **relationship_types**: Defines the types of relationships and interactions that can be tracked.
+
+#### relationship/interaction.rs
+- **interaction_tracking**: Manages the tracking of interactions and endorsements between entities.

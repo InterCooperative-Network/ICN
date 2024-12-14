@@ -177,3 +177,12 @@ Introduce incentive mechanisms to encourage the sharing of high-value or scarce 
 - **Release Resource**: Returns an allocated resource back to available status.
 - **Update Resource**: Updates the description or availability of a resource.
 
+### B. Modular Structure
+
+The resource sharing system modules are now split into smaller submodules for better separation of concerns. Below is the updated structure:
+
+#### cooperative/resource.rs
+- **resource_request**: Handles the creation and management of resource requests.
+- **resource_evaluation**: Manages the evaluation of resource requests based on policies and availability.
+- **resource_allocation**: Provides methods for allocating resources to fulfill approved requests.
+- **resource_monitoring**: Tracks allocated resources to ensure proper usage and return.
