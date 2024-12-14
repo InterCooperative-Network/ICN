@@ -169,3 +169,11 @@ Develop a mechanism to dynamically assign governance roles based on reputation, 
 - **Cast Vote**: Allows members or delegates to vote on a proposal.
 - **Implement Policy**: Executes an approved policy and oversees its implementation.
 
+### B. Modular Structure
+
+The governance management modules are now split into smaller submodules for better separation of concerns. Below is the updated structure:
+
+#### governance/proposal.rs
+- **creation**: Handles the creation of governance proposals.
+- **submission**: Manages the submission and tracking of proposals.
+- **voting**: Provides methods for casting votes and tallying results.

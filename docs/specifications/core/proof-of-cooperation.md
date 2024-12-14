@@ -1,10 +1,3 @@
-Certainly! Here is the documentation for the **Proof of Cooperation Consensus Mechanism**, focusing on security mechanisms, blockchain components, and efficiency considerations. The documentation is written in Markdown format and enclosed in a code block so you can easily paste it into your documentation folder.
-
----
-
-**File: `./docs/specifications/core/proof-of-cooperation.md`**
-
-```markdown
 ---
 authors:
   - Matt Faherty
@@ -176,17 +169,19 @@ The Proof of Cooperation (PoC) is a consensus mechanism designed specifically fo
 - **Interoperability**: Explore compatibility with other networks.
 - **Smart Contract Integration**: Enhance cooperative functions through smart contracts.
 
-```
+## Modular Structure
 
----
+The consensus system modules are now split into smaller submodules for better separation of concerns. Below is the updated structure:
 
-You can save this file as `proof-of-cooperation.md` in your `./docs/specifications/core/` directory.
+### consensus/proof_of_cooperation/mod.rs
+- **round_management**: Handles the management of consensus rounds.
+- **validation**: Manages the validation of proposals and transactions.
+- **timeout_handling**: Provides methods for handling consensus timeouts and error logging.
 
-**Note:** This document provides a detailed specification of the Proof of Cooperation consensus mechanism, focusing on security mechanisms, blockchain components, and efficiency considerations, as per your request.
+### consensus/round.rs
+- **round_initialization**: Handles the initialization of new consensus rounds.
+- **round_finalization**: Manages the finalization of consensus rounds.
 
-**Next Steps:**
-
-- **Review and Edit**: Please review the document and make any necessary adjustments or additions specific to your project's needs.
-- **Integration**: Incorporate this documentation into your project to guide development and ensure alignment with the designed consensus mechanism.
-
-Let me know if you'd like assistance with any other components or further details.
+### consensus/validator.rs
+- **validator_selection**: Provides methods for selecting validators based on reputation and contribution.
+- **validator_roles**: Manages the roles and responsibilities of validators.

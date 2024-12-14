@@ -50,3 +50,18 @@ Computes the hash for each block, securing the data and linking blocks sequentia
 ## Monitoring and Metrics
 - **Transaction Throughput**: Measure number of transactions per block.
 - **Hash Verification**: Track hash generation time to monitor performance.
+
+## Modular Structure
+
+The blockchain system modules are now split into smaller submodules for better separation of concerns. Below is the updated structure:
+
+### blockchain/block.rs
+- **block_creation**: Handles the creation of new blocks.
+- **block_validation**: Manages the validation of blocks before adding to the chain.
+
+### blockchain/chain.rs
+- **chain_management**: Provides methods for managing the blockchain, including adding new blocks and retrieving the chain.
+
+### blockchain/transaction.rs
+- **transaction_creation**: Handles the creation of new transactions.
+- **transaction_validation**: Manages the validation of transactions before adding to a block.
