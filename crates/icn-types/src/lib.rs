@@ -2,6 +2,7 @@ use std::time::SystemTime;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
+use serde_derive::{Serialize, Deserialize};
 
 /// Represents a block in the blockchain
 #[derive(Clone, Debug, Serialize, Deserialize)]
