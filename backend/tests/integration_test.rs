@@ -103,3 +103,30 @@ async fn test_category_specific_eligibility_checks() {
         assert!(!reputation.is_eligible("did:icn:test", 50, "governance".to_string()));
     }
 }
+
+#[tokio::test]
+async fn test_did_creation_and_serialization() {
+    let did = DID::new("did:icn:test".to_string(), &SecretKey::new(&mut thread_rng()));
+    let serialized_did = serde_json::to_string(&did).unwrap();
+    let deserialized_did: DID = serde_json::from_str(&serialized_did).unwrap();
+    assert_eq!(did, deserialized_did);
+}
+
+#[tokio::test]
+async fn test_permission_handling_in_identity_system() {
+    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+
+    {
+        let mut identity = identity_system.lock().unwrap();
+        identity.register_did(
+            DID::new("did:icn:test".to_string(), &SecretKey::new(&mut thread_rng())),
+            vec!["transfer".to_string()],
+        );
+    }
+
+    {
+        let identity = identity_system.lock().unwrap();
+        assert!(identity.has_permission("did:icn:test", "transfer"));
+        assert!(!identity.has_permission("did:icn:test", "invalid_permission"));
+    }
+}
