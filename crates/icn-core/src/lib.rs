@@ -103,10 +103,10 @@ pub trait IdentityManager {
 pub trait ReputationManager {
     async fn start(&self);
     async fn stop(&self);
-    async fn adjust_reputation(&self, did: String, change: i64);
-    async fn get_reputation(&self, did: String) -> i64;
+    async fn adjust_reputation(&self, did: String, change: i64, category: String);
+    async fn get_reputation(&self, did: String, category: String) -> i64;
+    async fn is_eligible(&self, did: String, min_reputation: i64, category: String) -> bool;
 }
-
 pub struct TelemetryManager {
     metrics: PrometheusMetrics,
     logger: Logger,

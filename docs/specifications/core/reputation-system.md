@@ -49,6 +49,14 @@ pub struct ReputationChange {
 ```
 - **changes**: A list of reputation changes, including increase or decrease values, reasons, and timestamps.
 
+### 1.3 Multi-Dimensional Reputation
+The system supports multi-dimensional reputation tracking, allowing different types of contributions to be tracked independently.
+
+#### Reputation Categories
+- **Governance**: Contributions to governance activities.
+- **Resource Sharing**: Contributions to resource sharing.
+- **Technical Contributions**: Contributions to technical development and support.
+
 ## 2. Key Methods
 
 ### 2.1 Adjusting Reputation
@@ -56,17 +64,18 @@ Reputation can be adjusted for various actions, such as contributions to governa
 
 #### Modify Reputation
 ```rust
-pub fn modify_reputation(&mut self, did: &str, change: i32, reason: String) {
+pub fn modify_reputation(&mut self, did: &str, change: i32, reason: String, category: String) {
     let entry = ReputationChange {
         did: did.to_string(),
         change,
         reason,
         timestamp: current_timestamp(),
+        category,
     };
     self.changes.push(entry);
 }
 ```
-- **Input**: `did` (identifier of the entity), `change` (positive or negative reputation adjustment), `reason` (description).
+- **Input**: `did` (identifier of the entity), `change` (positive or negative reputation adjustment), `reason` (description), `category` (reputation category).
 - **Functionality**: Adds a reputation change entry to the ledger.
 
 ### 2.2 Fetching Reputation Score
@@ -74,23 +83,23 @@ This method returns the current reputation score for a given DID by summing the 
 
 #### Get Reputation Score
 ```rust
-pub fn get_reputation_score(&self, did: &str) -> i32 {
-    self.changes.iter().filter(|c| c.did == did).map(|c| c.change).sum()
+pub fn get_reputation_score(&self, did: &str, category: &str) -> i32 {
+    self.changes.iter().filter(|c| c.did == did && c.category == category).map(|c| c.change).sum()
 }
 ```
-- **Input**: `did` (identifier of the entity).
-- **Output**: An integer representing the current reputation score.
+- **Input**: `did` (identifier of the entity), `category` (reputation category).
+- **Output**: An integer representing the current reputation score for the specified category.
 
 ### 2.3 Verifying Eligibility for Operations
 Some operations, such as proposing actions or joining federations, require a minimum reputation score. This method verifies eligibility.
 
 #### Check Reputation Eligibility
 ```rust
-pub fn is_eligible(&self, did: &str, min_reputation: i32) -> bool {
-    self.get_reputation_score(did) >= min_reputation
+pub fn is_eligible(&self, did: &str, min_reputation: i32, category: &str) -> bool {
+    self.get_reputation_score(did, category) >= min_reputation
 }
 ```
-- **Input**: `did` (identifier of the entity), `min_reputation` (minimum required reputation score).
+- **Input**: `did` (identifier of the entity), `min_reputation` (minimum required reputation score), `category` (reputation category).
 - **Output**: Boolean indicating whether the entity is eligible.
 
 ## 3. Reputation Adjustments
@@ -113,6 +122,8 @@ Reputation can be reduced for behaviors that harm the network or violate coopera
 If entities are inactive for prolonged periods, their reputation decays to encourage continuous participation.
 
 - **Decay Function**: The decay rate is applied periodically (e.g., monthly) to reduce scores by a small percentage if no positive actions are recorded.
+- **Decay Rate Configuration**: The decay rate can be configured to adapt to different community dynamics and participation levels.
+- **Decay Exemptions**: Certain participants or activities can be exempted from decay to ensure critical contributors are not unfairly penalized for temporary inactivity.
 
 ## 4. Security Considerations
 
@@ -123,6 +134,9 @@ If entities are inactive for prolonged periods, their reputation decays to encou
 ### 4.2 Transparency and Accountability
 - **Immutable Ledger**: The Reputation Ledger is immutable, ensuring that all reputation adjustments are recorded transparently and cannot be altered after the fact.
 - **Public Visibility**: Reputation scores and their historical adjustments are accessible to network participants for transparency, promoting accountability.
+- **Public Reputation Ledger**: The reputation ledger is publicly accessible, allowing participants to view the history of reputation changes for each DID.
+- **Detailed Change Logs**: Detailed logs for each reputation change include the reason, timestamp, and the entity responsible for the adjustment.
+- **Reputation Dashboards**: Dashboards display reputation scores and changes, providing participants with a clear and transparent view of their reputation status and history.
 
 ## 5. Implementation Guidelines
 
