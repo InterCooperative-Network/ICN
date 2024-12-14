@@ -1,10 +1,3 @@
-Certainly! Here's the expanded documentation for the Virtual Machine (VM), written in Markdown format and enclosed within a code block so you can easily paste it into your documentation folder.
-
----
-
-**File: `./docs/specifications/core/vm-system.md`**
-
-```markdown
 ---
 authors:
   - Matt Faherty
@@ -293,17 +286,12 @@ Provide detailed descriptions of each OpCode, including its function, expected s
 - **Reputation System Specification**
 - **Governance System Specification**
 
-```
+### B. Modular Structure
 
----
+The VM management modules are now split into smaller submodules for better separation of concerns. Below is the updated structure:
 
-You can save this file as `vm-system.md` in your `./docs/specifications/core/` directory.
+#### vm/operations/stack.rs
+- **stack_management**: Handles stack operations such as push, pop, dup, and swap.
 
-**Next Steps:**
-
-- **Review the OpCode Definitions:** Ensure that all required operations are defined and that their behaviors align with the needs of your cooperatives.
-- **Expand the Appendix:** Add detailed definitions for each OpCode, especially for custom cooperative and governance operations.
-- **Integrate with Other Systems:** Cross-reference with the Identity System and Reputation System specifications to ensure consistent interactions.
-- **Implement Security Measures:** Consider any additional security requirements specific to your use case.
-
-**Let me know if you'd like to further refine any section or if you have additional components you'd like to develop!**
+#### vm/operations/federation.rs
+- **federation_operations**: Manages federation-related operations such as creating and joining federations.
