@@ -1,6 +1,7 @@
 pub mod proof_of_cooperation;
 pub mod validation;
 pub mod round_management;
+pub mod timeout_handling;
 
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -13,6 +14,7 @@ pub struct ProofOfCooperation {
     proposed_block: Option<Block>,
     votes: HashMap<String, bool>,
     timeout: Duration,
+    timeout_handling: timeout_handling::TimeoutHandling,
 }
 
 impl ProofOfCooperation {
@@ -23,6 +25,7 @@ impl ProofOfCooperation {
             proposed_block: None,
             votes: HashMap::new(),
             timeout: Duration::from_secs(60),
+            timeout_handling: timeout_handling::TimeoutHandling::new(Duration::from_secs(60)),
         }
     }
 
@@ -49,7 +52,7 @@ impl ProofOfCooperation {
     }
 
     pub async fn handle_timeout(&self) {
-        sleep(self.timeout).await;
+        self.timeout_handling.handle_timeout().await;
     }
 }
 
