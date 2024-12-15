@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
+use crate::Algorithm;
 
 pub struct IdentitySystem {
     permissions: HashMap<String, Vec<String>>,
     roles: HashMap<String, Vec<String>>,
-    public_keys: HashMap<String, secp256k1::PublicKey>,
+    public_keys: HashMap<String, (Vec<u8>, Algorithm)>,
     reputation_scores: HashMap<String, i64>,
     last_activity: HashMap<String, SystemTime>,
+    key_versions: HashMap<String, u32>,
 }
 
 impl IdentitySystem {
@@ -17,13 +19,15 @@ impl IdentitySystem {
             public_keys: HashMap::new(),
             reputation_scores: HashMap::new(),
             last_activity: HashMap::new(),
+            key_versions: HashMap::new(),
         }
     }
 
     pub fn register_did(&mut self, did: String, permissions: Vec<String>, initial_reputation: i64) {
         self.permissions.insert(did.clone(), permissions);
         self.reputation_scores.insert(did.clone(), initial_reputation);
-        self.last_activity.insert(did, SystemTime::now());
+        self.last_activity.insert(did.clone(), SystemTime::now());
+        self.key_versions.insert(did, 1);
     }
 
     pub fn has_permission(&self, did: &str, permission: &str) -> bool {
@@ -42,15 +46,18 @@ impl IdentitySystem {
         self.roles.get(did).cloned().unwrap_or_default()
     }
 
-    pub fn register_public_key(&mut self, did: String, public_key: secp256k1::PublicKey) {
-        self.public_keys.insert(did, public_key);
+    pub fn register_public_key(&mut self, did: String, public_key: Vec<u8>, algorithm: Algorithm) {
+        self.public_keys.insert(did, (public_key, algorithm));
     }
 
-    pub fn verify_did(&self, did: &str, message: &[u8], signature: &secp256k1::Signature) -> bool {
-        if let Some(public_key) = self.public_keys.get(did) {
-            let secp = secp256k1::Secp256k1::new();
-            let msg = secp256k1::Message::from_slice(message).expect("32 bytes");
-            secp.verify(&msg, signature, public_key).is_ok()
+    pub fn verify_did(&self, did: &str, message: &[u8], signature: &[u8]) -> bool {
+        if let Some((public_key, algorithm)) = self.public_keys.get(did) {
+            let key_pair = crate::KeyPair {
+                public_key: public_key.clone(),
+                private_key: vec![], // Not used for verification
+                algorithm: algorithm.clone(),
+            };
+            key_pair.verify(message, signature)
         } else {
             false
         }
@@ -83,5 +90,16 @@ impl IdentitySystem {
 
     pub fn update_last_activity(&mut self, did: &str) {
         self.last_activity.insert(did.to_string(), SystemTime::now());
+    }
+
+    pub fn rotate_key(&mut self, did: &str, new_public_key: Vec<u8>, algorithm: Algorithm) {
+        if let Some(version) = self.key_versions.get_mut(did) {
+            *version += 1;
+            self.public_keys.insert(did.to_string(), (new_public_key, algorithm));
+        }
+    }
+
+    pub fn get_key_version(&self, did: &str) -> Option<u32> {
+        self.key_versions.get(did).cloned()
     }
 }
