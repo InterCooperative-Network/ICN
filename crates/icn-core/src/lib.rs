@@ -22,7 +22,7 @@ impl Core {
         identity: Arc<dyn IdentityManager>,
         reputation: Arc<dyn ReputationManager>,
     ) -> Self {
-        let consensus = Arc::new(ProofOfCooperation::new());
+        let consensus = Arc::new(ProofOfCooperation::new(reputation.clone()));
         Core {
             consensus,
             storage,

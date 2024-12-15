@@ -120,3 +120,9 @@ tools/.env/
 # Other virtual environments
 tools/.env/
 *.exe
+
+# Add patterns for build directories and other temp files
+/target/
+*.d
+*.rs.bk
+*.log
