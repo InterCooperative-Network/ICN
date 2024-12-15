@@ -45,10 +45,14 @@ The Identity System tracks registered DIDs, manages their permissions, and suppo
 pub struct IdentitySystem {
     permissions: HashMap<String, Vec<String>>,
     registered_dids: HashMap<String, DID>,
+    reputation_scores: HashMap<String, i64>,
+    last_activity: HashMap<String, SystemTime>,
 }
 ```
 - **permissions**: Maps each DID to its assigned permissions.
 - **registered_dids**: Stores the registered DIDs for verification and reference.
+- **reputation_scores**: Tracks the reputation scores of each DID.
+- **last_activity**: Records the last activity time of each DID.
 
 ## 2. Key Methods
 
@@ -73,12 +77,14 @@ pub fn generate_random(id: String) -> (DID, SecretKey) {
 The `register_did` method registers a DID with the Identity System and assigns it permissions.
 
 ```rust
-pub fn register_did(&mut self, did: DID, permissions: Vec<String>) {
+pub fn register_did(&mut self, did: DID, permissions: Vec<String>, initial_reputation: i64) {
     self.permissions.insert(did.id.clone(), permissions);
     self.registered_dids.insert(did.id.clone(), did);
+    self.reputation_scores.insert(did.id.clone(), initial_reputation);
+    self.last_activity.insert(did.id.clone(), SystemTime::now());
 }
 ```
-- **Input**: `did` - The DID to be registered, `permissions` - A list of permissions to assign.
+- **Input**: `did` - The DID to be registered, `permissions` - A list of permissions to assign, `initial_reputation` - The initial reputation score.
 - **Functionality**: Adds the DID and permissions to the Identity System for future reference.
 
 ### 2.3 Get Permissions
@@ -107,17 +113,18 @@ pub fn is_registered(&self, did: &str) -> bool {
 The Identity System authenticates DIDs using cryptographic verification. The `verify_did` function checks if the DID’s public key matches the stored public key.
 
 ```rust
-pub fn verify_did(&self, did: &str) -> Result<bool, String> {
+pub fn verify_did(&self, did: &str, message: &[u8], signature: &secp256k1::Signature) -> bool {
     if let Some(did_obj) = self.registered_dids.get(did) {
-        // Verification logic
-        Ok(true)
+        let secp = secp256k1::Secp256k1::new();
+        let msg = secp256k1::Message::from_slice(message).expect("32 bytes");
+        secp.verify(&msg, signature, &did_obj.public_key).is_ok()
     } else {
-        Err("DID not registered".to_string())
+        false
     }
 }
 ```
-- **Input**: `did` - The DID to verify.
-- **Output**: A result indicating whether the DID is valid or an error message.
+- **Input**: `did` - The DID to verify, `message` - The message to verify, `signature` - The signature to verify.
+- **Output**: A boolean indicating whether the DID is valid.
 
 ## 3. Permission Management
 
@@ -175,6 +182,22 @@ To future-proof the system against advancements in quantum computing, a migratio
 ### 6.2 DID Lifecycle Management
 Adding lifecycle management for DIDs, including deactivation, expiration, and renewal, will enhance security and prevent unauthorized use of stale identities.
 
+## 7. Dynamic Recalibration and Reputation Decay
+
+### 7.1 Dynamic Recalibration
+To ensure dynamic recalibration of reputation scores, the following approaches are considered:
+
+- **Continuous Monitoring**: A system is implemented that continuously monitors the activities and contributions of participants. This can be achieved by integrating the reputation system with various components of the network, such as the consensus mechanism, governance, and resource sharing.
+- **Periodic Updates**: Periodic updates are scheduled to recalculate reputation scores based on recent activities and contributions. This can be done using a background task or a scheduled job that runs at regular intervals.
+- **Event-Driven Recalibration**: An event-driven system is implemented that recalibrates reputation scores in response to specific events, such as successful block proposals, voting participation, or resource sharing.
+
+### 7.2 Reputation Decay
+A decay mechanism is introduced that gradually reduces reputation scores over time if participants do not engage in positive activities. This encourages continuous participation and prevents reputation scores from remaining static.
+
+- **Decay Function**: The decay rate is applied periodically (e.g., monthly) to reduce scores by a small percentage if no positive actions are recorded.
+- **Decay Rate Configuration**: The decay rate can be configured to adapt to different community dynamics and participation levels.
+- **Decay Exemptions**: Certain participants or activities can be exempted from decay to ensure critical contributors are not unfairly penalized for temporary inactivity.
+
 ## Appendix
 
 ### A. Summary of Methods
@@ -182,6 +205,8 @@ Adding lifecycle management for DIDs, including deactivation, expiration, and re
 - **Register DID**: Adds a DID to the registry with permissions.
 - **Verify DID**: Confirms a DID’s validity via cryptographic checks.
 - **Permission Management**: Add or remove permissions for a DID as roles change.
+- **Dynamic Recalibration**: Continuously updates reputation scores based on ongoing activities and contributions.
+- **Reputation Decay**: Gradually reduces reputation scores over time if participants do not engage in positive activities.
 
 ### B. Modular Structure
 
@@ -196,3 +221,4 @@ The identity management modules are now split into smaller submodules for better
 - **permission_handling**: Manages permissions associated with DIDs.
 - **role_management**: Handles role assignments and retrievals.
 - **identity_verification**: Provides methods for verifying DIDs using cryptographic signatures.
+- **reputation_management**: Manages reputation scores, dynamic recalibration, and reputation decay.
