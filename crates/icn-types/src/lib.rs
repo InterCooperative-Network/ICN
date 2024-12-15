@@ -3,6 +3,11 @@ use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use serde_derive::{Serialize, Deserialize};
+use tokio::task;
+use rayon::prelude::*;
+use std::collections::HashMap;
+use std::sync::Mutex;
+use lazy_static::lazy_static;
 
 /// Represents a block in the blockchain
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -81,6 +86,10 @@ pub struct RelationshipMetadata {
     pub unique_cooperatives: Vec<String>,
 }
 
+lazy_static! {
+    static ref TRANSACTION_CACHE: Mutex<HashMap<String, bool>> = Mutex::new(HashMap::new());
+}
+
 impl Block {
     /// Creates a new block with the given parameters
     pub fn new(index: u64, previous_hash: String, transactions: Vec<Transaction>, proposer: String) -> Self {
@@ -136,8 +145,11 @@ impl Block {
         hasher.update(self.timestamp.to_string());
         
         // Add transaction hashes
-        for tx in &self.transactions {
-            hasher.update(&tx.hash);
+        let transaction_hashes: Vec<String> = self.transactions.par_iter()
+            .map(|tx| tx.hash.clone())
+            .collect();
+        for tx_hash in transaction_hashes {
+            hasher.update(tx_hash);
         }
         
         // Add proposer
@@ -148,18 +160,23 @@ impl Block {
     }
 
     /// Adds a validator's signature to the block
-    pub fn add_signature(&mut self, validator_did: String, signature: String, voting_power: f64) -> bool {
+    pub async fn add_signature(&mut self, validator_did: String, signature: String, voting_power: f64) -> bool {
         // Check if validator has already signed
         if self.signatures.iter().any(|s| s.validator_did == validator_did) {
             return false;
         }
 
-        self.signatures.push(BlockSignature {
-            validator_did,
-            signature,
-            timestamp: Utc::now(),
-            voting_power,
+        let signature_task = task::spawn(async move {
+            BlockSignature {
+                validator_did,
+                signature,
+                timestamp: Utc::now(),
+                voting_power,
+            }
         });
+
+        let new_signature = signature_task.await.unwrap();
+        self.signatures.push(new_signature);
 
         // Update metadata
         self.metadata.validator_count = self.signatures.len() as u32;
@@ -171,7 +188,7 @@ impl Block {
     }
 
     /// Verifies the block's integrity
-    pub fn verify(&self, previous_block: Option<&Block>) -> Result<(), String> {
+    pub async fn verify(&self, previous_block: Option<&Block>) -> Result<(), String> {
         // Verify hash
         if self.hash != self.calculate_hash() {
             return Err("Invalid block hash".to_string());
@@ -202,10 +219,40 @@ impl Block {
             return Err("Block timestamp is in the future".to_string());
         }
 
-        // Verify all transactions
+        // Group transactions by type
+        let mut grouped_transactions: HashMap<&str, Vec<&Transaction>> = HashMap::new();
         for tx in &self.transactions {
-            if !tx.validate() {
-                return Err(format!("Invalid transaction: {}", tx.hash));
+            let tx_type = match &tx.transaction_type {
+                TransactionType::Transfer { .. } => "Transfer",
+                TransactionType::ContractExecution { .. } => "ContractExecution",
+                TransactionType::RecordContribution { .. } => "RecordContribution",
+                TransactionType::RecordMutualAid { .. } => "RecordMutualAid",
+                TransactionType::UpdateRelationship { .. } => "UpdateRelationship",
+                TransactionType::AddEndorsement { .. } => "AddEndorsement",
+            };
+            grouped_transactions.entry(tx_type).or_default().push(tx);
+        }
+
+        // Validate transactions in parallel
+        let validation_tasks: Vec<_> = grouped_transactions.iter()
+            .flat_map(|(_, txs)| txs.iter().map(|tx| {
+                let tx_hash = tx.hash.clone();
+                task::spawn(async move {
+                    let mut cache = TRANSACTION_CACHE.lock().unwrap();
+                    if let Some(&is_valid) = cache.get(&tx_hash) {
+                        is_valid
+                    } else {
+                        let is_valid = tx.validate();
+                        cache.insert(tx_hash, is_valid);
+                        is_valid
+                    }
+                })
+            }))
+            .collect();
+
+        for task in validation_tasks {
+            if !task.await.unwrap() {
+                return Err("Invalid transaction".to_string());
             }
         }
 
