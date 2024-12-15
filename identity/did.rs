@@ -36,11 +36,13 @@ pub mod creation {
 pub mod serialization {
     use super::creation::{DID, Algorithm};
     use serde::{Serialize, Deserialize};
+    use crate::Algorithm;
 
     #[derive(Serialize, Deserialize)]
     pub struct SerializableDID {
         pub id: String,
         pub secret_key: Vec<u8>,
+        pub algorithm: Algorithm,
         pub algorithm: Algorithm,
     }
 

@@ -13,6 +13,9 @@ pub struct KeyPair {
     pub public_key: Vec<u8>,
     pub private_key: Vec<u8>,
     pub algorithm: Algorithm,
+    pub public_key: Vec<u8>,
+    pub private_key: Vec<u8>,
+    pub algorithm: Algorithm,
 }
 
 impl KeyPair {
