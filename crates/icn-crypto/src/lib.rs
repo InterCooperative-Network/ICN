@@ -1,28 +1,92 @@
 use secp256k1::{Secp256k1, SecretKey, PublicKey, Message, Signature};
 use sha2::{Sha256, Digest};
+use rsa::{RSAPrivateKey, RSAPublicKey, PaddingScheme};
+use p256::ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
+
+pub enum Algorithm {
+    Secp256k1,
+    RSA,
+    ECDSA,
+}
 
 pub struct KeyPair {
-    pub public_key: PublicKey,
-    pub private_key: SecretKey,
+    pub public_key: Vec<u8>,
+    pub private_key: Vec<u8>,
+    pub algorithm: Algorithm,
 }
 
 impl KeyPair {
-    pub fn generate() -> Self {
-        let secp = Secp256k1::new();
-        let (private_key, public_key) = secp.generate_keypair(&mut rand::thread_rng());
-        KeyPair { public_key, private_key }
+    pub fn generate(algorithm: Algorithm) -> Self {
+        match algorithm {
+            Algorithm::Secp256k1 => {
+                let secp = Secp256k1::new();
+                let (private_key, public_key) = secp.generate_keypair(&mut rand::thread_rng());
+                KeyPair {
+                    public_key: public_key.serialize().to_vec(),
+                    private_key: private_key[..].to_vec(),
+                    algorithm,
+                }
+            }
+            Algorithm::RSA => {
+                let private_key = RSAPrivateKey::new(&mut rand::thread_rng(), 2048).expect("failed to generate a key");
+                let public_key = RSAPublicKey::from(&private_key);
+                KeyPair {
+                    public_key: public_key.to_pkcs1().unwrap(),
+                    private_key: private_key.to_pkcs1().unwrap(),
+                    algorithm,
+                }
+            }
+            Algorithm::ECDSA => {
+                let signing_key = SigningKey::random(&mut rand::thread_rng());
+                let verifying_key = VerifyingKey::from(&signing_key);
+                KeyPair {
+                    public_key: verifying_key.to_encoded_point(false).as_bytes().to_vec(),
+                    private_key: signing_key.to_bytes().to_vec(),
+                    algorithm,
+                }
+            }
+        }
     }
 
-    pub fn sign(&self, message: &[u8]) -> Signature {
-        let secp = Secp256k1::new();
-        let message = Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
-        secp.sign(&message, &self.private_key)
+    pub fn sign(&self, message: &[u8]) -> Vec<u8> {
+        match self.algorithm {
+            Algorithm::Secp256k1 => {
+                let secp = Secp256k1::new();
+                let private_key = SecretKey::from_slice(&self.private_key).expect("32 bytes");
+                let message = Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
+                secp.sign(&message, &private_key).serialize_compact().to_vec()
+            }
+            Algorithm::RSA => {
+                let private_key = RSAPrivateKey::from_pkcs1(&self.private_key).expect("valid RSA private key");
+                let padding = PaddingScheme::new_pkcs1v15_sign(None);
+                private_key.sign(padding, &Sha256::digest(message)).expect("failed to sign").to_vec()
+            }
+            Algorithm::ECDSA => {
+                let signing_key = SigningKey::from_bytes(&self.private_key).expect("valid ECDSA private key");
+                signing_key.sign(message).as_ref().to_vec()
+            }
+        }
     }
 
-    pub fn verify(&self, message: &[u8], signature: &Signature) -> bool {
-        let secp = Secp256k1::new();
-        let message = Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
-        secp.verify(&message, signature, &self.public_key).is_ok()
+    pub fn verify(&self, message: &[u8], signature: &[u8]) -> bool {
+        match self.algorithm {
+            Algorithm::Secp256k1 => {
+                let secp = Secp256k1::new();
+                let public_key = PublicKey::from_slice(&self.public_key).expect("valid secp256k1 public key");
+                let message = Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
+                let signature = Signature::from_compact(signature).expect("valid secp256k1 signature");
+                secp.verify(&message, &signature, &public_key).is_ok()
+            }
+            Algorithm::RSA => {
+                let public_key = RSAPublicKey::from_pkcs1(&self.public_key).expect("valid RSA public key");
+                let padding = PaddingScheme::new_pkcs1v15_sign(None);
+                public_key.verify(padding, &Sha256::digest(message), signature).is_ok()
+            }
+            Algorithm::ECDSA => {
+                let verifying_key = VerifyingKey::from_sec1_bytes(&self.public_key).expect("valid ECDSA public key");
+                verifying_key.verify(message, signature).is_ok()
+            }
+        }
     }
 }
 
