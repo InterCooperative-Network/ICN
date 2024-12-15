@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sat Dec  7 10:33:35 UTC 2024
+Project Code Dump - Generated Sun Dec 15 04:50:54 UTC 2024
 ======================================
 
 LLM Context Information
@@ -31,33 +31,32 @@ Project Tree:
 .
 ├── ICN.code-workspace
 ├── backend
-│   ├── Cargo.lock
-│   ├── Cargo.toml
-│   ├── lib.rs,old
-│   └── src
-│       ├── api
-│       ├── blockchain
-│       ├── claims
-│       ├── community
-│       ├── config
-│       ├── consensus
-│       ├── cooperative
-│       ├── governance
-│       ├── identity
-│       ├── lib.rs
-│       ├── main.rs
-│       ├── monitoring
-│       ├── network
-│       ├── relationship
-│       ├── reputation
-│       ├── state
-│       ├── utils
-│       ├── vm
-│       └── websocket
+│   └── Cargo.toml
 ├── contracts
-│   ├── cooperative
+│   └── cooperative
+│       └── src
+├── crates
+│   ├── icn-consensus
+│   │   ├── Cargo.toml
 │   │   └── src
-│   └── governance
+│   ├── icn-core
+│   │   ├── Cargo.toml
+│   │   └── src
+│   ├── icn-crypto
+│   │   ├── Cargo.toml
+│   │   └── src
+│   ├── icn-p2p
+│   │   ├── Cargo.toml
+│   │   └── src
+│   ├── icn-runtime
+│   │   ├── Cargo.toml
+│   │   └── src
+│   ├── icn-storage
+│   │   ├── Cargo.toml
+│   │   └── src
+│   └── icn-types
+│       ├── Cargo.toml
+│       └── src
 ├── create_docs_dump.sh
 ├── docker
 │   ├── backend.Dockerfile
@@ -67,14 +66,13 @@ Project Tree:
 ├── frontend
 │   ├── package.json
 │   ├── src
-│   │   ├── app
-│   │   ├── components
-│   │   ├── contexts
-│   │   ├── hooks
-│   │   ├── lib
-│   │   └── styles
+│   │   └── components
 │   └── tsconfig.json
 ├── generate_code_dump.sh
+├── identity
+│   ├── did.rs
+│   ├── identity_system.rs
+│   └── mod.rs
 ├── improved-setup.sh
 ├── inventory_nodes.sh
 ├── project_code_dump.txt
@@ -91,15 +89,14 @@ Project Tree:
     │   ├── __init__.py
     │   ├── docmanager.py
     │   ├── docsctl
-    │   ├── specgen.py
-    │   └── venv
+    │   └── specgen.py
     ├── install_docsctl.sh
     └── requirements.txt
 
 ===================
 File: ./backend/Cargo.toml
-Size: 723 bytes
-Modified: 2024-12-05 22:16:29.921464962 +0000
+Size: 597 bytes
+Modified: 2024-12-15 04:28:45.682118797 +0000
 
 ===================
 ```toml
@@ -109,332 +106,1144 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.35.1", features = ["full"] }
-thiserror = "1.0.50"
-warp = "0.3.7"
-tokio-tungstenite = { version = "0.21.0", features = ["native-tls"] }
-url = "2.5.0"
-http = "1.0.0"
-serde = { version = "1.0.193", features = ["derive"] }
-serde_json = "1.0.108"
-chrono = { version = "0.4.38", features = ["serde"] }
-uuid = { version = "1.11.0", features = ["v4"] }
-futures = "0.3.31"
-futures-util = "0.3.31"
-rand = "0.8.5"
-secp256k1 = { version = "0.24.3", features = ["rand"] }
-sha2 = "0.10.8"
-
-// Remove the [dev-dependencies] section entirely since these are already in main dependencies
-
-[[bin]]
-name = "icn-app" 
-path = "src/main.rs"```
-
-===================
-File: ./backend/src/lib.rs
-Size: 1723 bytes
-Modified: 2024-12-05 21:57:38.922020627 +0000
-Dependencies:
-use chrono::{DateTime, Utc};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use tokio::sync::broadcast;
-use uuid;
-
-===================
-```rs
-// src/lib.rs
-
-pub mod api;
-pub mod blockchain;
-pub mod claims;
-pub mod community;
-pub mod consensus;
-pub mod cooperative;
-pub mod governance;
-pub mod identity;
-pub mod monitoring;
-pub mod network;
-pub mod relationship;
-pub mod reputation;
-pub mod state;  // New state module
-pub mod utils;
-pub mod vm;
-pub mod websocket;
-
-pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
-pub use consensus::{ProofOfCooperation, types::ConsensusConfig, types::ConsensusRound};
-pub use governance::Proposal;
-pub use identity::IdentitySystem;
-pub use monitoring::energy::{EnergyAware, EnergyMonitor};
-pub use relationship::{
-    Contribution, 
-    MutualAidInteraction, 
-    RelationshipSystem,
-    Relationship, 
-    RelationshipType,
-    Interaction,
-    InteractionType,
-    Endorsement
-};
-pub use reputation::ReputationSystem;
-pub use vm::{Contract, ExecutionContext, VM};
-pub use vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
-pub use websocket::WebSocketHandler;
-
-use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
-use tokio::sync::broadcast;
-use uuid;
-use chrono::{DateTime, Utc};
-
-/// Events emitted by the ICN system
-#[derive(Clone, Debug)]
-pub enum SystemEvent {
-    BlockCreated(Block),
-    ProposalSubmitted(Proposal),
-    VoteCast { proposal_id: u64, voter: String, vote: bool },
-    ReputationChanged { did: String, change: i64, reason: String },
-    ConsensusStarted(ConsensusRound),
-    ConsensusFinished(Block),
-    CooperativeCreated { id: String, creator: String },
-    CooperativeJoined { id: String, member: String },
-    ContributionRecorded(Contribution),
-    MutualAidProvided(MutualAidInteraction),
-    RelationshipUpdated { member_one: String, member_two: String },
-}```
-
-===================
-File: ./backend/src/main.rs
-Size: 2127 bytes
-Modified: 2024-12-05 22:16:28.750308239 +0000
-Dependencies:
-use icn_backend::{
-use std::sync::{Arc, Mutex};
-use warp::Filter;
-
-===================
-```rs
-// src/main.rs
-
-use std::sync::{Arc, Mutex};
-use warp::Filter;
-
-// Import from the icn_backend library
-use icn_backend::{
-    blockchain::Blockchain,
-    consensus::{ProofOfCooperation, types::ConsensusConfig},
-    identity::IdentitySystem,
-    relationship::RelationshipSystem, // Import the RelationshipSystem
-    reputation::ReputationSystem,
-    websocket::WebSocketHandler,
-};
-
-#[tokio::main]
-async fn main() {
-    // Initialize core systems
-    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
-    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
-    let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new())); // Initialize the RelationshipSystem
-    
-    // Create WebSocket handler for real-time updates
-    let ws_handler = Arc::new(WebSocketHandler::new());
-    
-    // Initialize consensus system
-    let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
-        ConsensusConfig::default(),
-        ws_handler.clone(),
-    )));
-
-    // Initialize the blockchain with all required systems
-    let blockchain = Arc::new(Mutex::new(Blockchain::new(
-        identity_system.clone(),
-        reputation_system.clone(),
-        relationship_system.clone(), // Pass the relationship_system to the Blockchain constructor
-        consensus.clone(),
-    )));
-
-
-    // Define WebSocket route with DID header for user identification
-    let ws_handler = ws_handler.clone();
-    let ws_route = warp::path("ws")
-        .and(warp::ws())
-        .and(warp::header::<String>("X-DID"))
-        .and(warp::any().map(move || ws_handler.clone()))
-        .map(|ws: warp::ws::Ws, did: String, handler: Arc<WebSocketHandler>| {
-            ws.on_upgrade(move |socket| async move {
-                handler.handle_connection(socket, did).await;
-            })
-        });
-
-    // Health check route
-    let health_route = warp::path("health")
-        .and(warp::get())
-        .map(|| "OK");
-
-    let routes = ws_route.or(health_route);
-
-    println!("Starting WebSocket server on localhost:8088");
-    warp::serve(routes)
-        .run(([127, 0, 0, 1], 8088))
-        .await;
-}```
+icn-types = { path = "../crates/icn-types" }
+icn-core = { path = "../crates/icn-core" }
+icn-consensus = { path = "../crates/icn-consensus" }
+icn-crypto = { path = "../crates/icn-crypto" }
+icn-p2p = { path = "../crates/icn-p2p" }
+icn-runtime = { path = "../crates/icn-runtime" }
+icn-storage = { path = "../crates/icn-storage" }
+serde = "1.0"
+secp256k1 = "0.21"
+chrono = "0.4"
+sha2 = "0.9"
+tokio-tungstenite = "0.15"
+warp = "0.3"
+futures-util = "0.3"
+hashbrown = "0.11"
+tokio = { version = "1", features = ["full"] }
+```
 
 ===================
 File: ./docker/docker-compose.yml
 Size: 829 bytes
-Modified: 2024-11-20 22:07:42.247802666 +0000
+Modified: 2024-12-15 04:28:47.482118852 +0000
 
 ===================
 
 ===================
-File: ./backend/src/main.rs
-Size: 2127 bytes
-Modified: 2024-12-05 22:16:28.750308239 +0000
+File: ./crates/icn-crypto/src/lib.rs
+Size: 4011 bytes
+Modified: 2024-12-15 04:49:21.330156894 +0000
 Dependencies:
-use icn_backend::{
-use std::sync::{Arc, Mutex};
-use warp::Filter;
+use p256::ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
+use rsa::{RSAPrivateKey, RSAPublicKey, PaddingScheme};
+use secp256k1::{Secp256k1, SecretKey, PublicKey, Message, Signature};
+use sha2::{Sha256, Digest};
 
 ===================
 ```rs
-// src/main.rs
+use secp256k1::{Secp256k1, SecretKey, PublicKey, Message, Signature};
+use sha2::{Sha256, Digest};
+use rsa::{RSAPrivateKey, RSAPublicKey, PaddingScheme};
+use p256::ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
 
-use std::sync::{Arc, Mutex};
-use warp::Filter;
+pub enum Algorithm {
+    Secp256k1,
+    RSA,
+    ECDSA,
+}
 
-// Import from the icn_backend library
-use icn_backend::{
-    blockchain::Blockchain,
-    consensus::{ProofOfCooperation, types::ConsensusConfig},
-    identity::IdentitySystem,
-    relationship::RelationshipSystem, // Import the RelationshipSystem
-    reputation::ReputationSystem,
-    websocket::WebSocketHandler,
-};
+pub struct KeyPair {
+    pub public_key: Vec<u8>,
+    pub private_key: Vec<u8>,
+    pub algorithm: Algorithm,
+}
 
-#[tokio::main]
-async fn main() {
-    // Initialize core systems
-    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
-    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
-    let relationship_system = Arc::new(Mutex::new(RelationshipSystem::new())); // Initialize the RelationshipSystem
+impl KeyPair {
+    pub fn generate(algorithm: Algorithm) -> Self {
+        match algorithm {
+            Algorithm::Secp256k1 => {
+                let secp = Secp256k1::new();
+                let (private_key, public_key) = secp.generate_keypair(&mut rand::thread_rng());
+                KeyPair {
+                    public_key: public_key.serialize().to_vec(),
+                    private_key: private_key[..].to_vec(),
+                    algorithm,
+                }
+            }
+            Algorithm::RSA => {
+                let private_key = RSAPrivateKey::new(&mut rand::thread_rng(), 2048).expect("failed to generate a key");
+                let public_key = RSAPublicKey::from(&private_key);
+                KeyPair {
+                    public_key: public_key.to_pkcs1().unwrap(),
+                    private_key: private_key.to_pkcs1().unwrap(),
+                    algorithm,
+                }
+            }
+            Algorithm::ECDSA => {
+                let signing_key = SigningKey::random(&mut rand::thread_rng());
+                let verifying_key = VerifyingKey::from(&signing_key);
+                KeyPair {
+                    public_key: verifying_key.to_encoded_point(false).as_bytes().to_vec(),
+                    private_key: signing_key.to_bytes().to_vec(),
+                    algorithm,
+                }
+            }
+        }
+    }
+
+    pub fn sign(&self, message: &[u8]) -> Vec<u8> {
+        match self.algorithm {
+            Algorithm::Secp256k1 => {
+                let secp = Secp256k1::new();
+                let private_key = SecretKey::from_slice(&self.private_key).expect("32 bytes");
+                let message = Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
+                secp.sign(&message, &private_key).serialize_compact().to_vec()
+            }
+            Algorithm::RSA => {
+                let private_key = RSAPrivateKey::from_pkcs1(&self.private_key).expect("valid RSA private key");
+                let padding = PaddingScheme::new_pkcs1v15_sign(None);
+                private_key.sign(padding, &Sha256::digest(message)).expect("failed to sign").to_vec()
+            }
+            Algorithm::ECDSA => {
+                let signing_key = SigningKey::from_bytes(&self.private_key).expect("valid ECDSA private key");
+                signing_key.sign(message).as_ref().to_vec()
+            }
+        }
+    }
+
+    pub fn verify(&self, message: &[u8], signature: &[u8]) -> bool {
+        match self.algorithm {
+            Algorithm::Secp256k1 => {
+                let secp = Secp256k1::new();
+                let public_key = PublicKey::from_slice(&self.public_key).expect("valid secp256k1 public key");
+                let message = Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
+                let signature = Signature::from_compact(signature).expect("valid secp256k1 signature");
+                secp.verify(&message, &signature, &public_key).is_ok()
+            }
+            Algorithm::RSA => {
+                let public_key = RSAPublicKey::from_pkcs1(&self.public_key).expect("valid RSA public key");
+                let padding = PaddingScheme::new_pkcs1v15_sign(None);
+                public_key.verify(padding, &Sha256::digest(message), signature).is_ok()
+            }
+            Algorithm::ECDSA => {
+                let verifying_key = VerifyingKey::from_sec1_bytes(&self.public_key).expect("valid ECDSA public key");
+                verifying_key.verify(message, signature).is_ok()
+            }
+        }
+    }
+}
+
+pub fn hash(data: &[u8]) -> Vec<u8> {
+    Sha256::digest(data).to_vec()
+}
+```
+
+===================
+File: ./crates/icn-consensus/src/lib.rs
+Size: 2335 bytes
+Modified: 2024-12-15 04:28:47.482118852 +0000
+Dependencies:
+use async_trait::async_trait;
+use icn_core::ReputationManager;
+use std::collections::HashMap;
+use std::time::Duration;
+use tokio::time::sleep;
+
+===================
+```rs
+pub mod proof_of_cooperation;
+pub mod validation;
+pub mod round_management;
+pub mod timeout_handling;
+
+use async_trait::async_trait;
+use std::collections::HashMap;
+use std::time::Duration;
+use tokio::time::sleep;
+use icn_core::ReputationManager;
+
+pub struct ProofOfCooperation {
+    current_round: u64,
+    participants: Vec<String>,
+    proposed_block: Option<Block>,
+    votes: HashMap<String, bool>,
+    timeout: Duration,
+    timeout_handling: timeout_handling::TimeoutHandling,
+    reputation_manager: Arc<dyn ReputationManager>,
+}
+
+impl ProofOfCooperation {
+    pub fn new(reputation_manager: Arc<dyn ReputationManager>) -> Self {
+        ProofOfCooperation {
+            current_round: 0,
+            participants: Vec::new(),
+            proposed_block: None,
+            votes: HashMap::new(),
+            timeout: Duration::from_secs(60),
+            timeout_handling: timeout_handling::TimeoutHandling::new(Duration::from_secs(60)),
+            reputation_manager,
+        }
+    }
+
+    pub fn start_round(&mut self) {
+        self.current_round += 1;
+        self.proposed_block = None;
+        self.votes.clear();
+    }
+
+    pub fn propose_block(&mut self, block: Block) {
+        self.proposed_block = Some(block);
+    }
+
+    pub fn vote(&mut self, participant: String, vote: bool) {
+        if self.is_eligible(&participant) {
+            self.votes.insert(participant, vote);
+        }
+    }
+
+    pub fn finalize_block(&self) -> Option<Block> {
+        let total_reputation: i64 = self.votes.keys().map(|p| self.reputation_manager.get_reputation(p, "consensus")).sum();
+        let approval_reputation: i64 = self.votes.iter().filter(|&(_, &v)| v).map(|(p, _)| self.reputation_manager.get_reputation(p, "consensus")).sum();
+
+        if approval_reputation > total_reputation / 2 {
+            self.proposed_block.clone()
+        } else {
+            None
+        }
+    }
+
+    pub async fn handle_timeout(&self) {
+        self.timeout_handling.handle_timeout().await;
+    }
+
+    fn is_eligible(&self, participant: &str) -> bool {
+        self.reputation_manager.is_eligible(participant, 10, "consensus")
+    }
+}
+
+#[async_trait]
+impl ConsensusEngine for ProofOfCooperation {
+    async fn start(&self) {
+        // Start the consensus process
+    }
+
+    async fn stop(&self) {
+        // Stop the consensus process
+    }
+}
+```
+
+===================
+File: ./crates/icn-p2p/src/lib.rs
+Size: 57 bytes
+Modified: 2024-12-15 04:28:47.482118852 +0000
+Dependencies:
+
+===================
+```rs
+pub mod websocket;
+pub mod protocol;
+pub mod networking;
+```
+
+===================
+File: ./crates/icn-runtime/src/lib.rs
+Size: 518 bytes
+Modified: 2024-12-15 04:28:47.482118852 +0000
+Dependencies:
+use async_trait::async_trait;
+use icn_types::{Block, Transaction};
+
+===================
+```rs
+use async_trait::async_trait;
+use icn_types::{Block, Transaction};
+
+pub struct RuntimeManager {
+    // Fields for the RuntimeManager struct
+}
+
+impl RuntimeManager {
+    // Methods for the RuntimeManager struct
+}
+
+#[async_trait]
+pub trait VM {
+    async fn execute_transaction(&self, transaction: Transaction);
+    async fn execute_block(&self, block: Block);
+}
+
+pub struct ContractExecution {
+    // Fields for the ContractExecution struct
+}
+
+impl ContractExecution {
+    // Methods for the ContractExecution struct
+}
+```
+
+===================
+File: ./crates/icn-types/src/lib.rs
+Size: 18487 bytes
+Modified: 2024-12-15 04:28:47.482118852 +0000
+Dependencies:
+use chrono::{DateTime, Utc};
+use lazy_static::lazy_static;
+use rayon::prelude::*;
+use serde::{Serialize, Deserialize};
+use serde_derive::{Serialize, Deserialize};
+use sha2::{Sha256, Digest};
+use std::collections::HashMap;
+use std::sync::Mutex;
+use std::time::SystemTime;
+use tokio::task;
+
+===================
+```rs
+use std::time::SystemTime;
+use sha2::{Sha256, Digest};
+use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Utc};
+use serde_derive::{Serialize, Deserialize};
+use tokio::task;
+use rayon::prelude::*;
+use std::collections::HashMap;
+use std::sync::Mutex;
+use lazy_static::lazy_static;
+
+/// Represents a block in the blockchain
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Block {
+    /// Sequential index of this block in the chain
+    pub index: u64,
     
-    // Create WebSocket handler for real-time updates
-    let ws_handler = Arc::new(WebSocketHandler::new());
+    /// Hash of the previous block
+    pub previous_hash: String,
     
-    // Initialize consensus system
-    let consensus = Arc::new(Mutex::new(ProofOfCooperation::new(
-        ConsensusConfig::default(),
-        ws_handler.clone(),
-    )));
+    /// Unix timestamp in milliseconds when block was created
+    pub timestamp: u64,
+    
+    /// List of transactions included in this block
+    pub transactions: Vec<Transaction>,
+    
+    /// Hash of this block's contents
+    pub hash: String,
+    
+    /// The DID of the validator that proposed this block
+    pub proposer: String,
+    
+    /// Collection of validator signatures approving this block
+    pub signatures: Vec<BlockSignature>,
+    
+    /// Metadata about the block creation
+    pub metadata: BlockMetadata,
+}
 
-    // Initialize the blockchain with all required systems
-    let blockchain = Arc::new(Mutex::new(Blockchain::new(
-        identity_system.clone(),
-        reputation_system.clone(),
-        relationship_system.clone(), // Pass the relationship_system to the Blockchain constructor
-        consensus.clone(),
-    )));
+/// Signature from a validator approving a block
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BlockSignature {
+    /// DID of the signing validator
+    pub validator_did: String,
+    
+    /// The signature itself
+    pub signature: String,
+    
+    /// Timestamp when signature was created
+    pub timestamp: DateTime<Utc>,
+    
+    /// Voting power of the validator at time of signing
+    pub voting_power: f64,
+}
 
+/// Additional metadata about block creation and validation
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BlockMetadata {
+    /// Time taken to reach consensus (milliseconds)
+    pub consensus_duration_ms: u64,
+    
+    /// Number of validators that participated
+    pub validator_count: u32,
+    
+    /// Total voting power that approved the block
+    pub total_voting_power: f64,
+    
+    /// Total resources consumed by transactions in the block
+    pub resources_used: u64,
+    
+    /// Size of the block in bytes
+    pub size: u64,
+    
+    /// Summary of relationship transactions
+    pub relationship_updates: RelationshipMetadata,
+}
 
-    // Define WebSocket route with DID header for user identification
-    let ws_handler = ws_handler.clone();
-    let ws_route = warp::path("ws")
-        .and(warp::ws())
-        .and(warp::header::<String>("X-DID"))
-        .and(warp::any().map(move || ws_handler.clone()))
-        .map(|ws: warp::ws::Ws, did: String, handler: Arc<WebSocketHandler>| {
-            ws.on_upgrade(move |socket| async move {
-                handler.handle_connection(socket, did).await;
-            })
+/// Metadata specific to relationship transactions in the block
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct RelationshipMetadata {
+    pub contribution_count: u32,
+    pub mutual_aid_count: u32,
+    pub endorsement_count: u32,
+    pub relationship_update_count: u32,
+    pub total_participants: u32,
+    pub unique_cooperatives: Vec<String>,
+}
+
+lazy_static! {
+    static ref TRANSACTION_CACHE: Mutex<HashMap<String, bool>> = Mutex::new(HashMap::new());
+}
+
+impl Block {
+    /// Creates a new block with the given parameters
+    pub fn new(index: u64, previous_hash: String, transactions: Vec<Transaction>, proposer: String) -> Self {
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        let relationship_metadata = Self::calculate_relationship_metadata(&transactions);
+        let resources_used = transactions.iter().map(|tx| tx.resource_cost).sum();
+
+        let metadata = BlockMetadata {
+            consensus_duration_ms: 0,
+            validator_count: 0,
+            total_voting_power: 0.0,
+            resources_used,
+            size: 0,
+            relationship_updates: relationship_metadata,
+        };
+
+        let mut block = Block {
+            index,
+            previous_hash,
+            timestamp,
+            transactions,
+            hash: String::new(),
+            proposer,
+            signatures: Vec::new(),
+            metadata,
+        };
+
+        block.hash = block.calculate_hash();
+        block
+    }
+
+    /// Creates a genesis block
+    pub fn genesis() -> Self {
+        Block::new(
+            0,
+            String::from("0"),
+            vec![],
+            String::from("genesis")
+        )
+    }
+
+    /// Calculates the hash of the block's contents
+    pub fn calculate_hash(&self) -> String {
+        let mut hasher = Sha256::new();
+        
+        // Add block header fields
+        hasher.update(self.index.to_string());
+        hasher.update(&self.previous_hash);
+        hasher.update(self.timestamp.to_string());
+        
+        // Add transaction hashes
+        let transaction_hashes: Vec<String> = self.transactions.par_iter()
+            .map(|tx| tx.hash.clone())
+            .collect();
+        for tx_hash in transaction_hashes {
+            hasher.update(tx_hash);
+        }
+        
+        // Add proposer
+        hasher.update(&self.proposer);
+        
+        // Convert hash to hex string
+        format!("{:x}", hasher.finalize())
+    }
+
+    /// Adds a validator's signature to the block
+    pub async fn add_signature(&mut self, validator_did: String, signature: String, voting_power: f64) -> bool {
+        // Check if validator has already signed
+        if self.signatures.iter().any(|s| s.validator_did == validator_did) {
+            return false;
+        }
+
+        let signature_task = task::spawn(async move {
+            BlockSignature {
+                validator_did,
+                signature,
+                timestamp: Utc::now(),
+                voting_power,
+            }
         });
 
-    // Health check route
-    let health_route = warp::path("health")
-        .and(warp::get())
-        .map(|| "OK");
+        let new_signature = signature_task.await.unwrap();
+        self.signatures.push(new_signature);
 
-    let routes = ws_route.or(health_route);
+        // Update metadata
+        self.metadata.validator_count = self.signatures.len() as u32;
+        self.metadata.total_voting_power = self.signatures.iter()
+            .map(|s| s.voting_power)
+            .sum();
 
-    println!("Starting WebSocket server on localhost:8088");
-    warp::serve(routes)
-        .run(([127, 0, 0, 1], 8088))
-        .await;
-}```
+        true
+    }
+
+    /// Verifies the block's integrity
+    pub async fn verify(&self, previous_block: Option<&Block>) -> Result<(), String> {
+        // Verify hash
+        if self.hash != self.calculate_hash() {
+            return Err("Invalid block hash".to_string());
+        }
+
+        // Verify previous hash and index if we have a parent block
+        if let Some(prev) = previous_block {
+            if self.previous_hash != prev.hash {
+                return Err("Previous hash mismatch".to_string());
+            }
+
+            if self.index != prev.index + 1 {
+                return Err("Invalid block index".to_string());
+            }
+
+            if self.timestamp <= prev.timestamp {
+                return Err("Invalid timestamp".to_string());
+            }
+        }
+
+        // Verify timestamp is not in the future
+        let current_time = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        if self.timestamp > current_time + 5000 { // Allow 5 second drift
+            return Err("Block timestamp is in the future".to_string());
+        }
+
+        // Group transactions by type
+        let mut grouped_transactions: HashMap<&str, Vec<&Transaction>> = HashMap::new();
+        for tx in &self.transactions {
+            let tx_type = match &tx.transaction_type {
+                TransactionType::Transfer { .. } => "Transfer",
+                TransactionType::ContractExecution { .. } => "ContractExecution",
+                TransactionType::RecordContribution { .. } => "RecordContribution",
+                TransactionType::RecordMutualAid { .. } => "RecordMutualAid",
+                TransactionType::UpdateRelationship { .. } => "UpdateRelationship",
+                TransactionType::AddEndorsement { .. } => "AddEndorsement",
+            };
+            grouped_transactions.entry(tx_type).or_default().push(tx);
+        }
+
+        // Validate transactions in parallel
+        let validation_tasks: Vec<_> = grouped_transactions.iter()
+            .flat_map(|(_, txs)| txs.iter().map(|tx| {
+                let tx_hash = tx.hash.clone();
+                task::spawn(async move {
+                    let mut cache = TRANSACTION_CACHE.lock().unwrap();
+                    if let Some(&is_valid) = cache.get(&tx_hash) {
+                        is_valid
+                    } else {
+                        let is_valid = tx.validate();
+                        cache.insert(tx_hash, is_valid);
+                        is_valid
+                    }
+                })
+            }))
+            .collect();
+
+        for task in validation_tasks {
+            if !task.await.unwrap() {
+                return Err("Invalid transaction".to_string());
+            }
+        }
+
+        // Verify resource usage
+        let calculated_resources: u64 = self.transactions.iter()
+            .map(|tx| tx.resource_cost)
+            .sum();
+        if calculated_resources != self.metadata.resources_used {
+            return Err("Resource usage mismatch".to_string());
+        }
+
+        // Verify relationship metadata
+        let calculated_metadata = Self::calculate_relationship_metadata(&self.transactions);
+        if calculated_metadata != self.metadata.relationship_updates {
+            return Err("Relationship metadata mismatch".to_string());
+        }
+
+        Ok(())
+    }
+
+    /// Calculates metadata for relationship transactions in the block
+    fn calculate_relationship_metadata(transactions: &[Transaction]) -> RelationshipMetadata {
+        let mut metadata = RelationshipMetadata {
+            contribution_count: 0,
+            mutual_aid_count: 0,
+            endorsement_count: 0,
+            relationship_update_count: 0,
+            total_participants: 0,
+            unique_cooperatives: Vec::new(),
+        };
+
+        let mut participants = std::collections::HashSet::new();
+
+        for tx in transactions {
+            match &tx.transaction_type {
+                TransactionType::RecordContribution { .. } => {
+                    metadata.contribution_count += 1;
+                    participants.insert(tx.sender.clone());
+                }
+                TransactionType::RecordMutualAid { receiver, .. } => {
+                    metadata.mutual_aid_count += 1;
+                    participants.insert(tx.sender.clone());
+                    participants.insert(receiver.clone());
+                }
+                TransactionType::UpdateRelationship { member_two, .. } => {
+                    metadata.relationship_update_count += 1;
+                    participants.insert(tx.sender.clone());
+                    participants.insert(member_two.clone());
+                }
+                TransactionType::AddEndorsement { to_did, .. } => {
+                    metadata.endorsement_count += 1;
+                    participants.insert(tx.sender.clone());
+                    participants.insert(to_did.clone());
+                }
+                _ => {}
+            }
+        }
+
+        metadata.total_participants = participants.len() as u32;
+
+        metadata
+    }
+
+    /// Updates the block's metadata after consensus is reached
+    pub fn update_metadata(&mut self, consensus_duration_ms: u64, size: u64) {
+        self.metadata.consensus_duration_ms = consensus_duration_ms;
+        self.metadata.size = size;
+        self.metadata.resources_used = self.transactions.iter()
+            .map(|tx| tx.resource_cost)
+            .sum();
+    }
+
+    /// Gets the total resources used by all transactions in the block
+    pub fn total_resources_used(&self) -> u64 {
+        self.metadata.resources_used
+    }
+
+    /// Gets the number of transactions in the block
+    pub fn transaction_count(&self) -> usize {
+        self.transactions.len()
+    }
+
+    /// Gets the block size in bytes
+    pub fn size(&self) -> u64 {
+        self.metadata.size
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum TransactionType {
+    // Resource transfer between members
+    Transfer {
+        receiver: String,
+        amount: u64,
+    },
+    
+    // Smart contract execution
+    ContractExecution {
+        contract_id: String,
+        input_data: std::collections::HashMap<String, i64>,
+    },
+    
+    // Relationship management
+    RecordContribution {
+        description: String,
+        impact_story: String,
+        context: String,
+        tags: Vec<String>,
+    },
+    
+    RecordMutualAid {
+        receiver: String,
+        description: String,
+        impact_story: Option<String>,
+        reciprocity_notes: Option<String>,
+        tags: Vec<String>,
+    },
+    
+    UpdateRelationship {
+        member_two: String,
+        relationship_type: String,
+        story: String,
+        interaction: Option<String>,
+    },
+    
+    AddEndorsement {
+        to_did: String,
+        content: String,
+        context: String,
+        skills: Vec<String>,
+    },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Transaction {
+    pub sender: String,
+    pub transaction_type: TransactionType,
+    pub timestamp: u128,
+    pub hash: String,
+    pub resource_cost: u64,      // Resource points required for this transaction
+    pub resource_priority: u8,    // Priority level for resource allocation (1-10)
+}
+
+impl Transaction {
+    pub fn new(sender: String, transaction_type: TransactionType) -> Self {
+        let timestamp = Utc::now().timestamp_millis() as u128;
+        let hash = Self::calculate_transaction_hash(&sender, &transaction_type, timestamp);
+        let resource_cost = Self::calculate_resource_cost(&transaction_type);
+        
+        Transaction {
+            sender,
+            transaction_type,
+            timestamp,
+            hash,
+            resource_cost,
+            resource_priority: 5, // Default priority level
+        }
+    }
+
+    fn calculate_transaction_hash(sender: &str, transaction_type: &TransactionType, timestamp: u128) -> String {
+        let mut hasher = Sha256::new();
+        let transaction_data = match transaction_type {
+            TransactionType::Transfer { receiver, amount } => {
+                format!("Transfer:{}:{}:{}", sender, receiver, amount)
+            },
+            TransactionType::ContractExecution { contract_id, input_data } => {
+                format!("ContractExecution:{}:{:?}", contract_id, input_data)
+            },
+            TransactionType::RecordContribution { description, impact_story, context, tags } => {
+                format!("Contribution:{}:{}:{}:{:?}", description, impact_story, context, tags)
+            },
+            TransactionType::RecordMutualAid { receiver, description, impact_story, reciprocity_notes, tags } => {
+                format!("MutualAid:{}:{}:{:?}:{:?}:{:?}", receiver, description, impact_story, reciprocity_notes, tags)
+            },
+            TransactionType::UpdateRelationship { member_two, relationship_type, story, interaction } => {
+                format!("Relationship:{}:{}:{}:{:?}", member_two, relationship_type, story, interaction)
+            },
+            TransactionType::AddEndorsement { to_did, content, context, skills } => {
+                format!("Endorsement:{}:{}:{}:{:?}", to_did, content, context, skills)
+            },
+        };
+        
+        hasher.update(format!("{}{}{}", sender, transaction_data, timestamp));
+        format!("{:x}", hasher.finalize())
+    }
+
+    fn calculate_resource_cost(transaction_type: &TransactionType) -> u64 {
+        match transaction_type {
+            TransactionType::Transfer { amount, .. } => {
+                // Base cost plus percentage of transfer amount
+                100 + (amount / 100)
+            },
+            TransactionType::ContractExecution { input_data, .. } => {
+                // Base cost plus data size cost
+                200 + (input_data.len() as u64 * 10)
+            },
+            TransactionType::RecordContribution { description, impact_story, tags, .. } => {
+                // Cost based on content size and complexity
+                let content_length = (description.len() + impact_story.len()) as u64;
+                50 + (content_length / 100) + (tags.len() as u64 * 5)
+            },
+            TransactionType::RecordMutualAid { description, tags, .. } => {
+                // Base cost plus content size
+                75 + (description.len() as u64 / 100) + (tags.len() as u64 * 5)
+            },
+            TransactionType::UpdateRelationship { story, .. } => {
+                // Base cost plus story length
+                100 + (story.len() as u64 / 100)
+            },
+            TransactionType::AddEndorsement { content, skills, .. } => {
+                // Base cost plus content and skills
+                60 + (content.len() as u64 / 100) + (skills.len() as u64 * 10)
+            },
+        }
+    }
+
+    pub fn validate(&self) -> bool {
+        // Ensure sender is not empty
+        if self.sender.is_empty() {
+            return false;
+        }
+
+        // Validate based on transaction type
+        match &self.transaction_type {
+            TransactionType::Transfer { receiver, amount } => {
+                !receiver.is_empty() && *amount > 0
+            },
+            TransactionType::ContractExecution { contract_id, input_data } => {
+                !contract_id.is_empty() && !input_data.is_empty()
+            },
+            TransactionType::RecordContribution { description, impact_story, context, tags } => {
+                !description.is_empty() && 
+                !impact_story.is_empty() && 
+                !context.is_empty() && 
+                !tags.is_empty()
+            },
+            TransactionType::RecordMutualAid { receiver, description, tags, .. } => {
+                !receiver.is_empty() && 
+                !description.is_empty() && 
+                !tags.is_empty()
+            },
+            TransactionType::UpdateRelationship { member_two, relationship_type, story, .. } => {
+                !member_two.is_empty() && 
+                !relationship_type.is_empty() && 
+                !story.is_empty()
+            },
+            TransactionType::AddEndorsement { to_did, content, context, skills } => {
+                !to_did.is_empty() && 
+                !content.is_empty() && 
+                !context.is_empty() && 
+                !skills.is_empty()
+            },
+        }
+    }
+
+    pub fn set_priority(&mut self, priority: u8) {
+        self.resource_priority = priority.min(10);
+    }
+
+    pub fn get_timestamp_ms(&self) -> u128 {
+        self.timestamp
+    }
+
+    pub fn get_sender(&self) -> &str {
+        &self.sender
+    }
+
+    pub fn get_hash(&self) -> &str {
+        &self.hash
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend(self.sender.as_bytes());
+        bytes.extend(self.hash.as_bytes());
+        bytes.extend(&self.timestamp.to_be_bytes());
+        bytes
+    }
+}
+```
 
 ===================
-File: ./backend/src/lib.rs
-Size: 1723 bytes
-Modified: 2024-12-05 21:57:38.922020627 +0000
+File: ./crates/icn-storage/src/lib.rs
+Size: 3664 bytes
+Modified: 2024-12-15 04:28:47.482118852 +0000
 Dependencies:
-use chrono::{DateTime, Utc};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use tokio::sync::broadcast;
-use uuid;
+mod tests {
+use serde::{Serialize, Deserialize};
+use std::sync::Arc;
+use thiserror::Error;
+use tokio::sync::Mutex;
 
 ===================
 ```rs
-// src/lib.rs
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use serde::{Serialize, Deserialize};
+use thiserror::Error;
 
-pub mod api;
-pub mod blockchain;
-pub mod claims;
-pub mod community;
-pub mod consensus;
-pub mod cooperative;
-pub mod governance;
-pub mod identity;
-pub mod monitoring;
-pub mod network;
-pub mod relationship;
-pub mod reputation;
-pub mod state;  // New state module
-pub mod utils;
-pub mod vm;
-pub mod websocket;
+/// Errors that can occur in storage operations
+#[derive(Error, Debug)]
+pub enum StorageError {
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+    
+    #[error("Item not found: {0}")]
+    NotFound(String),
+    
+    #[error("Invalid data: {0}")]
+    InvalidData(String),
+}
 
-pub use blockchain::{Block, Blockchain, Transaction, TransactionType};
-pub use consensus::{ProofOfCooperation, types::ConsensusConfig, types::ConsensusRound};
-pub use governance::Proposal;
-pub use identity::IdentitySystem;
-pub use monitoring::energy::{EnergyAware, EnergyMonitor};
-pub use relationship::{
-    Contribution, 
-    MutualAidInteraction, 
-    RelationshipSystem,
-    Relationship, 
-    RelationshipType,
-    Interaction,
-    InteractionType,
-    Endorsement
-};
-pub use reputation::ReputationSystem;
-pub use vm::{Contract, ExecutionContext, VM};
-pub use vm::cooperative_metadata::{CooperativeMetadata, ResourceImpact};
-pub use websocket::WebSocketHandler;
+/// Represents the result of storage operations
+pub type StorageResult<T> = Result<T, StorageError>;
 
-use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
-use tokio::sync::broadcast;
-use uuid;
-use chrono::{DateTime, Utc};
+/// Core storage interface for the system
+#[async_trait::async_trait]
+pub trait StorageBackend: Send + Sync {
+    /// Store a value with the given key
+    async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()>;
+    
+    /// Retrieve a value by key
+    async fn get(&self, key: &str) -> StorageResult<Vec<u8>>;
+    
+    /// Delete a value by key
+    async fn delete(&self, key: &str) -> StorageResult<()>;
+    
+    /// Check if a key exists
+    async fn exists(&self, key: &str) -> StorageResult<bool>;
+}
 
-/// Events emitted by the ICN system
-#[derive(Clone, Debug)]
-pub enum SystemEvent {
-    BlockCreated(Block),
-    ProposalSubmitted(Proposal),
-    VoteCast { proposal_id: u64, voter: String, vote: bool },
-    ReputationChanged { did: String, change: i64, reason: String },
-    ConsensusStarted(ConsensusRound),
-    ConsensusFinished(Block),
-    CooperativeCreated { id: String, creator: String },
-    CooperativeJoined { id: String, member: String },
-    ContributionRecorded(Contribution),
-    MutualAidProvided(MutualAidInteraction),
-    RelationshipUpdated { member_one: String, member_two: String },
-}```
+/// Manages persistent storage for the system
+pub struct StorageManager {
+    backend: Arc<Mutex<Box<dyn StorageBackend>>>,
+}
+
+impl StorageManager {
+    /// Create a new storage manager with the given backend
+    pub fn new(backend: Box<dyn StorageBackend>) -> Self {
+        Self {
+            backend: Arc::new(Mutex::new(backend)),
+        }
+    }
+    
+    /// Store a serializable value
+    pub async fn store<T: Serialize>(&self, key: &str, value: &T) -> StorageResult<()> {
+        let serialized = serde_json::to_vec(value)
+            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            
+        let backend = self.backend.lock().await;
+        backend.set(key, &serialized).await
+    }
+    
+    /// Retrieve and deserialize a value
+    pub async fn retrieve<T: for<'de> Deserialize<'de>>(&self, key: &str) -> StorageResult<T> {
+        let backend = self.backend.lock().await;
+        let data = backend.get(key).await?;
+        
+        serde_json::from_slice(&data)
+            .map_err(|e| StorageError::SerializationError(e.to_string()))
+    }
+    
+    /// Delete a stored value
+    pub async fn remove(&self, key: &str) -> StorageResult<()> {
+        let backend = self.backend.lock().await;
+        backend.delete(key).await
+    }
+    
+    /// Check if a key exists in storage
+    pub async fn has_key(&self, key: &str) -> StorageResult<bool> {
+        let backend = self.backend.lock().await;
+        backend.exists(key).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    
+    // Mock storage backend for testing
+    struct MockStorage {
+        data: HashMap<String, Vec<u8>>,
+    }
+    
+    #[async_trait::async_trait]
+    impl StorageBackend for MockStorage {
+        async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()> {
+            self.data.insert(key.to_string(), value.to_vec());
+            Ok(())
+        }
+        
+        async fn get(&self, key: &str) -> StorageResult<Vec<u8>> {
+            self.data.get(key)
+                .cloned()
+                .ok_or_else(|| StorageError::NotFound(key.to_string()))
+        }
+        
+        async fn delete(&self, key: &str) -> StorageResult<()> {
+            self.data.remove(key);
+            Ok(())
+        }
+        
+        async fn exists(&self, key: &str) -> StorageResult<bool> {
+            Ok(self.data.contains_key(key))
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_basic_storage_operations() {
+        // Test implementation here
+        // Will add comprehensive tests as we develop
+    }
+}
+```
+
+===================
+File: ./crates/icn-core/src/lib.rs
+Size: 4079 bytes
+Modified: 2024-12-15 04:49:21.354156894 +0000
+Dependencies:
+use async_trait::async_trait;
+use icn_consensus::ProofOfCooperation;
+use icn_types::{Block, Transaction};
+use std::sync::Arc;
+
+===================
+```rs
+use std::sync::Arc;
+use async_trait::async_trait;
+use icn_types::{Block, Transaction};
+use icn_consensus::ProofOfCooperation;
+
+pub struct Core {
+    consensus: Arc<dyn ConsensusEngine>,
+    storage: Arc<dyn StorageManager>,
+    network: Arc<dyn NetworkManager>,
+    runtime: Arc<dyn RuntimeManager>,
+    telemetry: Arc<TelemetryManager>,
+    identity: Arc<dyn IdentityManager>,
+    reputation: Arc<dyn ReputationManager>,
+}
+
+impl Core {
+    pub fn new(
+        storage: Arc<dyn StorageManager>,
+        network: Arc<dyn NetworkManager>,
+        runtime: Arc<dyn RuntimeManager>,
+        telemetry: Arc<TelemetryManager>,
+        identity: Arc<dyn IdentityManager>,
+        reputation: Arc<dyn ReputationManager>,
+    ) -> Self {
+        let consensus = Arc::new(ProofOfCooperation::new());
+        Core {
+            consensus,
+            storage,
+            network,
+            runtime,
+            telemetry,
+            identity,
+            reputation,
+        }
+    }
+
+    pub async fn start(&self) {
+        self.telemetry.log("Starting Core...");
+        self.consensus.start().await;
+        self.network.start().await;
+        self.runtime.start().await;
+        self.identity.start().await;
+        self.reputation.start().await;
+        self.telemetry.log("Core started.");
+    }
+
+    pub async fn stop(&self) {
+        self.telemetry.log("Stopping Core...");
+        self.runtime.stop().await;
+        self.network.stop().await;
+        self.consensus.stop().await;
+        self.identity.stop().await;
+        self.reputation.stop().await;
+        self.telemetry.log("Core stopped.");
+    }
+
+    pub async fn process_transaction(&self, transaction: Transaction) {
+        self.telemetry.log("Processing transaction...");
+        self.runtime.execute_transaction(transaction).await;
+        self.telemetry.log("Transaction processed.");
+    }
+
+    pub async fn add_block(&self, block: Block) {
+        self.telemetry.log("Adding block...");
+        self.storage.store_block(block).await;
+        self.telemetry.log("Block added.");
+    }
+}
+
+#[async_trait]
+pub trait ConsensusEngine {
+    async fn start(&self);
+    async fn stop(&self);
+}
+
+#[async_trait]
+pub trait StorageManager {
+    async fn store_block(&self, block: Block);
+}
+
+#[async_trait]
+pub trait NetworkManager {
+    async fn start(&self);
+    async fn stop(&self);
+}
+
+#[async_trait]
+pub trait RuntimeManager {
+    async fn start(&self);
+    async fn stop(&self);
+    async fn execute_transaction(&self, transaction: Transaction);
+}
+
+#[async_trait]
+pub trait IdentityManager {
+    async fn start(&self);
+    async fn stop(&self);
+    async fn register_did(&self, did: String, public_key: String, algorithm: Algorithm);
+    async fn verify_did(&self, did: String, signature: String, algorithm: Algorithm) -> bool;
+}
+
+#[async_trait]
+pub trait ReputationManager {
+    async fn start(&self);
+    async fn stop(&self);
+    async fn adjust_reputation(&self, did: String, change: i64, category: String);
+    async fn get_reputation(&self, did: String, category: String) -> i64;
+    async fn is_eligible(&self, did: String, min_reputation: i64, category: String) -> bool;
+}
+pub struct TelemetryManager {
+    metrics: PrometheusMetrics,
+    logger: Logger,
+    traces: TracingSystem,
+}
+
+impl TelemetryManager {
+    pub fn new(metrics: PrometheusMetrics, logger: Logger, traces: TracingSystem) -> Self {
+        TelemetryManager {
+            metrics,
+            logger,
+            traces,
+        }
+    }
+
+    pub fn log(&self, message: &str) {
+        self.logger.log(message);
+        self.traces.trace(message);
+    }
+
+    pub fn record_metric(&self, name: &str, value: f64) {
+        self.metrics.record(name, value);
+    }
+}
+
+pub struct PrometheusMetrics;
+
+impl PrometheusMetrics {
+    pub fn record(&self, name: &str, value: f64) {
+        // Record the metric
+    }
+}
+
+pub struct Logger;
+
+impl Logger {
+    pub fn log(&self, message: &str) {
+        // Log the message
+    }
+}
+
+pub struct TracingSystem;
+
+impl TracingSystem {
+    pub fn trace(&self, message: &str) {
+        // Trace the message
+    }
+}
+```
 
