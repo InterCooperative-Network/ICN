@@ -119,3 +119,4 @@ tools/.env/
 
 # Other virtual environments
 tools/.env/
+*.exe
