@@ -95,8 +95,8 @@ pub trait RuntimeManager {
 pub trait IdentityManager {
     async fn start(&self);
     async fn stop(&self);
-    async fn register_did(&self, did: String, public_key: String);
-    async fn verify_did(&self, did: String, signature: String) -> bool;
+    async fn register_did(&self, did: String, public_key: String, algorithm: Algorithm);
+    async fn verify_did(&self, did: String, signature: String, algorithm: Algorithm) -> bool;
 }
 
 #[async_trait]

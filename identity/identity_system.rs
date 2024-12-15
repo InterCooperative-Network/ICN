@@ -10,8 +10,10 @@ pub struct IdentitySystem {
     permissions: HashMap<String, Vec<String>>,
     roles: HashMap<String, Vec<String>>,
     public_keys: HashMap<String, (Vec<u8>, Algorithm)>,
+    public_keys: HashMap<String, (Vec<u8>, Algorithm)>,
     reputation_scores: HashMap<String, i64>,
     last_activity: HashMap<String, SystemTime>,
+    key_versions: HashMap<String, u32>,
 }
 
 impl IdentitySystem {
@@ -22,6 +24,7 @@ impl IdentitySystem {
             public_keys: HashMap::new(),
             reputation_scores: HashMap::new(),
             last_activity: HashMap::new(),
+            key_versions: HashMap::new(),
         }
     }
 
