@@ -1,1 +1,14 @@
-{}
+{
+    "name": "ICN Dev Container",
+    "image": "mcr.microsoft.com/vscode/devcontainers/rust:0-1",
+    "settings": {
+        "terminal.integrated.shell.linux": "/bin/bash"
+    },
+    "extensions": [
+        "rust-lang.rust",
+        "ms-vscode.cpptools",
+        "vadimcn.vscode-lldb",
+        "mutantdino.resourcemonitor"
+    ],
+    "postCreateCommand": "cargo build --release"
+}
