@@ -2,6 +2,7 @@ use secp256k1::{Secp256k1, SecretKey, PublicKey, Message, Signature};
 use sha2::{Sha256, Digest};
 use rsa::{RSAPrivateKey, RSAPublicKey, PaddingScheme};
 use ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
+use icn-types::Algorithm;
 
 pub enum Algorithm {
     Secp256k1,
