@@ -280,3 +280,75 @@ The identity management modules are now split into smaller submodules for better
 - **role_management**: Handles role assignments and retrievals.
 - **identity_verification**: Provides methods for verifying DIDs using cryptographic signatures.
 - **reputation_management**: Manages reputation scores, dynamic recalibration, and reputation decay.
+
+## 9. Privacy Preservation
+
+### 9.1 Privacy-Preserving Decentralized Identifiers (DIDs)
+Privacy-preserving DIDs are designed to protect the identity and personal information of participants while ensuring secure interactions within the ICN. These DIDs leverage advanced cryptographic techniques to maintain privacy.
+
+#### Zero-Knowledge Proofs (ZKPs)
+Zero-Knowledge Proofs allow participants to prove the validity of their identity or actions without revealing any sensitive information. This ensures that privacy is maintained while still enabling secure verification.
+
+#### Selective Disclosure
+Selective disclosure enables participants to reveal only specific pieces of information as needed, rather than disclosing their entire identity. This approach enhances privacy by minimizing the exposure of personal data.
+
+### 9.2 Data Security Protocols
+Data security protocols are implemented to protect sensitive information within the ICN. These protocols include encryption methods, data sovereignty measures, and access controls.
+
+#### Encryption Methods
+Encryption methods are used to secure data at rest and in transit. The ICN employs advanced encryption standards to ensure that sensitive information is protected from unauthorized access.
+
+#### Data Sovereignty Measures
+Data sovereignty measures ensure that data is stored and processed in compliance with local and international regulations. This includes adhering to data protection laws and ensuring that data is not transferred to jurisdictions with weaker privacy protections.
+
+#### Access Controls
+Access controls are implemented to restrict access to sensitive data based on roles and permissions. This ensures that only authorized participants can access or modify sensitive information.
+
+### 9.3 Resilience Against Cyber Threats
+The ICN implements various mechanisms to protect against cyber threats and attacks on the blockchain infrastructure. These mechanisms include intrusion detection systems, regular security audits, and incident response protocols.
+
+#### Intrusion Detection Systems (IDS)
+Intrusion Detection Systems monitor network traffic and system activities for signs of malicious behavior. These systems help detect and respond to potential threats in real-time.
+
+#### Regular Security Audits
+Regular security audits are conducted to identify and address vulnerabilities within the ICN. These audits involve comprehensive assessments of the network's security posture, including code reviews, penetration testing, and configuration analysis.
+
+#### Incident Response Protocols
+Incident response protocols are established to ensure a swift and effective response to security incidents. These protocols outline the steps to be taken in the event of a breach, including containment, eradication, recovery, and post-incident analysis.
+
+## Appendix
+
+### C. Summary of Privacy and Security Methods
+- **Privacy-Preserving DIDs**: Implement zero-knowledge proofs and selective disclosure to protect participant privacy.
+- **Encryption Methods**: Secure data at rest and in transit using advanced encryption standards.
+- **Data Sovereignty Measures**: Ensure compliance with local and international data protection regulations.
+- **Access Controls**: Restrict access to sensitive data based on roles and permissions.
+- **Intrusion Detection Systems**: Monitor network traffic and system activities for signs of malicious behavior.
+- **Regular Security Audits**: Conduct comprehensive assessments to identify and address vulnerabilities.
+- **Incident Response Protocols**: Establish procedures for responding to security incidents.
+
+### D. Modular Structure
+
+The privacy and security modules are now split into smaller submodules for better separation of concerns. Below is the updated structure:
+
+#### privacy/did.rs
+- **zkp**: Implements zero-knowledge proofs for privacy-preserving DIDs.
+- **selective_disclosure**: Manages selective disclosure of identity information.
+
+#### security/encryption.rs
+- **encryption_methods**: Provides methods for encrypting data at rest and in transit.
+
+#### security/data_sovereignty.rs
+- **data_sovereignty_measures**: Ensures compliance with data protection regulations.
+
+#### security/access_control.rs
+- **access_controls**: Manages access controls based on roles and permissions.
+
+#### security/ids.rs
+- **intrusion_detection**: Implements intrusion detection systems to monitor for malicious behavior.
+
+#### security/audits.rs
+- **security_audits**: Conducts regular security audits to identify and address vulnerabilities.
+
+#### security/incident_response.rs
+- **incident_response_protocols**: Establishes procedures for responding to security incidents.
