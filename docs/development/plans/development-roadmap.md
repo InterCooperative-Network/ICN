@@ -64,6 +64,16 @@ The ICN Development Roadmap provides a strategic plan for the growth and impleme
 - **Automated Deployment**: Automate the deployment process to staging and production environments using Kubernetes and Helm charts for better management and scalability.
 - **Monitoring and Alerts**: Integrate monitoring and alerting systems to ensure the health and performance of the CI/CD pipeline.
 
+### 1.6 Phase 6: Backend Component Development
+**Timeline**: Q1 2027 - Q4 2027
+
+- **Blockchain Module**: Enhance the blockchain module to support more complex transactions and smart contracts.
+- **Identity System**: Improve the identity system to include more robust DID management and permissioning.
+- **Reputation System**: Expand the reputation system to include more granular tracking and category-specific adjustments.
+- **Governance Module**: Develop advanced governance features, including multi-level voting and proposal management.
+- **Virtual Machine (VM)**: Optimize the VM for better performance and resource management.
+- **Storage Module**: Enhance the storage module to support more efficient data retrieval and storage management.
+
 ## 2. Key Milestones
 
 ### 2.1 Core Release Milestones
