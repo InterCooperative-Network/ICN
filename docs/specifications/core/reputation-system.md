@@ -138,6 +138,15 @@ If entities are inactive for prolonged periods, their reputation decays to encou
 - **Detailed Change Logs**: Detailed logs for each reputation change include the reason, timestamp, and the entity responsible for the adjustment.
 - **Reputation Dashboards**: Dashboards display reputation scores and changes, providing participants with a clear and transparent view of their reputation status and history.
 
+### 4.3 Reputation Decay
+A decay mechanism is introduced that gradually reduces reputation scores over time if participants do not engage in positive activities. This encourages continuous participation and prevents reputation scores from remaining static.
+
+### 4.4 Reputation-Based Access Control
+Permissions are checked against reputation thresholds to ensure that only participants with sufficient reputation can perform critical actions. This is managed by the `IdentitySystem` in `identity/identity_system.rs`.
+
+### 4.5 Reputation-Weighted Voting
+In the Proof of Cooperation consensus mechanism, voting power is influenced by the reputation scores of the participants. This ensures that participants with higher reputation scores have a greater impact on the decision-making process, while maintaining a cap to prevent centralization.
+
 ## 5. Implementation Guidelines
 
 ### 5.1 Performance Considerations
