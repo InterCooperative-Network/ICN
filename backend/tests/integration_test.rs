@@ -226,3 +226,96 @@ async fn test_did_operations() {
     let deserialized: DID = serde_json::from_str(&serialized).unwrap();
     assert_eq!(did.id, deserialized.id);
 }
+
+// Additional Test Cases
+
+#[tokio::test]
+async fn test_blockchain_consistency() {
+    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+    let mut blockchain = Blockchain::new(
+        identity_system.clone(),
+        reputation_system.clone()
+    );
+
+    let block1 = Block::new(
+        1,
+        "previous_hash".to_string(),
+        vec![],
+        "proposer".to_string()
+    );
+
+    let block2 = Block::new(
+        2,
+        block1.hash.clone(),
+        vec![],
+        "proposer".to_string()
+    );
+
+    blockchain.add_block(block1).await.unwrap();
+    blockchain.add_block(block2).await.unwrap();
+
+    assert!(blockchain.verify_chain().await.is_ok());
+}
+
+#[tokio::test]
+async fn test_vm_execution_with_complex_contract() {
+    let vm = VM::new();
+    let metadata = CooperativeMetadata {
+        resource_impact: ResourceImpact {
+            cpu: 20,
+            memory: 2048,
+            bandwidth: 200,
+        },
+        // Add other metadata fields as needed
+    };
+
+    let contract = Contract::new(
+        vec![
+            OpCode::Push(10),
+            OpCode::Push(20),
+            OpCode::Add,
+            OpCode::Push(5),
+            OpCode::Mul,
+        ],
+        metadata
+    );
+
+    let result = vm.execute(&contract);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 150);
+}
+
+#[tokio::test]
+async fn test_governance_proposal_creation_and_voting() {
+    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+    let mut proposal_history = ProposalHistory::new();
+
+    let proposal = Proposal::new(
+        "did:icn:proposer".to_string(),
+        ProposalType::ResourceAllocation {
+            resource: "cpu".to_string(),
+            amount: 100,
+        },
+    );
+
+    proposal_history.add_proposal(proposal.clone());
+
+    {
+        let mut identity = identity_system.lock().unwrap();
+        identity.register_did(
+            DID::new("did:icn:voter".to_string(), Algorithm::Secp256k1),
+            vec!["vote".to_string()],
+        );
+    }
+
+    {
+        let mut reputation = reputation_system.lock().unwrap();
+        reputation.increase_reputation("did:icn:voter", 50);
+    }
+
+    proposal_history.vote("did:icn:voter".to_string(), proposal.id.clone(), true);
+
+    assert_eq!(proposal_history.get_proposal(proposal.id.clone()).unwrap().votes_for, 1);
+}

@@ -24,6 +24,9 @@ FROM debian:bullseye-slim AS runner
 WORKDIR /app
 COPY --from=builder /app/target/release/icn-backend /usr/local/bin/icn-backend
 
+# Install necessary runtime dependencies
+RUN apt-get update && apt-get install -y libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+
 # Expose only the necessary ports
 EXPOSE 8081  # WebSocket port for backend
 
