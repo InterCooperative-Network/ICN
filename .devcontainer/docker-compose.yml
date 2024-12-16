@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ../backend                        
+      dockerfile: ../docker/backend.Dockerfile   
+    ports:
+      - "8081:8081"  
+    environment:
+      - DATABASE_URL=postgres://icnuser:icnpass@db:5432/icndb
+
+  frontend:
+    build:
+      context: ../frontend                       
+      dockerfile: ../docker/frontend.Dockerfile  
+    ports:
+      - "3000:3000"
+
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: icnuser
+      POSTGRES_PASSWORD: icnpass
+      POSTGRES_DB: icndb
+    ports:
+      - "5432:5432"
+
+  docs:
+    image: squidfunk/mkdocs-material:latest
+    volumes:
+      - ../docs:/docs          
+    ports:
+      - "8000:8000"
+    working_dir: /docs
+    command: /bin/sh -c "pip install mkdocs-mermaid2-plugin && mkdocs serve -a 0.0.0.0:8000"
