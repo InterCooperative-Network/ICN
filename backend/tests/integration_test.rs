@@ -130,3 +130,11 @@ async fn test_permission_handling_in_identity_system() {
         assert!(!identity.has_permission("did:icn:test", "invalid_permission"));
     }
 }
+
+#[tokio::test]
+async fn test_did_validation() {
+    let did = DID::new("did:icn:test".to_string(), &SecretKey::new(&mut thread_rng()));
+    let message = b"test message";
+    let signature = did.sign_message(message);
+    assert!(did.verify_signature(message, &signature));
+}
