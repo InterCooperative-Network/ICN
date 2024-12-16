@@ -56,6 +56,14 @@ The ICN Development Roadmap provides a strategic plan for the growth and impleme
 - **User Engagement Modules**: Create modules to encourage user engagement, including educational content and interactive tutorials for onboarding new members.
 - **Mobile Accessibility**: Develop a mobile version of key ICN features to increase accessibility, especially for cooperatives in resource-constrained environments.
 
+### 1.5 Phase 5: CI/CD Pipeline Optimization and Automation
+**Timeline**: Q3 2026 - Q4 2026
+
+- **CI/CD Pipeline Optimization**: Refine the CI/CD pipeline to include Docker multi-stage builds, caching mechanisms, and automated deployment using Kubernetes and Helm charts.
+- **Caching Mechanisms**: Implement caching for Docker layers, frontend dependencies, and shared cache for test results to speed up the build process and avoid redundant test executions.
+- **Automated Deployment**: Automate the deployment process to staging and production environments using Kubernetes and Helm charts for better management and scalability.
+- **Monitoring and Alerts**: Integrate monitoring and alerting systems to ensure the health and performance of the CI/CD pipeline.
+
 ## 2. Key Milestones
 
 ### 2.1 Core Release Milestones
@@ -68,7 +76,12 @@ The ICN Development Roadmap provides a strategic plan for the growth and impleme
 - **Community Testing Feedback** (Q4 2024): Open beta testing for cooperatives to gather feedback on usability and performance.
 - **Load Testing and Optimization** (Q1 2025): Conduct load tests to ensure the system can handle increased network traffic and cooperative participation.
 
-### 2.3 Community and Ecosystem Milestones
+### 2.3 CI/CD Pipeline Milestones
+- **CI/CD Pipeline Optimization** (Q4 2026): Complete the optimization of the CI/CD pipeline, including Docker multi-stage builds, caching mechanisms, and automated deployment using Kubernetes and Helm charts.
+- **Caching Mechanisms Implementation** (Q4 2026): Implement caching for Docker layers, frontend dependencies, and shared cache for test results to speed up the build process and avoid redundant test executions.
+- **Automated Deployment** (Q4 2026): Automate the deployment process to staging and production environments using Kubernetes and Helm charts for better management and scalability.
+
+### 2.4 Community and Ecosystem Milestones
 - **Early Adopter Onboarding** (Q3 2024): Onboard early adopter cooperatives to serve as pilot members for testing and providing feedback.
 - **Public Launch Event** (Q4 2024): Host a virtual launch event to introduce ICN’s beta version to a broader audience and solicit feedback.
 - **Educational Campaign** (Q1 2025): Launch a series of webinars, tutorials, and written guides to educate new members about using ICN effectively.
