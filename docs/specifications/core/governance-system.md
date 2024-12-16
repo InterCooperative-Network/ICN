@@ -162,6 +162,38 @@ Introduce mechanisms for members to delegate their voting power to trusted repre
 ### 6.2 Dynamic Role Assignment
 Develop a mechanism to dynamically assign governance roles based on reputation, activity, and expertise to ensure that the governance system remains flexible and responsive to changing needs.
 
+## 7. Detailed Voting Mechanisms
+
+### 7.1 Reputation-Weighted Voting
+Reputation-weighted voting is a mechanism where the voting power of each member is influenced by their reputation score. This ensures that members who have consistently contributed positively to the cooperative have a greater influence on decision-making.
+
+#### Reputation Calculation
+Reputation scores are calculated based on various factors, including:
+- **Participation in Governance**: Regularly voting on proposals and participating in discussions.
+- **Contributions to Cooperative Activities**: Providing resources, skills, or time to cooperative projects.
+- **Adherence to Cooperative Principles**: Demonstrating behaviors that align with the cooperative's values and principles.
+
+#### Voting Power
+The voting power of each member is proportional to their reputation score. For example, a member with a higher reputation score will have more weight in their vote compared to a member with a lower score.
+
+### 7.2 Conflict Resolution Protocols
+Conflict resolution protocols are established to mediate disputes within and between cooperatives. These protocols ensure that conflicts are resolved fairly and efficiently, maintaining harmony within the network.
+
+#### Mediation Process
+1. **Initiation**: A conflict is reported to the Governance Board.
+2. **Mediation Team**: A team of mediators is appointed to handle the conflict.
+3. **Discussion**: The mediators facilitate a discussion between the parties involved to understand the root cause of the conflict.
+4. **Resolution**: The mediators propose a resolution based on cooperative principles and the interests of all parties involved.
+5. **Implementation**: The proposed resolution is implemented, and the conflict is considered resolved.
+
+### 7.3 Scalability of Governance
+As cooperatives grow or federate with others, the governance system must adapt to ensure effective decision-making and management.
+
+#### Adaptive Governance Structures
+- **Local Governance**: Each cooperative maintains its own governance structure for local decision-making.
+- **Federated Governance**: Federations of cooperatives establish a higher-level governance structure to manage inter-cooperative affairs.
+- **Scalable Voting Mechanisms**: Voting mechanisms are designed to scale with the size of the cooperative, ensuring that all members have a voice in decision-making.
+
 ## Appendix
 
 ### A. Summary of Governance Methods

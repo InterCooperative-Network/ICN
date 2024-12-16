@@ -236,6 +236,72 @@ The `icn-p2p` crate in `crates/icn-p2p/src/lib.rs` handles peer-to-peer networki
 ### 9.8 Concurrency
 The use of asynchronous programming and concurrency, as seen in the `tokio` tests in `backend/tests/integration_test.rs`, allows multiple tasks to run in parallel, improving performance and ensuring timely data consistency checks.
 
+## 10. Node Software
+
+### 10.1 Node Requirements
+To set up and maintain a node in the ICN network, the following requirements must be met:
+- **Hardware**: Minimum hardware specifications include a multi-core CPU, 16GB RAM, and 1TB SSD storage.
+- **Operating System**: Nodes can run on Linux, macOS, or Windows.
+- **Network**: A stable internet connection with a minimum upload/download speed of 100 Mbps.
+
+### 10.2 Node Setup
+The steps to set up a node in the ICN network are as follows:
+1. **Download Software**: Obtain the latest version of the ICN node software from the official repository.
+2. **Install Dependencies**: Install required dependencies, including Rust, Docker, and PostgreSQL.
+3. **Configure Node**: Edit the configuration file to set node-specific parameters, such as network settings and consensus preferences.
+4. **Initialize Node**: Run the initialization script to set up the node's environment and generate cryptographic keys.
+5. **Start Node**: Launch the node software and connect to the ICN network.
+
+### 10.3 Node Maintenance
+To maintain a node in the ICN network, regular updates and monitoring are required:
+- **Software Updates**: Keep the node software up to date with the latest releases and security patches.
+- **Resource Monitoring**: Monitor resource usage, including CPU, memory, and storage, to ensure optimal performance.
+- **Log Management**: Regularly review log files for any errors or warnings and take appropriate action.
+
+## 11. Proof of Cooperation (PoC) Consensus
+
+### 11.1 Overview
+The Proof of Cooperation (PoC) consensus mechanism is designed to facilitate secure, efficient, and cooperative blockchain operations. It emphasizes collaboration, democratic participation, and reputation-based accountability.
+
+### 11.2 Core Principles
+- **Democratic Participation**: Ensures inclusive decision-making by allowing each node to contribute to consensus.
+- **Incentivized Cooperation**: Rewards are based on positive contributions to the cooperative ecosystem.
+- **Reputation-Driven Accountability**: Reputation scores influence participation and voting power.
+- **Environmental Sustainability**: Eliminates energy-intensive computations, maintaining an energy-efficient model.
+
+### 11.3 Consensus Process
+The PoC consensus process involves the following steps:
+1. **Transaction Verification**: Nodes submit transactions, which are initially validated by the Coordinator Node.
+2. **Block Proposal**: The Coordinator Node assembles a candidate block with selected transactions.
+3. **Reputation-Weighted Voting**: Validator Nodes vote on the proposed block, with votes weighted based on reputation scores.
+4. **Block Finalization**: If the approval threshold is met, the block is finalized and added to the blockchain.
+
+### 11.4 Security Mechanisms
+- **Asymmetric Encryption**: Utilizes public/private key pairs for secure communication and transaction signing.
+- **Digital Signatures**: Ensures authenticity and non-repudiation of transactions and blocks.
+- **Hash Functions**: Employs secure hash algorithms for data integrity.
+- **Reputation Requirements**: High reputation thresholds for Validator Nodes to prevent malicious actors from gaining influence.
+- **Byzantine Fault Tolerance**: Requires a supermajority for block approval, tolerating up to one-third faulty or malicious nodes.
+
+### 11.5 Advantages over Traditional Mechanisms
+- **Energy Efficiency**: PoC eliminates the need for energy-intensive computations, making it more environmentally sustainable than Proof of Work (PoW).
+- **Democratic Participation**: PoC ensures that all nodes have a voice in the consensus process, promoting inclusivity and fairness.
+- **Reputation-Based Accountability**: PoC leverages reputation scores to ensure that only trusted and active members can influence critical decisions.
+
+## 12. Scalability Features
+
+### 12.1 Sharding
+Sharding divides the network into smaller groups, or shards, to process transactions in parallel. This improves scalability by allowing multiple consensus rounds to occur simultaneously.
+
+### 12.2 Layer 2 Solutions
+Layer 2 solutions, such as state channels and sidechains, enable off-chain transactions that are later settled on the main blockchain. This reduces the load on the main chain and improves transaction throughput.
+
+### 12.3 Efficient Data Structures
+Optimized data structures, such as Merkle trees and Patricia tries, are used to store and manage blockchain data efficiently. These structures enable fast lookups and updates, improving overall performance.
+
+### 12.4 Adaptive Block Sizes
+Adaptive block sizes allow the blockchain to adjust the size of blocks based on network conditions and transaction volume. This ensures that the network can handle varying levels of activity without compromising performance.
+
 ## Appendix
 
 ### A. Summary of Consensus Methods
