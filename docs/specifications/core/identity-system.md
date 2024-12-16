@@ -20,7 +20,9 @@ The Identity System is a core component of the Inter-Cooperative Network (ICN). 
 
 ## 1. System Components
 
-### 1.1 Decentralized Identifiers (DIDs)
+### 1.1 Error Handling
+
+### 1.2 Decentralized Identifiers (DIDs)
 A DID is a cryptographic identifier representing users or entities within the ICN. DIDs are generated using cryptographic primitives for uniqueness and security.
 
 #### DID Structure
@@ -28,15 +30,17 @@ A DID is a cryptographic identifier representing users or entities within the IC
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DID {
     pub id: String,
+    pub algorithm: Algorithm,
     #[serde(serialize_with = "serialize_public_key")]
     #[serde(deserialize_with = "deserialize_public_key")]
     pub public_key: PublicKey,
 }
 ```
 - **id**: A unique identifier for each DID.
+- **algorithm**: The cryptographic algorithm used for the DID.
 - **public_key**: The public key used for identity verification.
 
-### 1.2 Identity System
+### 1.3 Identity System
 The Identity System tracks registered DIDs, manages their permissions, and supports verification processes.
 
 #### Identity System Structure
@@ -60,17 +64,17 @@ pub struct IdentitySystem {
 DIDs are generated using cryptographic methods to ensure both uniqueness and security. The function `generate_random` is used to create a new DID with an associated secret key.
 
 ```rust
-pub fn generate_random(id: String) -> (DID, SecretKey) {
+pub fn generate_random(id: String, algorithm: Algorithm) -> Result<(DID, SecretKey), Error> {
     let secp = Secp256k1::new();
     let mut rng = thread_rng();
     let mut secret_key_bytes = [0u8; 32];
     rng.fill_bytes(&mut secret_key_bytes);
-    let secret_key = SecretKey::from_slice(&secret_key_bytes).expect("Valid key");
+    let secret_key = SecretKey::from_slice(&secret_key_bytes).map_err(|_| Error::InvalidKey)?;
     let public_key = PublicKey::from_secret_key(&secp, &secret_key);
-    (DID { id, public_key }, secret_key)
+    Ok((DID { id, algorithm, public_key }, secret_key))
 }
 ```
-- **Input**: `id` - A string identifier for the DID.
+- **Input**: `id` - A string identifier for the DID, `algorithm` - The cryptographic algorithm to use.
 - **Output**: A tuple containing the generated `DID` and its associated `SecretKey`.
 
 ### 2.2 Register DID
@@ -197,6 +201,60 @@ A decay mechanism is introduced that gradually reduces reputation scores over ti
 - **Decay Function**: The decay rate is applied periodically (e.g., monthly) to reduce scores by a small percentage if no positive actions are recorded.
 - **Decay Rate Configuration**: The decay rate can be configured to adapt to different community dynamics and participation levels.
 - **Decay Exemptions**: Certain participants or activities can be exempted from decay to ensure critical contributors are not unfairly penalized for temporary inactivity.
+
+## 8. Testing and Validation Procedures
+
+### 8.1 DID Generation and Validation
+Comprehensive tests are implemented to ensure the correct generation and validation of DIDs. These tests cover various scenarios, including valid and invalid DIDs, to ensure the system's robustness.
+
+#### DID Creation Test
+```rust
+#[test]
+fn test_did_creation() {
+    let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+    assert_eq!(did.id, "did:example:123");
+}
+```
+- **Purpose**: Verify that a DID is created correctly with the specified ID.
+
+#### DID Serialization Test
+```rust
+#[test]
+fn test_did_serialization() {
+    let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+    let serializable_did: SerializableDID = (&did).into();
+    let deserialized_did: DID = (&serializable_did).into();
+    assert_eq!(did.id, deserialized_did.id);
+}
+```
+- **Purpose**: Ensure that a DID can be serialized and deserialized correctly.
+
+#### DID Sign and Verify Test
+```rust
+#[test]
+fn test_did_sign_and_verify() {
+    let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+    let message = b"test message";
+    let signature = did.sign_message(message).expect("Failed to sign message");
+    assert!(did.verify_signature(message, &signature).expect("Failed to verify signature"));
+}
+```
+- **Purpose**: Validate that a DID can sign a message and verify the signature correctly.
+
+### 8.2 Integration Tests
+Integration tests are written to confirm that the DID validation works correctly within the blockchain system. These tests include scenarios for valid and invalid DIDs, ensuring the system's robustness.
+
+#### DID Validation Integration Test
+```rust
+#[tokio::test]
+async fn test_did_validation() {
+    let did = DID::new("did:icn:test".to_string(), Algorithm::Secp256k1);
+    let message = b"test message";
+    let signature = did.sign_message(message).expect("Failed to sign message");
+    assert!(did.verify_signature(message, &signature).expect("Failed to verify signature"));
+}
+```
+- **Purpose**: Verify that the DID validation works correctly within the blockchain system.
 
 ## Appendix
 

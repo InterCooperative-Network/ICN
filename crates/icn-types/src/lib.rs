@@ -8,6 +8,32 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use lazy_static::lazy_static;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum BlockError {
+    #[error("Invalid block hash")]
+    InvalidHash,
+    #[error("Previous hash mismatch")]
+    PreviousHashMismatch,
+    #[error("Invalid block index")]
+    InvalidIndex,
+    #[error("Invalid timestamp")]
+    InvalidTimestamp,
+    #[error("Invalid transaction: {0}")]
+    InvalidTransaction(String),
+    #[error("Resource usage mismatch")]
+    ResourceMismatch,
+    #[error("Relationship metadata mismatch")]
+    MetadataMismatch,
+}
+
+#[derive(Debug)]
+pub struct ResourceDebt {
+    pub cpu_debt: u64,
+    pub memory_debt: u64,
+    pub bandwidth_debt: u64,
+}
 
 /// Represents a block in the blockchain
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -188,24 +214,22 @@ impl Block {
     }
 
     /// Verifies the block's integrity
-    pub async fn verify(&self, previous_block: Option<&Block>) -> Result<(), String> {
+    pub async fn verify(&self, previous_block: Option<&Block>) -> Result<(), BlockError> {
         // Verify hash
         if self.hash != self.calculate_hash() {
-            return Err("Invalid block hash".to_string());
+            return Err(BlockError::InvalidHash);
         }
 
-        // Verify previous hash and index if we have a parent block
+        // Verify previous block linkage
         if let Some(prev) = previous_block {
             if self.previous_hash != prev.hash {
-                return Err("Previous hash mismatch".to_string());
+                return Err(BlockError::PreviousHashMismatch);
             }
-
             if self.index != prev.index + 1 {
-                return Err("Invalid block index".to_string());
+                return Err(BlockError::InvalidIndex);
             }
-
             if self.timestamp <= prev.timestamp {
-                return Err("Invalid timestamp".to_string());
+                return Err(BlockError::InvalidTimestamp);
             }
         }
 
@@ -216,7 +240,7 @@ impl Block {
             .as_millis() as u64;
 
         if self.timestamp > current_time + 5000 { // Allow 5 second drift
-            return Err("Block timestamp is in the future".to_string());
+            return Err(BlockError::InvalidTimestamp);
         }
 
         // Group transactions by type
@@ -252,7 +276,7 @@ impl Block {
 
         for task in validation_tasks {
             if !task.await.unwrap() {
-                return Err("Invalid transaction".to_string());
+                return Err(BlockError::InvalidTransaction("One or more invalid transactions".into()));
             }
         }
 
@@ -261,13 +285,13 @@ impl Block {
             .map(|tx| tx.resource_cost)
             .sum();
         if calculated_resources != self.metadata.resources_used {
-            return Err("Resource usage mismatch".to_string());
+            return Err(BlockError::ResourceMismatch);
         }
 
         // Verify relationship metadata
         let calculated_metadata = Self::calculate_relationship_metadata(&self.transactions);
         if calculated_metadata != self.metadata.relationship_updates {
-            return Err("Relationship metadata mismatch".to_string());
+            return Err(BlockError::MetadataMismatch);
         }
 
         Ok(())
@@ -338,6 +362,25 @@ impl Block {
     /// Gets the block size in bytes
     pub fn size(&self) -> u64 {
         self.metadata.size
+    }
+
+    /// Finalizes the block and ensures all validations pass
+    pub async fn finalize(&mut self) -> Result<(), BlockError> {
+        self.verify(None).await?;
+        
+        let resource_usage = self.transactions.par_iter()
+            .map(|tx| tx.resource_cost)
+            .sum();
+            
+        self.metadata.resources_used = resource_usage;
+        
+        self.metadata.size = bincode::serialize(&self)
+            .map_err(|_| BlockError::InvalidHash)?
+            .len() as u64;
+            
+        self.hash = self.calculate_hash();
+        
+        Ok(())
     }
 }
 
