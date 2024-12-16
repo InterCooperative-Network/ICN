@@ -31,6 +31,30 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-
 
+    - name: Cache Docker layers
+      uses: actions/cache@v2
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-docker-${{ hashFiles('**/Dockerfile') }}
+        restore-keys: |
+          ${{ runner.os }}-docker-
+
+    - name: Cache Frontend dependencies
+      uses: actions/cache@v2
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-npm-
+
+    - name: Cache Test Results
+      uses: actions/cache@v2
+      with:
+        path: ~/.cargo/test-results
+        key: ${{ runner.os }}-test-results-${{ hashFiles('**/*.rs') }}
+        restore-keys: |
+          ${{ runner.os }}-test-results-
+
     - name: Build Backend
       run: cargo build --verbose
 
