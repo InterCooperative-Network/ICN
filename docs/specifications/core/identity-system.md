@@ -198,6 +198,60 @@ A decay mechanism is introduced that gradually reduces reputation scores over ti
 - **Decay Rate Configuration**: The decay rate can be configured to adapt to different community dynamics and participation levels.
 - **Decay Exemptions**: Certain participants or activities can be exempted from decay to ensure critical contributors are not unfairly penalized for temporary inactivity.
 
+## 8. Testing and Validation Procedures
+
+### 8.1 DID Generation and Validation
+Comprehensive tests are implemented to ensure the correct generation and validation of DIDs. These tests cover various scenarios, including valid and invalid DIDs, to ensure the system's robustness.
+
+#### DID Creation Test
+```rust
+#[test]
+fn test_did_creation() {
+    let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+    assert_eq!(did.id, "did:example:123");
+}
+```
+- **Purpose**: Verify that a DID is created correctly with the specified ID.
+
+#### DID Serialization Test
+```rust
+#[test]
+fn test_did_serialization() {
+    let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+    let serializable_did: SerializableDID = (&did).into();
+    let deserialized_did: DID = (&serializable_did).into();
+    assert_eq!(did.id, deserialized_did.id);
+}
+```
+- **Purpose**: Ensure that a DID can be serialized and deserialized correctly.
+
+#### DID Sign and Verify Test
+```rust
+#[test]
+fn test_did_sign_and_verify() {
+    let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+    let message = b"test message";
+    let signature = did.sign_message(message);
+    assert!(did.verify_signature(message, &signature));
+}
+```
+- **Purpose**: Validate that a DID can sign a message and verify the signature correctly.
+
+### 8.2 Integration Tests
+Integration tests are written to confirm that the DID validation works correctly within the blockchain system. These tests include scenarios for valid and invalid DIDs, ensuring the system's robustness.
+
+#### DID Validation Integration Test
+```rust
+#[tokio::test]
+async fn test_did_validation() {
+    let did = DID::new("did:icn:test".to_string(), &SecretKey::new(&mut thread_rng()));
+    let message = b"test message";
+    let signature = did.sign_message(message);
+    assert!(did.verify_signature(message, &signature));
+}
+```
+- **Purpose**: Verify that the DID validation works correctly within the blockchain system.
+
 ## Appendix
 
 ### A. Summary of Methods

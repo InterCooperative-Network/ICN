@@ -339,6 +339,47 @@ impl Block {
     pub fn size(&self) -> u64 {
         self.metadata.size
     }
+
+    /// Validates the block's integrity
+    pub fn validate_block(&self, previous_block: Option<&Block>) -> Result<(), String> {
+        // Check if the block's hash matches its contents
+        if self.hash != self.calculate_hash() {
+            return Err("Block hash does not match its contents".to_string());
+        }
+
+        // Check if the block links correctly to the previous block
+        if let Some(prev_block) = previous_block {
+            if self.previous_hash != prev_block.hash {
+                return Err("Block does not link correctly to the previous block".to_string());
+            }
+        }
+
+        // Check if the block's index is correct
+        if let Some(prev_block) = previous_block {
+            if self.index != prev_block.index + 1 {
+                return Err("Block index is incorrect".to_string());
+            }
+        }
+
+        // Check if the block's timestamp is valid
+        let current_time = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        if self.timestamp > current_time {
+            return Err("Block timestamp is in the future".to_string());
+        }
+
+        // Validate each transaction in the block
+        for transaction in &self.transactions {
+            if !transaction.validate() {
+                return Err("Invalid transaction in block".to_string());
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
