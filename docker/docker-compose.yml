@@ -4,7 +4,7 @@ services:
   backend:
     build:
       context: ../backend                        
-      dockerfile: ../docker/backend_new.Dockerfile   
+      dockerfile: ../docker/backend.Dockerfile   
     ports:
       - "8081:8081"  
     environment:
