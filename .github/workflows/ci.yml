@@ -63,3 +63,9 @@ jobs:
 
     - name: Integration Tests
       run: cargo test --test integration_test --verbose
+
+    - name: Run Clippy
+      run: cargo clippy -- -D warnings
+
+    - name: Run Format Check
+      run: cargo fmt -- --check
