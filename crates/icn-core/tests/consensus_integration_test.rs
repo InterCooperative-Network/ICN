@@ -31,8 +31,8 @@ struct MockIdentityManager;
 impl IdentityManager for MockIdentityManager {
     async fn start(&self) {}
     async fn stop(&self) {}
-    async fn register_did(&self, _did: String, _public_key: String) {}
-    async fn verify_did(&self, _did: String, _signature: String) -> bool { true }
+    async fn register_did(&self, _did: String, _public_key: String, _algorithm: Algorithm) {}
+    async fn verify_did(&self, _did: String, _signature: String, _algorithm: Algorithm) -> bool { true }
 }
 
 struct MockReputationManager;
@@ -91,5 +91,5 @@ async fn test_proof_of_cooperation_reputation_weighted_voting() {
 async fn test_proof_of_cooperation_reputation_threshold() {
     let reputation_manager = Arc::new(MockReputationManager);
     let mut poc = ProofOfCooperation::new(reputation_manager);
-    assert!(poc.is_eligible("participant1"));
+    assert!(poc.is_eligible("participant1", 10, "consensus"));
 }

@@ -9,6 +9,7 @@ use std::time::Duration;
 use tokio::time::sleep;
 use icn_core::ReputationManager;
 use icn_types::Block;
+use std::sync::Arc;
 
 pub struct ProofOfCooperation {
     current_round: u64,

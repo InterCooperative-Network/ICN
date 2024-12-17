@@ -107,6 +107,7 @@ pub trait ReputationManager {
     async fn get_reputation(&self, did: String, category: String) -> i64;
     async fn is_eligible(&self, did: String, min_reputation: i64, category: String) -> bool;
 }
+
 pub struct TelemetryManager {
     metrics: PrometheusMetrics,
     logger: Logger,
