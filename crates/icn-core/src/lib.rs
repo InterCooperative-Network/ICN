@@ -106,6 +106,9 @@ pub trait ReputationManager {
     async fn adjust_reputation(&self, did: String, change: i64, category: String);
     async fn get_reputation(&self, did: String, category: String) -> i64;
     async fn is_eligible(&self, did: String, min_reputation: i64, category: String) -> bool;
+    async fn dynamic_adjustment(&self, did: String, contribution: i64);
+    async fn apply_decay(&self, did: String, decay_rate: f64);
+    async fn reputation_based_access(&self, did: String, min_reputation: i64) -> bool;
 }
 
 pub struct TelemetryManager {

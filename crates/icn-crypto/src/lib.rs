@@ -3,17 +3,26 @@ use sha2::{Sha256, Digest};
 use rsa::{RSAPrivateKey, RSAPublicKey, PaddingScheme};
 use ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
 use icn-types::Algorithm;
+use kyber::keypair as kyber_keypair;
+use kyber::encapsulate as kyber_encapsulate;
+use kyber::decapsulate as kyber_decapsulate;
+use dilithium::keypair as dilithium_keypair;
+use dilithium::sign as dilithium_sign;
+use dilithium::verify as dilithium_verify;
+use falcon::keypair as falcon_keypair;
+use falcon::sign as falcon_sign;
+use falcon::verify as falcon_verify;
 
 pub enum Algorithm {
     Secp256k1,
     RSA,
     ECDSA,
+    Kyber,
+    Dilithium,
+    Falcon,
 }
 
 pub struct KeyPair {
-    pub public_key: Vec<u8>,
-    pub private_key: Vec<u8>,
-    pub algorithm: Algorithm,
     pub public_key: Vec<u8>,
     pub private_key: Vec<u8>,
     pub algorithm: Algorithm,
@@ -49,6 +58,30 @@ impl KeyPair {
                     algorithm,
                 }
             },
+            Algorithm::Kyber => {
+                let (public_key, private_key) = kyber_keypair();
+                KeyPair {
+                    public_key,
+                    private_key,
+                    algorithm,
+                }
+            },
+            Algorithm::Dilithium => {
+                let (public_key, private_key) = dilithium_keypair();
+                KeyPair {
+                    public_key,
+                    private_key,
+                    algorithm,
+                }
+            },
+            Algorithm::Falcon => {
+                let (public_key, private_key) = falcon_keypair();
+                KeyPair {
+                    public_key,
+                    private_key,
+                    algorithm,
+                }
+            },
         }
     }
 
@@ -69,6 +102,13 @@ impl KeyPair {
                 let signing_key = SigningKey::from_bytes(&self.private_key).expect("failed to decode private key");
                 signing_key.sign(message).to_bytes().to_vec()
             },
+            Algorithm::Dilithium => {
+                dilithium_sign(&self.private_key, message)
+            },
+            Algorithm::Falcon => {
+                falcon_sign(&self.private_key, message)
+            },
+            _ => vec![],
         }
     }
 
@@ -90,6 +130,13 @@ impl KeyPair {
                 let verifying_key = VerifyingKey::from_bytes(&self.public_key).expect("failed to decode public key");
                 verifying_key.verify(message, signature).is_ok()
             },
+            Algorithm::Dilithium => {
+                dilithium_verify(&self.public_key, message, signature)
+            },
+            Algorithm::Falcon => {
+                falcon_verify(&self.public_key, message, signature)
+            },
+            _ => false,
         }
     }
 }
