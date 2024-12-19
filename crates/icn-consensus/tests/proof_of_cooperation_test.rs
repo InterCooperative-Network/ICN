@@ -4,6 +4,8 @@ use icn_consensus::ProofOfCooperation;
 use icn_types::Block;
 use std::sync::Arc;
 use icn_core::ReputationManager;
+use bit_set::BitSet;
+use trie_rs::Trie;
 
 struct MockReputationManager;
 
@@ -51,7 +53,8 @@ async fn test_proof_of_cooperation_vote() {
     let reputation_manager = Arc::new(MockReputationManager);
     let mut poc = ProofOfCooperation::new(reputation_manager);
     poc.vote("participant1".to_string(), true);
-    assert_eq!(poc.votes.get("participant1"), Some(&true));
+    assert!(poc.votes.contains(0));
+    assert!(poc.vote_trie.contains("participant1"));
 }
 
 #[tokio::test]
@@ -63,7 +66,7 @@ async fn test_proof_of_cooperation_finalize_block() {
     poc.vote("participant1".to_string(), true);
     poc.vote("participant2".to_string(), true);
     poc.vote("participant3".to_string(), false);
-    assert_eq!(poc.finalize_block(), Some(block));
+    assert_eq!(poc.finalize_block().await, Some(block));
 }
 
 #[tokio::test]
@@ -83,7 +86,7 @@ async fn test_proof_of_cooperation_reputation_weighted_voting() {
     poc.vote("participant1".to_string(), true);
     poc.vote("participant2".to_string(), true);
     poc.vote("participant3".to_string(), false);
-    assert_eq!(poc.finalize_block(), Some(block));
+    assert_eq!(poc.finalize_block().await, Some(block));
 }
 
 #[tokio::test]
@@ -91,4 +94,16 @@ async fn test_proof_of_cooperation_reputation_threshold() {
     let reputation_manager = Arc::new(MockReputationManager);
     let mut poc = ProofOfCooperation::new(reputation_manager);
     assert!(poc.is_eligible("participant1"));
+}
+
+#[tokio::test]
+async fn test_proof_of_cooperation_parallel_vote_counting() {
+    let reputation_manager = Arc::new(MockReputationManager);
+    let mut poc = ProofOfCooperation::new(reputation_manager);
+    poc.vote("participant1".to_string(), true);
+    poc.vote("participant2".to_string(), true);
+    poc.vote("participant3".to_string(), false);
+    let (total_reputation, approval_reputation) = poc.parallel_vote_counting().await;
+    assert_eq!(total_reputation, 30);
+    assert_eq!(approval_reputation, 20);
 }
