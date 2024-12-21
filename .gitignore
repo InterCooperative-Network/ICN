@@ -126,3 +126,5 @@ tools/.env/
 *.d
 *.rs.bk
 *.log
+project_docs_dump.txt
+project_code_dump.txt

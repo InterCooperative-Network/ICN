@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sun Dec 15 04:50:54 UTC 2024
+Project Code Dump - Generated Sat Dec 21 18:12:05 UTC 2024
 ======================================
 
 LLM Context Information
@@ -29,17 +29,22 @@ File Organization:
 Project Tree:
 =============
 .
+├── Cargo.lock
+├── Cargo.toml
 ├── ICN.code-workspace
+├── README.md
 ├── backend
 │   └── Cargo.toml
 ├── contracts
-│   └── cooperative
-│       └── src
+│   ├── cooperative
+│   │   └── src
+│   └── governance
 ├── crates
 │   ├── icn-consensus
 │   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-core
+│   │   ├── Cargo.lock
 │   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-crypto
@@ -66,7 +71,12 @@ Project Tree:
 ├── frontend
 │   ├── package.json
 │   ├── src
-│   │   └── components
+│   │   ├── app
+│   │   ├── components
+│   │   ├── contexts
+│   │   ├── hooks
+│   │   ├── lib
+│   │   └── styles
 │   └── tsconfig.json
 ├── generate_code_dump.sh
 ├── identity
@@ -75,11 +85,19 @@ Project Tree:
 │   └── mod.rs
 ├── improved-setup.sh
 ├── inventory_nodes.sh
+├── old_src_backup
+│   ├── config
+│   ├── consensus
+│   ├── network
+│   ├── storage
+│   └── vm
 ├── project_code_dump.txt
 ├── project_docs_dump.txt
 ├── setup_and_run_script.sh
 ├── setup_docs.sh
 ├── setup_venv.sh
+├── src
+│   └── block.rs
 ├── start_docs_server.sh
 └── tools
     ├── README.md
@@ -89,14 +107,15 @@ Project Tree:
     │   ├── __init__.py
     │   ├── docmanager.py
     │   ├── docsctl
-    │   └── specgen.py
+    │   ├── specgen.py
+    │   └── venv
     ├── install_docsctl.sh
     └── requirements.txt
 
 ===================
 File: ./backend/Cargo.toml
-Size: 597 bytes
-Modified: 2024-12-15 04:28:45.682118797 +0000
+Size: 617 bytes
+Modified: 2024-12-17 00:38:49.193177112 +0000
 
 ===================
 ```toml
@@ -122,21 +141,203 @@ warp = "0.3"
 futures-util = "0.3"
 hashbrown = "0.11"
 tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+```
+
+===================
+File: ./frontend/package.json
+Size: 546 bytes
+Modified: 2024-12-16 14:21:48.053095673 +0000
+
+===================
+```json
+{
+  "name": "icn-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for the Inter-Cooperative Network",
+  "main": "index.js",
+  "scripts": {
+    "start": "next start",
+    "build": "next build",
+    "dev": "next dev",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "eslint": "^7.32.0",
+    "prettier": "^2.3.2",
+    "eslint-config-prettier": "^8.3.0",
+    "eslint-plugin-prettier": "^3.4.0"
+  }
+}
 ```
 
 ===================
 File: ./docker/docker-compose.yml
 Size: 829 bytes
-Modified: 2024-12-15 04:28:47.482118852 +0000
+Modified: 2024-12-17 00:38:49.194177112 +0000
 
 ===================
+
+===================
+File: ./.devcontainer/docker-compose.yml
+Size: 829 bytes
+Modified: 2024-12-16 14:21:48.047095702 +0000
+
+===================
+
+===================
+File: ./crates/icn-storage/src/lib.rs
+Size: 3686 bytes
+Modified: 2024-12-16 14:21:48.049095692 +0000
+Dependencies:
+mod tests {
+use icn-types::Block;
+use serde::{Serialize, Deserialize};
+use std::sync::Arc;
+use thiserror::Error;
+use tokio::sync::Mutex;
+
+===================
+```rs
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use serde::{Serialize, Deserialize};
+use thiserror::Error;
+use icn-types::Block;
+
+/// Errors that can occur in storage operations
+#[derive(Error, Debug)]
+pub enum StorageError {
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+    
+    #[error("Item not found: {0}")]
+    NotFound(String),
+    
+    #[error("Invalid data: {0}")]
+    InvalidData(String),
+}
+
+/// Represents the result of storage operations
+pub type StorageResult<T> = Result<T, StorageError>;
+
+/// Core storage interface for the system
+#[async_trait::async_trait]
+pub trait StorageBackend: Send + Sync {
+    /// Store a value with the given key
+    async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()>;
+    
+    /// Retrieve a value by key
+    async fn get(&self, key: &str) -> StorageResult<Vec<u8>>;
+    
+    /// Delete a value by key
+    async fn delete(&self, key: &str) -> StorageResult<()>;
+    
+    /// Check if a key exists
+    async fn exists(&self, key: &str) -> StorageResult<bool>;
+}
+
+/// Manages persistent storage for the system
+pub struct StorageManager {
+    backend: Arc<Mutex<Box<dyn StorageBackend>>>,
+}
+
+impl StorageManager {
+    /// Create a new storage manager with the given backend
+    pub fn new(backend: Box<dyn StorageBackend>) -> Self {
+        Self {
+            backend: Arc::new(Mutex::new(backend)),
+        }
+    }
+    
+    /// Store a serializable value
+    pub async fn store<T: Serialize>(&self, key: &str, value: &T) -> StorageResult<()> {
+        let serialized = serde_json::to_vec(value)
+            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            
+        let backend = self.backend.lock().await;
+        backend.set(key, &serialized).await
+    }
+    
+    /// Retrieve and deserialize a value
+    pub async fn retrieve<T: for<'de> Deserialize<'de>>(&self, key: &str) -> StorageResult<T> {
+        let backend = self.backend.lock().await;
+        let data = backend.get(key).await?;
+        
+        serde_json::from_slice(&data)
+            .map_err(|e| StorageError::SerializationError(e.to_string()))
+    }
+    
+    /// Delete a stored value
+    pub async fn remove(&self, key: &str) -> StorageResult<()> {
+        let backend = self.backend.lock().await;
+        backend.delete(key).await
+    }
+    
+    /// Check if a key exists in storage
+    pub async fn has_key(&self, key: &str) -> StorageResult<bool> {
+        let backend = self.backend.lock().await;
+        backend.exists(key).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    
+    // Mock storage backend for testing
+    struct MockStorage {
+        data: HashMap<String, Vec<u8>>,
+    }
+    
+    #[async_trait::async_trait]
+    impl StorageBackend for MockStorage {
+        async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()> {
+            self.data.insert(key.to_string(), value.to_vec());
+            Ok(())
+        }
+        
+        async fn get(&self, key: &str) -> StorageResult<Vec<u8>> {
+            self.data.get(key)
+                .cloned()
+                .ok_or_else(|| StorageError::NotFound(key.to_string()))
+        }
+        
+        async fn delete(&self, key: &str) -> StorageResult<()> {
+            self.data.remove(key);
+            Ok(())
+        }
+        
+        async fn exists(&self, key: &str) -> StorageResult<bool> {
+            Ok(self.data.contains_key(key))
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_basic_storage_operations() {
+        // Test implementation here
+        // Will add comprehensive tests as we develop
+    }
+}
+```
 
 ===================
 File: ./crates/icn-crypto/src/lib.rs
-Size: 4011 bytes
-Modified: 2024-12-15 04:49:21.330156894 +0000
+Size: 4168 bytes
+Modified: 2024-12-16 14:21:48.049095692 +0000
 Dependencies:
-use p256::ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
+use ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
+use icn-types::Algorithm;
 use rsa::{RSAPrivateKey, RSAPublicKey, PaddingScheme};
 use secp256k1::{Secp256k1, SecretKey, PublicKey, Message, Signature};
 use sha2::{Sha256, Digest};
@@ -146,7 +347,8 @@ use sha2::{Sha256, Digest};
 use secp256k1::{Secp256k1, SecretKey, PublicKey, Message, Signature};
 use sha2::{Sha256, Digest};
 use rsa::{RSAPrivateKey, RSAPublicKey, PaddingScheme};
-use p256::ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
+use ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
+use icn-types::Algorithm;
 
 pub enum Algorithm {
     Secp256k1,
@@ -155,6 +357,9 @@ pub enum Algorithm {
 }
 
 pub struct KeyPair {
+    pub public_key: Vec<u8>,
+    pub private_key: Vec<u8>,
+    pub algorithm: Algorithm,
     pub public_key: Vec<u8>,
     pub private_key: Vec<u8>,
     pub algorithm: Algorithm,
@@ -171,25 +376,25 @@ impl KeyPair {
                     private_key: private_key[..].to_vec(),
                     algorithm,
                 }
-            }
+            },
             Algorithm::RSA => {
                 let private_key = RSAPrivateKey::new(&mut rand::thread_rng(), 2048).expect("failed to generate a key");
                 let public_key = RSAPublicKey::from(&private_key);
                 KeyPair {
-                    public_key: public_key.to_pkcs1().unwrap(),
-                    private_key: private_key.to_pkcs1().unwrap(),
+                    public_key: public_key.to_pkcs1().expect("failed to encode public key"),
+                    private_key: private_key.to_pkcs1().expect("failed to encode private key"),
                     algorithm,
                 }
-            }
+            },
             Algorithm::ECDSA => {
                 let signing_key = SigningKey::random(&mut rand::thread_rng());
                 let verifying_key = VerifyingKey::from(&signing_key);
                 KeyPair {
-                    public_key: verifying_key.to_encoded_point(false).as_bytes().to_vec(),
+                    public_key: verifying_key.to_bytes().to_vec(),
                     private_key: signing_key.to_bytes().to_vec(),
                     algorithm,
                 }
-            }
+            },
         }
     }
 
@@ -200,16 +405,16 @@ impl KeyPair {
                 let private_key = SecretKey::from_slice(&self.private_key).expect("32 bytes");
                 let message = Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
                 secp.sign(&message, &private_key).serialize_compact().to_vec()
-            }
+            },
             Algorithm::RSA => {
-                let private_key = RSAPrivateKey::from_pkcs1(&self.private_key).expect("valid RSA private key");
+                let private_key = RSAPrivateKey::from_pkcs1(&self.private_key).expect("failed to decode private key");
                 let padding = PaddingScheme::new_pkcs1v15_sign(None);
-                private_key.sign(padding, &Sha256::digest(message)).expect("failed to sign").to_vec()
-            }
+                private_key.sign(padding, &Sha256::digest(message)).expect("failed to sign message")
+            },
             Algorithm::ECDSA => {
-                let signing_key = SigningKey::from_bytes(&self.private_key).expect("valid ECDSA private key");
-                signing_key.sign(message).as_ref().to_vec()
-            }
+                let signing_key = SigningKey::from_bytes(&self.private_key).expect("failed to decode private key");
+                signing_key.sign(message).to_bytes().to_vec()
+            },
         }
     }
 
@@ -217,20 +422,20 @@ impl KeyPair {
         match self.algorithm {
             Algorithm::Secp256k1 => {
                 let secp = Secp256k1::new();
-                let public_key = PublicKey::from_slice(&self.public_key).expect("valid secp256k1 public key");
+                let public_key = PublicKey::from_slice(&self.public_key).expect("invalid public key");
                 let message = Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
-                let signature = Signature::from_compact(signature).expect("valid secp256k1 signature");
+                let signature = Signature::from_compact(signature).expect("invalid signature");
                 secp.verify(&message, &signature, &public_key).is_ok()
-            }
+            },
             Algorithm::RSA => {
-                let public_key = RSAPublicKey::from_pkcs1(&self.public_key).expect("valid RSA public key");
+                let public_key = RSAPublicKey::from_pkcs1(&self.public_key).expect("failed to decode public key");
                 let padding = PaddingScheme::new_pkcs1v15_sign(None);
                 public_key.verify(padding, &Sha256::digest(message), signature).is_ok()
-            }
+            },
             Algorithm::ECDSA => {
-                let verifying_key = VerifyingKey::from_sec1_bytes(&self.public_key).expect("valid ECDSA public key");
+                let verifying_key = VerifyingKey::from_bytes(&self.public_key).expect("failed to decode public key");
                 verifying_key.verify(message, signature).is_ok()
-            }
+            },
         }
     }
 }
@@ -241,153 +446,9 @@ pub fn hash(data: &[u8]) -> Vec<u8> {
 ```
 
 ===================
-File: ./crates/icn-consensus/src/lib.rs
-Size: 2335 bytes
-Modified: 2024-12-15 04:28:47.482118852 +0000
-Dependencies:
-use async_trait::async_trait;
-use icn_core::ReputationManager;
-use std::collections::HashMap;
-use std::time::Duration;
-use tokio::time::sleep;
-
-===================
-```rs
-pub mod proof_of_cooperation;
-pub mod validation;
-pub mod round_management;
-pub mod timeout_handling;
-
-use async_trait::async_trait;
-use std::collections::HashMap;
-use std::time::Duration;
-use tokio::time::sleep;
-use icn_core::ReputationManager;
-
-pub struct ProofOfCooperation {
-    current_round: u64,
-    participants: Vec<String>,
-    proposed_block: Option<Block>,
-    votes: HashMap<String, bool>,
-    timeout: Duration,
-    timeout_handling: timeout_handling::TimeoutHandling,
-    reputation_manager: Arc<dyn ReputationManager>,
-}
-
-impl ProofOfCooperation {
-    pub fn new(reputation_manager: Arc<dyn ReputationManager>) -> Self {
-        ProofOfCooperation {
-            current_round: 0,
-            participants: Vec::new(),
-            proposed_block: None,
-            votes: HashMap::new(),
-            timeout: Duration::from_secs(60),
-            timeout_handling: timeout_handling::TimeoutHandling::new(Duration::from_secs(60)),
-            reputation_manager,
-        }
-    }
-
-    pub fn start_round(&mut self) {
-        self.current_round += 1;
-        self.proposed_block = None;
-        self.votes.clear();
-    }
-
-    pub fn propose_block(&mut self, block: Block) {
-        self.proposed_block = Some(block);
-    }
-
-    pub fn vote(&mut self, participant: String, vote: bool) {
-        if self.is_eligible(&participant) {
-            self.votes.insert(participant, vote);
-        }
-    }
-
-    pub fn finalize_block(&self) -> Option<Block> {
-        let total_reputation: i64 = self.votes.keys().map(|p| self.reputation_manager.get_reputation(p, "consensus")).sum();
-        let approval_reputation: i64 = self.votes.iter().filter(|&(_, &v)| v).map(|(p, _)| self.reputation_manager.get_reputation(p, "consensus")).sum();
-
-        if approval_reputation > total_reputation / 2 {
-            self.proposed_block.clone()
-        } else {
-            None
-        }
-    }
-
-    pub async fn handle_timeout(&self) {
-        self.timeout_handling.handle_timeout().await;
-    }
-
-    fn is_eligible(&self, participant: &str) -> bool {
-        self.reputation_manager.is_eligible(participant, 10, "consensus")
-    }
-}
-
-#[async_trait]
-impl ConsensusEngine for ProofOfCooperation {
-    async fn start(&self) {
-        // Start the consensus process
-    }
-
-    async fn stop(&self) {
-        // Stop the consensus process
-    }
-}
-```
-
-===================
-File: ./crates/icn-p2p/src/lib.rs
-Size: 57 bytes
-Modified: 2024-12-15 04:28:47.482118852 +0000
-Dependencies:
-
-===================
-```rs
-pub mod websocket;
-pub mod protocol;
-pub mod networking;
-```
-
-===================
-File: ./crates/icn-runtime/src/lib.rs
-Size: 518 bytes
-Modified: 2024-12-15 04:28:47.482118852 +0000
-Dependencies:
-use async_trait::async_trait;
-use icn_types::{Block, Transaction};
-
-===================
-```rs
-use async_trait::async_trait;
-use icn_types::{Block, Transaction};
-
-pub struct RuntimeManager {
-    // Fields for the RuntimeManager struct
-}
-
-impl RuntimeManager {
-    // Methods for the RuntimeManager struct
-}
-
-#[async_trait]
-pub trait VM {
-    async fn execute_transaction(&self, transaction: Transaction);
-    async fn execute_block(&self, block: Block);
-}
-
-pub struct ContractExecution {
-    // Fields for the ContractExecution struct
-}
-
-impl ContractExecution {
-    // Methods for the ContractExecution struct
-}
-```
-
-===================
 File: ./crates/icn-types/src/lib.rs
-Size: 18487 bytes
-Modified: 2024-12-15 04:28:47.482118852 +0000
+Size: 19644 bytes
+Modified: 2024-12-16 01:24:43.503945460 +0000
 Dependencies:
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
@@ -398,6 +459,7 @@ use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::SystemTime;
+use thiserror::Error;
 use tokio::task;
 
 ===================
@@ -412,6 +474,32 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use lazy_static::lazy_static;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum BlockError {
+    #[error("Invalid block hash")]
+    InvalidHash,
+    #[error("Previous hash mismatch")]
+    PreviousHashMismatch,
+    #[error("Invalid block index")]
+    InvalidIndex,
+    #[error("Invalid timestamp")]
+    InvalidTimestamp,
+    #[error("Invalid transaction: {0}")]
+    InvalidTransaction(String),
+    #[error("Resource usage mismatch")]
+    ResourceMismatch,
+    #[error("Relationship metadata mismatch")]
+    MetadataMismatch,
+}
+
+#[derive(Debug)]
+pub struct ResourceDebt {
+    pub cpu_debt: u64,
+    pub memory_debt: u64,
+    pub bandwidth_debt: u64,
+}
 
 /// Represents a block in the blockchain
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -592,24 +680,22 @@ impl Block {
     }
 
     /// Verifies the block's integrity
-    pub async fn verify(&self, previous_block: Option<&Block>) -> Result<(), String> {
+    pub async fn verify(&self, previous_block: Option<&Block>) -> Result<(), BlockError> {
         // Verify hash
         if self.hash != self.calculate_hash() {
-            return Err("Invalid block hash".to_string());
+            return Err(BlockError::InvalidHash);
         }
 
-        // Verify previous hash and index if we have a parent block
+        // Verify previous block linkage
         if let Some(prev) = previous_block {
             if self.previous_hash != prev.hash {
-                return Err("Previous hash mismatch".to_string());
+                return Err(BlockError::PreviousHashMismatch);
             }
-
             if self.index != prev.index + 1 {
-                return Err("Invalid block index".to_string());
+                return Err(BlockError::InvalidIndex);
             }
-
             if self.timestamp <= prev.timestamp {
-                return Err("Invalid timestamp".to_string());
+                return Err(BlockError::InvalidTimestamp);
             }
         }
 
@@ -620,7 +706,7 @@ impl Block {
             .as_millis() as u64;
 
         if self.timestamp > current_time + 5000 { // Allow 5 second drift
-            return Err("Block timestamp is in the future".to_string());
+            return Err(BlockError::InvalidTimestamp);
         }
 
         // Group transactions by type
@@ -656,7 +742,7 @@ impl Block {
 
         for task in validation_tasks {
             if !task.await.unwrap() {
-                return Err("Invalid transaction".to_string());
+                return Err(BlockError::InvalidTransaction("One or more invalid transactions".into()));
             }
         }
 
@@ -665,13 +751,13 @@ impl Block {
             .map(|tx| tx.resource_cost)
             .sum();
         if calculated_resources != self.metadata.resources_used {
-            return Err("Resource usage mismatch".to_string());
+            return Err(BlockError::ResourceMismatch);
         }
 
         // Verify relationship metadata
         let calculated_metadata = Self::calculate_relationship_metadata(&self.transactions);
         if calculated_metadata != self.metadata.relationship_updates {
-            return Err("Relationship metadata mismatch".to_string());
+            return Err(BlockError::MetadataMismatch);
         }
 
         Ok(())
@@ -742,6 +828,25 @@ impl Block {
     /// Gets the block size in bytes
     pub fn size(&self) -> u64 {
         self.metadata.size
+    }
+
+    /// Finalizes the block and ensures all validations pass
+    pub async fn finalize(&mut self) -> Result<(), BlockError> {
+        self.verify(None).await?;
+        
+        let resource_usage = self.transactions.par_iter()
+            .map(|tx| tx.resource_cost)
+            .sum();
+            
+        self.metadata.resources_used = resource_usage;
+        
+        self.metadata.size = bincode::serialize(&self)
+            .map_err(|_| BlockError::InvalidHash)?
+            .len() as u64;
+            
+        self.hash = self.calculate_hash();
+        
+        Ok(())
     }
 }
 
@@ -939,147 +1044,158 @@ impl Transaction {
 ```
 
 ===================
-File: ./crates/icn-storage/src/lib.rs
-Size: 3664 bytes
-Modified: 2024-12-15 04:28:47.482118852 +0000
+File: ./crates/icn-p2p/src/lib.rs
+Size: 86 bytes
+Modified: 2024-12-16 14:21:48.049095692 +0000
 Dependencies:
-mod tests {
-use serde::{Serialize, Deserialize};
-use std::sync::Arc;
-use thiserror::Error;
-use tokio::sync::Mutex;
+use icn-types::Transaction;
 
 ===================
 ```rs
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use serde::{Serialize, Deserialize};
-use thiserror::Error;
+pub mod websocket;
+pub mod protocol;
+pub mod networking;
 
-/// Errors that can occur in storage operations
-#[derive(Error, Debug)]
-pub enum StorageError {
-    #[error("Database error: {0}")]
-    DatabaseError(String),
-    
-    #[error("Serialization error: {0}")]
-    SerializationError(String),
-    
-    #[error("Item not found: {0}")]
-    NotFound(String),
-    
-    #[error("Invalid data: {0}")]
-    InvalidData(String),
+use icn-types::Transaction;
+```
+
+===================
+File: ./crates/icn-runtime/src/lib.rs
+Size: 518 bytes
+Modified: 2024-12-16 14:21:48.049095692 +0000
+Dependencies:
+use async_trait::async_trait;
+use icn_types::{Block, Transaction};
+
+===================
+```rs
+use async_trait::async_trait;
+use icn_types::{Block, Transaction};
+
+pub struct RuntimeManager {
+    // Fields for the RuntimeManager struct
 }
 
-/// Represents the result of storage operations
-pub type StorageResult<T> = Result<T, StorageError>;
-
-/// Core storage interface for the system
-#[async_trait::async_trait]
-pub trait StorageBackend: Send + Sync {
-    /// Store a value with the given key
-    async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()>;
-    
-    /// Retrieve a value by key
-    async fn get(&self, key: &str) -> StorageResult<Vec<u8>>;
-    
-    /// Delete a value by key
-    async fn delete(&self, key: &str) -> StorageResult<()>;
-    
-    /// Check if a key exists
-    async fn exists(&self, key: &str) -> StorageResult<bool>;
+impl RuntimeManager {
+    // Methods for the RuntimeManager struct
 }
 
-/// Manages persistent storage for the system
-pub struct StorageManager {
-    backend: Arc<Mutex<Box<dyn StorageBackend>>>,
+#[async_trait]
+pub trait VM {
+    async fn execute_transaction(&self, transaction: Transaction);
+    async fn execute_block(&self, block: Block);
 }
 
-impl StorageManager {
-    /// Create a new storage manager with the given backend
-    pub fn new(backend: Box<dyn StorageBackend>) -> Self {
-        Self {
-            backend: Arc::new(Mutex::new(backend)),
+pub struct ContractExecution {
+    // Fields for the ContractExecution struct
+}
+
+impl ContractExecution {
+    // Methods for the ContractExecution struct
+}
+```
+
+===================
+File: ./crates/icn-consensus/src/lib.rs
+Size: 2357 bytes
+Modified: 2024-12-16 14:21:48.049095692 +0000
+Dependencies:
+use async_trait::async_trait;
+use icn_core::ReputationManager;
+use icn_types::Block;
+use std::collections::HashMap;
+use std::time::Duration;
+use tokio::time::sleep;
+
+===================
+```rs
+pub mod proof_of_cooperation;
+pub mod validation;
+pub mod round_management;
+pub mod timeout_handling;
+
+use async_trait::async_trait;
+use std::collections::HashMap;
+use std::time::Duration;
+use tokio::time::sleep;
+use icn_core::ReputationManager;
+use icn_types::Block;
+
+pub struct ProofOfCooperation {
+    current_round: u64,
+    participants: Vec<String>,
+    proposed_block: Option<Block>,
+    votes: HashMap<String, bool>,
+    timeout: Duration,
+    timeout_handling: timeout_handling::TimeoutHandling,
+    reputation_manager: Arc<dyn ReputationManager>,
+}
+
+impl ProofOfCooperation {
+    pub fn new(reputation_manager: Arc<dyn ReputationManager>) -> Self {
+        ProofOfCooperation {
+            current_round: 0,
+            participants: Vec::new(),
+            proposed_block: None,
+            votes: HashMap::new(),
+            timeout: Duration::from_secs(60),
+            timeout_handling: timeout_handling::TimeoutHandling::new(Duration::from_secs(60)),
+            reputation_manager,
         }
     }
-    
-    /// Store a serializable value
-    pub async fn store<T: Serialize>(&self, key: &str, value: &T) -> StorageResult<()> {
-        let serialized = serde_json::to_vec(value)
-            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-            
-        let backend = self.backend.lock().await;
-        backend.set(key, &serialized).await
+
+    pub fn start_round(&mut self) {
+        self.current_round += 1;
+        self.proposed_block = None;
+        self.votes.clear();
     }
-    
-    /// Retrieve and deserialize a value
-    pub async fn retrieve<T: for<'de> Deserialize<'de>>(&self, key: &str) -> StorageResult<T> {
-        let backend = self.backend.lock().await;
-        let data = backend.get(key).await?;
-        
-        serde_json::from_slice(&data)
-            .map_err(|e| StorageError::SerializationError(e.to_string()))
+
+    pub fn propose_block(&mut self, block: Block) {
+        self.proposed_block = Some(block);
     }
-    
-    /// Delete a stored value
-    pub async fn remove(&self, key: &str) -> StorageResult<()> {
-        let backend = self.backend.lock().await;
-        backend.delete(key).await
+
+    pub fn vote(&mut self, participant: String, vote: bool) {
+        if self.is_eligible(&participant) {
+            self.votes.insert(participant, vote);
+        }
     }
-    
-    /// Check if a key exists in storage
-    pub async fn has_key(&self, key: &str) -> StorageResult<bool> {
-        let backend = self.backend.lock().await;
-        backend.exists(key).await
+
+    pub fn finalize_block(&self) -> Option<Block> {
+        let total_reputation: i64 = self.votes.keys().map(|p| self.reputation_manager.get_reputation(p, "consensus")).sum();
+        let approval_reputation: i64 = self.votes.iter().filter(|&(_, &v)| v).map(|(p, _)| self.reputation_manager.get_reputation(p, "consensus")).sum();
+
+        if approval_reputation > total_reputation / 2 {
+            self.proposed_block.clone()
+        } else {
+            None
+        }
+    }
+
+    pub async fn handle_timeout(&self) {
+        self.timeout_handling.handle_timeout().await;
+    }
+
+    fn is_eligible(&self, participant: &str) -> bool {
+        self.reputation_manager.is_eligible(participant, 10, "consensus")
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashMap;
-    
-    // Mock storage backend for testing
-    struct MockStorage {
-        data: HashMap<String, Vec<u8>>,
+#[async_trait]
+impl ConsensusEngine for ProofOfCooperation {
+    async fn start(&self) {
+        // Start the consensus process
     }
-    
-    #[async_trait::async_trait]
-    impl StorageBackend for MockStorage {
-        async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()> {
-            self.data.insert(key.to_string(), value.to_vec());
-            Ok(())
-        }
-        
-        async fn get(&self, key: &str) -> StorageResult<Vec<u8>> {
-            self.data.get(key)
-                .cloned()
-                .ok_or_else(|| StorageError::NotFound(key.to_string()))
-        }
-        
-        async fn delete(&self, key: &str) -> StorageResult<()> {
-            self.data.remove(key);
-            Ok(())
-        }
-        
-        async fn exists(&self, key: &str) -> StorageResult<bool> {
-            Ok(self.data.contains_key(key))
-        }
-    }
-    
-    #[tokio::test]
-    async fn test_basic_storage_operations() {
-        // Test implementation here
-        // Will add comprehensive tests as we develop
+
+    async fn stop(&self) {
+        // Stop the consensus process
     }
 }
 ```
 
 ===================
 File: ./crates/icn-core/src/lib.rs
-Size: 4079 bytes
-Modified: 2024-12-15 04:49:21.354156894 +0000
+Size: 4097 bytes
+Modified: 2024-12-16 01:18:30.662003017 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_consensus::ProofOfCooperation;
@@ -1185,8 +1301,8 @@ pub trait RuntimeManager {
 pub trait IdentityManager {
     async fn start(&self);
     async fn stop(&self);
-    async fn register_did(&self, did: String, public_key: String);
-    async fn verify_did(&self, did: String, signature: String) -> bool;
+    async fn register_did(&self, did: String, public_key: String, algorithm: Algorithm);
+    async fn verify_did(&self, did: String, signature: String, algorithm: Algorithm) -> bool;
 }
 
 #[async_trait]
