@@ -319,3 +319,75 @@ async fn test_governance_proposal_creation_and_voting() {
 
     assert_eq!(proposal_history.get_proposal(proposal.id.clone()).unwrap().votes_for, 1);
 }
+
+// Tests for enhanced reputation management
+
+#[tokio::test]
+async fn test_dynamic_reputation_adjustment() {
+    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+
+    {
+        let mut reputation = reputation_system.lock().unwrap();
+        reputation.dynamic_adjustment("did:icn:test", 50);
+    }
+
+    {
+        let reputation = reputation_system.lock().unwrap();
+        assert_eq!(reputation.get_reputation("did:icn:test", "consensus".to_string()), 50);
+    }
+}
+
+#[tokio::test]
+async fn test_reputation_decay_mechanism() {
+    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+
+    {
+        let mut reputation = reputation_system.lock().unwrap();
+        reputation.adjust_reputation("did:icn:test", 100, "consensus".to_string());
+        reputation.apply_decay("did:icn:test", 0.1);
+    }
+
+    {
+        let reputation = reputation_system.lock().unwrap();
+        assert_eq!(reputation.get_reputation("did:icn:test", "consensus".to_string()), 90);
+    }
+}
+
+#[tokio::test]
+async fn test_reputation_based_access_control() {
+    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+
+    {
+        let mut reputation = reputation_system.lock().unwrap();
+        reputation.adjust_reputation("did:icn:test", 50, "consensus".to_string());
+    }
+
+    {
+        let reputation = reputation_system.lock().unwrap();
+        assert!(reputation.reputation_based_access("did:icn:test", 30));
+        assert!(!reputation.reputation_based_access("did:icn:test", 60));
+    }
+}
+
+// Tests for post-quantum algorithms integration
+
+#[tokio::test]
+async fn test_post_quantum_algorithms_integration() {
+    let did_kyber = DID::new("did:icn:kyber".to_string(), Algorithm::Kyber);
+    let did_dilithium = DID::new("did:icn:dilithium".to_string(), Algorithm::Dilithium);
+    let did_falcon = DID::new("did:icn:falcon".to_string(), Algorithm::Falcon);
+
+    let message = b"test message";
+
+    // Test Kyber
+    let signature_kyber = did_kyber.sign_message(message).expect("Failed to sign message with Kyber");
+    assert!(did_kyber.verify_signature(message, &signature_kyber).expect("Failed to verify Kyber signature"));
+
+    // Test Dilithium
+    let signature_dilithium = did_dilithium.sign_message(message).expect("Failed to sign message with Dilithium");
+    assert!(did_dilithium.verify_signature(message, &signature_dilithium).expect("Failed to verify Dilithium signature"));
+
+    // Test Falcon
+    let signature_falcon = did_falcon.sign_message(message).expect("Failed to sign message with Falcon");
+    assert!(did_falcon.verify_signature(message, &signature_falcon).expect("Failed to verify Falcon signature"));
+}

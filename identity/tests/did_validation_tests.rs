@@ -23,6 +23,50 @@ fn test_did_serialization() {
 fn test_did_sign_and_verify() {
     let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
     let message = b"test message";
-    let signature = did.sign_message(message);
-    assert!(did.verify_signature(message, &signature));
+    let signature = did.sign_message(message).expect("Failed to sign message");
+    assert!(did.verify_signature(message, &signature).expect("Failed to verify signature"));
+}
+
+#[test]
+fn test_did_creation_rsa() {
+    let did = DID::new("did:example:456".to_string(), Algorithm::RSA);
+    assert_eq!(did.id, "did:example:456");
+}
+
+#[test]
+fn test_did_serialization_rsa() {
+    let did = DID::new("did:example:456".to_string(), Algorithm::RSA);
+    let serializable_did: SerializableDID = (&did).into();
+    let deserialized_did: DID = (&serializable_did).into();
+    assert_eq!(did.id, deserialized_did.id);
+}
+
+#[test]
+fn test_did_sign_and_verify_rsa() {
+    let did = DID::new("did:example:456".to_string(), Algorithm::RSA);
+    let message = b"test message";
+    let signature = did.sign_message(message).expect("Failed to sign message");
+    assert!(did.verify_signature(message, &signature).expect("Failed to verify signature"));
+}
+
+#[test]
+fn test_did_creation_ecdsa() {
+    let did = DID::new("did:example:789".to_string(), Algorithm::ECDSA);
+    assert_eq!(did.id, "did:example:789");
+}
+
+#[test]
+fn test_did_serialization_ecdsa() {
+    let did = DID::new("did:example:789".to_string(), Algorithm::ECDSA);
+    let serializable_did: SerializableDID = (&did).into();
+    let deserialized_did: DID = (&serializable_did).into();
+    assert_eq!(did.id, deserialized_did.id);
+}
+
+#[test]
+fn test_did_sign_and_verify_ecdsa() {
+    let did = DID::new("did:example:789".to_string(), Algorithm::ECDSA);
+    let message = b"test message";
+    let signature = did.sign_message(message).expect("Failed to sign message");
+    assert!(did.verify_signature(message, &signature).expect("Failed to verify signature"));
 }
