@@ -277,22 +277,24 @@ impl Block {
 
         let validation_tasks: Vec<_> = grouped_transactions.iter()
             .flat_map(|(_, txs)| {
-                let grouped_transactions = Arc::clone(&grouped_transactions);
-                txs.iter().map(move |tx| {
-                    let tx_hash = tx.hash.clone();
-                    task::spawn({
-                        let grouped_transactions = Arc::clone(&grouped_transactions);
-                        async move {
-                            let mut cache = TRANSACTION_CACHE.lock().unwrap();
-                            if let Some(&is_valid) = cache.get(&tx_hash) {
-                                is_valid
-                            } else {
-                                let is_valid = tx.validate();
-                                cache.insert(tx_hash, is_valid);
-                                is_valid
+                txs.iter().map({
+                    let grouped_transactions = Arc::clone(&grouped_transactions);
+                    move |tx| {
+                        let tx_hash = tx.hash.clone();
+                        task::spawn({
+                            let grouped_transactions = Arc::clone(&grouped_transactions);
+                            async move {
+                                let mut cache = TRANSACTION_CACHE.lock().unwrap();
+                                if let Some(&is_valid) = cache.get(&tx_hash) {
+                                    is_valid
+                                } else {
+                                    let is_valid = tx.validate();
+                                    cache.insert(tx_hash, is_valid);
+                                    is_valid
+                                }
                             }
-                        }
-                    })
+                        })
+                    }
                 })
             })
             .collect();
