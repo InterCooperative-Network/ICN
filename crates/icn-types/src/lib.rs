@@ -2,11 +2,10 @@ use std::time::SystemTime;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
-use serde_derive::{Serialize, Deserialize};
 use tokio::task;
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Mutex};
 use lazy_static::lazy_static;
 use thiserror::Error;
 
@@ -244,20 +243,20 @@ impl Block {
         }
 
         // Group transactions by type
-        let mut grouped_transactions: HashMap<&str, Vec<&Transaction>> = HashMap::new();
-        for tx in &self.transactions {
-            let tx_type = match &tx.transaction_type {
-                TransactionType::Transfer { .. } => "Transfer",
-                TransactionType::ContractExecution { .. } => "ContractExecution",
-                TransactionType::RecordContribution { .. } => "RecordContribution",
-                TransactionType::RecordMutualAid { .. } => "RecordMutualAid",
-                TransactionType::UpdateRelationship { .. } => "UpdateRelationship",
-                TransactionType::AddEndorsement { .. } => "AddEndorsement",
-            };
-            grouped_transactions.entry(tx_type).or_default().push(tx);
-        }
+        let grouped_transactions: HashMap<&str, Vec<&Transaction>> = self.transactions.iter()
+            .fold(HashMap::new(), |mut acc, tx| {
+                let tx_type = match &tx.transaction_type {
+                    TransactionType::Transfer { .. } => "Transfer",
+                    TransactionType::ContractExecution { .. } => "ContractExecution",
+                    TransactionType::RecordContribution { .. } => "RecordContribution",
+                    TransactionType::RecordMutualAid { .. } => "RecordMutualAid",
+                    TransactionType::UpdateRelationship { .. } => "UpdateRelationship",
+                    TransactionType::AddEndorsement { .. } => "AddEndorsement",
+                };
+                acc.entry(tx_type).or_default().push(tx);
+                acc
+            });
 
-        // Validate transactions in parallel
         let validation_tasks: Vec<_> = grouped_transactions.iter()
             .flat_map(|(_, txs)| txs.iter().map(|tx| {
                 let tx_hash = tx.hash.clone();
@@ -568,10 +567,6 @@ impl Transaction {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        bytes.extend(self.sender.as_bytes());
-        bytes.extend(self.hash.as_bytes());
-        bytes.extend(&self.timestamp.to_be_bytes());
-        bytes
-    }
+        // ...method implementation...
+    } // Add this closing brace
 }
