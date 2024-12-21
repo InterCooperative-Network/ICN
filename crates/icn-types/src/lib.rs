@@ -5,7 +5,8 @@ use chrono::{DateTime, Utc};
 use tokio::task;
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::sync::{Mutex};
+
+use std::sync::{Mutex, Arc}; // Re-import Arc
 use lazy_static::lazy_static;
 use thiserror::Error;
 
@@ -242,42 +243,8 @@ impl Block {
             return Err(BlockError::InvalidTimestamp);
         }
 
-        // Group transactions by type
-        let grouped_transactions: HashMap<&str, Vec<&Transaction>> = self.transactions.iter()
-            .fold(HashMap::new(), |mut acc, tx| {
-                let tx_type = match &tx.transaction_type {
-                    TransactionType::Transfer { .. } => "Transfer",
-                    TransactionType::ContractExecution { .. } => "ContractExecution",
-                    TransactionType::RecordContribution { .. } => "RecordContribution",
-                    TransactionType::RecordMutualAid { .. } => "RecordMutualAid",
-                    TransactionType::UpdateRelationship { .. } => "UpdateRelationship",
-                    TransactionType::AddEndorsement { .. } => "AddEndorsement",
-                };
-                acc.entry(tx_type).or_default().push(tx);
-                acc
-            });
-
-        let validation_tasks: Vec<_> = grouped_transactions.iter()
-            .flat_map(|(_, txs)| txs.iter().map(|tx| {
-                let tx_hash = tx.hash.clone();
-                task::spawn(async move {
-                    let mut cache = TRANSACTION_CACHE.lock().unwrap();
-                    if let Some(&is_valid) = cache.get(&tx_hash) {
-                        is_valid
-                    } else {
-                        let is_valid = tx.validate();
-                        cache.insert(tx_hash, is_valid);
-                        is_valid
-                    }
-                })
-            }))
-            .collect();
-
-        for task in validation_tasks {
-            if !task.await.unwrap() {
-                return Err(BlockError::InvalidTransaction("One or more invalid transactions".into()));
-            }
-        }
+        // Validate transactions
+        self.validate_transactions().await?;
 
         // Verify resource usage
         let calculated_resources: u64 = self.transactions.iter()
@@ -291,6 +258,49 @@ impl Block {
         let calculated_metadata = Self::calculate_relationship_metadata(&self.transactions);
         if calculated_metadata != self.metadata.relationship_updates {
             return Err(BlockError::MetadataMismatch);
+        }
+
+        Ok(())
+    }
+
+    /// Validates the transactions in the block
+    async fn validate_transactions(&self) -> Result<(), BlockError> {
+        // Group transactions by type
+        let grouped_transactions: Arc<HashMap<String, Vec<Transaction>>> = Arc::new(
+            self.transactions.iter()
+                .map(|tx| (tx.transaction_type.as_str().to_string(), tx.clone()))
+                .fold(HashMap::new(), |mut acc, (group, tx)| {
+                    acc.entry(group).or_insert_with(Vec::new).push(tx);
+                    acc
+                })
+        );
+
+        let validation_tasks: Vec<_> = grouped_transactions.iter()
+            .flat_map(|(_, txs)| {
+                let grouped_transactions = Arc::clone(&grouped_transactions);
+                txs.iter().map(move |tx| {
+                    let tx_hash = tx.hash.clone();
+                    task::spawn({
+                        let grouped_transactions = Arc::clone(&grouped_transactions);
+                        async move {
+                            let mut cache = TRANSACTION_CACHE.lock().unwrap();
+                            if let Some(&is_valid) = cache.get(&tx_hash) {
+                                is_valid
+                            } else {
+                                let is_valid = tx.validate();
+                                cache.insert(tx_hash, is_valid);
+                                is_valid
+                            }
+                        }
+                    })
+                })
+            })
+            .collect();
+
+        for task in validation_tasks {
+            if !task.await.unwrap() {
+                return Err(BlockError::InvalidTransaction("One or more invalid transactions".into()));
+            }
         }
 
         Ok(())
@@ -426,6 +436,19 @@ pub enum TransactionType {
         context: String,
         skills: Vec<String>,
     },
+}
+
+impl TransactionType {
+    pub fn as_str(&self) -> &str {
+        match self {
+            TransactionType::Transfer { .. } => "Transfer",
+            TransactionType::ContractExecution { .. } => "ContractExecution",
+            TransactionType::RecordContribution { .. } => "RecordContribution",
+            TransactionType::RecordMutualAid { .. } => "RecordMutualAid",
+            TransactionType::UpdateRelationship { .. } => "UpdateRelationship",
+            TransactionType::AddEndorsement { .. } => "AddEndorsement",
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -567,6 +590,6 @@ impl Transaction {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        // ...method implementation...
-    } // Add this closing brace
+        bincode::serialize(self).unwrap_or_default()
+    }
 }
