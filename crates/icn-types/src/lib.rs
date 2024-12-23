@@ -170,12 +170,9 @@ impl Block {
         hasher.update(&self.previous_hash);
         hasher.update(self.timestamp.to_string());
         
-        // Add transaction hashes
-        let transaction_hashes: Vec<String> = self.transactions.par_iter()
-            .map(|tx| tx.hash.clone())
-            .collect();
-        for tx_hash in transaction_hashes {
-            hasher.update(tx_hash);
+        // Add entire transaction data
+        for tx in &self.transactions {
+            hasher.update(serde_json::to_string(tx).unwrap());
         }
         
         // Add proposer
