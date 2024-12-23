@@ -155,3 +155,23 @@ async fn test_invalid_block_transaction() {
     assert!(genesis_block.validate_block(None).is_ok());
     assert!(block1.validate_block(Some(&genesis_block)).is_err());
 }
+
+#[tokio::test]
+async fn test_block_hashing_order() {
+    let genesis_block = Block::genesis();
+    let block = Block::new(
+        1,
+        genesis_block.hash.clone(),
+        vec![Transaction::new(
+            "did:icn:test".to_string(),
+            TransactionType::Transfer {
+                receiver: "did:icn:receiver".to_string(),
+                amount: 100,
+            },
+        )],
+        "did:icn:proposer".to_string(),
+    );
+
+    let expected_hash = block.calculate_hash();
+    assert_eq!(block.hash, expected_hash);
+}

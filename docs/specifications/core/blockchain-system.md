@@ -25,12 +25,38 @@ The Blockchain System is the immutable ledger of the ICN, tracking all transacti
 - **previous_hash**: `String` - Hash of the previous block, linking it to the chain.
 - **timestamp**: `u128` - Millisecond timestamp of creation.
 - **transactions**: `Vec<Transaction>` - List of transactions included in the block.
+- **hash**: `String` - Hash of the block's contents.
+- **proposer**: `String` - DID of the validator that proposed the block.
+- **signatures**: `Vec<BlockSignature>` - Collection of validator signatures approving the block.
+- **metadata**: `BlockMetadata` - Metadata about the block creation.
 
 ### Transaction
 - **sender**: `String` - DID of sender.
 - **receiver**: `String` - DID of receiver.
 - **amount**: `u64` - Value or resource exchanged.
 - **hash**: `String` - Unique hash of the transaction, based on contents.
+
+### BlockSignature
+- **validator_did**: `String` - DID of the signing validator.
+- **signature**: `String` - The signature itself.
+- **timestamp**: `DateTime<Utc>` - Timestamp when signature was created.
+- **voting_power**: `f64` - Voting power of the validator at time of signing.
+
+### BlockMetadata
+- **consensus_duration_ms**: `u64` - Time taken to reach consensus (milliseconds).
+- **validator_count**: `u32` - Number of validators that participated.
+- **total_voting_power**: `f64` - Total voting power that approved the block.
+- **resources_used**: `u64` - Total resources consumed by transactions in the block.
+- **size**: `u64` - Size of the block in bytes.
+- **relationship_updates**: `RelationshipMetadata` - Summary of relationship transactions.
+
+### RelationshipMetadata
+- **contribution_count**: `u32` - Number of contribution transactions.
+- **mutual_aid_count**: `u32` - Number of mutual aid transactions.
+- **endorsement_count**: `u32` - Number of endorsement transactions.
+- **relationship_update_count**: `u32` - Number of relationship update transactions.
+- **total_participants**: `u32` - Total number of participants.
+- **unique_cooperatives**: `Vec<String>` - List of unique cooperatives involved.
 
 ## Methods
 
@@ -43,9 +69,13 @@ Bundles pending transactions into a block, calculating hash and adding to the bl
 ### Calculate Hash
 Computes the hash for each block, securing the data and linking blocks sequentially.
 
+### Verify Block
+Ensures the integrity of the entire transaction data by verifying the block hash.
+
 ## Implementation Guidelines
 - **Block Size Limit**: Define a maximum number of transactions per block to manage processing time.
 - **Difficulty and Verification**: For scalability, adjust verification complexity based on load.
+- **Order of Hashing**: Ensure that the order in which the block fields are hashed is consistent and well-documented to avoid potential hash collisions.
 
 ## Monitoring and Metrics
 - **Transaction Throughput**: Measure number of transactions per block.
