@@ -91,3 +91,52 @@ Transaction {
     timestamp: u128,
     hash: String,
 }
+```
+
+### 2.2 Block Object
+
+```rust
+Block {
+    index: u64,
+    previous_hash: String,
+    timestamp: u64,
+    transactions: Vec<Transaction>,
+    hash: String,
+    proposer: String,
+    signatures: Vec<BlockSignature>,
+    metadata: BlockMetadata,
+}
+```
+
+---
+
+## 3. Hashing Order and Consistency
+
+### 3.1 Order of Hashing
+
+To ensure consistency and avoid potential hash collisions, the order in which the block fields are hashed is explicitly defined:
+
+1. **Block Header Fields**:
+   - `index`
+   - `previous_hash`
+   - `timestamp`
+
+2. **Transaction Data**:
+   - Each transaction's full data (serialized) is included in the hash calculation.
+
+3. **Proposer**:
+   - The DID of the block proposer.
+
+### 3.2 Documentation and Implementation
+
+1. **Documentation**:
+   - The order of hashing is documented in the relevant specification files, including `docs/specifications/core/blockchain-system.md` and `docs/specifications/core/transaction-system.md`.
+
+2. **Code Comments**:
+   - Comments are added in the code where the hashing is implemented to describe the order of fields being hashed.
+
+3. **Unit Tests**:
+   - Unit tests are created to verify the correct order of hashing and ensure the integrity of the entire transaction data.
+
+4. **Consistent Implementation**:
+   - All implementations of the hashing function follow the documented order, verified through code reviews and automated tests.
