@@ -147,6 +147,15 @@ Permissions are checked against reputation thresholds to ensure that only partic
 ### 4.5 Reputation-Weighted Voting
 In the Proof of Cooperation consensus mechanism, voting power is influenced by the reputation scores of the participants. This ensures that participants with higher reputation scores have a greater impact on the decision-making process, while maintaining a cap to prevent centralization.
 
+### 4.6 Real-Time Reputation Recalibration
+Real-time reputation recalibration is implemented to ensure that reputation scores are continuously updated based on ongoing activities and contributions. This includes:
+
+- **Continuous Monitoring**: The reputation system is integrated with various components of the network, such as the consensus mechanism, governance, and resource sharing, to continuously monitor the activities and contributions of participants.
+- **Periodic Updates**: Periodic updates are scheduled to recalculate reputation scores based on recent activities and contributions. This is done using a background task or a scheduled job that runs at regular intervals.
+- **Event-Driven Recalibration**: An event-driven system is implemented that recalibrates reputation scores in response to specific events, such as successful block proposals, voting participation, or resource sharing.
+- **Decay Mechanism**: A decay mechanism is introduced that gradually reduces reputation scores over time if participants do not engage in positive activities. This encourages continuous participation and prevents reputation scores from remaining static.
+- **Reputation-Based Access Control**: Permissions and voting power are based on reputation scores, ensuring that only participants with sufficient reputation can perform critical actions.
+
 ## 5. Implementation Guidelines
 
 ### 5.1 Performance Considerations

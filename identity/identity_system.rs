@@ -7,6 +7,7 @@ use sha2::{Sha256, Digest};
 use crate::did::creation::Algorithm;
 use crate::did::creation::DID;
 use crate::did::creation::DIDError;
+use tokio::time::sleep;
 
 pub struct IdentitySystem {
     permissions: HashMap<String, Vec<String>>,
@@ -120,6 +121,19 @@ impl IdentitySystem {
         } else {
             Err(DIDError::KeyRotation)
         }
+    }
+
+    pub async fn start_real_time_recalibration(&self) {
+        let reputation_system = self.clone();
+        tokio::spawn(async move {
+            loop {
+                {
+                    let mut reputation = reputation_system.lock().unwrap();
+                    reputation.dynamic_recalibration();
+                }
+                sleep(Duration::from_secs(10)).await;
+            }
+        });
     }
 }
 
