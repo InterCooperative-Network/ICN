@@ -52,12 +52,19 @@ interface Relationship {
   }>;
 }
 
+interface ReputationUpdate {
+  did: string;
+  change: number;
+  newTotal: number;
+}
+
 export default function RelationshipIntegration() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [contributions, setContributions] = useState<Contribution[]>([]);
   const [relationships, setRelationships] = useState<Relationship[]>([]);
   const [mutualAid, setMutualAid] = useState<MutualAidInteraction[]>([]);
+  const [reputationUpdates, setReputationUpdates] = useState<ReputationUpdate[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
@@ -73,6 +80,7 @@ export default function RelationshipIntegration() {
         setContributions(data.contributions);
         setRelationships(data.relationships);
         setMutualAid(data.mutualAid);
+        setReputationUpdates(data.reputationUpdates);
         
         // Set up WebSocket connection for real-time updates
         const ws = new WebSocket('ws://localhost:8088/ws');
@@ -92,6 +100,9 @@ export default function RelationshipIntegration() {
                   r.memberOne === update.data.memberOne ? update.data : r
                 )
               );
+              break;
+            case 'reputationUpdate':
+              setReputationUpdates(prev => [...prev, update.data]);
               break;
           }
         };
@@ -141,6 +152,10 @@ export default function RelationshipIntegration() {
           <TabsTrigger value="relationships">
             <MessageCircle className="h-4 w-4 mr-2" />
             Relationships
+          </TabsTrigger>
+          <TabsTrigger value="reputation-updates">
+            <Users className="h-4 w-4 mr-2" />
+            Reputation Updates
           </TabsTrigger>
         </TabsList>
 
@@ -269,6 +284,40 @@ export default function RelationshipIntegration() {
                             </p>
                           </div>
                         ))}
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="reputation-updates">
+          <Card>
+            <CardHeader>
+              <CardTitle>Reputation Updates</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {reputationUpdates.map((update, i) => (
+                  <Card key={i} className="p-4">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold">Reputation Update</h3>
+                        <p className="text-sm text-gray-600">DID: {update.did}</p>
+                      </div>
+                      <span className={`px-2 py-1 rounded text-sm ${
+                        update.change > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {update.change > 0 ? '+' : ''}{update.change}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span>New Total</span>
+                        <span>{update.newTotal}</span>
                       </div>
                     </div>
                   </Card>
