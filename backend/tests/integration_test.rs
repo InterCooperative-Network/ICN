@@ -18,6 +18,7 @@ use icn_storage;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use rand::thread_rng;
+use tokio::time::{sleep, Duration};
 
 #[tokio::test]
 async fn test_integration() {
@@ -407,4 +408,36 @@ async fn test_key_rotation() {
     let new_public_key = identity_system.public_keys.get(&did).unwrap().0.clone();
 
     assert_ne!(old_public_key, new_public_key);
+}
+
+// Real-time Reputation Recalibration Tests
+
+#[tokio::test]
+async fn test_real_time_reputation_recalibration() {
+    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+
+    {
+        let mut reputation = reputation_system.lock().unwrap();
+        reputation.adjust_reputation("did:icn:test", 100, "governance".to_string());
+    }
+
+    // Simulate real-time recalibration
+    let reputation_system_clone = reputation_system.clone();
+    tokio::spawn(async move {
+        loop {
+            {
+                let mut reputation = reputation_system_clone.lock().unwrap();
+                reputation.apply_decay("did:icn:test", 0.1, "governance".to_string());
+            }
+            sleep(Duration::from_secs(10)).await;
+        }
+    });
+
+    // Wait for some time to allow recalibration to occur
+    sleep(Duration::from_secs(30)).await;
+
+    {
+        let reputation = reputation_system.lock().unwrap();
+        assert!(reputation.get_reputation("did:icn:test", "governance".to_string()) < 100);
+    }
 }

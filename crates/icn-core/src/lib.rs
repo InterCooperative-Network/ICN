@@ -2,6 +2,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use icn_types::{Block, Transaction};
 use icn_consensus::ProofOfCooperation;
+use tokio::time::{sleep, Duration};
 
 pub struct Core {
     consensus: Arc<dyn ConsensusEngine>,
@@ -41,6 +42,17 @@ impl Core {
         self.runtime.start().await;
         self.identity.start().await;
         self.reputation.start().await;
+
+        // Start real-time reputation recalibration
+        let reputation_system = self.reputation.clone();
+        tokio::spawn(async move {
+            loop {
+                reputation_system.dynamic_adjustment("did:icn:test", 10).await;
+                reputation_system.apply_decay("did:icn:test", 0.1).await;
+                sleep(Duration::from_secs(10)).await;
+            }
+        });
+
         self.telemetry.log("Core started.");
     }
 
