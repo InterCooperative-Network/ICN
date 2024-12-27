@@ -5,6 +5,15 @@ use rand::thread_rng;
 use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest};
 use thiserror::Error;
+use kyber::keypair as kyber_keypair;
+use kyber::encapsulate as kyber_encapsulate;
+use kyber::decapsulate as kyber_decapsulate;
+use dilithium::keypair as dilithium_keypair;
+use dilithium::sign as dilithium_sign;
+use dilithium::verify as dilithium_verify;
+use falcon::keypair as falcon_keypair;
+use falcon::sign as falcon_sign;
+use falcon::verify as falcon_verify;
 
 #[derive(Debug, Error)]
 pub enum DIDError {
@@ -14,6 +23,8 @@ pub enum DIDError {
     SignatureVerification,
     #[error("Serialization error: {0}")]
     Serialization(String),
+    #[error("Key rotation failed")]
+    KeyRotation,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -21,6 +32,9 @@ pub enum Algorithm {
     Secp256k1,
     RSA,
     ECDSA,
+    Kyber,
+    Dilithium,
+    Falcon,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,6 +71,18 @@ impl DID {
                     verifying_key.to_bytes().to_vec()
                 )
             },
+            Algorithm::Kyber => {
+                let (public_key, private_key) = kyber_keypair();
+                (private_key, public_key)
+            },
+            Algorithm::Dilithium => {
+                let (public_key, private_key) = dilithium_keypair();
+                (private_key, public_key)
+            },
+            Algorithm::Falcon => {
+                let (public_key, private_key) = falcon_keypair();
+                (private_key, public_key)
+            },
         };
 
         DID {
@@ -86,6 +112,13 @@ impl DID {
                 let signing_key = SigningKey::from_bytes(&self.secret_key).expect("failed to decode private key");
                 Ok(signing_key.sign(message).to_bytes().to_vec())
             },
+            Algorithm::Dilithium => {
+                Ok(dilithium_sign(&self.secret_key, message))
+            },
+            Algorithm::Falcon => {
+                Ok(falcon_sign(&self.secret_key, message))
+            },
+            _ => Err(DIDError::InvalidKey),
         }
     }
 
@@ -116,7 +149,58 @@ impl DID {
                     Err(DIDError::InvalidKey)
                 }
             },
+            Algorithm::Dilithium => {
+                Ok(dilithium_verify(&self.public_key, message, signature))
+            },
+            Algorithm::Falcon => {
+                Ok(falcon_verify(&self.public_key, message, signature))
+            },
+            _ => Err(DIDError::InvalidKey),
         }
+    }
+
+    pub fn rotate_key(&mut self) -> Result<(), DIDError> {
+        let (new_secret_key, new_public_key) = match self.algorithm {
+            Algorithm::Secp256k1 => {
+                let secp = Secp256k1::new();
+                let secret = SecretKey::new(&mut thread_rng());
+                let public = PublicKey::from_secret_key(&secp, &secret);
+                (secret.to_bytes().to_vec(), public.serialize().to_vec())
+            },
+            Algorithm::RSA => {
+                let private_key = RSAPrivateKey::new(&mut thread_rng(), 2048)
+                    .expect("failed to generate RSA key");
+                let public_key = private_key.to_public_key();
+                (
+                    private_key.to_pkcs1().expect("failed to encode private key"),
+                    public_key.to_pkcs1().expect("failed to encode public key")
+                )
+            },
+            Algorithm::ECDSA => {
+                let signing_key = SigningKey::random(&mut thread_rng());
+                let verifying_key = VerifyingKey::from(&signing_key);
+                (
+                    signing_key.to_bytes().to_vec(),
+                    verifying_key.to_bytes().to_vec()
+                )
+            },
+            Algorithm::Kyber => {
+                let (public_key, private_key) = kyber_keypair();
+                (private_key, public_key)
+            },
+            Algorithm::Dilithium => {
+                let (public_key, private_key) = dilithium_keypair();
+                (private_key, public_key)
+            },
+            Algorithm::Falcon => {
+                let (public_key, private_key) = falcon_keypair();
+                (private_key, public_key)
+            },
+        };
+
+        self.secret_key = new_secret_key;
+        self.public_key = new_public_key;
+        Ok(())
     }
 }
 
@@ -156,7 +240,7 @@ mod tests {
 
     #[test]
     fn test_algorithm_support() {
-        for alg in &[Algorithm::Secp256k1, Algorithm::RSA, Algorithm::ECDSA] {
+        for alg in &[Algorithm::Secp256k1, Algorithm::RSA, Algorithm::ECDSA, Algorithm::Kyber, Algorithm::Dilithium, Algorithm::Falcon] {
             let did = DID::new("did:example:123".to_string(), alg.clone());
             let message = b"test message";
             let signature = did.sign_message(message).unwrap();
@@ -211,6 +295,22 @@ mod tests {
     }
 
     #[test]
+    fn test_dilithium_signing() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::Dilithium);
+        let message = b"test message";
+        let signature = did.sign_message(message).unwrap();
+        assert!(did.verify_signature(message, &signature).unwrap());
+    }
+
+    #[test]
+    fn test_falcon_signing() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::Falcon);
+        let message = b"test message";
+        let signature = did.sign_message(message).unwrap();
+        assert!(did.verify_signature(message, &signature).unwrap());
+    }
+
+    #[test]
     fn test_serialization() {
         let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
         let serializable: SerializableDID = (&did).into();
@@ -219,5 +319,13 @@ mod tests {
         assert_eq!(did.id, deserialized.id);
         assert_eq!(did.public_key, deserialized.public_key);
         assert_eq!(did.algorithm, deserialized.algorithm);
+    }
+
+    #[test]
+    fn test_key_rotation() {
+        let mut did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+        let old_public_key = did.public_key.clone();
+        did.rotate_key().unwrap();
+        assert_ne!(old_public_key, did.public_key);
     }
 }
