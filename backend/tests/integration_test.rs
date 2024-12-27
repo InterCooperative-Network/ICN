@@ -391,3 +391,20 @@ async fn test_post_quantum_algorithms_integration() {
     let signature_falcon = did_falcon.sign_message(message).expect("Failed to sign message with Falcon");
     assert!(did_falcon.verify_signature(message, &signature_falcon).expect("Failed to verify Falcon signature"));
 }
+
+// Tests for key rotation
+
+#[tokio::test]
+async fn test_key_rotation() {
+    let mut identity_system = IdentitySystem::new();
+    let did = "did:icn:test".to_string();
+    let algorithm = Algorithm::Secp256k1;
+    let did_instance = DID::new(did.clone(), algorithm.clone());
+    identity_system.register_did(did.clone(), vec!["transfer".to_string()], 100, did_instance.public_key.clone(), algorithm.clone());
+
+    let old_public_key = identity_system.public_keys.get(&did).unwrap().0.clone();
+    identity_system.rotate_key(&did).unwrap();
+    let new_public_key = identity_system.public_keys.get(&did).unwrap().0.clone();
+
+    assert_ne!(old_public_key, new_public_key);
+}
