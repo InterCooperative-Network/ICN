@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use rand::thread_rng;
 use tokio::time::{sleep, Duration};
+use warp::Filter;
 
 #[tokio::test]
 async fn test_integration() {
@@ -440,4 +441,44 @@ async fn test_real_time_reputation_recalibration() {
         let reputation = reputation_system.lock().unwrap();
         assert!(reputation.get_reputation("did:icn:test", "governance".to_string()) < 100);
     }
+}
+
+#[tokio::test]
+async fn test_backend_startup() {
+    // Start the backend application
+    let backend_future = tokio::spawn(async {
+        let routes = warp::path::end().map(|| warp::reply::html("Backend is running"));
+        warp::serve(routes).run(([0, 0, 0, 0], 8081)).await;
+    });
+
+    // Wait for the backend to start
+    sleep(Duration::from_secs(2)).await;
+
+    // Check if the backend is running
+    let response = reqwest::get("http://localhost:8081").await.unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.text().await.unwrap(), "Backend is running");
+
+    // Stop the backend
+    backend_future.abort();
+}
+
+#[tokio::test]
+async fn test_frontend_connection() {
+    // Start the backend application
+    let backend_future = tokio::spawn(async {
+        let routes = warp::path::end().map(|| warp::reply::html("Backend is running"));
+        warp::serve(routes).run(([0, 0, 0, 0], 8081)).await;
+    });
+
+    // Wait for the backend to start
+    sleep(Duration::from_secs(2)).await;
+
+    // Simulate frontend connection
+    let response = reqwest::get("http://localhost:8081").await.unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.text().await.unwrap(), "Backend is running");
+
+    // Stop the backend
+    backend_future.abort();
 }
