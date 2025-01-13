@@ -21,3 +21,6 @@ futures-util = "0.3"
 hashbrown = "0.11"
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
+env_logger = "0.9"
+tokio-postgres = "0.7"
+sqlx = { version = "0.5", features = ["runtime-tokio-rustls", "postgres"] }
