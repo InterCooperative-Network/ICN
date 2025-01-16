@@ -54,29 +54,29 @@ impl IdentitySystem {
         self.roles.get(did).cloned().unwrap_or_default()
     }
 
-    pub fn verify_did(&self, did: &str, message: &[u8], signature: &[u8]) -> bool {
+    pub fn verify_did(&self, did: &str, message: &[u8], signature: &[u8]) -> Result<bool, DIDError> {
         if let Some((public_key, algorithm)) = self.public_keys.get(did) {
             match algorithm {
                 Algorithm::Secp256k1 => {
                     let secp = Secp256k1::new();
-                    let public_key = Secp256k1PublicKey::from_slice(public_key).expect("invalid public key");
-                    let msg = secp256k1::Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
-                    let signature = Secp256k1Signature::from_compact(signature).expect("invalid signature");
-                    secp.verify(&msg, &signature, &public_key).is_ok()
+                    let public_key = Secp256k1PublicKey::from_slice(public_key).map_err(|_| DIDError::InvalidKey)?;
+                    let msg = secp256k1::Message::from_slice(&Sha256::digest(message)).map_err(|_| DIDError::InvalidKey)?;
+                    let signature = Secp256k1Signature::from_compact(signature).map_err(|_| DIDError::SignatureVerification)?;
+                    Ok(secp.verify(&msg, &signature, &public_key).is_ok())
                 },
                 Algorithm::RSA => {
-                    let public_key = RSAPublicKey::from_pkcs1(public_key).expect("failed to decode public key");
+                    let public_key = RSAPublicKey::from_pkcs1(public_key).map_err(|_| DIDError::InvalidKey)?;
                     let padding = PaddingScheme::new_pkcs1v15_sign(None);
-                    public_key.verify(padding, &Sha256::digest(message), signature).is_ok()
+                    Ok(public_key.verify(padding, &Sha256::digest(message), signature).is_ok())
                 },
                 Algorithm::ECDSA => {
-                    let verifying_key = VerifyingKey::from_bytes(public_key).expect("failed to decode public key");
-                    verifying_key.verify(message, signature).is_ok()
+                    let verifying_key = VerifyingKey::from_bytes(public_key).map_err(|_| DIDError::InvalidKey)?;
+                    Ok(verifying_key.verify(message, signature).is_ok())
                 },
-                _ => false,
+                _ => Err(DIDError::InvalidKey),
             }
         } else {
-            false
+            Err(DIDError::InvalidKey)
         }
     }
 
@@ -156,7 +156,7 @@ mod tests {
         let msg = secp256k1::Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
         let signature = secp.sign(&msg, &secret_key).serialize_compact().to_vec();
 
-        assert!(identity_system.verify_did(&did, message, &signature));
+        assert!(identity_system.verify_did(&did, message, &signature).unwrap());
     }
 
     #[test]
@@ -171,7 +171,7 @@ mod tests {
         let padding = PaddingScheme::new_pkcs1v15_sign(None);
         let signature = private_key.sign(padding, &Sha256::digest(message)).expect("failed to sign message");
 
-        assert!(identity_system.verify_did(&did, message, &signature));
+        assert!(identity_system.verify_did(&did, message, &signature).unwrap());
     }
 
     #[test]
@@ -185,7 +185,7 @@ mod tests {
         let message = b"test message";
         let signature = signing_key.sign(message).to_bytes().to_vec();
 
-        assert!(identity_system.verify_did(&did, message, &signature));
+        assert!(identity_system.verify_did(&did, message, &signature).unwrap());
     }
 
     #[test]

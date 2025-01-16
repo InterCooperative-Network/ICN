@@ -15,6 +15,8 @@ use icn_runtime::RuntimeManager;
 use icn_storage::{StorageManager, StorageBackend, StorageResult};
 use icn_types::{Block, Transaction};
 use tokio::signal;
+use tokio_retry::{Retry, strategy::ExponentialBackoff};
+use std::time::Duration;
 
 #[derive(Deserialize)]
 struct Config {
@@ -46,18 +48,53 @@ async fn main() {
     };
 
     // Initialize components
-    let storage_manager = StorageManager::new(Box::new(MockStorageBackend));
-    let network_manager = NetworkManager::new();
-    let runtime_manager = RuntimeManager::new();
+    let storage_manager = match initialize_storage_manager().await {
+        Ok(manager) => manager,
+        Err(e) => {
+            error!("Failed to initialize StorageManager: {}", e);
+            return;
+        }
+    };
+
+    let network_manager = match NetworkManager::new().await {
+        Ok(manager) => manager,
+        Err(e) => {
+            error!("Failed to initialize NetworkManager: {}", e);
+            return;
+        }
+    };
+
+    let runtime_manager = match RuntimeManager::new().await {
+        Ok(manager) => manager,
+        Err(e) => {
+            error!("Failed to initialize RuntimeManager: {}", e);
+            return;
+        }
+    };
+
     let telemetry_manager = TelemetryManager::new(PrometheusMetrics, Logger, TracingSystem);
-    let identity_manager = IdentityManager::new();
-    let reputation_manager = ReputationManager::new(
+
+    let identity_manager = match IdentityManager::new().await {
+        Ok(manager) => manager,
+        Err(e) => {
+            error!("Failed to initialize IdentityManager: {}", e);
+            return;
+        }
+    };
+
+    let reputation_manager = match ReputationManager::new(
         config.reputation_decay_rate,
         config.reputation_adjustment_interval,
         config.reputation_initial_score,
         config.reputation_positive_contribution_weight,
         config.reputation_negative_contribution_weight,
-    );
+    ).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            error!("Failed to initialize ReputationManager: {}", e);
+            return;
+        }
+    };
 
     // Create core system
     let core = Core::new(
@@ -103,6 +140,17 @@ fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
     let config_str = std::fs::read_to_string("config.toml")?;
     let config: Config = toml::from_str(&config_str)?;
     Ok(config)
+}
+
+async fn initialize_storage_manager() -> Result<StorageManager, Box<dyn std::error::Error>> {
+    let retry_strategy = ExponentialBackoff::from_millis(10).map(|x| x * 2).take(5);
+
+    let storage_manager = Retry::spawn(retry_strategy, || async {
+        let manager = StorageManager::new(Box::new(MockStorageBackend));
+        Ok::<_, Box<dyn std::error::Error>>(manager)
+    }).await?;
+
+    Ok(storage_manager)
 }
 
 struct MockStorageBackend;
