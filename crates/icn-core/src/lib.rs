@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use icn_types::{Block, Transaction};
 use icn_consensus::ProofOfCooperation;
 use tokio::time::{sleep, Duration};
+use log::{info, error};
 
 pub struct Core {
     consensus: Arc<dyn ConsensusEngine>,
@@ -37,11 +38,26 @@ impl Core {
 
     pub async fn start(&self) {
         self.telemetry.log("Starting Core...");
-        self.consensus.start().await;
-        self.network.start().await;
-        self.runtime.start().await;
-        self.identity.start().await;
-        self.reputation.start().await;
+        if let Err(e) = self.consensus.start().await {
+            error!("Failed to start consensus: {}", e);
+            return;
+        }
+        if let Err(e) = self.network.start().await {
+            error!("Failed to start network: {}", e);
+            return;
+        }
+        if let Err(e) = self.runtime.start().await {
+            error!("Failed to start runtime: {}", e);
+            return;
+        }
+        if let Err(e) = self.identity.start().await {
+            error!("Failed to start identity: {}", e);
+            return;
+        }
+        if let Err(e) = self.reputation.start().await {
+            error!("Failed to start reputation: {}", e);
+            return;
+        }
 
         // Start real-time reputation recalibration
         let reputation_system = self.reputation.clone();
@@ -58,11 +74,21 @@ impl Core {
 
     pub async fn stop(&self) {
         self.telemetry.log("Stopping Core...");
-        self.runtime.stop().await;
-        self.network.stop().await;
-        self.consensus.stop().await;
-        self.identity.stop().await;
-        self.reputation.stop().await;
+        if let Err(e) = self.runtime.stop().await {
+            error!("Failed to stop runtime: {}", e);
+        }
+        if let Err(e) = self.network.stop().await {
+            error!("Failed to stop network: {}", e);
+        }
+        if let Err(e) = self.consensus.stop().await {
+            error!("Failed to stop consensus: {}", e);
+        }
+        if let Err(e) = self.identity.stop().await {
+            error!("Failed to stop identity: {}", e);
+        }
+        if let Err(e) = self.reputation.stop().await {
+            error!("Failed to stop reputation: {}", e);
+        }
         self.telemetry.log("Core stopped.");
     }
 
@@ -81,46 +107,46 @@ impl Core {
 
 #[async_trait]
 pub trait ConsensusEngine {
-    async fn start(&self);
-    async fn stop(&self);
+    async fn start(&self) -> Result<(), Box<dyn std::error::Error>>;
+    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 #[async_trait]
 pub trait StorageManager {
-    async fn store_block(&self, block: Block);
+    async fn store_block(&self, block: Block) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 #[async_trait]
 pub trait NetworkManager {
-    async fn start(&self);
-    async fn stop(&self);
+    async fn start(&self) -> Result<(), Box<dyn std::error::Error>>;
+    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 #[async_trait]
 pub trait RuntimeManager {
-    async fn start(&self);
-    async fn stop(&self);
-    async fn execute_transaction(&self, transaction: Transaction);
+    async fn start(&self) -> Result<(), Box<dyn std::error::Error>>;
+    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>>;
+    async fn execute_transaction(&self, transaction: Transaction) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 #[async_trait]
 pub trait IdentityManager {
-    async fn start(&self);
-    async fn stop(&self);
-    async fn register_did(&self, did: String, public_key: String, algorithm: Algorithm);
-    async fn verify_did(&self, did: String, signature: String, algorithm: Algorithm) -> bool;
+    async fn start(&self) -> Result<(), Box<dyn std::error::Error>>;
+    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>>;
+    async fn register_did(&self, did: String, public_key: String, algorithm: Algorithm) -> Result<(), Box<dyn std::error::Error>>;
+    async fn verify_did(&self, did: String, signature: String, algorithm: Algorithm) -> Result<bool, Box<dyn std::error::Error>>;
 }
 
 #[async_trait]
 pub trait ReputationManager {
-    async fn start(&self);
-    async fn stop(&self);
-    async fn adjust_reputation(&self, did: String, change: i64, category: String);
-    async fn get_reputation(&self, did: String, category: String) -> i64;
-    async fn is_eligible(&self, did: String, min_reputation: i64, category: String) -> bool;
-    async fn dynamic_adjustment(&self, did: String, contribution: i64);
-    async fn apply_decay(&self, did: String, decay_rate: f64);
-    async fn reputation_based_access(&self, did: String, min_reputation: i64) -> bool;
+    async fn start(&self) -> Result<(), Box<dyn std::error::Error>>;
+    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>>;
+    async fn adjust_reputation(&self, did: String, change: i64, category: String) -> Result<(), Box<dyn std::error::Error>>;
+    async fn get_reputation(&self, did: String, category: String) -> Result<i64, Box<dyn std::error::Error>>;
+    async fn is_eligible(&self, did: String, min_reputation: i64, category: String) -> Result<bool, Box<dyn std::error::Error>>;
+    async fn dynamic_adjustment(&self, did: String, contribution: i64) -> Result<(), Box<dyn std::error::Error>>;
+    async fn apply_decay(&self, did: String, decay_rate: f64) -> Result<(), Box<dyn std::error::Error>>;
+    async fn reputation_based_access(&self, did: String, min_reputation: i64) -> Result<bool, Box<dyn std::error::Error>>;
 }
 
 pub struct TelemetryManager {

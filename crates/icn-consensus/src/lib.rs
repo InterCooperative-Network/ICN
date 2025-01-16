@@ -75,14 +75,16 @@ impl ProofOfCooperation {
     }
 
     pub async fn handle_timeout(&self) {
-        self.timeout_handling.handle_timeout().await;
+        if let Err(e) = self.timeout_handling.handle_timeout().await {
+            eprintln!("Error handling timeout: {}", e);
+        }
     }
 
     fn is_eligible(&self, participant: &str) -> bool {
         self.reputation_manager.is_eligible(participant, 10, "consensus")
     }
 
-    pub async fn parallel_vote_counting(&self) -> (i64, i64) {
+    pub async fn parallel_vote_counting(&self) -> Result<(i64, i64), Box<dyn std::error::Error>> {
         let chunks: Vec<_> = self.participants.chunks(self.participants.len() / 4).collect();
         let mut handles = vec![];
 
@@ -93,7 +95,7 @@ impl ProofOfCooperation {
             let handle = task::spawn(async move {
                 let total_reputation: i64 = chunk.iter().map(|p| reputation_manager.get_reputation(p, "consensus")).sum();
                 let approval_reputation: i64 = chunk.iter().enumerate().filter(|(i, _)| votes.contains(*i)).map(|(_, p)| reputation_manager.get_reputation(p, "consensus")).sum();
-                (total_reputation, approval_reputation)
+                Ok((total_reputation, approval_reputation))
             });
             handles.push(handle);
         }
@@ -102,12 +104,12 @@ impl ProofOfCooperation {
         let mut approval_reputation = 0;
 
         for handle in handles {
-            let (chunk_total, chunk_approval) = handle.await.unwrap();
+            let (chunk_total, chunk_approval) = handle.await??;
             total_reputation += chunk_total;
             approval_reputation += chunk_approval;
         }
 
-        (total_reputation, approval_reputation)
+        Ok((total_reputation, approval_reputation))
     }
 }
 
