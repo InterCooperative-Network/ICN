@@ -4,6 +4,7 @@ use icn_types::{Block, Transaction};
 use icn_consensus::ProofOfCooperation;
 use tokio::time::{sleep, Duration};
 use log::{info, error};
+use tokio_retry::{Retry, strategy::ExponentialBackoff};
 
 pub struct Core {
     consensus: Arc<dyn ConsensusEngine>,
@@ -38,23 +39,26 @@ impl Core {
 
     pub async fn start(&self) {
         self.telemetry.log("Starting Core...");
-        if let Err(e) = self.consensus.start().await {
+
+        let retry_strategy = ExponentialBackoff::from_millis(10).map(|x| x * 2).take(5);
+
+        if let Err(e) = Retry::spawn(retry_strategy.clone(), || self.consensus.start()).await {
             error!("Failed to start consensus: {}", e);
             return;
         }
-        if let Err(e) = self.network.start().await {
+        if let Err(e) = Retry::spawn(retry_strategy.clone(), || self.network.start()).await {
             error!("Failed to start network: {}", e);
             return;
         }
-        if let Err(e) = self.runtime.start().await {
+        if let Err(e) = Retry::spawn(retry_strategy.clone(), || self.runtime.start()).await {
             error!("Failed to start runtime: {}", e);
             return;
         }
-        if let Err(e) = self.identity.start().await {
+        if let Err(e) = Retry::spawn(retry_strategy.clone(), || self.identity.start()).await {
             error!("Failed to start identity: {}", e);
             return;
         }
-        if let Err(e) = self.reputation.start().await {
+        if let Err(e) = Retry::spawn(retry_strategy.clone(), || self.reputation.start()).await {
             error!("Failed to start reputation: {}", e);
             return;
         }

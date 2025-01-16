@@ -13,6 +13,7 @@ use icn_types::Block;
 use std::sync::Arc;
 use bit_set::BitSet;
 use trie_rs::Trie;
+use log::{error};
 
 pub struct ProofOfCooperation {
     current_round: u64,
@@ -76,7 +77,7 @@ impl ProofOfCooperation {
 
     pub async fn handle_timeout(&self) {
         if let Err(e) = self.timeout_handling.handle_timeout().await {
-            eprintln!("Error handling timeout: {}", e);
+            error!("Error handling timeout: {}", e);
         }
     }
 
@@ -115,11 +116,13 @@ impl ProofOfCooperation {
 
 #[async_trait]
 impl ConsensusEngine for ProofOfCooperation {
-    async fn start(&self) {
+    async fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
         // Start the consensus process
+        Ok(())
     }
 
-    async fn stop(&self) {
+    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>> {
         // Stop the consensus process
+        Ok(())
     }
 }
