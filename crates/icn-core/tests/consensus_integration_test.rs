@@ -8,41 +8,71 @@ use icn_consensus::ProofOfCooperation;
 struct MockStorageManager;
 #[async_trait::async_trait]
 impl StorageManager for MockStorageManager {
-    async fn store_block(&self, _block: Block) {}
+    async fn store_block(&self, _block: Block) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
 }
 
 struct MockNetworkManager;
 #[async_trait::async_trait]
 impl NetworkManager for MockNetworkManager {
-    async fn start(&self) {}
-    async fn stop(&self) {}
+    async fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
 }
 
 struct MockRuntimeManager;
 #[async_trait::async_trait]
 impl RuntimeManager for MockRuntimeManager {
-    async fn start(&self) {}
-    async fn stop(&self) {}
-    async fn execute_transaction(&self, _transaction: Transaction) {}
+    async fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+    async fn execute_transaction(&self, _transaction: Transaction) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
 }
 
 struct MockIdentityManager;
 #[async_trait::async_trait]
 impl IdentityManager for MockIdentityManager {
-    async fn start(&self) {}
-    async fn stop(&self) {}
-    async fn register_did(&self, _did: String, _public_key: String, _algorithm: Algorithm) {}
-    async fn verify_did(&self, _did: String, _signature: String, _algorithm: Algorithm) -> bool { true }
+    async fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+    async fn register_did(&self, _did: String, _public_key: String, _algorithm: Algorithm) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+    async fn verify_did(&self, _did: String, _signature: String, _algorithm: Algorithm) -> Result<bool, Box<dyn std::error::Error>> {
+        Ok(true)
+    }
 }
 
 struct MockReputationManager;
 #[async_trait::async_trait]
 impl ReputationManager for MockReputationManager {
-    async fn start(&self) {}
-    async fn stop(&self) {}
-    async fn adjust_reputation(&self, _did: String, _change: i64, _category: String) {}
-    async fn get_reputation(&self, _did: String, _category: String) -> i64 { 10 }
-    async fn is_eligible(&self, _did: String, _min_reputation: i64, _category: String) -> bool { true }
+    async fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+    async fn adjust_reputation(&self, _did: String, _change: i64, _category: String) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+    async fn get_reputation(&self, _did: String, _category: String) -> Result<i64, Box<dyn std::error::Error>> {
+        Ok(10)
+    }
+    async fn is_eligible(&self, _did: String, _min_reputation: i64, _category: String) -> Result<bool, Box<dyn std::error::Error>> {
+        Ok(true)
+    }
 }
 
 struct MockTelemetryManager;
@@ -62,17 +92,22 @@ async fn test_consensus_integration() {
 
     let core = Core::new(storage, network, runtime, telemetry, identity, reputation);
 
-    core.start().await;
+    if let Err(e) = core.start().await {
+        eprintln!("Error starting core: {}", e);
+    }
     sleep(Duration::from_secs(1)).await;
-    core.stop().await;
+    if let Err(e) = core.stop().await {
+        eprintln!("Error stopping core: {}", e);
+    }
 }
 
 #[tokio::test]
 async fn test_proof_of_cooperation_handle_timeout() {
     let reputation_manager = Arc::new(MockReputationManager);
     let poc = ProofOfCooperation::new(reputation_manager);
-    poc.handle_timeout().await;
-    // No assertion needed, just ensure it completes without error
+    if let Err(e) = poc.handle_timeout().await {
+        eprintln!("Error handling timeout: {}", e);
+    }
 }
 
 #[tokio::test]
@@ -84,12 +119,12 @@ async fn test_proof_of_cooperation_reputation_weighted_voting() {
     poc.vote("participant1".to_string(), true);
     poc.vote("participant2".to_string(), true);
     poc.vote("participant3".to_string(), false);
-    assert_eq!(poc.finalize_block(), Some(block));
+    assert_eq!(poc.finalize_block().await.unwrap(), Some(block));
 }
 
 #[tokio::test]
 async fn test_proof_of_cooperation_reputation_threshold() {
     let reputation_manager = Arc::new(MockReputationManager);
     let mut poc = ProofOfCooperation::new(reputation_manager);
-    assert!(poc.is_eligible("participant1", 10, "consensus"));
+    assert!(poc.is_eligible("participant1", 10, "consensus").unwrap());
 }

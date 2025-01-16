@@ -1,5 +1,5 @@
 use tokio::runtime::Runtime;
-use log::info;
+use log::{info, error};
 use env_logger;
 use serde::Deserialize;
 use chrono::Utc;
@@ -12,13 +12,19 @@ use icn_consensus::ProofOfCooperation;
 use icn_crypto::KeyPair;
 use icn_p2p::networking::NetworkManager;
 use icn_runtime::RuntimeManager;
-use icn_storage::StorageManager;
+use icn_storage::{StorageManager, StorageBackend, StorageResult};
 use icn_types::{Block, Transaction};
+use tokio::signal;
 
 #[derive(Deserialize)]
 struct Config {
     database_url: String,
     log_level: String,
+    reputation_decay_rate: f64,
+    reputation_adjustment_interval: u64,
+    reputation_initial_score: i64,
+    reputation_positive_contribution_weight: f64,
+    reputation_negative_contribution_weight: f64,
 }
 
 #[tokio::main]
@@ -28,7 +34,16 @@ async fn main() {
     info!("Starting backend application...");
 
     // Load configuration
-    let config: Config = load_config().expect("Failed to load configuration");
+    let config: Config = match load_config() {
+        Ok(config) => {
+            info!("Configuration loaded successfully.");
+            config
+        }
+        Err(e) => {
+            error!("Failed to load configuration: {}", e);
+            return;
+        }
+    };
 
     // Initialize components
     let storage_manager = StorageManager::new(Box::new(MockStorageBackend));
@@ -36,7 +51,13 @@ async fn main() {
     let runtime_manager = RuntimeManager::new();
     let telemetry_manager = TelemetryManager::new(PrometheusMetrics, Logger, TracingSystem);
     let identity_manager = IdentityManager::new();
-    let reputation_manager = ReputationManager::new();
+    let reputation_manager = ReputationManager::new(
+        config.reputation_decay_rate,
+        config.reputation_adjustment_interval,
+        config.reputation_initial_score,
+        config.reputation_positive_contribution_weight,
+        config.reputation_negative_contribution_weight,
+    );
 
     // Create core system
     let core = Core::new(
@@ -49,14 +70,33 @@ async fn main() {
     );
 
     // Start core system
-    core.start().await;
+    if let Err(e) = core.start().await {
+        error!("Failed to start core system: {}", e);
+        return;
+    }
 
     // Set up Warp server
     let routes = warp::path::end().map(|| warp::reply::html("Backend is running"));
-    warp::serve(routes).run(([0, 0, 0, 0], 8081)).await;
+    let server = warp::serve(routes).run(([0, 0, 0, 0], 8081));
+
+    // Handle graceful shutdown
+    let shutdown_signal = async {
+        signal::ctrl_c().await.expect("Failed to install CTRL+C signal handler");
+    };
+
+    info!("Warp server started.");
+    let (_, server_result) = tokio::join!(shutdown_signal, server);
+
+    if let Err(e) = server_result {
+        error!("Warp server encountered an error: {}", e);
+    }
 
     // Stop core system
-    core.stop().await;
+    if let Err(e) = core.stop().await {
+        error!("Failed to stop core system: {}", e);
+    }
+
+    info!("Backend application stopped.");
 }
 
 fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
