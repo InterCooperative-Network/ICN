@@ -34,6 +34,7 @@ type ReputationUpdate = {
   did: string
   change: number
   newTotal: number
+  category: string // Added category field
 }
 
 const GovernanceDashboard = () => {
@@ -99,12 +100,14 @@ const GovernanceDashboard = () => {
       {
         did: 'did:icn:alice',
         change: 10,
-        newTotal: 110
+        newTotal: 110,
+        category: 'governance' // Added category field
       },
       {
         did: 'did:icn:bob',
         change: -5,
-        newTotal: 95
+        newTotal: 95,
+        category: 'resource_sharing' // Added category field
       }
     ]
 
@@ -184,6 +187,10 @@ const GovernanceDashboard = () => {
         <div className="flex justify-between text-sm">
           <span>New Total</span>
           <span>{update.newTotal}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span>Category</span>
+          <span>{update.category}</span>
         </div>
       </div>
     </Card>
