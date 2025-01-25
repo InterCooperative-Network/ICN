@@ -324,6 +324,26 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+### Query Shared Resources
+- **Endpoint**: `GET /api/resources/query`
+- **Response**:
+  ```json
+  [
+    {
+      "resource_id": "resource1",
+      "owner": "did:icn:owner1",
+      "quantity": 100,
+      "price_per_unit": 10.0
+    },
+    {
+      "resource_id": "resource2",
+      "owner": "did:icn:owner2",
+      "quantity": 200,
+      "price_per_unit": 20.0
+    }
+  ]
+  ```
+
 ## Integration and Interoperability
 
 ### APIs and SDKs
