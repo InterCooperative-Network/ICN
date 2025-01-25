@@ -195,3 +195,33 @@ The reputation management modules are now split into smaller submodules for bett
 
 #### relationship/interaction.rs
 - **interaction_tracking**: Manages the tracking of interactions and endorsements between entities.
+
+### C. Federation-Related Reputation Mechanisms
+
+The Reputation System also includes reputation-based access control and decay mechanisms for federations. These mechanisms ensure that only trusted members can influence critical decisions within federations and encourage continuous participation.
+
+#### Reputation-Based Access Control
+Permissions and voting power within federations are based on reputation scores. This ensures that only participants with sufficient reputation can perform critical actions, such as proposing actions, voting on proposals, or updating federation terms.
+
+#### Reputation Decay
+A decay mechanism gradually reduces reputation scores over time if participants do not engage in positive activities within federations. This encourages continuous participation and prevents reputation scores from remaining static.
+
+#### Example: Reputation-Based Access Control
+```rust
+pub fn is_eligible_for_federation(&self, did: &str, min_reputation: i32, federation_id: &str) -> bool {
+    self.get_reputation_score(did, "federation") >= min_reputation
+}
+```
+- **Input**: `did` (identifier of the entity), `min_reputation` (minimum required reputation score), `federation_id` (ID of the federation).
+- **Output**: Boolean indicating whether the entity is eligible for federation-related actions.
+
+#### Example: Reputation Decay in Federations
+```rust
+pub fn apply_federation_decay(&mut self, did: &str, decay_rate: f64) {
+    let current_score = self.get_reputation_score(did, "federation");
+    let new_score = (current_score as f64 * (1.0 - decay_rate)) as i32;
+    self.modify_reputation(did, new_score - current_score, "Reputation decay in federation", "federation");
+}
+```
+- **Input**: `did` (identifier of the entity), `decay_rate` (rate of reputation decay).
+- **Functionality**: Applies the decay rate to the reputation score within federations.
