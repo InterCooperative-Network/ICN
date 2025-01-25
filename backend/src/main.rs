@@ -55,6 +55,60 @@ struct Vote {
     approve: bool,
 }
 
+#[derive(Serialize, Deserialize)]
+struct FederationTerms {
+    minimum_reputation: i64,
+    resource_sharing_policies: String,
+    governance_rules: String,
+    duration: String,
+}
+
+#[derive(Serialize, Deserialize)]
+enum FederationType {
+    Cooperative,
+    Community,
+    Hybrid,
+}
+
+#[derive(Serialize, Deserialize)]
+enum FederationOperation {
+    InitiateFederation {
+        federation_type: FederationType,
+        partner_id: String,
+        terms: FederationTerms,
+    },
+    JoinFederation {
+        federation_id: String,
+        commitment: Vec<String>,
+    },
+    LeaveFederation {
+        federation_id: String,
+        reason: String,
+    },
+    ProposeAction {
+        federation_id: String,
+        action_type: String,
+        description: String,
+        resources: std::collections::HashMap<String, u64>,
+    },
+    VoteOnProposal {
+        federation_id: String,
+        proposal_id: String,
+        approve: bool,
+        notes: Option<String>,
+    },
+    ShareResources {
+        federation_id: String,
+        resource_type: String,
+        amount: u64,
+        recipient_id: String,
+    },
+    UpdateFederationTerms {
+        federation_id: String,
+        new_terms: FederationTerms,
+    },
+}
+
 struct NotificationManager {
     client: Client,
     email: String,
@@ -204,7 +258,85 @@ async fn main() {
             }
         });
 
-    let routes = create_proposal.or(vote_on_proposal);
+    let initiate_federation = warp::path!("api" / "federation" / "initiate")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let join_federation = warp::path!("api" / "federation" / "join")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let leave_federation = warp::path!("api" / "federation" / "leave")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let propose_action = warp::path!("api" / "federation" / "propose_action")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let vote_on_federation_proposal = warp::path!("api" / "federation" / "vote")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let share_resources = warp::path!("api" / "federation" / "share_resources")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let update_federation_terms = warp::path!("api" / "federation" / "update_terms")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let routes = create_proposal
+        .or(vote_on_proposal)
+        .or(initiate_federation)
+        .or(join_federation)
+        .or(leave_federation)
+        .or(propose_action)
+        .or(vote_on_federation_proposal)
+        .or(share_resources)
+        .or(update_federation_terms);
 
     let server = warp::serve(routes).run(([0, 0, 0, 0], 8081));
 
@@ -242,6 +374,37 @@ async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_m
     let body = format!("A new vote has been cast by {}. Approve: {}", vote.voter, vote.approve);
     notification_manager.send_notification(&subject, &body).await;
     Ok(warp::reply::json(&vote))
+}
+
+async fn handle_federation_operation(operation: FederationOperation, notification_manager: NotificationManager) -> Result<impl warp::Reply, warp::Rejection> {
+    // Logic to handle federation operations
+    let subject = match &operation {
+        FederationOperation::InitiateFederation { federation_type, partner_id, terms } => {
+            format!("Federation Initiated: {:?}", federation_type)
+        }
+        FederationOperation::JoinFederation { federation_id, commitment } => {
+            format!("Joined Federation: {}", federation_id)
+        }
+        FederationOperation::LeaveFederation { federation_id, reason } => {
+            format!("Left Federation: {}", federation_id)
+        }
+        FederationOperation::ProposeAction { federation_id, action_type, description, resources } => {
+            format!("Action Proposed in Federation: {}", federation_id)
+        }
+        FederationOperation::VoteOnProposal { federation_id, proposal_id, approve, notes } => {
+            format!("Vote on Federation Proposal: {}", proposal_id)
+        }
+        FederationOperation::ShareResources { federation_id, resource_type, amount, recipient_id } => {
+            format!("Resources Shared in Federation: {}", federation_id)
+        }
+        FederationOperation::UpdateFederationTerms { federation_id, new_terms } => {
+            format!("Federation Terms Updated: {}", federation_id)
+        }
+    };
+
+    let body = format!("Federation operation executed: {:?}", operation);
+    notification_manager.send_notification(&subject, &body).await;
+    Ok(warp::reply::json(&operation))
 }
 
 fn load_config() -> Result<Config, Box<dyn std::error::Error>> {

@@ -509,3 +509,104 @@ async fn test_notification_fallback() {
     let result = invalid_email_manager.send_notification("Test Subject", "Test Body").await;
     assert!(result.is_ok());
 }
+
+// Federation Tests
+
+#[tokio::test]
+async fn test_initiate_federation() {
+    let federation_operation = FederationOperation::InitiateFederation {
+        federation_type: FederationType::Cooperative,
+        partner_id: "did:icn:partner".to_string(),
+        terms: FederationTerms {
+            minimum_reputation: 50,
+            resource_sharing_policies: "Equal distribution".to_string(),
+            governance_rules: "Majority vote".to_string(),
+            duration: "2025-12-31T23:59:59Z".to_string(),
+        },
+    };
+
+    let result = handle_federation_operation(federation_operation).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_join_federation() {
+    let federation_operation = FederationOperation::JoinFederation {
+        federation_id: "federation123".to_string(),
+        commitment: vec!["Adhere to terms".to_string(), "Contribute resources".to_string()],
+    };
+
+    let result = handle_federation_operation(federation_operation).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_leave_federation() {
+    let federation_operation = FederationOperation::LeaveFederation {
+        federation_id: "federation123".to_string(),
+        reason: "No longer able to participate".to_string(),
+    };
+
+    let result = handle_federation_operation(federation_operation).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_propose_action() {
+    let federation_operation = FederationOperation::ProposeAction {
+        federation_id: "federation123".to_string(),
+        action_type: "New Project".to_string(),
+        description: "Proposal for a new collaborative project".to_string(),
+        resources: {
+            let mut resources = HashMap::new();
+            resources.insert("resourceX".to_string(), 100);
+            resources.insert("resourceY".to_string(), 200);
+            resources
+        },
+    };
+
+    let result = handle_federation_operation(federation_operation).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_vote_on_federation_proposal() {
+    let federation_operation = FederationOperation::VoteOnProposal {
+        federation_id: "federation123".to_string(),
+        proposal_id: "proposal456".to_string(),
+        approve: true,
+        notes: Some("Support the project".to_string()),
+    };
+
+    let result = handle_federation_operation(federation_operation).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_share_resources() {
+    let federation_operation = FederationOperation::ShareResources {
+        federation_id: "federation123".to_string(),
+        resource_type: "resourceX".to_string(),
+        amount: 50,
+        recipient_id: "did:icn:recipient".to_string(),
+    };
+
+    let result = handle_federation_operation(federation_operation).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_update_federation_terms() {
+    let federation_operation = FederationOperation::UpdateFederationTerms {
+        federation_id: "federation123".to_string(),
+        new_terms: FederationTerms {
+            minimum_reputation: 60,
+            resource_sharing_policies: "Proportional distribution".to_string(),
+            governance_rules: "Supermajority vote".to_string(),
+            duration: "2026-12-31T23:59:59Z".to_string(),
+        },
+    };
+
+    let result = handle_federation_operation(federation_operation).await;
+    assert!(result.is_ok());
+}
