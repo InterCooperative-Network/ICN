@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -37,6 +37,11 @@ type ReputationUpdate = {
   category: string // Added category field
 }
 
+type WebSocketMessage = {
+  type: 'ProposalUpdate' | 'VoteUpdate' | 'ReputationUpdate'
+  data: Proposal | ReputationUpdate
+}
+
 const GovernanceDashboard = () => {
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [votingStats, setVotingStats] = useState<VotingStats>({
@@ -52,6 +57,7 @@ const GovernanceDashboard = () => {
   const [newProposal, setNewProposal] = useState({ title: '', description: '' })
   const [formErrors, setFormErrors] = useState({ title: '', description: '' })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const ws = useRef<WebSocket | null>(null)
 
   useEffect(() => {
     // Mock data - replace with actual API calls
@@ -115,7 +121,72 @@ const GovernanceDashboard = () => {
     setVotingStats(mockStats)
     setReputationUpdates(mockReputationUpdates)
     setLoading(false)
+
+    // WebSocket connection for real-time updates
+    const connectWebSocket = () => {
+      try {
+        ws.current = new WebSocket('ws://localhost:8080/ws')
+
+        ws.current.onopen = () => {
+          console.log('WebSocket connected')
+        }
+
+        ws.current.onmessage = (event) => {
+          try {
+            const message: WebSocketMessage = JSON.parse(event.data)
+            handleWebSocketMessage(message)
+          } catch (e) {
+            console.error('Failed to parse WebSocket message:', e)
+          }
+        }
+
+        ws.current.onclose = () => {
+          console.log('WebSocket disconnected, attempting to reconnect...')
+          setTimeout(connectWebSocket, 5000)
+        }
+
+        ws.current.onerror = (error) => {
+          console.error('WebSocket error:', error)
+          ws.current?.close()
+        }
+      } catch (error) {
+        console.error('Failed to establish WebSocket connection:', error)
+        setTimeout(connectWebSocket, 5000)
+      }
+    }
+
+    connectWebSocket()
+
+    return () => {
+      if (ws.current) {
+        ws.current.close()
+      }
+    }
   }, [])
+
+  const handleWebSocketMessage = (message: WebSocketMessage) => {
+    switch (message.type) {
+      case 'ProposalUpdate':
+        setProposals((prevProposals) =>
+          prevProposals.map((proposal) =>
+            proposal.id === (message.data as Proposal).id ? (message.data as Proposal) : proposal
+          )
+        )
+        break
+      case 'VoteUpdate':
+        setProposals((prevProposals) =>
+          prevProposals.map((proposal) =>
+            proposal.id === (message.data as Proposal).id ? (message.data as Proposal) : proposal
+          )
+        )
+        break
+      case 'ReputationUpdate':
+        setReputationUpdates((prevUpdates) => [...prevUpdates, message.data as ReputationUpdate])
+        break
+      default:
+        console.error('Unknown WebSocket message type:', message.type)
+    }
+  }
 
   const calculateProgress = (votesFor: number, votesAgainst: number) => {
     const total = votesFor + votesAgainst
