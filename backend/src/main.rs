@@ -30,6 +30,10 @@ struct Config {
     reputation_negative_contribution_weight: f64,
     notification_email: String,
     notification_sms: String,
+    governance_decay_rate: f64,
+    resource_sharing_decay_rate: f64,
+    technical_contributions_decay_rate: f64,
+    decay_exemptions: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -92,6 +96,44 @@ impl NotificationManager {
     }
 }
 
+struct ReputationManager {
+    governance_decay_rate: f64,
+    resource_sharing_decay_rate: f64,
+    technical_contributions_decay_rate: f64,
+    decay_exemptions: Vec<String>,
+}
+
+impl ReputationManager {
+    fn new(
+        governance_decay_rate: f64,
+        resource_sharing_decay_rate: f64,
+        technical_contributions_decay_rate: f64,
+        decay_exemptions: Vec<String>,
+    ) -> Self {
+        ReputationManager {
+            governance_decay_rate,
+            resource_sharing_decay_rate,
+            technical_contributions_decay_rate,
+            decay_exemptions,
+        }
+    }
+
+    fn apply_decay(&self, did: &str, category: &str, reputation: &mut i64) {
+        if self.decay_exemptions.contains(&did.to_string()) {
+            return;
+        }
+
+        let decay_rate = match category {
+            "governance" => self.governance_decay_rate,
+            "resource_sharing" => self.resource_sharing_decay_rate,
+            "technical_contributions" => self.technical_contributions_decay_rate,
+            _ => 0.0,
+        };
+
+        *reputation = (*reputation as f64 * (1.0 - decay_rate)) as i64;
+    }
+}
+
 #[tokio::main]
 async fn main() {
     // Initialize logging
@@ -117,11 +159,10 @@ async fn main() {
     let telemetry_manager = TelemetryManager::new(PrometheusMetrics, Logger, TracingSystem);
     let identity_manager = IdentityManager::new();
     let reputation_manager = ReputationManager::new(
-        config.reputation_decay_rate,
-        config.reputation_adjustment_interval,
-        config.reputation_initial_score,
-        config.reputation_positive_contribution_weight,
-        config.reputation_negative_contribution_weight,
+        config.governance_decay_rate,
+        config.resource_sharing_decay_rate,
+        config.technical_contributions_decay_rate,
+        config.decay_exemptions.clone(),
     );
 
     let notification_manager = NotificationManager::new(config.notification_email.clone(), config.notification_sms.clone());

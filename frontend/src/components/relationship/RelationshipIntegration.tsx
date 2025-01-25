@@ -56,6 +56,7 @@ interface ReputationUpdate {
   did: string;
   change: number;
   newTotal: number;
+  category: string; // Added category field
 }
 
 export default function RelationshipIntegration() {
@@ -318,6 +319,10 @@ export default function RelationshipIntegration() {
                       <div className="flex justify-between text-sm">
                         <span>New Total</span>
                         <span>{update.newTotal}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Category</span>
+                        <span>{update.category}</span>
                       </div>
                     </div>
                   </Card>
