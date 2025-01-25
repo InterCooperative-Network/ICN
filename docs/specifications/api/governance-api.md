@@ -22,9 +22,22 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
 - **Request Body**:
   ```json
   {
-    "proposal_type": "Funding",
-    "description": "Allocate resources for new development",
-    "duration": 60
+    "title": "Proposal Title",
+    "description": "Detailed description of the proposal",
+    "created_by": "did:icn:example",
+    "ends_at": "2024-12-31T23:59:59Z"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "proposal_id": "12345",
+    "title": "Proposal Title",
+    "description": "Detailed description of the proposal",
+    "status": "Open",
+    "created_by": "did:icn:example",
+    "ends_at": "2024-12-31T23:59:59Z",
+    "created_at": "2024-11-03T12:00:00Z"
   }
   ```
 
@@ -35,9 +48,11 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   [
     {
       "proposal_id": "12345",
-      "proposal_type": "Funding",
-      "description": "Allocate resources for new development",
+      "title": "Proposal Title",
+      "description": "Detailed description of the proposal",
       "status": "Open",
+      "created_by": "did:icn:example",
+      "ends_at": "2024-12-31T23:59:59Z",
       "created_at": "2024-11-03T12:00:00Z"
     }
   ]
@@ -48,7 +63,17 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
 - **Request Body**:
   ```json
   {
+    "voter": "did:icn:voter",
     "approve": true
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "proposal_id": "12345",
+    "voter": "did:icn:voter",
+    "approve": true,
+    "timestamp": "2024-11-03T12:30:00Z"
   }
   ```
 
@@ -102,6 +127,20 @@ All API endpoints require DID-based access control to ensure that only authorize
 
 ### Reputation Permissions
 Certain actions, such as creating proposals or voting, require members to have a minimum reputation score. This ensures that only trusted and active members can influence critical decisions within the network.
+
+## Reputation-Based Weighted Voting
+
+### Overview
+Reputation-based weighted voting is a mechanism where the voting power of each member is influenced by their reputation score. This ensures that members who have consistently contributed positively to the cooperative have a greater influence on decision-making.
+
+### Reputation Calculation
+Reputation scores are calculated based on various factors, including:
+- **Participation in Governance**: Regularly voting on proposals and participating in discussions.
+- **Contributions to Cooperative Activities**: Providing resources, skills, or time to cooperative projects.
+- **Adherence to Cooperative Principles**: Demonstrating behaviors that align with the cooperative's values and principles.
+
+### Voting Power
+The voting power of each member is proportional to their reputation score. For example, a member with a higher reputation score will have more weight in their vote compared to a member with a lower score.
 
 ## Conclusion
 The Governance API is a powerful tool for enabling democratic and transparent governance within the InterCooperative Network. By providing robust endpoints for proposal management, voting, cross-cooperative interactions, and hybrid participation, the API supports a wide range of governance activities and fosters collaboration among cooperatives. The integration and interoperability features further enhance the utility of the API, allowing developers to build custom solutions that leverage the governance capabilities of ICN.
