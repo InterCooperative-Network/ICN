@@ -1,7 +1,7 @@
 use tokio::runtime::Runtime;
 use log::{info, error};
 use env_logger;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use chrono::Utc;
 use sha2::{Sha256, Digest};
 use warp::Filter;
@@ -15,6 +15,7 @@ use icn_runtime::RuntimeManager;
 use icn_storage::{StorageManager, StorageBackend, StorageResult};
 use icn_types::{Block, Transaction};
 use tokio::signal;
+use std::sync::Arc;
 
 #[derive(Deserialize)]
 struct Config {
@@ -25,6 +26,25 @@ struct Config {
     reputation_initial_score: i64,
     reputation_positive_contribution_weight: f64,
     reputation_negative_contribution_weight: f64,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Proposal {
+    id: String,
+    title: String,
+    description: String,
+    status: String,
+    votes_for: i64,
+    votes_against: i64,
+    created_by: String,
+    ends_at: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Vote {
+    proposal_id: String,
+    voter: String,
+    approve: bool,
 }
 
 #[tokio::main]
@@ -76,7 +96,18 @@ async fn main() {
     }
 
     // Set up Warp server
-    let routes = warp::path::end().map(|| warp::reply::html("Backend is running"));
+    let create_proposal = warp::path!("api" / "governance" / "proposals")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(handle_create_proposal);
+
+    let vote_on_proposal = warp::path!("api" / "governance" / "proposals" / String / "vote")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(handle_vote_on_proposal);
+
+    let routes = create_proposal.or(vote_on_proposal);
+
     let server = warp::serve(routes).run(([0, 0, 0, 0], 8081));
 
     // Handle graceful shutdown
@@ -97,6 +128,16 @@ async fn main() {
     }
 
     info!("Backend application stopped.");
+}
+
+async fn handle_create_proposal(proposal: Proposal) -> Result<impl warp::Reply, warp::Rejection> {
+    // Logic to handle proposal creation
+    Ok(warp::reply::json(&proposal))
+}
+
+async fn handle_vote_on_proposal(vote: Vote) -> Result<impl warp::Reply, warp::Rejection> {
+    // Logic to handle voting on a proposal
+    Ok(warp::reply::json(&vote))
 }
 
 fn load_config() -> Result<Config, Box<dyn std::error::Error>> {

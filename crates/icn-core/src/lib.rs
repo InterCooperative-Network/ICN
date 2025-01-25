@@ -103,6 +103,20 @@ impl Core {
         self.storage.store_block(block).await;
         self.telemetry.log("Block added.");
     }
+
+    pub async fn create_proposal(&self, proposal: Proposal) -> Result<(), Box<dyn std::error::Error>> {
+        self.telemetry.log("Creating proposal...");
+        // Logic to handle proposal creation
+        self.telemetry.log("Proposal created.");
+        Ok(())
+    }
+
+    pub async fn vote_on_proposal(&self, vote: Vote) -> Result<(), Box<dyn std::error::Error>> {
+        self.telemetry.log("Voting on proposal...");
+        // Logic to handle voting on a proposal
+        self.telemetry.log("Vote cast.");
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -196,4 +210,23 @@ impl TracingSystem {
     pub fn trace(&self, message: &str) {
         // Trace the message
     }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Proposal {
+    id: String,
+    title: String,
+    description: String,
+    status: String,
+    votes_for: i64,
+    votes_against: i64,
+    created_by: String,
+    ends_at: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Vote {
+    proposal_id: String,
+    voter: String,
+    approve: bool,
 }
