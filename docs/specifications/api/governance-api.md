@@ -109,6 +109,52 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+### Notification Endpoints
+
+#### Schedule Notification
+- **Endpoint**: `POST /api/governance/notifications/schedule`
+- **Request Body**:
+  ```json
+  {
+    "event_type": "VotingDeadline",
+    "event_time": "2024-12-31T23:59:59Z",
+    "notification_method": "email",
+    "recipient": "did:icn:example"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "status": "Notification scheduled",
+    "event_type": "VotingDeadline",
+    "event_time": "2024-12-31T23:59:59Z",
+    "notification_method": "email",
+    "recipient": "did:icn:example"
+  }
+  ```
+
+#### Send Notification
+- **Endpoint**: `POST /api/governance/notifications/send`
+- **Request Body**:
+  ```json
+  {
+    "event_type": "ProposalOutcome",
+    "message": "The proposal has been approved.",
+    "notification_method": "sms",
+    "recipient": "did:icn:example"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "status": "Notification sent",
+    "event_type": "ProposalOutcome",
+    "message": "The proposal has been approved.",
+    "notification_method": "sms",
+    "recipient": "did:icn:example"
+  }
+  ```
+
 ## Integration and Interoperability
 
 ### APIs and SDKs

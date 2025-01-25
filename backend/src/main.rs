@@ -16,6 +16,8 @@ use icn_storage::{StorageManager, StorageBackend, StorageResult};
 use icn_types::{Block, Transaction};
 use tokio::signal;
 use std::sync::Arc;
+use tokio::time::{sleep, Duration};
+use reqwest::Client;
 
 #[derive(Deserialize)]
 struct Config {
@@ -26,6 +28,8 @@ struct Config {
     reputation_initial_score: i64,
     reputation_positive_contribution_weight: f64,
     reputation_negative_contribution_weight: f64,
+    notification_email: String,
+    notification_sms: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -45,6 +49,47 @@ struct Vote {
     proposal_id: String,
     voter: String,
     approve: bool,
+}
+
+struct NotificationManager {
+    client: Client,
+    email: String,
+    sms: String,
+}
+
+impl NotificationManager {
+    fn new(email: String, sms: String) -> Self {
+        NotificationManager {
+            client: Client::new(),
+            email,
+            sms,
+        }
+    }
+
+    async fn send_email(&self, subject: &str, body: &str) -> Result<(), reqwest::Error> {
+        self.client.post(&self.email)
+            .body(format!("Subject: {}\n\n{}", subject, body))
+            .send()
+            .await?;
+        Ok(())
+    }
+
+    async fn send_sms(&self, message: &str) -> Result<(), reqwest::Error> {
+        self.client.post(&self.sms)
+            .body(message.to_string())
+            .send()
+            .await?;
+        Ok(())
+    }
+
+    async fn send_notification(&self, subject: &str, body: &str) {
+        if let Err(e) = self.send_email(subject, body).await {
+            error!("Failed to send email notification: {}", e);
+            if let Err(e) = self.send_sms(body).await {
+                error!("Failed to send SMS notification: {}", e);
+            }
+        }
+    }
 }
 
 #[tokio::main]
@@ -79,6 +124,8 @@ async fn main() {
         config.reputation_negative_contribution_weight,
     );
 
+    let notification_manager = NotificationManager::new(config.notification_email.clone(), config.notification_sms.clone());
+
     // Create core system
     let core = Core::new(
         Arc::new(storage_manager),
@@ -99,12 +146,22 @@ async fn main() {
     let create_proposal = warp::path!("api" / "governance" / "proposals")
         .and(warp::post())
         .and(warp::body::json())
-        .and_then(handle_create_proposal);
+        .and_then(move |proposal: Proposal| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_create_proposal(proposal, notification_manager).await
+            }
+        });
 
     let vote_on_proposal = warp::path!("api" / "governance" / "proposals" / String / "vote")
         .and(warp::post())
         .and(warp::body::json())
-        .and_then(handle_vote_on_proposal);
+        .and_then(move |proposal_id: String, vote: Vote| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_vote_on_proposal(proposal_id, vote, notification_manager).await
+            }
+        });
 
     let routes = create_proposal.or(vote_on_proposal);
 
@@ -130,13 +187,19 @@ async fn main() {
     info!("Backend application stopped.");
 }
 
-async fn handle_create_proposal(proposal: Proposal) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager) -> Result<impl warp::Reply, warp::Rejection> {
     // Logic to handle proposal creation
+    let subject = format!("New Proposal Created: {}", proposal.title);
+    let body = format!("A new proposal has been created by {}. Description: {}", proposal.created_by, proposal.description);
+    notification_manager.send_notification(&subject, &body).await;
     Ok(warp::reply::json(&proposal))
 }
 
-async fn handle_vote_on_proposal(vote: Vote) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager) -> Result<impl warp::Reply, warp::Rejection> {
     // Logic to handle voting on a proposal
+    let subject = format!("New Vote on Proposal: {}", proposal_id);
+    let body = format!("A new vote has been cast by {}. Approve: {}", vote.voter, vote.approve);
+    notification_manager.send_notification(&subject, &body).await;
     Ok(warp::reply::json(&vote))
 }
 
