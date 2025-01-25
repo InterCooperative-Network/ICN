@@ -610,3 +610,115 @@ async fn test_update_federation_terms() {
     let result = handle_federation_operation(federation_operation).await;
     assert!(result.is_ok());
 }
+
+// Tests for real-time updates for proposals and voting
+
+#[tokio::test]
+async fn test_real_time_proposal_updates() {
+    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+    let mut proposal_history = ProposalHistory::new();
+
+    let proposal = Proposal::new(
+        "did:icn:proposer".to_string(),
+        ProposalType::ResourceAllocation {
+            resource: "cpu".to_string(),
+            amount: 100,
+        },
+    );
+
+    proposal_history.add_proposal(proposal.clone());
+
+    {
+        let mut identity = identity_system.lock().unwrap();
+        identity.register_did(
+            DID::new("did:icn:voter".to_string(), Algorithm::Secp256k1),
+            vec!["vote".to_string()],
+        );
+    }
+
+    {
+        let mut reputation = reputation_system.lock().unwrap();
+        reputation.increase_reputation("did:icn:voter", 50);
+    }
+
+    // Simulate WebSocket connection and message handling
+    let (ws_tx, mut ws_rx) = tokio::sync::mpsc::unbounded_channel();
+    let ws_tx_clone = ws_tx.clone();
+
+    tokio::spawn(async move {
+        while let Some(message) = ws_rx.recv().await {
+            if let Ok(proposal_update) = serde_json::from_str::<Proposal>(&message) {
+                proposal_history.update_proposal(proposal_update);
+            }
+        }
+    });
+
+    // Simulate sending a proposal update via WebSocket
+    let updated_proposal = Proposal {
+        votes_for: 1,
+        ..proposal.clone()
+    };
+    let message = serde_json::to_string(&updated_proposal).unwrap();
+    ws_tx_clone.send(message).unwrap();
+
+    // Wait for the update to be processed
+    sleep(Duration::from_secs(1)).await;
+
+    assert_eq!(proposal_history.get_proposal(proposal.id.clone()).unwrap().votes_for, 1);
+}
+
+#[tokio::test]
+async fn test_real_time_voting_updates() {
+    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+    let mut proposal_history = ProposalHistory::new();
+
+    let proposal = Proposal::new(
+        "did:icn:proposer".to_string(),
+        ProposalType::ResourceAllocation {
+            resource: "cpu".to_string(),
+            amount: 100,
+        },
+    );
+
+    proposal_history.add_proposal(proposal.clone());
+
+    {
+        let mut identity = identity_system.lock().unwrap();
+        identity.register_did(
+            DID::new("did:icn:voter".to_string(), Algorithm::Secp256k1),
+            vec!["vote".to_string()],
+        );
+    }
+
+    {
+        let mut reputation = reputation_system.lock().unwrap();
+        reputation.increase_reputation("did:icn:voter", 50);
+    }
+
+    // Simulate WebSocket connection and message handling
+    let (ws_tx, mut ws_rx) = tokio::sync::mpsc::unbounded_channel();
+    let ws_tx_clone = ws_tx.clone();
+
+    tokio::spawn(async move {
+        while let Some(message) = ws_rx.recv().await {
+            if let Ok(vote_update) = serde_json::from_str::<Proposal>(&message) {
+                proposal_history.update_proposal(vote_update);
+            }
+        }
+    });
+
+    // Simulate sending a vote update via WebSocket
+    let updated_proposal = Proposal {
+        votes_for: 1,
+        ..proposal.clone()
+    };
+    let message = serde_json::to_string(&updated_proposal).unwrap();
+    ws_tx_clone.send(message).unwrap();
+
+    // Wait for the update to be processed
+    sleep(Duration::from_secs(1)).await;
+
+    assert_eq!(proposal_history.get_proposal(proposal.id.clone()).unwrap().votes_for, 1);
+}

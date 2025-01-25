@@ -15,9 +15,12 @@ use icn_runtime::{RuntimeManager, ContractExecution};
 use icn_storage::{StorageManager, StorageBackend, StorageResult};
 use icn_types::{Block, Transaction};
 use tokio::signal;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::time::{sleep, Duration};
 use reqwest::Client;
+use warp::ws::{Message, WebSocket};
+use futures_util::{StreamExt, SinkExt};
+use std::collections::HashMap;
 
 #[derive(Deserialize)]
 struct Config {
@@ -245,14 +248,25 @@ async fn main() {
         return;
     }
 
+    // Set up WebSocket server
+    let websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>> = Arc::new(Mutex::new(HashMap::new()));
+
+    let websocket_route = warp::path("ws")
+        .and(warp::ws())
+        .map(move |ws: warp::ws::Ws| {
+            let websocket_clients = websocket_clients.clone();
+            ws.on_upgrade(move |socket| handle_websocket(socket, websocket_clients))
+        });
+
     // Set up Warp server
     let create_proposal = warp::path!("api" / "governance" / "proposals")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |proposal: Proposal| {
             let notification_manager = notification_manager.clone();
+            let websocket_clients = websocket_clients.clone();
             async move {
-                handle_create_proposal(proposal, notification_manager).await
+                handle_create_proposal(proposal, notification_manager, websocket_clients).await
             }
         });
 
@@ -261,8 +275,9 @@ async fn main() {
         .and(warp::body::json())
         .and_then(move |proposal_id: String, vote: Vote| {
             let notification_manager = notification_manager.clone();
+            let websocket_clients = websocket_clients.clone();
             async move {
-                handle_vote_on_proposal(proposal_id, vote, notification_manager).await
+                handle_vote_on_proposal(proposal_id, vote, notification_manager, websocket_clients).await
             }
         });
 
@@ -353,7 +368,8 @@ async fn main() {
         .or(vote_on_federation_proposal)
         .or(share_resources)
         .or(update_federation_terms)
-        .or(query_shared_resources);
+        .or(query_shared_resources)
+        .or(websocket_route);
 
     let server = warp::serve(routes).run(([0, 0, 0, 0], 8081));
 
@@ -377,19 +393,29 @@ async fn main() {
     info!("Backend application stopped.");
 }
 
-async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) -> Result<impl warp::Reply, warp::Rejection> {
     // Logic to handle proposal creation
     let subject = format!("New Proposal Created: {}", proposal.title);
     let body = format!("A new proposal has been created by {}. Description: {}", proposal.created_by, proposal.description);
     notification_manager.send_notification(&subject, &body).await;
+
+    // Broadcast proposal update via WebSocket
+    let message = warp::ws::Message::text(serde_json::to_string(&proposal).unwrap());
+    broadcast_message(&message, websocket_clients).await;
+
     Ok(warp::reply::json(&proposal))
 }
 
-async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) -> Result<impl warp::Reply, warp::Rejection> {
     // Logic to handle voting on a proposal
     let subject = format!("New Vote on Proposal: {}", proposal_id);
     let body = format!("A new vote has been cast by {}. Approve: {}", vote.voter, vote.approve);
     notification_manager.send_notification(&subject, &body).await;
+
+    // Broadcast vote update via WebSocket
+    let message = warp::ws::Message::text(serde_json::to_string(&vote).unwrap());
+    broadcast_message(&message, websocket_clients).await;
+
     Ok(warp::reply::json(&vote))
 }
 
@@ -441,6 +467,37 @@ async fn handle_query_shared_resources() -> Result<impl warp::Reply, warp::Rejec
         },
     ];
     Ok(warp::reply::json(&resources))
+}
+
+async fn handle_websocket(ws: WebSocket, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) {
+    let (mut tx, mut rx) = ws.split();
+    let client_id = uuid::Uuid::new_v4().to_string();
+
+    websocket_clients.lock().unwrap().insert(client_id.clone(), tx);
+
+    while let Some(result) = rx.next().await {
+        match result {
+            Ok(msg) => {
+                if msg.is_text() {
+                    let text = msg.to_str().unwrap();
+                    println!("Received message: {}", text);
+                }
+            }
+            Err(e) => {
+                eprintln!("WebSocket error: {}", e);
+                break;
+            }
+        }
+    }
+
+    websocket_clients.lock().unwrap().remove(&client_id);
+}
+
+async fn broadcast_message(message: &Message, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) {
+    let clients = websocket_clients.lock().unwrap();
+    for (_, client) in clients.iter() {
+        let _ = client.send(message.clone()).await;
+    }
 }
 
 fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
