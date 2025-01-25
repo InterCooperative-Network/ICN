@@ -482,3 +482,30 @@ async fn test_frontend_connection() {
     // Stop the backend
     backend_future.abort();
 }
+
+// Notification Tests
+
+#[tokio::test]
+async fn test_notification_sending() {
+    let notification_manager = NotificationManager::new("http://localhost:8081/email".to_string(), "http://localhost:8081/sms".to_string());
+
+    // Test sending email notification
+    let email_result = notification_manager.send_email("Test Subject", "Test Body").await;
+    assert!(email_result.is_ok());
+
+    // Test sending SMS notification
+    let sms_result = notification_manager.send_sms("Test Message").await;
+    assert!(sms_result.is_ok());
+}
+
+#[tokio::test]
+async fn test_notification_fallback() {
+    let notification_manager = NotificationManager::new("http://localhost:8081/email".to_string(), "http://localhost:8081/sms".to_string());
+
+    // Simulate email failure by using an invalid URL
+    let invalid_email_manager = NotificationManager::new("http://invalid-url".to_string(), "http://localhost:8081/sms".to_string());
+
+    // Test fallback to SMS when email fails
+    let result = invalid_email_manager.send_notification("Test Subject", "Test Body").await;
+    assert!(result.is_ok());
+}
