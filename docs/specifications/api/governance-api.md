@@ -155,6 +155,175 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+### Federation Endpoints
+
+#### Initiate Federation
+- **Endpoint**: `POST /api/federation/initiate`
+- **Request Body**:
+  ```json
+  {
+    "federation_type": "Cooperative",
+    "partner_id": "did:icn:partner",
+    "terms": {
+      "minimum_reputation": 50,
+      "resource_sharing_policies": "Equal distribution",
+      "governance_rules": "Majority vote",
+      "duration": "2025-12-31T23:59:59Z"
+    }
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "status": "Federation initiated",
+    "federation_id": "federation123",
+    "federation_type": "Cooperative",
+    "partner_id": "did:icn:partner",
+    "terms": {
+      "minimum_reputation": 50,
+      "resource_sharing_policies": "Equal distribution",
+      "governance_rules": "Majority vote",
+      "duration": "2025-12-31T23:59:59Z"
+    }
+  }
+  ```
+
+#### Join Federation
+- **Endpoint**: `POST /api/federation/join`
+- **Request Body**:
+  ```json
+  {
+    "federation_id": "federation123",
+    "commitment": ["Adhere to terms", "Contribute resources"]
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "status": "Joined federation",
+    "federation_id": "federation123",
+    "commitment": ["Adhere to terms", "Contribute resources"]
+  }
+  ```
+
+#### Leave Federation
+- **Endpoint**: `POST /api/federation/leave`
+- **Request Body**:
+  ```json
+  {
+    "federation_id": "federation123",
+    "reason": "No longer able to participate"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "status": "Left federation",
+    "federation_id": "federation123",
+    "reason": "No longer able to participate"
+  }
+  ```
+
+#### Propose Action
+- **Endpoint**: `POST /api/federation/propose_action`
+- **Request Body**:
+  ```json
+  {
+    "federation_id": "federation123",
+    "action_type": "New Project",
+    "description": "Proposal for a new collaborative project",
+    "resources": {
+      "resourceX": 100,
+      "resourceY": 200
+    }
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "status": "Action proposed",
+    "federation_id": "federation123",
+    "action_type": "New Project",
+    "description": "Proposal for a new collaborative project",
+    "resources": {
+      "resourceX": 100,
+      "resourceY": 200
+    }
+  }
+  ```
+
+#### Vote on Federation Proposal
+- **Endpoint**: `POST /api/federation/vote`
+- **Request Body**:
+  ```json
+  {
+    "federation_id": "federation123",
+    "proposal_id": "proposal456",
+    "approve": true,
+    "notes": "Support the project"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "status": "Vote cast",
+    "federation_id": "federation123",
+    "proposal_id": "proposal456",
+    "approve": true,
+    "notes": "Support the project"
+  }
+  ```
+
+#### Share Resources
+- **Endpoint**: `POST /api/federation/share_resources`
+- **Request Body**:
+  ```json
+  {
+    "federation_id": "federation123",
+    "resource_type": "resourceX",
+    "amount": 50,
+    "recipient_id": "did:icn:recipient"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "status": "Resources shared",
+    "federation_id": "federation123",
+    "resource_type": "resourceX",
+    "amount": 50,
+    "recipient_id": "did:icn:recipient"
+  }
+  ```
+
+#### Update Federation Terms
+- **Endpoint**: `POST /api/federation/update_terms`
+- **Request Body**:
+  ```json
+  {
+    "federation_id": "federation123",
+    "new_terms": {
+      "minimum_reputation": 60,
+      "resource_sharing_policies": "Proportional distribution",
+      "governance_rules": "Supermajority vote",
+      "duration": "2026-12-31T23:59:59Z"
+    }
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "status": "Federation terms updated",
+    "federation_id": "federation123",
+    "new_terms": {
+      "minimum_reputation": 60,
+      "resource_sharing_policies": "Proportional distribution",
+      "governance_rules": "Supermajority vote",
+      "duration": "2026-12-31T23:59:59Z"
+    }
+  }
+  ```
+
 ## Integration and Interoperability
 
 ### APIs and SDKs

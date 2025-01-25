@@ -16,6 +16,7 @@ pub struct IdentitySystem {
     reputation_scores: HashMap<String, HashMap<String, i64>>, // Multi-dimensional reputation scores
     last_activity: HashMap<String, SystemTime>,
     key_versions: HashMap<String, u32>,
+    federation_roles: HashMap<String, HashMap<String, Vec<String>>>, // Federation-specific roles
 }
 
 impl IdentitySystem {
@@ -27,6 +28,7 @@ impl IdentitySystem {
             reputation_scores: HashMap::new(),
             last_activity: HashMap::new(),
             key_versions: HashMap::new(),
+            federation_roles: HashMap::new(),
         }
     }
 
@@ -59,6 +61,14 @@ impl IdentitySystem {
 
     pub fn get_roles(&self, did: &str) -> Vec<String> {
         self.roles.get(did).cloned().unwrap_or_default()
+    }
+
+    pub fn assign_federation_role(&mut self, federation_id: String, did: String, role: String) {
+        self.federation_roles.entry(federation_id).or_insert_with(HashMap::new).entry(did).or_insert_with(Vec::new).push(role);
+    }
+
+    pub fn get_federation_roles(&self, federation_id: &str, did: &str) -> Vec<String> {
+        self.federation_roles.get(federation_id).and_then(|roles| roles.get(did)).cloned().unwrap_or_default()
     }
 
     pub fn verify_did(&self, did: &str, message: &[u8], signature: &[u8]) -> bool {
@@ -251,5 +261,19 @@ mod tests {
 
         assert!(identity_system.is_eligible(&did, 30, "governance"));
         assert!(!identity_system.is_eligible(&did, 50, "governance"));
+    }
+
+    #[test]
+    fn test_assign_and_get_federation_roles() {
+        let mut identity_system = IdentitySystem::new();
+        let federation_id = "federation123".to_string();
+        let did = "did:example:secp256k1".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 10, vec![], Algorithm::Secp256k1);
+
+        identity_system.assign_federation_role(federation_id.clone(), did.clone(), "admin".to_string());
+        identity_system.assign_federation_role(federation_id.clone(), did.clone(), "member".to_string());
+
+        let roles = identity_system.get_federation_roles(&federation_id, &did);
+        assert_eq!(roles, vec!["admin".to_string(), "member".to_string()]);
     }
 }
