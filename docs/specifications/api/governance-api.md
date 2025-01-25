@@ -188,5 +188,30 @@ Reputation scores are calculated based on various factors, including:
 ### Voting Power
 The voting power of each member is proportional to their reputation score. For example, a member with a higher reputation score will have more weight in their vote compared to a member with a lower score.
 
+## Reputation Categories
+
+### Overview
+Reputation categories allow for multi-dimensional tracking of contributions, ensuring a more nuanced and accurate representation of each member's contributions to the cooperative.
+
+### Categories
+- **Governance**: Contributions to governance activities, such as voting on proposals and participating in discussions.
+- **Resource Sharing**: Contributions to resource sharing, such as providing resources to other members or federations.
+- **Technical Contributions**: Contributions to technical development and support, such as coding, debugging, and providing technical assistance.
+
+### Reputation Ledger
+The `ReputationLedger` structure maintains an immutable history of all reputation changes associated with each Decentralized Identifier (DID). This ledger includes details such as the DID, change amount, reason, timestamp, and category.
+
+### Reputation Adjustments
+Reputation can be adjusted for various actions, such as contributions to governance, resource sharing, or verified claims. Positive contributions increase reputation, while negative behaviors decrease it.
+
+### Reputation Decay
+A decay mechanism gradually reduces reputation scores over time if participants do not engage in positive activities. This encourages continuous participation and prevents reputation scores from remaining static.
+
+### Reputation-Based Access Control
+Permissions and voting power are based on reputation scores, ensuring that only participants with sufficient reputation can perform critical actions.
+
+### Real-Time Reputation Recalibration
+The system continuously updates reputation scores based on ongoing activities and contributions. This includes continuous monitoring, periodic updates, and event-driven recalibration.
+
 ## Conclusion
 The Governance API is a powerful tool for enabling democratic and transparent governance within the InterCooperative Network. By providing robust endpoints for proposal management, voting, cross-cooperative interactions, and hybrid participation, the API supports a wide range of governance activities and fosters collaboration among cooperatives. The integration and interoperability features further enhance the utility of the API, allowing developers to build custom solutions that leverage the governance capabilities of ICN.
