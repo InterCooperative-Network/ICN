@@ -11,7 +11,7 @@ use icn_core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem}
 use icn_consensus::ProofOfCooperation;
 use icn_crypto::KeyPair;
 use icn_p2p::networking::NetworkManager;
-use icn_runtime::RuntimeManager;
+use icn_runtime::{RuntimeManager, ContractExecution};
 use icn_storage::{StorageManager, StorageBackend, StorageResult};
 use icn_types::{Block, Transaction};
 use tokio::signal;
@@ -107,6 +107,14 @@ enum FederationOperation {
         federation_id: String,
         new_terms: FederationTerms,
     },
+}
+
+#[derive(Serialize, Deserialize)]
+struct TokenizedResource {
+    resource_id: String,
+    owner: String,
+    quantity: u64,
+    price_per_unit: f64,
 }
 
 struct NotificationManager {
@@ -328,6 +336,14 @@ async fn main() {
             }
         });
 
+    let query_shared_resources = warp::path!("api" / "resources" / "query")
+        .and(warp::get())
+        .and_then(move || {
+            async move {
+                handle_query_shared_resources().await
+            }
+        });
+
     let routes = create_proposal
         .or(vote_on_proposal)
         .or(initiate_federation)
@@ -336,7 +352,8 @@ async fn main() {
         .or(propose_action)
         .or(vote_on_federation_proposal)
         .or(share_resources)
-        .or(update_federation_terms);
+        .or(update_federation_terms)
+        .or(query_shared_resources);
 
     let server = warp::serve(routes).run(([0, 0, 0, 0], 8081));
 
@@ -405,6 +422,25 @@ async fn handle_federation_operation(operation: FederationOperation, notificatio
     let body = format!("Federation operation executed: {:?}", operation);
     notification_manager.send_notification(&subject, &body).await;
     Ok(warp::reply::json(&operation))
+}
+
+async fn handle_query_shared_resources() -> Result<impl warp::Reply, warp::Rejection> {
+    // Logic to handle querying shared resources
+    let resources = vec![
+        TokenizedResource {
+            resource_id: "resource1".to_string(),
+            owner: "did:icn:owner1".to_string(),
+            quantity: 100,
+            price_per_unit: 10.0,
+        },
+        TokenizedResource {
+            resource_id: "resource2".to_string(),
+            owner: "did:icn:owner2".to_string(),
+            quantity: 200,
+            price_per_unit: 20.0,
+        },
+    ];
+    Ok(warp::reply::json(&resources))
 }
 
 fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
