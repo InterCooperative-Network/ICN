@@ -194,6 +194,35 @@ As cooperatives grow or federate with others, the governance system must adapt t
 - **Federated Governance**: Federations of cooperatives establish a higher-level governance structure to manage inter-cooperative affairs.
 - **Scalable Voting Mechanisms**: Voting mechanisms are designed to scale with the size of the cooperative, ensuring that all members have a voice in decision-making.
 
+## 8. User-Friendly Tools for Proposal Creation and Voting
+
+### 8.1 Proposal Creation Modal
+To facilitate the creation of proposals, a user-friendly modal is provided within the governance dashboard. This modal includes input fields for the proposal title, description, and other relevant details. The modal also implements form validation to ensure that all required fields are filled out correctly before submission.
+
+#### Modal Features
+- **Input Fields**: Title, description, and other relevant details.
+- **Form Validation**: Ensures all required fields are filled out correctly.
+- **Submit Button**: Triggers an API call to create a new proposal.
+
+### 8.2 Voting Buttons
+Each active proposal displayed on the governance dashboard includes buttons for casting votes (approve/reject) directly from the dashboard. This allows members to participate in the voting process without navigating away from the dashboard.
+
+#### Voting Button Features
+- **Approve Button**: Casts a vote in favor of the proposal.
+- **Reject Button**: Casts a vote against the proposal.
+- **Real-Time Updates**: Displays real-time updates for proposal statuses and voting results.
+
+### 8.3 Accessibility
+The proposal creation modal and voting buttons are designed to be accessible, following best practices for semantic HTML elements, ARIA roles, and properties.
+
+#### Accessibility Features
+- **Semantic HTML**: Use of elements like `<header>`, `<main>`, and `<footer>` to provide meaningful structure.
+- **Keyboard Accessibility**: Ensures all interactive elements are keyboard accessible.
+- **Text Alternatives**: Provides text alternatives for non-text content.
+- **ARIA Roles**: Enhances accessibility of dynamic content with ARIA roles and properties.
+- **Color Contrast**: Ensures sufficient color contrast for readability.
+- **Focus Management**: Manages focus to improve navigation for users with assistive technologies.
+
 ## Appendix
 
 ### A. Summary of Governance Methods
