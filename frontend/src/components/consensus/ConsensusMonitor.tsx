@@ -22,6 +22,7 @@ interface ReputationUpdate {
   did: string;
   change: number;
   new_total: number;
+  category: string; // Added category field
 }
 
 interface ErrorMessage {
@@ -132,6 +133,7 @@ const ConsensusMonitor: React.FC = () => {
         </div>
         <p className="text-sm text-gray-600">DID: {data.did}</p>
         <p className="text-sm text-gray-600">New Total: {data.new_total}</p>
+        <p className="text-sm text-gray-600">Category: {data.category}</p> {/* Display category */}
       </CardContent>
     </Card>
   );

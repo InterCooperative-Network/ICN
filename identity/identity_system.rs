@@ -13,7 +13,7 @@ pub struct IdentitySystem {
     permissions: HashMap<String, Vec<String>>,
     roles: HashMap<String, Vec<String>>,
     public_keys: HashMap<String, (Vec<u8>, Algorithm)>,
-    reputation_scores: HashMap<String, i64>,
+    reputation_scores: HashMap<String, HashMap<String, i64>>, // Multi-dimensional reputation scores
     last_activity: HashMap<String, SystemTime>,
     key_versions: HashMap<String, u32>,
 }
@@ -32,7 +32,14 @@ impl IdentitySystem {
 
     pub fn register_did(&mut self, did: String, permissions: Vec<String>, initial_reputation: i64, public_key: Vec<u8>, algorithm: Algorithm) {
         self.permissions.insert(did.clone(), permissions);
-        self.reputation_scores.insert(did.clone(), initial_reputation);
+        self.reputation_scores.insert(did.clone(), {
+            let mut categories = HashMap::new();
+            categories.insert("general".to_string(), initial_reputation);
+            categories.insert("governance".to_string(), initial_reputation);
+            categories.insert("resource_sharing".to_string(), initial_reputation);
+            categories.insert("technical_contributions".to_string(), initial_reputation);
+            categories
+        });
         self.public_keys.insert(did.clone(), (public_key, algorithm));
         self.last_activity.insert(did.clone(), SystemTime::now());
         self.key_versions.insert(did, 1);
@@ -80,18 +87,20 @@ impl IdentitySystem {
         }
     }
 
-    pub fn get_reputation(&self, did: &str) -> i64 {
-        *self.reputation_scores.get(did).unwrap_or(&0)
+    pub fn get_reputation(&self, did: &str, category: &str) -> i64 {
+        self.reputation_scores.get(did).and_then(|categories| categories.get(category)).cloned().unwrap_or(0)
     }
 
-    pub fn adjust_reputation(&mut self, did: &str, change: i64) {
-        if let Some(score) = self.reputation_scores.get_mut(did) {
-            *score += change;
+    pub fn adjust_reputation(&mut self, did: &str, change: i64, category: &str) {
+        if let Some(categories) = self.reputation_scores.get_mut(did) {
+            if let Some(score) = categories.get_mut(category) {
+                *score += change;
+            }
         }
     }
 
-    pub fn is_eligible(&self, did: &str, min_reputation: i64) -> bool {
-        self.get_reputation(did) >= min_reputation
+    pub fn is_eligible(&self, did: &str, min_reputation: i64, category: &str) -> bool {
+        self.get_reputation(did, category) >= min_reputation
     }
 
     pub fn dynamic_recalibration(&mut self) {
@@ -99,7 +108,10 @@ impl IdentitySystem {
         for (did, last_active) in &self.last_activity {
             if let Ok(duration) = now.duration_since(*last_active) {
                 if duration > Duration::from_secs(30 * 24 * 60 * 60) { // 30 days
-                    self.adjust_reputation(did, -1); // Decay reputation
+                    self.adjust_reputation(did, -1, "general"); // Decay general reputation
+                    self.adjust_reputation(did, -1, "governance"); // Decay governance reputation
+                    self.adjust_reputation(did, -1, "resource_sharing"); // Decay resource sharing reputation
+                    self.adjust_reputation(did, -1, "technical_contributions"); // Decay technical contributions reputation
                 }
             }
         }
@@ -201,5 +213,43 @@ mod tests {
         let new_public_key = identity_system.public_keys.get(&did).unwrap().0.clone();
 
         assert_ne!(old_public_key, new_public_key);
+    }
+
+    #[test]
+    fn test_reputation_decay() {
+        let mut identity_system = IdentitySystem::new();
+        let did = "did:example:secp256k1".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 100, vec![], Algorithm::Secp256k1);
+
+        identity_system.dynamic_recalibration();
+        assert_eq!(identity_system.get_reputation(&did, "general"), 99);
+        assert_eq!(identity_system.get_reputation(&did, "governance"), 99);
+        assert_eq!(identity_system.get_reputation(&did, "resource_sharing"), 99);
+        assert_eq!(identity_system.get_reputation(&did, "technical_contributions"), 99);
+    }
+
+    #[test]
+    fn test_multi_dimensional_reputation_tracking() {
+        let mut identity_system = IdentitySystem::new();
+        let did = "did:example:secp256k1".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 50, vec![], Algorithm::Secp256k1);
+
+        identity_system.adjust_reputation(&did, 20, "governance");
+        identity_system.adjust_reputation(&did, 30, "resource_sharing");
+
+        assert_eq!(identity_system.get_reputation(&did, "governance"), 70);
+        assert_eq!(identity_system.get_reputation(&did, "resource_sharing"), 80);
+    }
+
+    #[test]
+    fn test_category_specific_eligibility_checks() {
+        let mut identity_system = IdentitySystem::new();
+        let did = "did:example:secp256k1".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 40, vec![], Algorithm::Secp256k1);
+
+        identity_system.adjust_reputation(&did, 10, "governance");
+
+        assert!(identity_system.is_eligible(&did, 30, "governance"));
+        assert!(!identity_system.is_eligible(&did, 50, "governance"));
     }
 }
