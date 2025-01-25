@@ -249,3 +249,60 @@ let audit_entry = AuditLog {
 };
 audit_system.create_audit_entry(audit_entry);
 ```
+
+### C. Advanced Tracking and Auditing for Shared Resources
+The Audit System includes advanced tracking and auditing for shared resources to ensure transparency and accountability in resource allocation and usage. These actions are recorded in the audit log and can be queried and verified like other actions.
+
+#### Shared Resource Actions
+- **ResourceTokenization**: Records the tokenization of a resource.
+- **SmartContractExecution**: Records the execution of a smart contract related to resource sharing.
+- **DynamicPricingAdjustment**: Records adjustments to resource pricing based on availability and demand.
+- **ReputationBasedAccess**: Records access to resources based on reputation scores.
+
+#### Example: Resource Tokenization
+```rust
+let audit_entry = AuditLog {
+    entry_id: "entry130".to_string(),
+    timestamp: 1637356800,
+    entity: "did:icn:resource_owner".to_string(),
+    action: "ResourceTokenization".to_string(),
+    details: "Tokenized resource with ID resource123".to_string(),
+};
+audit_system.create_audit_entry(audit_entry);
+```
+
+#### Example: Smart Contract Execution
+```rust
+let audit_entry = AuditLog {
+    entry_id: "entry131".to_string(),
+    timestamp: 1637356800,
+    entity: "did:icn:contract_executor".to_string(),
+    action: "SmartContractExecution".to_string(),
+    details: "Executed smart contract for resource sharing".to_string(),
+};
+audit_system.create_audit_entry(audit_entry);
+```
+
+#### Example: Dynamic Pricing Adjustment
+```rust
+let audit_entry = AuditLog {
+    entry_id: "entry132".to_string(),
+    timestamp: 1637356800,
+    entity: "did:icn:pricing_manager".to_string(),
+    action: "DynamicPricingAdjustment".to_string(),
+    details: "Adjusted pricing for resource resource123 based on availability and demand".to_string(),
+};
+audit_system.create_audit_entry(audit_entry);
+```
+
+#### Example: Reputation-Based Access
+```rust
+let audit_entry = AuditLog {
+    entry_id: "entry133".to_string(),
+    timestamp: 1637356800,
+    entity: "did:icn:resource_user".to_string(),
+    action: "ReputationBasedAccess".to_string(),
+    details: "Accessed resource resource123 based on reputation score".to_string(),
+};
+audit_system.create_audit_entry(audit_entry);
+```
