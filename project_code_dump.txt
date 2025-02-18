@@ -1,4 +1,4 @@
-Project Code Dump - Generated Tue 18 Feb 2025 06:05:08 AM UTC
+Project Code Dump - Generated Tue 18 Feb 2025 06:16:46 AM UTC
 ======================================
 
 LLM Context Information
@@ -40,6 +40,7 @@ Project Tree:
 ├── crates
 │   ├── icn-consensus
 │   │   ├── Cargo.toml
+│   │   ├── README.md
 │   │   └── src
 │   ├── icn-core
 │   │   ├── Cargo.toml
