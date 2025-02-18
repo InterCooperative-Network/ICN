@@ -1,4 +1,4 @@
-Project Code Dump - Generated Tue 18 Feb 2025 06:54:15 AM UTC
+Project Code Dump - Generated Tue 18 Feb 2025 07:35:38 AM UTC
 ======================================
 
 LLM Context Information
@@ -32,8 +32,23 @@ Project Tree:
 ├── backend
 │   ├── Cargo.lock
 │   ├── Cargo.toml
+│   ├── migrations
+│   │   └── 20240218000000_initial.sql
 │   └── src
-│       └── main.rs
+│       ├── blockchain.rs
+│       ├── core.rs
+│       ├── db.rs
+│       ├── governance.rs
+│       ├── identity.rs
+│       ├── lib.rs
+│       ├── main.rs
+│       ├── models.rs
+│       ├── networking.rs
+│       ├── reputation.rs
+│       ├── storage.rs
+│       └── vm.rs
+├── Cargo.lock
+├── Cargo.toml
 ├── config
 │   └── feature-flags.json
 ├── contracts
@@ -135,8 +150,8 @@ Project Tree:
 
 ===================
 File: ./backend/Cargo.toml
-Size: 779 bytes
-Modified: 2025-01-25 21:33:39.104870000 +0000
+Size: 689 bytes
+Modified: 2025-02-18 07:13:32.972179500 +0000
 
 ===================
 ```toml
@@ -146,85 +161,106 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-icn-types = { path = "../crates/icn-types" }
-icn-core = { path = "../crates/icn-core" }
-icn-consensus = { path = "../crates/icn-consensus" }
-icn-crypto = { path = "../crates/icn-crypto" }
-icn-p2p = { path = "../crates/icn-p2p" }
-icn-runtime = { path = "../crates/icn-runtime" }
-icn-storage = { path = "../crates/icn-storage" }
-serde = "1.0"
-secp256k1 = "0.21"
-chrono = "0.4"
-sha2 = "0.9"
-tokio-tungstenite = "0.15"
+tokio = { version = "1.0", features = ["full"] }
 warp = "0.3"
-futures-util = "0.3"
-hashbrown = "0.11"
-tokio = { version = "1", features = ["full"] }
-async-trait = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4"] }
+log = "0.4"
 env_logger = "0.9"
-tokio-postgres = "0.7"
-sqlx = { version = "0.5", features = ["runtime-tokio-rustls", "postgres"] }
-reqwest = "0.11"
+futures-util = "0.3"
+sqlx = { version = "0.6", features = ["postgres", "runtime-tokio-rustls"] }
+thiserror = "1.0"
+dashmap = "5.4"
+lazy_static = "1.4"
+reqwest = { version = "0.11", features = ["json"] }
+icn-types = { path = "../crates/icn-types" }
+async-trait = "0.1"
+sha2 = "0.10"
+toml = "0.7"
+tokio-tungstenite = "0.21"
+```
+
+===================
+File: ./backend/src/lib.rs
+Size: 169 bytes
+Modified: 2025-02-18 07:17:44.613675800 +0000
+Dependencies:
+
+===================
+```rs
+pub mod blockchain;
+pub mod core;
+pub mod db;
+pub mod identity;
+pub mod reputation;
+pub mod governance;
+pub mod vm;
+pub mod networking;
+pub mod storage;
+pub mod models;
 ```
 
 ===================
 File: ./backend/src/main.rs
-Size: 18053 bytes
-Modified: 2025-02-18 05:32:41.089799300 +0000
+Size: 18754 bytes
+Modified: 2025-02-18 07:17:43.203396000 +0000
 Dependencies:
 use async_trait::async_trait;
-use chrono::Utc;
+use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
+use crate::identity::IdentityManager;
+use crate::networking::NetworkManager;
+use crate::storage::{StorageManager, StorageBackend, StorageResult};
+use dashmap::DashMap;
 use env_logger;
-use futures_util::future::join_all;
-use futures_util::{StreamExt, SinkExt};
-use icn_consensus::ProofOfCooperation;
-use icn_core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem};
-use icn_crypto::KeyPair;
-use icn_p2p::networking::NetworkManager;
-use icn_runtime::{RuntimeManager, ContractExecution};
-use icn_storage::{StorageManager, StorageBackend, StorageResult};
-use icn_types::{Block, Transaction};
+use futures_util::StreamExt;
 use log::{info, error};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use tokio::runtime::Runtime;
+use sha2::Digest;
+use sqlx::PgPool;
+use std::sync::Arc;
+use thiserror::Error;
+use tokio;
 use tokio::signal;
-use tokio::time::{sleep, Duration};
-use warp::Filter;
-use warp::ws::{Message, WebSocket};
+use warp::{Filter, ws::{WebSocket, Message}};
 
 ===================
 ```rs
-use tokio::runtime::Runtime;
+use tokio;
 use log::{info, error};
 use env_logger;
 use serde::{Deserialize, Serialize};
-use chrono::Utc;
-use sha2::{Sha256, Digest};
-use warp::Filter;
-use futures_util::future::join_all;
-use async_trait::async_trait;
-use icn_core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem};
-use icn_consensus::ProofOfCooperation;
-use icn_crypto::KeyPair;
-use icn_p2p::networking::NetworkManager;
-use icn_runtime::{RuntimeManager, ContractExecution};
-use icn_storage::{StorageManager, StorageBackend, StorageResult};
-use icn_types::{Block, Transaction};
-use tokio::signal;
-use std::sync::{Arc, Mutex};
-use tokio::time::{sleep, Duration};
+use std::sync::Arc;
+use sha2::Digest;
+use futures_util::StreamExt;
+use warp::{Filter, ws::{WebSocket, Message}};
+use dashmap::DashMap;
+use sqlx::PgPool;
+use thiserror::Error;
 use reqwest::Client;
-use warp::ws::{Message, WebSocket};
-use futures_util::{StreamExt, SinkExt};
-use std::collections::HashMap;
+use tokio::signal;
+use async_trait::async_trait;
 
-#[derive(Deserialize)]
+use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
+use crate::storage::{StorageManager, StorageBackend, StorageResult};
+use crate::networking::NetworkManager;
+use crate::identity::IdentityManager;
+
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+    #[error("Database error: {0}")]
+    DatabaseError(#[from] sqlx::Error),
+    #[error("WebSocket error: {0}")]
+    WebSocketError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+}
+
+#[derive(Debug, Deserialize)]
 struct Config {
     database_url: String,
     log_level: String,
@@ -240,6 +276,21 @@ struct Config {
     technical_contributions_decay_rate: f64,
     decay_exemptions: Vec<String>,
 }
+
+impl Config {
+    fn validate(&self) -> Result<(), AppError> {
+        if self.database_url.is_empty() {
+            return Err(AppError::ConfigError("database_url cannot be empty".to_string()));
+        }
+        if !(0.0..=1.0).contains(&self.reputation_decay_rate) {
+            return Err(AppError::ConfigError("reputation_decay_rate must be between 0 and 1".to_string()));
+        }
+        // Add other validation checks
+        Ok(())
+    }
+}
+
+type WebSocketClients = Arc<DashMap<String, warp::ws::WebSocket>>;
 
 #[derive(Serialize, Deserialize)]
 struct Proposal {
@@ -402,22 +453,21 @@ impl ReputationManager {
 }
 
 #[tokio::main]
-async fn main() {
-    // Initialize logging
+async fn main() -> Result<(), AppError> {
+    // Initialize logging with env_logger
     env_logger::init();
-    info!("Starting backend application...");
 
-    // Load configuration
-    let config: Config = match load_config() {
-        Ok(config) => {
-            info!("Configuration loaded successfully.");
-            config
-        }
-        Err(e) => {
-            error!("Failed to load configuration: {}", e);
-            return;
-        }
-    };
+    // Load and validate configuration
+    let config: Config = load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
+    config.validate()?;
+    
+    // Set up database connection pool
+    let db_pool = PgPool::connect(&config.database_url)
+        .await
+        .map_err(AppError::DatabaseError)?;
+
+    // Initialize WebSocket clients using DashMap
+    let websocket_clients: WebSocketClients = Arc::new(DashMap::new());
 
     // Initialize components
     let storage_manager = StorageManager::new(Box::new(MockStorageBackend));
@@ -447,12 +497,10 @@ async fn main() {
     // Start core system
     if let Err(e) = core.start().await {
         error!("Failed to start core system: {}", e);
-        return;
+        return Ok(());
     }
 
     // Set up WebSocket server
-    let websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>> = Arc::new(Mutex::new(HashMap::new()));
-
     let websocket_route = warp::path("ws")
         .and(warp::ws())
         .map(move |ws: warp::ws::Ws| {
@@ -593,9 +641,10 @@ async fn main() {
     }
 
     info!("Backend application stopped.");
+    Ok(())
 }
 
-async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
     // Logic to handle proposal creation
     let subject = format!("New Proposal Created: {}", proposal.title);
     let body = format!("A new proposal has been created by {}. Description: {}", proposal.created_by, proposal.description);
@@ -608,7 +657,7 @@ async fn handle_create_proposal(proposal: Proposal, notification_manager: Notifi
     Ok(warp::reply::json(&proposal))
 }
 
-async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
     // Logic to handle voting on a proposal
     let subject = format!("New Vote on Proposal: {}", proposal_id);
     let body = format!("A new vote has been cast by {}. Approve: {}", vote.voter, vote.approve);
@@ -671,31 +720,35 @@ async fn handle_query_shared_resources() -> Result<impl warp::Reply, warp::Rejec
     Ok(warp::reply::json(&resources))
 }
 
-async fn handle_websocket(ws: WebSocket, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) {
-    let (mut tx, mut rx) = ws.split();
+async fn handle_websocket(ws: WebSocket, websocket_clients: WebSocketClients) {
     let client_id = uuid::Uuid::new_v4().to_string();
+    
+    // Split the WebSocket
+    let (mut ws_tx, mut ws_rx) = ws.split();
 
-    websocket_clients.lock().unwrap().insert(client_id.clone(), tx);
+    // Insert the sender into clients
+    websocket_clients.insert(client_id.clone(), ws_tx);
 
-    while let Some(result) = rx.next().await {
+    // Handle incoming messages
+    while let Some(result) = ws_rx.next().await {
         match result {
             Ok(msg) => {
-                if msg.is_text() {
-                    let text = msg.to_str().unwrap();
-                    println!("Received message: {}", text);
-                }
+                log::debug!("Received message from {}: {:?}", client_id, msg);
+                // Handle the message
             }
             Err(e) => {
-                eprintln!("WebSocket error: {}", e);
+                log::error!("WebSocket error for {}: {}", client_id, e);
                 break;
             }
         }
     }
 
-    websocket_clients.lock().unwrap().remove(&client_id);
+    // Clean up on disconnect
+    log::info!("Client {} disconnected", client_id);
+    websocket_clients.remove(&client_id);
 }
 
-async fn broadcast_message(message: &Message, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) {
+async fn broadcast_message(message: &Message, websocket_clients: WebSocketClients) {
     let clients = websocket_clients.lock().unwrap();
     for (_, client) in clients.iter() {
         let _ = client.send(message.clone()).await;
@@ -772,67 +825,90 @@ Modified: 2025-01-16 22:02:57.707269200 +0000
 
 ===================
 File: ./docker/docker-compose.yml
-Size: 829 bytes
-Modified: 2025-01-16 22:02:57.991713300 +0000
+Size: 908 bytes
+Modified: 2025-02-18 07:31:04.819219400 +0000
 
 ===================
 
 ===================
-File: ./backend/src/main.rs
-Size: 18053 bytes
-Modified: 2025-02-18 05:32:41.089799300 +0000
+File: ./backend/src/lib.rs
+Size: 169 bytes
+Modified: 2025-02-18 07:17:44.613675800 +0000
 Dependencies:
-use async_trait::async_trait;
-use chrono::Utc;
-use env_logger;
-use futures_util::future::join_all;
-use futures_util::{StreamExt, SinkExt};
-use icn_consensus::ProofOfCooperation;
-use icn_core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem};
-use icn_crypto::KeyPair;
-use icn_p2p::networking::NetworkManager;
-use icn_runtime::{RuntimeManager, ContractExecution};
-use icn_storage::{StorageManager, StorageBackend, StorageResult};
-use icn_types::{Block, Transaction};
-use log::{info, error};
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use tokio::runtime::Runtime;
-use tokio::signal;
-use tokio::time::{sleep, Duration};
-use warp::Filter;
-use warp::ws::{Message, WebSocket};
 
 ===================
 ```rs
-use tokio::runtime::Runtime;
+pub mod blockchain;
+pub mod core;
+pub mod db;
+pub mod identity;
+pub mod reputation;
+pub mod governance;
+pub mod vm;
+pub mod networking;
+pub mod storage;
+pub mod models;
+```
+
+===================
+File: ./backend/src/main.rs
+Size: 18754 bytes
+Modified: 2025-02-18 07:17:43.203396000 +0000
+Dependencies:
+use async_trait::async_trait;
+use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
+use crate::identity::IdentityManager;
+use crate::networking::NetworkManager;
+use crate::storage::{StorageManager, StorageBackend, StorageResult};
+use dashmap::DashMap;
+use env_logger;
+use futures_util::StreamExt;
+use log::{info, error};
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use sha2::Digest;
+use sqlx::PgPool;
+use std::sync::Arc;
+use thiserror::Error;
+use tokio;
+use tokio::signal;
+use warp::{Filter, ws::{WebSocket, Message}};
+
+===================
+```rs
+use tokio;
 use log::{info, error};
 use env_logger;
 use serde::{Deserialize, Serialize};
-use chrono::Utc;
-use sha2::{Sha256, Digest};
-use warp::Filter;
-use futures_util::future::join_all;
-use async_trait::async_trait;
-use icn_core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem};
-use icn_consensus::ProofOfCooperation;
-use icn_crypto::KeyPair;
-use icn_p2p::networking::NetworkManager;
-use icn_runtime::{RuntimeManager, ContractExecution};
-use icn_storage::{StorageManager, StorageBackend, StorageResult};
-use icn_types::{Block, Transaction};
-use tokio::signal;
-use std::sync::{Arc, Mutex};
-use tokio::time::{sleep, Duration};
+use std::sync::Arc;
+use sha2::Digest;
+use futures_util::StreamExt;
+use warp::{Filter, ws::{WebSocket, Message}};
+use dashmap::DashMap;
+use sqlx::PgPool;
+use thiserror::Error;
 use reqwest::Client;
-use warp::ws::{Message, WebSocket};
-use futures_util::{StreamExt, SinkExt};
-use std::collections::HashMap;
+use tokio::signal;
+use async_trait::async_trait;
 
-#[derive(Deserialize)]
+use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
+use crate::storage::{StorageManager, StorageBackend, StorageResult};
+use crate::networking::NetworkManager;
+use crate::identity::IdentityManager;
+
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+    #[error("Database error: {0}")]
+    DatabaseError(#[from] sqlx::Error),
+    #[error("WebSocket error: {0}")]
+    WebSocketError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+}
+
+#[derive(Debug, Deserialize)]
 struct Config {
     database_url: String,
     log_level: String,
@@ -848,6 +924,21 @@ struct Config {
     technical_contributions_decay_rate: f64,
     decay_exemptions: Vec<String>,
 }
+
+impl Config {
+    fn validate(&self) -> Result<(), AppError> {
+        if self.database_url.is_empty() {
+            return Err(AppError::ConfigError("database_url cannot be empty".to_string()));
+        }
+        if !(0.0..=1.0).contains(&self.reputation_decay_rate) {
+            return Err(AppError::ConfigError("reputation_decay_rate must be between 0 and 1".to_string()));
+        }
+        // Add other validation checks
+        Ok(())
+    }
+}
+
+type WebSocketClients = Arc<DashMap<String, warp::ws::WebSocket>>;
 
 #[derive(Serialize, Deserialize)]
 struct Proposal {
@@ -1010,22 +1101,21 @@ impl ReputationManager {
 }
 
 #[tokio::main]
-async fn main() {
-    // Initialize logging
+async fn main() -> Result<(), AppError> {
+    // Initialize logging with env_logger
     env_logger::init();
-    info!("Starting backend application...");
 
-    // Load configuration
-    let config: Config = match load_config() {
-        Ok(config) => {
-            info!("Configuration loaded successfully.");
-            config
-        }
-        Err(e) => {
-            error!("Failed to load configuration: {}", e);
-            return;
-        }
-    };
+    // Load and validate configuration
+    let config: Config = load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
+    config.validate()?;
+    
+    // Set up database connection pool
+    let db_pool = PgPool::connect(&config.database_url)
+        .await
+        .map_err(AppError::DatabaseError)?;
+
+    // Initialize WebSocket clients using DashMap
+    let websocket_clients: WebSocketClients = Arc::new(DashMap::new());
 
     // Initialize components
     let storage_manager = StorageManager::new(Box::new(MockStorageBackend));
@@ -1055,12 +1145,10 @@ async fn main() {
     // Start core system
     if let Err(e) = core.start().await {
         error!("Failed to start core system: {}", e);
-        return;
+        return Ok(());
     }
 
     // Set up WebSocket server
-    let websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>> = Arc::new(Mutex::new(HashMap::new()));
-
     let websocket_route = warp::path("ws")
         .and(warp::ws())
         .map(move |ws: warp::ws::Ws| {
@@ -1201,9 +1289,10 @@ async fn main() {
     }
 
     info!("Backend application stopped.");
+    Ok(())
 }
 
-async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
     // Logic to handle proposal creation
     let subject = format!("New Proposal Created: {}", proposal.title);
     let body = format!("A new proposal has been created by {}. Description: {}", proposal.created_by, proposal.description);
@@ -1216,7 +1305,7 @@ async fn handle_create_proposal(proposal: Proposal, notification_manager: Notifi
     Ok(warp::reply::json(&proposal))
 }
 
-async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
     // Logic to handle voting on a proposal
     let subject = format!("New Vote on Proposal: {}", proposal_id);
     let body = format!("A new vote has been cast by {}. Approve: {}", vote.voter, vote.approve);
@@ -1279,31 +1368,35 @@ async fn handle_query_shared_resources() -> Result<impl warp::Reply, warp::Rejec
     Ok(warp::reply::json(&resources))
 }
 
-async fn handle_websocket(ws: WebSocket, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) {
-    let (mut tx, mut rx) = ws.split();
+async fn handle_websocket(ws: WebSocket, websocket_clients: WebSocketClients) {
     let client_id = uuid::Uuid::new_v4().to_string();
+    
+    // Split the WebSocket
+    let (mut ws_tx, mut ws_rx) = ws.split();
 
-    websocket_clients.lock().unwrap().insert(client_id.clone(), tx);
+    // Insert the sender into clients
+    websocket_clients.insert(client_id.clone(), ws_tx);
 
-    while let Some(result) = rx.next().await {
+    // Handle incoming messages
+    while let Some(result) = ws_rx.next().await {
         match result {
             Ok(msg) => {
-                if msg.is_text() {
-                    let text = msg.to_str().unwrap();
-                    println!("Received message: {}", text);
-                }
+                log::debug!("Received message from {}: {:?}", client_id, msg);
+                // Handle the message
             }
             Err(e) => {
-                eprintln!("WebSocket error: {}", e);
+                log::error!("WebSocket error for {}: {}", client_id, e);
                 break;
             }
         }
     }
 
-    websocket_clients.lock().unwrap().remove(&client_id);
+    // Clean up on disconnect
+    log::info!("Client {} disconnected", client_id);
+    websocket_clients.remove(&client_id);
 }
 
-async fn broadcast_message(message: &Message, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) {
+async fn broadcast_message(message: &Message, websocket_clients: WebSocketClients) {
     let clients = websocket_clients.lock().unwrap();
     for (_, client) in clients.iter() {
         let _ = client.send(message.clone()).await;
@@ -2830,8 +2923,8 @@ mod tests {
 
 ===================
 File: ./crates/icn-types/src/lib.rs
-Size: 21512 bytes
-Modified: 2025-02-18 06:52:03.323350100 +0000
+Size: 20588 bytes
+Modified: 2025-02-18 07:12:54.022123900 +0000
 Dependencies:
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
@@ -2839,7 +2932,7 @@ use rayon::prelude::*;
 use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest};
 use std::collections::HashMap;
-use std::sync::{Mutex, Arc}; // Re-import Arc
+use std::sync::Mutex; // Remove Arc since it's unused
 use std::time::SystemTime;
 use thiserror::Error;
 use tokio::task;
@@ -2854,7 +2947,7 @@ use tokio::task;
 use rayon::prelude::*;
 use std::collections::HashMap;
 
-use std::sync::{Mutex, Arc}; // Re-import Arc
+use std::sync::Mutex; // Remove Arc since it's unused
 use lazy_static::lazy_static;
 use thiserror::Error;
 
@@ -3110,35 +3203,18 @@ impl Block {
 
     /// Validates the transactions in the block
     async fn validate_transactions(&self) -> Result<(), BlockError> {
-        // Group transactions by type
-        let grouped_transactions: Arc<HashMap<String, Vec<Transaction>>> = Arc::new(
-            self.transactions.iter()
-                .map(|tx| (tx.transaction_type.as_str().to_string(), tx.clone()))
-                .fold(HashMap::new(), |mut acc, (group, tx)| {
-                    acc.entry(group).or_insert_with(Vec::new).push(tx);
-                    acc
-                })
-        );
-
-        let validation_tasks: Vec<_> = grouped_transactions.iter()
-            .flat_map(|(_, txs)| {
-                txs.iter().map({
-                    let grouped_transactions = Arc::clone(&grouped_transactions);
-                    move |tx| {
-                        let tx_hash = tx.hash.clone();
-                        task::spawn({
-                            let grouped_transactions = Arc::clone(&grouped_transactions);
-                            async move {
-                                let mut cache = TRANSACTION_CACHE.lock().unwrap();
-                                if let Some(&is_valid) = cache.get(&tx_hash) {
-                                    is_valid
-                                } else {
-                                    let is_valid = tx.validate();
-                                    cache.insert(tx_hash, is_valid);
-                                    is_valid
-                                }
-                            }
-                        })
+        let validation_tasks: Vec<_> = self.transactions.iter()
+            .map(|tx| {
+                let tx = tx.clone();
+                task::spawn(async move {
+                    let tx_hash = tx.hash.clone();
+                    let mut cache = TRANSACTION_CACHE.lock().unwrap();
+                    if let Some(&is_valid) = cache.get(&tx_hash) {
+                        is_valid
+                    } else {
+                        let is_valid = tx.validate();
+                        cache.insert(tx_hash, is_valid);
+                        is_valid
                     }
                 })
             })
@@ -3440,9 +3516,6 @@ impl Transaction {
         bincode::serialize(self).unwrap_or_default()
     }
 }
-
-use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FederationType {
