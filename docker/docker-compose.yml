@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.3"
 
 services:
   backend:
@@ -35,7 +35,7 @@ services:
     ports:
       - "8000:8000"
     working_dir: /docs
-    command: /bin/sh -c "pip install mkdocs-mermaid2-plugin && mkdocs serve -a 0.0.0.0:8000"
+    command: /bin/sh - c "pip install mkdocs-mermaid2-plugin && mkdocs serve -a 0.0.0.0:8000"
 
 networks:
   icn-network:
