@@ -1,9 +1,11 @@
-Project Docs Dump - Generated Tue 18 Feb 2025 07:36:40 AM UTC
+Project Docs Dump - Generated Tue Feb 18 03:01:15 EST 2025
 ======================================
 
 Docs Tree:
 =============
 ./docs
+├── INDEX.md
+├── README.md
 ├── api
 │   └── index.md
 ├── api.md
@@ -29,9 +31,7 @@ Docs Tree:
 │   ├── getting-started.md
 │   ├── governance-guide.md
 │   └── reputation-management.md
-├── INDEX.md
 ├── mkdocs.yml
-├── README.md
 ├── requirements.txt
 ├── specifications
 │   ├── api
@@ -60,7 +60,7 @@ Docs Tree:
         ├── onboarding-guide.md
         └── resource-management.md
 
-16 directories, 39 files
+17 directories, 39 files
 
 
 ===================
