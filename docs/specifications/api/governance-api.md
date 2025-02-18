@@ -402,5 +402,55 @@ Permissions and voting power are based on reputation scores, ensuring that only 
 ### Real-Time Reputation Recalibration
 The system continuously updates reputation scores based on ongoing activities and contributions. This includes continuous monitoring, periodic updates, and event-driven recalibration.
 
+## High-Level Architecture Diagram
+
+```mermaid
+graph TD
+    A[Cooperative Applications Layer] --> B[API/SDK Integration Layer]
+    B --> C[Decentralized Identity Management]
+    C --> D[Federated Ledger Layer]
+    D --> E[State Machine & On-Chain Storage]
+    E --> F[Off-Chain Storage & Data Vaults]
+
+    subgraph Cooperative Applications Layer
+        A1[Governance Tools]
+        A2[Secure Messaging]
+        A3[Resource Sharing Platforms]
+    end
+
+    subgraph API/SDK Integration Layer
+        B1[REST/gRPC/GraphQL Endpoints]
+        B2[Developer Tooling]
+        B3[Identity Wallets]
+    end
+
+    subgraph Decentralized Identity Management
+        C1[W3C DIDs]
+        C2[Verifiable Credentials]
+        C3[Zero-Knowledge Proofs]
+        C4[Aries Integration]
+    end
+
+    subgraph Federated Ledger Layer
+        D1[BFT Consensus Engine]
+        D2[Validator Nodes]
+        D3[Multi-Sig Governance]
+        D4[Cooperative Transaction Types]
+    end
+
+    subgraph State Machine & On-Chain Storage
+        E1[DID Registry]
+        E2[Reputation Logs]
+        E3[Transaction Histories]
+        E4[Revocation Records]
+    end
+
+    subgraph Off-Chain Storage & Data Vaults
+        F1[Encrypted Personal Data]
+        F2[IPFS/File Storage]
+        F3[Extended ZKP Artifacts]
+    end
+```
+
 ## Conclusion
 The Governance API is a powerful tool for enabling democratic and transparent governance within the InterCooperative Network. By providing robust endpoints for proposal management, voting, cross-cooperative interactions, and hybrid participation, the API supports a wide range of governance activities and fosters collaboration among cooperatives. The integration and interoperability features further enhance the utility of the API, allowing developers to build custom solutions that leverage the governance capabilities of ICN.

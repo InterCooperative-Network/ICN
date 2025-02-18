@@ -31,3 +31,7 @@
 - [Resource Sharing System Specification](specifications/core/resource-sharing-system.md) (v1.0.0, draft)
 - [Transaction Lifecycle System](specifications/core/transaction-system.md) (v1.0.0, draft)
 - [Voting System Specification](specifications/core/voting-system.md) (v1.0.0, draft)
+
+## Architecture
+
+- [High-Level Architecture Diagram](architecture/diagrams/mermaid/component-diagram.mermaid)
