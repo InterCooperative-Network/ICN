@@ -54,6 +54,8 @@ The ICN project is organized into several directories, each serving a specific p
 - **crates**: Contains various Rust crates used by the backend services.
 - **docker**: Contains Dockerfiles and Docker Compose configurations for containerizing the services.
 - **docs**: Contains the project documentation, including setup guides, contribution guides, and API documentation.
+- **scripts**: Contains various scripts for setup, deployment, and management of the project.
+- **config**: Contains configuration files for different environments and services.
 
 ## Key Features
 - **Decentralized Identity Management**: Secure and verifiable identities using DIDs.
@@ -65,6 +67,27 @@ The ICN project is organized into several directories, each serving a specific p
 
 ## Usage
 To run the ICN project locally, follow the instructions in the [Getting Started](#getting-started) section. For detailed usage instructions, refer to the [User Guides](docs/user/guides/index.md).
+
+### Starting the Backend
+```bash
+# Navigate to the backend directory
+cd backend
+
+# Run the backend services
+cargo run --bin icn-backend
+```
+
+### Starting the Frontend
+```bash
+# Navigate to the frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+
+# Run the frontend application
+npm start
+```
 
 ## Contributing
 We welcome contributions from the community! To get started, please read the [ICN Contribution Guide](docs/development/guides/contributing.md) for guidelines on how to contribute to the project.
