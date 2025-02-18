@@ -1,6 +1,7 @@
 use crate::models::{Proposal, Vote};
 use sqlx::PgPool;
 use std::sync::Arc;
+use log::{info, error};
 
 pub struct GovernanceEngine {
     db_pool: Arc<PgPool>,
@@ -14,7 +15,7 @@ impl GovernanceEngine {
     }
 
     pub async fn create_proposal(&self, proposal: Proposal) -> Result<i64, sqlx::Error> {
-        sqlx::query!(
+        match sqlx::query!(
             r#"
             INSERT INTO proposals (title, description, created_by, ends_at)
             VALUES ($1, $2, $3, $4)
@@ -26,12 +27,20 @@ impl GovernanceEngine {
             proposal.ends_at
         )
         .fetch_one(&*self.db_pool)
-        .await
-        .map(|row| row.id)
+        .await {
+            Ok(row) => {
+                info!("Proposal created with ID: {}", row.id);
+                Ok(row.id)
+            },
+            Err(e) => {
+                error!("Failed to create proposal: {}", e);
+                Err(e)
+            }
+        }
     }
 
     pub async fn record_vote(&self, vote: Vote) -> Result<(), sqlx::Error> {
-        sqlx::query!(
+        match sqlx::query!(
             r#"
             INSERT INTO votes (proposal_id, voter, approve)
             VALUES ($1, $2, $3)
@@ -41,8 +50,15 @@ impl GovernanceEngine {
             vote.approve
         )
         .execute(&*self.db_pool)
-        .await?;
-        
-        Ok(())
+        .await {
+            Ok(_) => {
+                info!("Vote recorded for proposal ID: {}", vote.proposal_id);
+                Ok(())
+            },
+            Err(e) => {
+                error!("Failed to record vote: {}", e);
+                Err(e)
+            }
+        }
     }
 }
