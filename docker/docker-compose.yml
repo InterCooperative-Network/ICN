@@ -25,6 +25,8 @@ services:
       POSTGRES_DB: icndb
     ports:
       - "5432:5432"
+    networks:
+      - icn-network
 
   docs:
     image: squidfunk/mkdocs-material:latest
@@ -34,3 +36,7 @@ services:
       - "8000:8000"
     working_dir: /docs
     command: /bin/sh -c "pip install mkdocs-mermaid2-plugin && mkdocs serve -a 0.0.0.0:8000"
+
+networks:
+  icn-network:
+    driver: bridge

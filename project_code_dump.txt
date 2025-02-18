@@ -1,4 +1,4 @@
-Project Code Dump - Generated Tue 18 Feb 2025 06:34:50 AM UTC
+Project Code Dump - Generated Tue 18 Feb 2025 06:54:15 AM UTC
 ======================================
 
 LLM Context Information
@@ -50,8 +50,15 @@ Project Tree:
 │   ├── icn-crypto
 │   │   ├── Cargo.toml
 │   │   └── src
+│   ├── icn-dsl
+│   │   ├── Cargo.toml
+│   │   └── src
+│   ├── icn-federation
+│   │   └── src
 │   ├── icn-p2p
 │   │   ├── Cargo.toml
+│   │   └── src
+│   ├── icn-resource
 │   │   └── src
 │   ├── icn-runtime
 │   │   ├── Cargo.toml
@@ -68,6 +75,7 @@ Project Tree:
 │   ├── backend_new.Dockerfile
 │   ├── docker-compose.yml
 │   └── frontend.Dockerfile
+├── DSL_ICN.txt
 ├── frontend
 │   ├── package.json
 │   ├── postcss.config.js
@@ -1559,12 +1567,12 @@ enum FederationType {
 
 ===================
 File: ./crates/icn-core/src/lib.rs
-Size: 9226 bytes
-Modified: 2025-01-25 22:00:31.176013500 +0000
+Size: 8529 bytes
+Modified: 2025-02-18 06:52:03.327222100 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_consensus::ProofOfCooperation;
-use icn_types::{Block, Transaction};
+use icn_types::{Block, Transaction, FederationType, FederationTerms, FederationOperation};
 use log::{info, error};
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
@@ -1573,7 +1581,7 @@ use tokio::time::{sleep, Duration};
 ```rs
 use std::sync::Arc;
 use async_trait::async_trait;
-use icn_types::{Block, Transaction};
+use icn_types::{Block, Transaction, FederationType, FederationTerms, FederationOperation};
 use icn_consensus::ProofOfCooperation;
 use tokio::time::{sleep, Duration};
 use log::{info, error};
@@ -1586,6 +1594,8 @@ pub struct Core {
     telemetry: Arc<TelemetryManager>,
     identity: Arc<dyn IdentityManager>,
     reputation: Arc<dyn ReputationManager>,
+    federation_manager: Arc<FederationManager>,
+    resource_system: Arc<ResourceAllocationSystem>,
 }
 
 impl Core {
@@ -1597,7 +1607,10 @@ impl Core {
         identity: Arc<dyn IdentityManager>,
         reputation: Arc<dyn ReputationManager>,
     ) -> Self {
+        let resource_system = Arc::new(ResourceAllocationSystem::new());
+        let federation_manager = Arc::new(FederationManager::new(resource_system.clone()));
         let consensus = Arc::new(ProofOfCooperation::new(reputation.clone()));
+
         Core {
             consensus,
             storage,
@@ -1606,6 +1619,8 @@ impl Core {
             telemetry,
             identity,
             reputation,
+            federation_manager,
+            resource_system,
         }
     }
 
@@ -1693,49 +1708,56 @@ impl Core {
 
     pub async fn handle_federation_operation(&self, operation: FederationOperation) -> Result<(), Box<dyn std::error::Error>> {
         self.telemetry.log("Handling federation operation...");
-        // Logic to handle federation operations
+        
+        match operation {
+            FederationOperation::InitiateFederation { federation_type, partner_id, terms } => {
+                self.federation_manager.create_federation(
+                    format!("Federation with {}", partner_id),
+                    federation_type,
+                    terms,
+                    partner_id,
+                ).await?;
+            }
+            FederationOperation::JoinFederation { federation_id, commitment } => {
+                // Get the requesting member's DID from context
+                let member_did = "did:icn:requesting_member"; // This should come from auth context
+                self.federation_manager.join_federation(&federation_id, member_did, commitment).await?;
+            }
+            // ... handle other federation operations ...
+        }
+
         self.telemetry.log("Federation operation handled.");
+        Ok(())
+    }
+
+    pub async fn allocate_resource(&self, request: ResourceAllocation) -> Result<String, Box<dyn std::error::Error>> {
+        self.telemetry.log("Allocating resources...");
+        let allocation_id = self.resource_system.allocate(
+            &request.resource_type,
+            request.recipient,
+            request.amount,
+        ).await?;
+        self.telemetry.log("Resources allocated.");
+        Ok(allocation_id)
+    }
+
+    pub async fn load_cooperative_rules(&self, dsl_code: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // Parse DSL code
+        let ast = icn_dsl::CoopLangAST::parse(dsl_code)
+            .map_err(|e| format!("Failed to parse DSL: {}", e))?;
+        
+        // Compile to ICVM bytecode
+        let bytecode = icn_dsl::compile_to_icvm(&ast);
+        
+        // Load into VM
+        self.runtime.load_bytecode(&bytecode).await?;
+        
         Ok(())
     }
 }
 
 #[async_trait]
 pub trait ConsensusEngine {
-    async fn start(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>>;
-}
-
-#[async_trait]
-pub trait StorageManager {
-    async fn store_block(&self, block: Block) -> Result<(), Box<dyn std::error::Error>>;
-}
-
-#[async_trait]
-pub trait NetworkManager {
-    async fn start(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>>;
-}
-
-#[async_trait]
-pub trait RuntimeManager {
-    async fn start(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn execute_transaction(&self, transaction: Transaction) -> Result<(), Box<dyn std::error::Error>>;
-}
-
-#[async_trait]
-pub trait IdentityManager {
-    async fn start(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn register_did(&self, did: String, public_key: String, algorithm: Algorithm) -> Result<(), Box<dyn std::error::Error>>;
-    async fn verify_did(&self, did: String, signature: String, algorithm: Algorithm) -> Result<bool, Box<dyn std::error::Error>>;
-}
-
-#[async_trait]
-pub trait ReputationManager {
-    async fn start(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn adjust_reputation(&self, did: String, change: i64, category: String) -> Result<(), Box<dyn std::error::Error>>;
     async fn get_reputation(&self, did: String, category: String) -> Result<i64, Box<dyn std::error::Error>>;
     async fn is_eligible(&self, did: String, min_reputation: i64, category: String) -> Result<bool, Box<dyn std::error::Error>>;
     async fn dynamic_adjustment(&self, did: String, contribution: i64) -> Result<(), Box<dyn std::error::Error>>;
@@ -1809,60 +1831,6 @@ pub struct Vote {
     proposal_id: String,
     voter: String,
     approve: bool,
-}
-
-#[derive(Serialize, Deserialize)]
-enum FederationOperation {
-    InitiateFederation {
-        federation_type: FederationType,
-        partner_id: String,
-        terms: FederationTerms,
-    },
-    JoinFederation {
-        federation_id: String,
-        commitment: Vec<String>,
-    },
-    LeaveFederation {
-        federation_id: String,
-        reason: String,
-    },
-    ProposeAction {
-        federation_id: String,
-        action_type: String,
-        description: String,
-        resources: std::collections::HashMap<String, u64>,
-    },
-    VoteOnProposal {
-        federation_id: String,
-        proposal_id: String,
-        approve: bool,
-        notes: Option<String>,
-    },
-    ShareResources {
-        federation_id: String,
-        resource_type: String,
-        amount: u64,
-        recipient_id: String,
-    },
-    UpdateFederationTerms {
-        federation_id: String,
-        new_terms: FederationTerms,
-    },
-}
-
-#[derive(Serialize, Deserialize)]
-struct FederationTerms {
-    minimum_reputation: i64,
-    resource_sharing_policies: String,
-    governance_rules: String,
-    duration: String,
-}
-
-#[derive(Serialize, Deserialize)]
-enum FederationType {
-    Cooperative,
-    Community,
-    Hybrid,
 }
 ```
 
@@ -2037,6 +2005,379 @@ pub fn hash(data: &[u8]) -> Vec<u8> {
 ```
 
 ===================
+File: ./crates/icn-dsl/src/lib.rs
+Size: 5568 bytes
+Modified: 2025-02-18 06:50:47.143649200 +0000
+Dependencies:
+use nom::{
+
+===================
+```rs
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_while1},
+    character::complete::{char, multispace0, multispace1},
+    combinator::{map, opt},
+    multi::{many0, many1},
+    sequence::{delimited, preceded, terminated, tuple},
+    IResult,
+};
+
+#[derive(Debug, Clone)]
+pub struct CoopLangAST {
+    pub governance: Option<GovernanceNode>,
+    pub reputation: Option<ReputationNode>,
+    pub marketplace: Option<MarketplaceNode>,
+    pub federation: Option<FederationNode>,
+    pub validation: Option<ValidationNode>,
+    pub logging: Option<LoggingNode>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ValidationNode {
+    pub pre_checks: Vec<Check>,
+    pub post_checks: Vec<Check>,
+    pub state_validation: Option<StateValidation>,
+    pub resource_checks: Option<ResourceChecks>,
+    pub custom_merge: Option<CustomMerge>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Check {
+    pub condition: String,
+    pub action: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct StateValidation {
+    pub current: Option<String>,
+    pub expected: Option<String>,
+    pub transition: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CustomMerge {
+    pub strategy: String,
+    pub handlers: Vec<ConflictHandler>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConflictHandler {
+    pub field_path: String,
+    pub resolution_type: String,
+}
+
+// Parser implementation
+impl CoopLangAST {
+    pub fn parse(input: &str) -> IResult<&str, Self> {
+        let (input, _) = multispace0(input)?;
+        let (input, governance) = opt(Self::parse_governance_section)(input)?;
+        let (input, reputation) = opt(Self::parse_reputation_section)(input)?;
+        let (input, marketplace) = opt(Self::parse_marketplace_section)(input)?;
+        let (input, federation) = opt(Self::parse_federation_section)(input)?;
+        let (input, validation) = opt(Self::parse_validation_section)(input)?;
+        let (input, logging) = opt(Self::parse_logging_section)(input)?;
+        
+        Ok((input, CoopLangAST {
+            governance,
+            reputation,
+            marketplace,
+            federation,
+            validation,
+            logging,
+        }))
+    }
+
+    fn parse_validation_section(input: &str) -> IResult<&str, ValidationNode> {
+        let (input, _) = tag("validation:")(input)?;
+        let (input, _) = multispace1(input)?;
+        
+        let (input, pre_checks) = Self::parse_checks("pre_checks:")(input)?;
+        let (input, post_checks) = Self::parse_checks("post_checks:")(input)?;
+        let (input, state_validation) = opt(Self::parse_state_validation)(input)?;
+        let (input, resource_checks) = opt(Self::parse_resource_checks)(input)?;
+        let (input, custom_merge) = opt(Self::parse_custom_merge)(input)?;
+
+        Ok((input, ValidationNode {
+            pre_checks,
+            post_checks,
+            state_validation,
+            resource_checks,
+            custom_merge,
+        }))
+    }
+
+    fn parse_checks(label: &'static str) -> impl Fn(&str) -> IResult<&str, Vec<Check>> {
+        move |input: &str| {
+            let (input, _) = tag(label)(input)?;
+            let (input, _) = multispace1(input)?;
+            many0(Self::parse_check)(input)
+        }
+    }
+
+    fn parse_check(input: &str) -> IResult<&str, Check> {
+        let (input, _) = char('-')(input)?;
+        let (input, _) = multispace0(input)?;
+        let (input, condition) = take_while1(|c| c != ':')(input)?;
+        let (input, _) = char(':')(input)?;
+        let (input, _) = multispace0(input)?;
+        let (input, action) = take_while1(|c| c != '\n')(input)?;
+        let (input, _) = multispace0(input)?;
+
+        Ok((input, Check {
+            condition: condition.trim().to_string(),
+            action: action.trim().to_string(),
+        }))
+    }
+
+    // Add other section parsers similarly...
+}
+
+// Bytecode generation
+pub fn compile_to_icvm(ast: &CoopLangAST) -> Vec<u8> {
+    let mut bytecode = Vec::new();
+
+    // Header
+    bytecode.extend_from_slice(&[0x49, 0x43, 0x56, 0x4D]); // "ICVM" magic bytes
+    bytecode.push(0x01); // Version
+
+    // Compile validation rules
+    if let Some(validation) = &ast.validation {
+        bytecode.push(0x01); // Validation section marker
+        
+        // Pre-checks
+        bytecode.push(validation.pre_checks.len() as u8);
+        for check in &validation.pre_checks {
+            compile_check(&mut bytecode, check);
+        }
+
+        // Post-checks
+        bytecode.push(validation.post_checks.len() as u8);
+        for check in &validation.post_checks {
+            compile_check(&mut bytecode, check);
+        }
+
+        // State validation
+        if let Some(state_validation) = &validation.state_validation {
+            bytecode.push(0x01);
+            compile_state_validation(&mut bytecode, state_validation);
+        } else {
+            bytecode.push(0x00);
+        }
+    }
+
+    // Compile other sections similarly...
+
+    bytecode
+}
+
+fn compile_check(bytecode: &mut Vec<u8>, check: &Check) {
+    // Convert check condition to bytecode operations
+    bytecode.extend_from_slice(check.condition.as_bytes());
+    bytecode.push(0x00); // Null terminator
+    bytecode.extend_from_slice(check.action.as_bytes());
+    bytecode.push(0x00); // Null terminator
+}
+
+fn compile_state_validation(bytecode: &mut Vec<u8>, validation: &StateValidation) {
+    if let Some(current) = &validation.current {
+        bytecode.push(0x01);
+        bytecode.extend_from_slice(current.as_bytes());
+        bytecode.push(0x00);
+    } else {
+        bytecode.push(0x00);
+    }
+    // Similarly for expected and transition...
+}
+```
+
+===================
+File: ./crates/icn-federation/src/lib.rs
+Size: 4796 bytes
+Modified: 2025-02-18 06:45:18.493755100 +0000
+Dependencies:
+use async_trait::async_trait;
+use icn_types::{Block, Transaction};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+===================
+```rs
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use icn_types::{Block, Transaction};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Federation {
+    pub id: String,
+    pub name: String,
+    pub federation_type: FederationType,
+    pub members: Vec<String>, // DIDs of member cooperatives
+    pub terms: FederationTerms,
+    pub resources: HashMap<String, ResourcePool>,
+    pub proposals: Vec<FederationProposal>,
+    pub created_at: u64,
+    pub status: FederationStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourcePool {
+    pub resource_type: String,
+    pub total_amount: u64,
+    pub available_amount: u64,
+    pub contributors: HashMap<String, u64>, // DID -> amount contributed
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationProposal {
+    pub id: String,
+    pub proposer: String,
+    pub proposal_type: ProposalType,
+    pub description: String,
+    pub votes: HashMap<String, bool>, // DID -> vote
+    pub status: ProposalStatus,
+    pub created_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ProposalType {
+    AddMember(String),
+    RemoveMember(String),
+    UpdateTerms(FederationTerms),
+    AllocateResources(ResourceAllocation),
+    UpdatePolicy(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceAllocation {
+    pub resource_type: String,
+    pub amount: u64,
+    pub recipient: String,
+    pub duration: Option<u64>,
+}
+
+pub struct FederationManager {
+    federations: Arc<RwLock<HashMap<String, Federation>>>,
+    resource_manager: Arc<dyn ResourceManager>,
+}
+
+impl FederationManager {
+    pub fn new(resource_manager: Arc<dyn ResourceManager>) -> Self {
+        Self {
+            federations: Arc::new(RwLock::new(HashMap::new())),
+            resource_manager,
+        }
+    }
+
+    pub async fn create_federation(
+        &self,
+        name: String,
+        federation_type: FederationType,
+        initial_terms: FederationTerms,
+        founding_member: String,
+    ) -> Result<String, FederationError> {
+        let federation_id = format!("fed_{}", uuid::Uuid::new_v4());
+        let federation = Federation {
+            id: federation_id.clone(),
+            name,
+            federation_type,
+            members: vec![founding_member],
+            terms: initial_terms,
+            resources: HashMap::new(),
+            proposals: Vec::new(),
+            created_at: chrono::Utc::now().timestamp() as u64,
+            status: FederationStatus::Active,
+        };
+
+        let mut federations = self.federations.write().await;
+        federations.insert(federation_id.clone(), federation);
+
+        Ok(federation_id)
+    }
+
+    pub async fn join_federation(
+        &self,
+        federation_id: &str,
+        member_did: &str,
+        commitment: Vec<String>,
+    ) -> Result<(), FederationError> {
+        let mut federations = self.federations.write().await;
+        
+        if let Some(federation) = federations.get_mut(federation_id) {
+            if federation.members.contains(&member_did.to_string()) {
+                return Err(FederationError::AlreadyMember);
+            }
+
+            // Verify commitments against federation terms
+            if !self.verify_commitments(&federation.terms, &commitment).await {
+                return Err(FederationError::InvalidCommitment);
+            }
+
+            federation.members.push(member_did.to_string());
+            Ok(())
+        } else {
+            Err(FederationError::FederationNotFound)
+        }
+    }
+
+    async fn verify_commitments(&self, terms: &FederationTerms, commitment: &[String]) -> bool {
+        // Add commitment verification logic here
+        true // Placeholder
+    }
+}
+
+#[async_trait]
+pub trait ResourceManager: Send + Sync {
+    async fn allocate_resources(&self, allocation: ResourceAllocation) -> Result<(), String>;
+    async fn release_resources(&self, resource_type: &str, amount: u64) -> Result<(), String>;
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationType {
+    Cooperative,
+    Community,
+    Hybrid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationTerms {
+    pub minimum_reputation: i64,
+    pub resource_sharing_policies: String,
+    pub governance_rules: String,
+    pub duration: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationStatus {
+    Active,
+    Suspended,
+    Dissolved,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ProposalStatus {
+    Active,
+    Approved,
+    Rejected,
+    Expired,
+}
+
+#[derive(Debug)]
+pub enum FederationError {
+    FederationNotFound,
+    AlreadyMember,
+    InvalidCommitment,
+    InsufficientResources,
+    UnauthorizedAction,
+}
+```
+
+===================
 File: ./crates/icn-p2p/src/lib.rs
 Size: 86 bytes
 Modified: 2025-01-16 22:02:57.863770400 +0000
@@ -2053,24 +2394,283 @@ use icn_types::Transaction;
 ```
 
 ===================
-File: ./crates/icn-runtime/src/lib.rs
-Size: 518 bytes
-Modified: 2025-01-16 22:02:57.909134300 +0000
+File: ./crates/icn-resource/src/lib.rs
+Size: 4307 bytes
+Modified: 2025-02-18 06:45:18.489379000 +0000
 Dependencies:
 use async_trait::async_trait;
+use icn_federation::ResourceManager;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+===================
+```rs
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use icn_federation::ResourceManager;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Resource {
+    pub id: String,
+    pub resource_type: String,
+    pub owner: String,
+    pub total_amount: u64,
+    pub available_amount: u64,
+    pub price_per_unit: f64,
+    pub constraints: ResourceConstraints,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceConstraints {
+    pub min_reputation: i64,
+    pub max_allocation: u64,
+    pub time_limit: Option<u64>,
+}
+
+pub struct ResourceAllocationSystem {
+    resources: Arc<RwLock<HashMap<String, Resource>>>,
+    allocations: Arc<RwLock<HashMap<String, Vec<ResourceAllocation>>>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceAllocation {
+    pub allocation_id: String,
+    pub resource_id: String,
+    pub recipient: String,
+    pub amount: u64,
+    pub allocated_at: u64,
+    pub expires_at: Option<u64>,
+}
+
+impl ResourceAllocationSystem {
+    pub fn new() -> Self {
+        Self {
+            resources: Arc::new(RwLock::new(HashMap::new())),
+            allocations: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    pub async fn register_resource(
+        &self,
+        owner: String,
+        resource_type: String,
+        amount: u64,
+        price: f64,
+        constraints: ResourceConstraints,
+    ) -> Result<String, ResourceError> {
+        let resource_id = format!("res_{}", uuid::Uuid::new_v4());
+        let resource = Resource {
+            id: resource_id.clone(),
+            resource_type,
+            owner,
+            total_amount: amount,
+            available_amount: amount,
+            price_per_unit: price,
+            constraints,
+        };
+
+        let mut resources = self.resources.write().await;
+        resources.insert(resource_id.clone(), resource);
+
+        Ok(resource_id)
+    }
+
+    pub async fn allocate(
+        &self,
+        resource_id: &str,
+        recipient: String,
+        amount: u64,
+    ) -> Result<String, ResourceError> {
+        let mut resources = self.resources.write().await;
+        let resource = resources.get_mut(resource_id)
+            .ok_or(ResourceError::ResourceNotFound)?;
+
+        if resource.available_amount < amount {
+            return Err(ResourceError::InsufficientResources);
+        }
+
+        let allocation_id = format!("alloc_{}", uuid::Uuid::new_v4());
+        let allocation = ResourceAllocation {
+            allocation_id: allocation_id.clone(),
+            resource_id: resource_id.to_string(),
+            recipient,
+            amount,
+            allocated_at: chrono::Utc::now().timestamp() as u64,
+            expires_at: None,
+        };
+
+        resource.available_amount -= amount;
+
+        let mut allocations = self.allocations.write().await;
+        allocations.entry(resource_id.to_string())
+            .or_insert_with(Vec::new)
+            .push(allocation);
+
+        Ok(allocation_id)
+    }
+
+    pub async fn release(
+        &self,
+        allocation_id: &str,
+    ) -> Result<(), ResourceError> {
+        // Implementation for releasing allocated resources
+        Ok(())
+    }
+
+    pub async fn adjust_price(
+        &self,
+        resource_id: &str,
+        new_price: f64,
+    ) -> Result<(), ResourceError> {
+        let mut resources = self.resources.write().await;
+        if let Some(resource) = resources.get_mut(resource_id) {
+            resource.price_per_unit = new_price;
+            Ok(())
+        } else {
+            Err(ResourceError::ResourceNotFound)
+        }
+    }
+}
+
+#[async_trait]
+impl ResourceManager for ResourceAllocationSystem {
+    async fn allocate_resources(&self, allocation: icn_federation::ResourceAllocation) -> Result<(), String> {
+        self.allocate(&allocation.resource_type, allocation.recipient, allocation.amount)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    async fn release_resources(&self, resource_type: &str, amount: u64) -> Result<(), String> {
+        // Implementation for releasing resources back to the pool
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub enum ResourceError {
+    ResourceNotFound,
+    InsufficientResources,
+    InvalidAllocation,
+    UnauthorizedAction,
+}
+```
+
+===================
+File: ./crates/icn-runtime/src/lib.rs
+Size: 4115 bytes
+Modified: 2025-02-18 06:52:03.314058600 +0000
+Dependencies:
+use async_trait::async_trait;
+use icn_dsl::CoopLangAST;
 use icn_types::{Block, Transaction};
 
 ===================
 ```rs
 use async_trait::async_trait;
 use icn_types::{Block, Transaction};
+use icn_dsl::CoopLangAST;
 
 pub struct RuntimeManager {
     // Fields for the RuntimeManager struct
+    dsl_context: Option<CoopLangAST>,
 }
 
 impl RuntimeManager {
     // Methods for the RuntimeManager struct
+
+    pub async fn load_bytecode(&mut self, bytecode: &[u8]) -> Result<(), RuntimeError> {
+        // Implementation to load and validate DSL bytecode
+        todo!("Implement bytecode loading")
+    }
+
+    pub async fn execute_cooperative_rules(&self, context: &ExecutionContext) -> Result<(), RuntimeError> {
+        if let Some(ast) = &self.dsl_context {
+            // Execute validation rules
+            if let Some(validation) = &ast.validation {
+                self.execute_validation_rules(validation, context).await?;
+            }
+
+            // Execute governance rules
+            if let Some(governance) = &ast.governance {
+                self.execute_governance_rules(governance, context).await?;
+            }
+
+            // Execute marketplace rules
+            if let Some(marketplace) = &ast.marketplace {
+                self.execute_marketplace_rules(marketplace, context).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn execute_governance_rules(&self, governance: &GovernanceNode, context: &ExecutionContext) -> Result<(), RuntimeError> {
+        // Implementation for executing governance rules
+        Ok(())
+    }
+
+    async fn execute_marketplace_rules(&self, marketplace: &MarketplaceNode, context: &ExecutionContext) -> Result<(), RuntimeError> {
+        // Implementation for executing marketplace rules
+        Ok(())
+    }
+
+    async fn evaluate_condition(&self, condition: &str, context: &ExecutionContext) -> Result<bool, RuntimeError> {
+        // Parse and evaluate condition expression
+        // This could use a simple expression evaluator or more complex logic
+        Ok(true) // Placeholder
+    }
+}
+
+#[async_trait]
+pub trait ValidationExecutor {
+    async fn execute_validation_rules(&self, validation: &ValidationNode, context: &ExecutionContext) -> Result<(), RuntimeError>;
+    async fn execute_check(&self, check: &Check, context: &ExecutionContext) -> Result<(), RuntimeError>;
+    async fn validate_state(&self, validation: &StateValidation, context: &ExecutionContext) -> Result<(), RuntimeError>;
+}
+
+#[async_trait]
+impl ValidationExecutor for RuntimeManager {
+    async fn execute_validation_rules(&self, validation: &ValidationNode, context: &ExecutionContext) -> Result<(), RuntimeError> {
+        // Execute pre-checks
+        for check in &validation.pre_checks {
+            self.execute_check(check, context).await?;
+        }
+
+        // Validate state if specified
+        if let Some(state_validation) = &validation.state_validation {
+            self.validate_state(state_validation, context).await?;
+        }
+
+        // Execute post-checks
+        for check in &validation.post_checks {
+            self.execute_check(check, context).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn execute_check(&self, check: &Check, context: &ExecutionContext) -> Result<(), RuntimeError> {
+        let condition_result = self.evaluate_condition(&check.condition, context).await?;
+        if !condition_result {
+            return Err(RuntimeError::ValidationFailed(check.action.clone()));
+        }
+        Ok(())
+    }
+
+    async fn validate_state(&self, validation: &StateValidation, context: &ExecutionContext) -> Result<(), RuntimeError> {
+        if let Some(current) = &validation.current {
+            let state = self.get_current_state(context).await?;
+            if state != *current {
+                return Err(RuntimeError::InvalidState);
+            }
+        }
+        // Similarly check expected state and transitions...
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -2230,8 +2830,8 @@ mod tests {
 
 ===================
 File: ./crates/icn-types/src/lib.rs
-Size: 20173 bytes
-Modified: 2025-01-16 22:02:57.949712900 +0000
+Size: 21512 bytes
+Modified: 2025-02-18 06:52:03.323350100 +0000
 Dependencies:
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
@@ -2839,6 +3439,63 @@ impl Transaction {
     pub fn to_bytes(&self) -> Vec<u8> {
         bincode::serialize(self).unwrap_or_default()
     }
+}
+
+use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationType {
+    Cooperative,
+    Community, 
+    Hybrid
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationTerms {
+    pub minimum_reputation: i64,
+    pub resource_sharing_policies: String,
+    pub governance_rules: String,
+    pub duration: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationOperation {
+    InitiateFederation {
+        federation_type: FederationType,
+        partner_id: String,
+        terms: FederationTerms,
+    },
+    JoinFederation {
+        federation_id: String,
+        commitment: Vec<String>,
+    },
+    LeaveFederation {
+        federation_id: String,
+        reason: String,
+    },
+    ProposeAction {
+        federation_id: String,
+        action_type: String,
+        description: String,
+        resources: HashMap<String, u64>,
+    },
+    VoteOnProposal {
+        federation_id: String,
+        proposal_id: String,
+        approve: bool,
+        notes: Option<String>,
+    },
+    ShareResources {
+        federation_id: String,
+        resource_type: String,
+        amount: u64,
+        recipient_id: String,
+    },
+    UpdateFederationTerms {
+        federation_id: String,
+        new_terms: FederationTerms,
+    },
 }
 ```
 
