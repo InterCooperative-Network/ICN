@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use async_trait::async_trait;
-use icn_types::{Block, Transaction};
+use icn_types::{Block, Transaction, FederationType, FederationTerms, FederationOperation};
 use icn_consensus::ProofOfCooperation;
 use tokio::time::{sleep, Duration};
 use log::{info, error};
@@ -13,6 +13,8 @@ pub struct Core {
     telemetry: Arc<TelemetryManager>,
     identity: Arc<dyn IdentityManager>,
     reputation: Arc<dyn ReputationManager>,
+    federation_manager: Arc<FederationManager>,
+    resource_system: Arc<ResourceAllocationSystem>,
 }
 
 impl Core {
@@ -24,7 +26,10 @@ impl Core {
         identity: Arc<dyn IdentityManager>,
         reputation: Arc<dyn ReputationManager>,
     ) -> Self {
+        let resource_system = Arc::new(ResourceAllocationSystem::new());
+        let federation_manager = Arc::new(FederationManager::new(resource_system.clone()));
         let consensus = Arc::new(ProofOfCooperation::new(reputation.clone()));
+
         Core {
             consensus,
             storage,
@@ -33,6 +38,8 @@ impl Core {
             telemetry,
             identity,
             reputation,
+            federation_manager,
+            resource_system,
         }
     }
 
@@ -120,49 +127,56 @@ impl Core {
 
     pub async fn handle_federation_operation(&self, operation: FederationOperation) -> Result<(), Box<dyn std::error::Error>> {
         self.telemetry.log("Handling federation operation...");
-        // Logic to handle federation operations
+        
+        match operation {
+            FederationOperation::InitiateFederation { federation_type, partner_id, terms } => {
+                self.federation_manager.create_federation(
+                    format!("Federation with {}", partner_id),
+                    federation_type,
+                    terms,
+                    partner_id,
+                ).await?;
+            }
+            FederationOperation::JoinFederation { federation_id, commitment } => {
+                // Get the requesting member's DID from context
+                let member_did = "did:icn:requesting_member"; // This should come from auth context
+                self.federation_manager.join_federation(&federation_id, member_did, commitment).await?;
+            }
+            // ... handle other federation operations ...
+        }
+
         self.telemetry.log("Federation operation handled.");
+        Ok(())
+    }
+
+    pub async fn allocate_resource(&self, request: ResourceAllocation) -> Result<String, Box<dyn std::error::Error>> {
+        self.telemetry.log("Allocating resources...");
+        let allocation_id = self.resource_system.allocate(
+            &request.resource_type,
+            request.recipient,
+            request.amount,
+        ).await?;
+        self.telemetry.log("Resources allocated.");
+        Ok(allocation_id)
+    }
+
+    pub async fn load_cooperative_rules(&self, dsl_code: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // Parse DSL code
+        let ast = icn_dsl::CoopLangAST::parse(dsl_code)
+            .map_err(|e| format!("Failed to parse DSL: {}", e))?;
+        
+        // Compile to ICVM bytecode
+        let bytecode = icn_dsl::compile_to_icvm(&ast);
+        
+        // Load into VM
+        self.runtime.load_bytecode(&bytecode).await?;
+        
         Ok(())
     }
 }
 
 #[async_trait]
 pub trait ConsensusEngine {
-    async fn start(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>>;
-}
-
-#[async_trait]
-pub trait StorageManager {
-    async fn store_block(&self, block: Block) -> Result<(), Box<dyn std::error::Error>>;
-}
-
-#[async_trait]
-pub trait NetworkManager {
-    async fn start(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>>;
-}
-
-#[async_trait]
-pub trait RuntimeManager {
-    async fn start(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn execute_transaction(&self, transaction: Transaction) -> Result<(), Box<dyn std::error::Error>>;
-}
-
-#[async_trait]
-pub trait IdentityManager {
-    async fn start(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn register_did(&self, did: String, public_key: String, algorithm: Algorithm) -> Result<(), Box<dyn std::error::Error>>;
-    async fn verify_did(&self, did: String, signature: String, algorithm: Algorithm) -> Result<bool, Box<dyn std::error::Error>>;
-}
-
-#[async_trait]
-pub trait ReputationManager {
-    async fn start(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn stop(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn adjust_reputation(&self, did: String, change: i64, category: String) -> Result<(), Box<dyn std::error::Error>>;
     async fn get_reputation(&self, did: String, category: String) -> Result<i64, Box<dyn std::error::Error>>;
     async fn is_eligible(&self, did: String, min_reputation: i64, category: String) -> Result<bool, Box<dyn std::error::Error>>;
     async fn dynamic_adjustment(&self, did: String, contribution: i64) -> Result<(), Box<dyn std::error::Error>>;
@@ -236,58 +250,4 @@ pub struct Vote {
     proposal_id: String,
     voter: String,
     approve: bool,
-}
-
-#[derive(Serialize, Deserialize)]
-enum FederationOperation {
-    InitiateFederation {
-        federation_type: FederationType,
-        partner_id: String,
-        terms: FederationTerms,
-    },
-    JoinFederation {
-        federation_id: String,
-        commitment: Vec<String>,
-    },
-    LeaveFederation {
-        federation_id: String,
-        reason: String,
-    },
-    ProposeAction {
-        federation_id: String,
-        action_type: String,
-        description: String,
-        resources: std::collections::HashMap<String, u64>,
-    },
-    VoteOnProposal {
-        federation_id: String,
-        proposal_id: String,
-        approve: bool,
-        notes: Option<String>,
-    },
-    ShareResources {
-        federation_id: String,
-        resource_type: String,
-        amount: u64,
-        recipient_id: String,
-    },
-    UpdateFederationTerms {
-        federation_id: String,
-        new_terms: FederationTerms,
-    },
-}
-
-#[derive(Serialize, Deserialize)]
-struct FederationTerms {
-    minimum_reputation: i64,
-    resource_sharing_policies: String,
-    governance_rules: String,
-    duration: String,
-}
-
-#[derive(Serialize, Deserialize)]
-enum FederationType {
-    Cooperative,
-    Community,
-    Hybrid,
 }
