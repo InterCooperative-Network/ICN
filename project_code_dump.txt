@@ -1,4 +1,4 @@
-Project Code Dump - Generated Tue 18 Feb 2025 06:26:39 AM UTC
+Project Code Dump - Generated Tue 18 Feb 2025 06:34:50 AM UTC
 ======================================
 
 LLM Context Information
@@ -34,6 +34,8 @@ Project Tree:
 │   ├── Cargo.toml
 │   └── src
 │       └── main.rs
+├── config
+│   └── feature-flags.json
 ├── contracts
 │   └── cooperative
 │       └── src
@@ -76,6 +78,7 @@ Project Tree:
 │   └── tsconfig.json
 ├── generate_code_dump.sh
 ├── grammar
+│   ├── coop_lang.pest
 │   └── did_grammar.peg
 ├── ICN.code-workspace
 ├── icn-consensus
@@ -100,7 +103,15 @@ Project Tree:
 ├── src
 │   ├── attestation
 │   ├── block.rs
-│   └── governance
+│   ├── dsl
+│   │   ├── governance.rs
+│   │   ├── grammar.pest
+│   │   ├── mod.rs
+│   │   ├── parser.rs
+│   │   └── vm.rs
+│   ├── feature-flags
+│   ├── governance
+│   └── parser.rs
 ├── start_docs_server.sh
 └── tools
     ├── activate-docs-env.sh
