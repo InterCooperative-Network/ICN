@@ -1,4 +1,4 @@
-Project Code Dump - Generated Tue 18 Feb 2025 07:35:38 AM UTC
+Project Code Dump - Generated Tue Feb 18 08:00:20 UTC 2025
 ======================================
 
 LLM Context Information
@@ -29,8 +29,12 @@ File Organization:
 Project Tree:
 =============
 .
+├── Cargo.lock
+├── Cargo.toml
+├── DSL_ICN.txt
+├── ICN.code-workspace
+├── README.md
 ├── backend
-│   ├── Cargo.lock
 │   ├── Cargo.toml
 │   ├── migrations
 │   │   └── 20240218000000_initial.sql
@@ -47,8 +51,6 @@ Project Tree:
 │       ├── reputation.rs
 │       ├── storage.rs
 │       └── vm.rs
-├── Cargo.lock
-├── Cargo.toml
 ├── config
 │   └── feature-flags.json
 ├── contracts
@@ -90,7 +92,6 @@ Project Tree:
 │   ├── backend_new.Dockerfile
 │   ├── docker-compose.yml
 │   └── frontend.Dockerfile
-├── DSL_ICN.txt
 ├── frontend
 │   ├── package.json
 │   ├── postcss.config.js
@@ -103,7 +104,6 @@ Project Tree:
 ├── grammar
 │   ├── coop_lang.pest
 │   └── did_grammar.peg
-├── ICN.code-workspace
 ├── icn-consensus
 │   └── src
 │       └── lib.rs
@@ -119,7 +119,17 @@ Project Tree:
 ├── inventory_nodes.sh
 ├── project_code_dump.txt
 ├── project_docs_dump.txt
-├── README.md
+├── scripts
+│   ├── backend
+│   │   ├── Cargo.toml
+│   │   └── src
+│   ├── contracts
+│   ├── crates
+│   ├── frontend
+│   │   ├── package-lock.json
+│   │   ├── package.json
+│   │   └── src
+│   └── setup.sh
 ├── setup_and_run_script.sh
 ├── setup_docs.sh
 ├── setup_venv.sh
@@ -137,21 +147,21 @@ Project Tree:
 │   └── parser.rs
 ├── start_docs_server.sh
 └── tools
+    ├── README.md
     ├── activate-docs-env.sh
     ├── activate-docs-env.sh.bak
     ├── doctools
+    │   ├── __init__.py
     │   ├── docmanager.py
     │   ├── docsctl
-    │   ├── __init__.py
     │   └── specgen.py
     ├── install_docsctl.sh
-    ├── README.md
     └── requirements.txt
 
 ===================
 File: ./backend/Cargo.toml
 Size: 689 bytes
-Modified: 2025-02-18 07:13:32.972179500 +0000
+Modified: 2025-02-18 02:13:32.972179500 -0500
 
 ===================
 ```toml
@@ -183,9 +193,24 @@ tokio-tungstenite = "0.21"
 ```
 
 ===================
+File: ./scripts/backend/Cargo.toml
+Size: 78 bytes
+Modified: 2025-02-18 02:59:01.136149500 -0500
+
+===================
+```toml
+[package]
+name = "backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+```
+
+===================
 File: ./backend/src/lib.rs
 Size: 169 bytes
-Modified: 2025-02-18 07:17:44.613675800 +0000
+Modified: 2025-02-18 02:17:44.613675800 -0500
 Dependencies:
 
 ===================
@@ -205,7 +230,7 @@ pub mod models;
 ===================
 File: ./backend/src/main.rs
 Size: 18754 bytes
-Modified: 2025-02-18 07:17:43.203396000 +0000
+Modified: 2025-02-18 02:17:43.203396000 -0500
 Dependencies:
 use async_trait::async_trait;
 use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
@@ -222,8 +247,8 @@ use sha2::Digest;
 use sqlx::PgPool;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio;
 use tokio::signal;
+use tokio;
 use warp::{Filter, ws::{WebSocket, Message}};
 
 ===================
@@ -784,9 +809,22 @@ impl StorageBackend for MockStorageBackend {
 ```
 
 ===================
+File: ./scripts/backend/src/main.rs
+Size: 45 bytes
+Modified: 2025-02-18 02:59:01.140151200 -0500
+Dependencies:
+
+===================
+```rs
+fn main() {
+    println!("Hello, world!");
+}
+```
+
+===================
 File: ./frontend/package.json
 Size: 546 bytes
-Modified: 2025-01-16 22:02:58.153827700 +0000
+Modified: 2025-01-16 17:02:58.153827700 -0500
 
 ===================
 ```json
@@ -817,23 +855,51 @@ Modified: 2025-01-16 22:02:58.153827700 +0000
 ```
 
 ===================
+File: ./scripts/frontend/package.json
+Size: 393 bytes
+Modified: 2025-02-18 02:59:04.737349800 -0500
+
+===================
+```json
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.3"
+  }
+}
+```
+
+===================
 File: ./.devcontainer/docker-compose.yml
 Size: 976 bytes
-Modified: 2025-01-16 22:02:57.707269200 +0000
+Modified: 2025-01-16 17:02:57.707269200 -0500
 
 ===================
 
 ===================
 File: ./docker/docker-compose.yml
-Size: 908 bytes
-Modified: 2025-02-18 07:31:04.819219400 +0000
+Size: 909 bytes
+Modified: 2025-02-18 02:52:41.817721700 -0500
 
 ===================
 
 ===================
 File: ./backend/src/lib.rs
 Size: 169 bytes
-Modified: 2025-02-18 07:17:44.613675800 +0000
+Modified: 2025-02-18 02:17:44.613675800 -0500
 Dependencies:
 
 ===================
@@ -853,7 +919,7 @@ pub mod models;
 ===================
 File: ./backend/src/main.rs
 Size: 18754 bytes
-Modified: 2025-02-18 07:17:43.203396000 +0000
+Modified: 2025-02-18 02:17:43.203396000 -0500
 Dependencies:
 use async_trait::async_trait;
 use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
@@ -870,8 +936,8 @@ use sha2::Digest;
 use sqlx::PgPool;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio;
 use tokio::signal;
+use tokio;
 use warp::{Filter, ws::{WebSocket, Message}};
 
 ===================
@@ -1434,7 +1500,7 @@ impl StorageBackend for MockStorageBackend {
 ===================
 File: ./crates/icn-consensus/src/lib.rs
 Size: 6994 bytes
-Modified: 2025-01-25 22:00:31.170012700 +0000
+Modified: 2025-01-25 17:00:31.170012700 -0500
 Dependencies:
 use async_trait::async_trait;
 use bit_set::BitSet;
@@ -1661,7 +1727,7 @@ enum FederationType {
 ===================
 File: ./crates/icn-core/src/lib.rs
 Size: 8529 bytes
-Modified: 2025-02-18 06:52:03.327222100 +0000
+Modified: 2025-02-18 01:52:03.327222100 -0500
 Dependencies:
 use async_trait::async_trait;
 use icn_consensus::ProofOfCooperation;
@@ -1930,7 +1996,7 @@ pub struct Vote {
 ===================
 File: ./crates/icn-crypto/src/lib.rs
 Size: 5761 bytes
-Modified: 2025-01-16 22:02:57.844616100 +0000
+Modified: 2025-01-16 17:02:57.844616100 -0500
 Dependencies:
 use dilithium::keypair as dilithium_keypair;
 use dilithium::sign as dilithium_sign;
@@ -2100,7 +2166,7 @@ pub fn hash(data: &[u8]) -> Vec<u8> {
 ===================
 File: ./crates/icn-dsl/src/lib.rs
 Size: 5568 bytes
-Modified: 2025-02-18 06:50:47.143649200 +0000
+Modified: 2025-02-18 01:50:47.143649200 -0500
 Dependencies:
 use nom::{
 
@@ -2287,7 +2353,7 @@ fn compile_state_validation(bytecode: &mut Vec<u8>, validation: &StateValidation
 ===================
 File: ./crates/icn-federation/src/lib.rs
 Size: 4796 bytes
-Modified: 2025-02-18 06:45:18.493755100 +0000
+Modified: 2025-02-18 01:45:18.493755100 -0500
 Dependencies:
 use async_trait::async_trait;
 use icn_types::{Block, Transaction};
@@ -2473,7 +2539,7 @@ pub enum FederationError {
 ===================
 File: ./crates/icn-p2p/src/lib.rs
 Size: 86 bytes
-Modified: 2025-01-16 22:02:57.863770400 +0000
+Modified: 2025-01-16 17:02:57.863770400 -0500
 Dependencies:
 use icn_types::Transaction;
 
@@ -2489,7 +2555,7 @@ use icn_types::Transaction;
 ===================
 File: ./crates/icn-resource/src/lib.rs
 Size: 4307 bytes
-Modified: 2025-02-18 06:45:18.489379000 +0000
+Modified: 2025-02-18 01:45:18.489379000 -0500
 Dependencies:
 use async_trait::async_trait;
 use icn_federation::ResourceManager;
@@ -2656,7 +2722,7 @@ pub enum ResourceError {
 ===================
 File: ./crates/icn-runtime/src/lib.rs
 Size: 4115 bytes
-Modified: 2025-02-18 06:52:03.314058600 +0000
+Modified: 2025-02-18 01:52:03.314058600 -0500
 Dependencies:
 use async_trait::async_trait;
 use icn_dsl::CoopLangAST;
@@ -2784,7 +2850,7 @@ impl ContractExecution {
 ===================
 File: ./crates/icn-storage/src/lib.rs
 Size: 3686 bytes
-Modified: 2025-01-16 22:02:57.927141600 +0000
+Modified: 2025-01-16 17:02:57.927141600 -0500
 Dependencies:
 mod tests {
 use icn_types::Block;
@@ -2924,7 +2990,7 @@ mod tests {
 ===================
 File: ./crates/icn-types/src/lib.rs
 Size: 20588 bytes
-Modified: 2025-02-18 07:12:54.022123900 +0000
+Modified: 2025-02-18 02:12:54.022123900 -0500
 Dependencies:
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
@@ -3575,7 +3641,7 @@ pub enum FederationOperation {
 ===================
 File: ./icn-consensus/src/lib.rs
 Size: 1234 bytes
-Modified: 2025-02-18 05:59:31.559796600 +0000
+Modified: 2025-02-18 00:59:31.559796600 -0500
 Dependencies:
 
 ===================
@@ -3624,5 +3690,18 @@ fn elect_validators(current_validators: &Vec<Validator>, candidates: &Vec<Valida
 }
 
 // ...existing code...
+```
+
+===================
+File: ./scripts/backend/src/main.rs
+Size: 45 bytes
+Modified: 2025-02-18 02:59:01.140151200 -0500
+Dependencies:
+
+===================
+```rs
+fn main() {
+    println!("Hello, world!");
+}
 ```
 

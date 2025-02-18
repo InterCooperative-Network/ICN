@@ -1,19 +1,18 @@
-# backend.Dockerfile
+# Use latest Rust image
+FROM rust:latest
 
-# Stage 1: Build the Rust app
-FROM rust:1.75-slim
-
+# Set work directory
 WORKDIR /usr/src/app
 
-# Copy Cargo files
-COPY Cargo.toml Cargo.lock ./
+# Upgrade Rust & Cargo
+RUN rustup update
 
-# Copy source code
-COPY src ./src
+# Copy entire workspace, including backend, crates, and Cargo files
+COPY . .
 
 # Build the application
+WORKDIR /usr/src/app/backend
 RUN cargo build --release
 
 EXPOSE 8081
-
-CMD ["cargo", "run", "--release"]
+CMD ["./target/release/icn-backend"]
