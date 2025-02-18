@@ -6,6 +6,8 @@ pub enum Transaction {
     CoopResource(ResourceTransaction),
     Governance(GovernanceTransaction),
     ValidatorElection(ElectionTransaction),
+    DidRegistry(DidRegistryTransaction),
+    AttestMembership(AttestMembershipTransaction),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -58,6 +60,16 @@ pub struct AccessControl {
     pub permissions: Permissions,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DidRegistryTransaction {
+    pub registry_data: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AttestMembershipTransaction {
+    pub member_did: String,
+}
+
 impl Transaction {
     pub fn verify_did_auth(&self) -> Result<bool, AuthError> {
         match self {
@@ -79,6 +91,13 @@ impl Transaction {
             Transaction::ValidatorElection(tx) => {
                 // ... validator election verification
                 Ok(true)
+            }
+            Transaction::DidRegistry(did_tx) => {
+                // Perform registry-specific DID verification
+                Self::verify_did_signature("did:example", "signature", &did_tx.registry_data)
+            }
+            Transaction::AttestMembership(tx) => {
+                Self::verify_did_signature(&tx.member_did, "zk_signature", "membership_claim")
             }
         }
     }

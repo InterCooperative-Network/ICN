@@ -1,4 +1,4 @@
-Project Docs Dump - Generated Tue 18 Feb 2025 06:05:49 AM UTC
+Project Docs Dump - Generated Tue 18 Feb 2025 06:17:27 AM UTC
 ======================================
 
 Docs Tree:
@@ -6,6 +6,7 @@ Docs Tree:
 ./docs
 ├── api
 │   └── index.md
+├── api.md
 ├── architecture
 │   └── diagrams
 │       ├── images
@@ -23,6 +24,7 @@ Docs Tree:
 │   │   └── testing-roadmap.md
 │   └── setup
 │       └── development-setup-guide.md
+├── governance.md
 ├── guides
 │   ├── getting-started.md
 │   ├── governance-guide.md
@@ -58,13 +60,64 @@ Docs Tree:
         ├── onboarding-guide.md
         └── resource-management.md
 
-16 directories, 37 files
+16 directories, 39 files
 
 
 ===================
 File: ./docs/api/index.md
 ===================
 <EMPTY FILE>
+
+
+===================
+File: ./docs/api.md
+===================
+# ICN API Reference
+
+## Transaction Types
+
+### Resource Transactions
+```rust
+CoopResource {
+    resource_id: String,
+    operation: ResourceOperation,
+    metadata: ResourceMetadata,
+    did_proof: DidProof,
+}
+```
+
+### Governance Transactions
+```rust
+GovernanceTransaction::SubmitProposal(proposal)
+GovernanceTransaction::CastVote(vote)
+GovernanceTransaction::FinalizeProposal(id)
+```
+
+## Storage Interface
+
+### On-Chain Storage
+Limited to small metadata and proofs.
+
+### Off-Chain Storage
+Uses IPFS/Filecoin with on-chain references:
+```rust
+StorageReference {
+    location: StorageType,
+    metadata: ResourceMetadata,
+    access_control: AccessControl,
+}
+```
+
+## Authentication
+
+All transactions require DID-based authentication:
+```rust
+DidProof {
+    did: String,
+    signature: String,
+    timestamp: u64,
+}
+```
 
 
 ===================
@@ -1396,6 +1449,48 @@ cargo test --features integration
 - **Docker Documentation**: [https://docs.docker.com/](https://docs.docker.com/)
 - **Node.js Documentation**: [https://nodejs.org/en/docs/](https://nodejs.org/en/docs/)
 
+
+
+===================
+File: ./docs/governance.md
+===================
+# ICN Governance Model
+
+## Validator Governance
+
+### Election Process
+1. Cooperatives propose validators
+2. Network participants vote
+3. Proposals require >50% approval
+4. Maximum 2 validators per cooperative
+
+### Voting Requirements
+- Must be an active network participant
+- One vote per DID
+- Votes expire after election period
+
+## Resource Sharing
+
+### Access Control
+```rust
+AccessControl {
+    owner_did: String,
+    allowed_coops: HashSet<String>,
+    permissions: Permissions,
+}
+```
+
+### Storage Rules
+- Small data (<1MB): On-chain storage
+- Large data: IPFS/Filecoin with on-chain references
+- Access controls enforced through smart contracts
+
+## Transaction Verification
+
+1. DID Authentication
+2. Permission Validation
+3. Governance Rules Check
+4. Resource Availability Check
 
 
 ===================
