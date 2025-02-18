@@ -592,3 +592,60 @@ impl Transaction {
         bincode::serialize(self).unwrap_or_default()
     }
 }
+
+use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationType {
+    Cooperative,
+    Community, 
+    Hybrid
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationTerms {
+    pub minimum_reputation: i64,
+    pub resource_sharing_policies: String,
+    pub governance_rules: String,
+    pub duration: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationOperation {
+    InitiateFederation {
+        federation_type: FederationType,
+        partner_id: String,
+        terms: FederationTerms,
+    },
+    JoinFederation {
+        federation_id: String,
+        commitment: Vec<String>,
+    },
+    LeaveFederation {
+        federation_id: String,
+        reason: String,
+    },
+    ProposeAction {
+        federation_id: String,
+        action_type: String,
+        description: String,
+        resources: HashMap<String, u64>,
+    },
+    VoteOnProposal {
+        federation_id: String,
+        proposal_id: String,
+        approve: bool,
+        notes: Option<String>,
+    },
+    ShareResources {
+        federation_id: String,
+        resource_type: String,
+        amount: u64,
+        recipient_id: String,
+    },
+    UpdateFederationTerms {
+        federation_id: String,
+        new_terms: FederationTerms,
+    },
+}

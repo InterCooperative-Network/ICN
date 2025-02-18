@@ -21,6 +21,37 @@ use rand::thread_rng;
 use tokio::time::{sleep, Duration};
 use warp::Filter;
 
+mod test_helpers {
+    use super::*;
+    
+    pub fn create_test_runtime() -> RuntimeManager {
+        RuntimeManager::new()
+    }
+
+    pub fn create_test_context() -> ExecutionContext {
+        ExecutionContext::default()
+    }
+
+    pub fn create_test_validation_node() -> ValidationNode {
+        ValidationNode {
+            pre_checks: vec![
+                Check {
+                    condition: "balance >= 100".to_string(),
+                    action: "require_minimum_balance".to_string(),
+                }
+            ],
+            post_checks: vec![],
+            state_validation: Some(StateValidation {
+                current: Some("PENDING".to_string()),
+                expected: Some("APPROVED".to_string()),
+                transition: Some("PENDING->APPROVED".to_string()),
+            }),
+            resource_checks: None,
+            custom_merge: None,
+        }
+    }
+}
+
 #[tokio::test]
 async fn test_integration() {
     // Setup base systems
@@ -721,4 +752,14 @@ async fn test_real_time_voting_updates() {
     sleep(Duration::from_secs(1)).await;
 
     assert_eq!(proposal_history.get_proposal(proposal.id.clone()).unwrap().votes_for, 1);
+}
+
+#[tokio::test]
+async fn test_validation_rule_execution() {
+    let runtime = test_helpers::create_test_runtime();
+    let context = test_helpers::create_test_context();
+    let validation = test_helpers::create_test_validation_node();
+    
+    let result = runtime.execute_validation_rules(&validation, &context);
+    assert!(result.is_ok());
 }
