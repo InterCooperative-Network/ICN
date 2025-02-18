@@ -1,0 +1,40 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT = _{ "//" ~ (!"\n" ~ ANY)* }
+
+program = { SOI ~ (statement)* ~ EOI }
+
+statement = {
+    governance_rule |
+    reputation_rule |
+    marketplace_rule |
+    threshold_rule |
+    federation_rule
+}
+
+governance_rule = { "governance" ~ ":" ~ block }
+reputation_rule = { "reputation" ~ ":" ~ block }
+marketplace_rule = { "marketplace" ~ ":" ~ block }
+threshold_rule = { "threshold" ~ ":" ~ block }
+federation_rule = { "federation" ~ ":" ~ block }
+
+block = { INDENT ~ (rule_statement)* ~ DEDENT }
+rule_statement = { identifier ~ ":" ~ complex_value }
+
+complex_value = {
+    array_value |
+    object_value |
+    simple_value
+}
+
+array_value = { "[" ~ (complex_value ~ ("," ~ complex_value)*)? ~ "]" }
+object_value = { "{" ~ (field_def ~ ("," ~ field_def)*)? ~ "}" }
+field_def = { identifier ~ ":" ~ complex_value }
+simple_value = @{ string_value | number_value | boolean_value | identifier }
+
+string_value = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+number_value = @{ "-"? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+boolean_value = @{ "true" | "false" }
+identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+
+INDENT = { "{" }
+DEDENT = { "}" }

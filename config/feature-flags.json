@@ -1,0 +1,11 @@
+{
+  "features": {
+    "gemini2Flash": {
+      "name": "Gemini 2.0 Flash Preview",
+      "description": "Enables Gemini 2.0 Flash (Preview) feature for all clients",
+      "enabled": true,
+      "defaultValue": true,
+      "scope": "global"
+    }
+  }
+}
