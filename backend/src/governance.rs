@@ -61,4 +61,17 @@ impl GovernanceEngine {
             }
         }
     }
+
+    pub async fn list_proposals(&self) -> Result<Vec<Proposal>, sqlx::Error> {
+        let proposals = sqlx::query_as!(
+            Proposal,
+            r#"
+            SELECT id, title, description, created_by, ends_at, created_at
+            FROM proposals
+            "#
+        )
+        .fetch_all(&*self.db_pool)
+        .await?;
+        Ok(proposals)
+    }
 }
