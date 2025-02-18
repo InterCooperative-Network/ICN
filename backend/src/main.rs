@@ -1,28 +1,36 @@
-use tokio::runtime::Runtime;
+use tokio;
 use log::{info, error};
 use env_logger;
 use serde::{Deserialize, Serialize};
-use chrono::Utc;
-use sha2::{Sha256, Digest};
-use warp::Filter;
-use futures_util::future::join_all;
-use async_trait::async_trait;
-use icn_core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem};
-use icn_consensus::ProofOfCooperation;
-use icn_crypto::KeyPair;
-use icn_p2p::networking::NetworkManager;
-use icn_runtime::{RuntimeManager, ContractExecution};
-use icn_storage::{StorageManager, StorageBackend, StorageResult};
-use icn_types::{Block, Transaction};
-use tokio::signal;
-use std::sync::{Arc, Mutex};
-use tokio::time::{sleep, Duration};
+use std::sync::Arc;
+use sha2::Digest;
+use futures_util::StreamExt;
+use warp::{Filter, ws::{WebSocket, Message}};
+use dashmap::DashMap;
+use sqlx::PgPool;
+use thiserror::Error;
 use reqwest::Client;
-use warp::ws::{Message, WebSocket};
-use futures_util::{StreamExt, SinkExt};
-use std::collections::HashMap;
+use tokio::signal;
+use async_trait::async_trait;
 
-#[derive(Deserialize)]
+use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
+use crate::storage::{StorageManager, StorageBackend, StorageResult};
+use crate::networking::NetworkManager;
+use crate::identity::IdentityManager;
+
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+    #[error("Database error: {0}")]
+    DatabaseError(#[from] sqlx::Error),
+    #[error("WebSocket error: {0}")]
+    WebSocketError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+}
+
+#[derive(Debug, Deserialize)]
 struct Config {
     database_url: String,
     log_level: String,
@@ -38,6 +46,21 @@ struct Config {
     technical_contributions_decay_rate: f64,
     decay_exemptions: Vec<String>,
 }
+
+impl Config {
+    fn validate(&self) -> Result<(), AppError> {
+        if self.database_url.is_empty() {
+            return Err(AppError::ConfigError("database_url cannot be empty".to_string()));
+        }
+        if !(0.0..=1.0).contains(&self.reputation_decay_rate) {
+            return Err(AppError::ConfigError("reputation_decay_rate must be between 0 and 1".to_string()));
+        }
+        // Add other validation checks
+        Ok(())
+    }
+}
+
+type WebSocketClients = Arc<DashMap<String, warp::ws::WebSocket>>;
 
 #[derive(Serialize, Deserialize)]
 struct Proposal {
@@ -200,22 +223,21 @@ impl ReputationManager {
 }
 
 #[tokio::main]
-async fn main() {
-    // Initialize logging
+async fn main() -> Result<(), AppError> {
+    // Initialize logging with env_logger
     env_logger::init();
-    info!("Starting backend application...");
 
-    // Load configuration
-    let config: Config = match load_config() {
-        Ok(config) => {
-            info!("Configuration loaded successfully.");
-            config
-        }
-        Err(e) => {
-            error!("Failed to load configuration: {}", e);
-            return;
-        }
-    };
+    // Load and validate configuration
+    let config: Config = load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
+    config.validate()?;
+    
+    // Set up database connection pool
+    let db_pool = PgPool::connect(&config.database_url)
+        .await
+        .map_err(AppError::DatabaseError)?;
+
+    // Initialize WebSocket clients using DashMap
+    let websocket_clients: WebSocketClients = Arc::new(DashMap::new());
 
     // Initialize components
     let storage_manager = StorageManager::new(Box::new(MockStorageBackend));
@@ -245,12 +267,10 @@ async fn main() {
     // Start core system
     if let Err(e) = core.start().await {
         error!("Failed to start core system: {}", e);
-        return;
+        return Ok(());
     }
 
     // Set up WebSocket server
-    let websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>> = Arc::new(Mutex::new(HashMap::new()));
-
     let websocket_route = warp::path("ws")
         .and(warp::ws())
         .map(move |ws: warp::ws::Ws| {
@@ -391,9 +411,10 @@ async fn main() {
     }
 
     info!("Backend application stopped.");
+    Ok(())
 }
 
-async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
     // Logic to handle proposal creation
     let subject = format!("New Proposal Created: {}", proposal.title);
     let body = format!("A new proposal has been created by {}. Description: {}", proposal.created_by, proposal.description);
@@ -406,7 +427,7 @@ async fn handle_create_proposal(proposal: Proposal, notification_manager: Notifi
     Ok(warp::reply::json(&proposal))
 }
 
-async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
     // Logic to handle voting on a proposal
     let subject = format!("New Vote on Proposal: {}", proposal_id);
     let body = format!("A new vote has been cast by {}. Approve: {}", vote.voter, vote.approve);
@@ -469,31 +490,35 @@ async fn handle_query_shared_resources() -> Result<impl warp::Reply, warp::Rejec
     Ok(warp::reply::json(&resources))
 }
 
-async fn handle_websocket(ws: WebSocket, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) {
-    let (mut tx, mut rx) = ws.split();
+async fn handle_websocket(ws: WebSocket, websocket_clients: WebSocketClients) {
     let client_id = uuid::Uuid::new_v4().to_string();
+    
+    // Split the WebSocket
+    let (mut ws_tx, mut ws_rx) = ws.split();
 
-    websocket_clients.lock().unwrap().insert(client_id.clone(), tx);
+    // Insert the sender into clients
+    websocket_clients.insert(client_id.clone(), ws_tx);
 
-    while let Some(result) = rx.next().await {
+    // Handle incoming messages
+    while let Some(result) = ws_rx.next().await {
         match result {
             Ok(msg) => {
-                if msg.is_text() {
-                    let text = msg.to_str().unwrap();
-                    println!("Received message: {}", text);
-                }
+                log::debug!("Received message from {}: {:?}", client_id, msg);
+                // Handle the message
             }
             Err(e) => {
-                eprintln!("WebSocket error: {}", e);
+                log::error!("WebSocket error for {}: {}", client_id, e);
                 break;
             }
         }
     }
 
-    websocket_clients.lock().unwrap().remove(&client_id);
+    // Clean up on disconnect
+    log::info!("Client {} disconnected", client_id);
+    websocket_clients.remove(&client_id);
 }
 
-async fn broadcast_message(message: &Message, websocket_clients: Arc<Mutex<HashMap<String, warp::ws::WebSocket>>>) {
+async fn broadcast_message(message: &Message, websocket_clients: WebSocketClients) {
     let clients = websocket_clients.lock().unwrap();
     for (_, client) in clients.iter() {
         let _ = client.send(message.clone()).await;

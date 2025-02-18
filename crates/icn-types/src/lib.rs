@@ -6,7 +6,7 @@ use tokio::task;
 use rayon::prelude::*;
 use std::collections::HashMap;
 
-use std::sync::{Mutex, Arc}; // Re-import Arc
+use std::sync::Mutex; // Remove Arc since it's unused
 use lazy_static::lazy_static;
 use thiserror::Error;
 
@@ -262,35 +262,18 @@ impl Block {
 
     /// Validates the transactions in the block
     async fn validate_transactions(&self) -> Result<(), BlockError> {
-        // Group transactions by type
-        let grouped_transactions: Arc<HashMap<String, Vec<Transaction>>> = Arc::new(
-            self.transactions.iter()
-                .map(|tx| (tx.transaction_type.as_str().to_string(), tx.clone()))
-                .fold(HashMap::new(), |mut acc, (group, tx)| {
-                    acc.entry(group).or_insert_with(Vec::new).push(tx);
-                    acc
-                })
-        );
-
-        let validation_tasks: Vec<_> = grouped_transactions.iter()
-            .flat_map(|(_, txs)| {
-                txs.iter().map({
-                    let grouped_transactions = Arc::clone(&grouped_transactions);
-                    move |tx| {
-                        let tx_hash = tx.hash.clone();
-                        task::spawn({
-                            let grouped_transactions = Arc::clone(&grouped_transactions);
-                            async move {
-                                let mut cache = TRANSACTION_CACHE.lock().unwrap();
-                                if let Some(&is_valid) = cache.get(&tx_hash) {
-                                    is_valid
-                                } else {
-                                    let is_valid = tx.validate();
-                                    cache.insert(tx_hash, is_valid);
-                                    is_valid
-                                }
-                            }
-                        })
+        let validation_tasks: Vec<_> = self.transactions.iter()
+            .map(|tx| {
+                let tx = tx.clone();
+                task::spawn(async move {
+                    let tx_hash = tx.hash.clone();
+                    let mut cache = TRANSACTION_CACHE.lock().unwrap();
+                    if let Some(&is_valid) = cache.get(&tx_hash) {
+                        is_valid
+                    } else {
+                        let is_valid = tx.validate();
+                        cache.insert(tx_hash, is_valid);
+                        is_valid
                     }
                 })
             })
@@ -592,9 +575,6 @@ impl Transaction {
         bincode::serialize(self).unwrap_or_default()
     }
 }
-
-use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FederationType {
