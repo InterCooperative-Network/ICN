@@ -62,4 +62,41 @@ impl Database {
         
         Ok(())
     }
+
+    pub async fn store_identity(&self, identity: &str, data: &str) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            r#"
+            INSERT INTO identities (identity, data)
+            VALUES ($1, $2)
+            ON CONFLICT (identity) DO UPDATE SET data = $2
+            "#,
+            identity,
+            data
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| {
+            eprintln!("Error storing identity: {}", e);
+            e
+        })?;
+        
+        Ok(())
+    }
+
+    pub async fn retrieve_identity(&self, identity: &str) -> Result<String, sqlx::Error> {
+        let result = sqlx::query!(
+            r#"
+            SELECT data FROM identities WHERE identity = $1
+            "#,
+            identity
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| {
+            eprintln!("Error retrieving identity: {}", e);
+            e
+        })?;
+        
+        Ok(result.data)
+    }
 }

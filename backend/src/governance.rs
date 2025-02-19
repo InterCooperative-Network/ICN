@@ -3,15 +3,18 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use log::{info, error};
 use crate::db::Database;
+use crate::identity::IdentityManager;
 
 pub struct GovernanceEngine {
     db: Arc<Database>,
+    identity_manager: Arc<IdentityManager>,
 }
 
 impl GovernanceEngine {
-    pub fn new(db: Arc<Database>) -> Self {
+    pub fn new(db: Arc<Database>, identity_manager: Arc<IdentityManager>) -> Self {
         Self {
-            db
+            db,
+            identity_manager,
         }
     }
 
@@ -44,5 +47,21 @@ impl GovernanceEngine {
             e
         })?;
         Ok(proposals)
+    }
+
+    pub async fn create_identity(&self, identity: &str) -> Result<(), String> {
+        self.identity_manager.create_identity(identity).await
+    }
+
+    pub async fn get_identity(&self, identity: &str) -> Result<String, String> {
+        self.identity_manager.get_identity(identity).await
+    }
+
+    pub async fn update_identity(&self, identity: &str, new_data: &str) -> Result<(), String> {
+        self.identity_manager.update_identity(identity, new_data).await
+    }
+
+    pub async fn delete_identity(&self, identity: &str) -> Result<(), String> {
+        self.identity_manager.delete_identity(identity).await
     }
 }
