@@ -324,6 +324,26 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+### Update Federation Governance Rules
+- **Endpoint**: `POST /api/federation/update_governance_rules`
+- **Request Body**:
+  ```json
+  {
+    "federation_id": "federation123",
+    "rules": {
+      "min_votes_required": 5,
+      "approval_threshold_percent": 66,
+      "min_voting_period_hours": 24,
+      "max_voting_period_hours": 168,
+      "allowed_proposal_types": ["resource_allocation", "membership"],
+      "veto_rights": {
+        "admin": ["membership", "governance"],
+        "moderator": ["resource_allocation"]
+      }
+    }
+  }
+  ```
+
 ### Query Shared Resources
 - **Endpoint**: `GET /api/resources/query`
 - **Response**:

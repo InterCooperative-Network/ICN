@@ -99,6 +99,26 @@ pub struct BlockMetadata {
     
     /// Summary of relationship transactions
     pub relationship_updates: RelationshipMetadata,
+
+    /// Fault tolerance level for Byzantine fault tolerance
+    pub fault_tolerance: Option<u32>,
+}
+
+impl BlockMetadata {
+    pub fn with_bft_info(&mut self, quorum_size: u32, fault_tolerance: u32) {
+        self.validator_count = quorum_size;
+        self.fault_tolerance = Some(fault_tolerance);
+        self.consensus_duration_ms = 0; // Will be set during finalization
+    }
+
+    pub fn is_bft_valid(&self) -> bool {
+        if let Some(fault_tolerance) = self.fault_tolerance {
+            // Check if we have enough validators (3f + 1)
+            self.validator_count >= (fault_tolerance * 3) + 1
+        } else {
+            false
+        }
+    }
 }
 
 /// Metadata specific to relationship transactions in the block
@@ -134,6 +154,7 @@ impl Block {
             resources_used,
             size: 0,
             relationship_updates: relationship_metadata,
+            fault_tolerance: None,
         };
 
         let mut block = Block {

@@ -194,6 +194,24 @@ As cooperatives grow or federate with others, the governance system must adapt t
 - **Federated Governance**: Federations of cooperatives establish a higher-level governance structure to manage inter-cooperative affairs.
 - **Scalable Voting Mechanisms**: Voting mechanisms are designed to scale with the size of the cooperative, ensuring that all members have a voice in decision-making.
 
+## 7. Federation Governance Rules
+
+### 7.1 Rule Types
+Federation governance rules include:
+- Minimum required votes for proposals
+- Approval threshold percentage
+- Voting period duration limits
+- Allowed proposal types
+- Veto rights for specific roles
+
+### 7.2 Rule Enforcement
+The system enforces governance rules by:
+- Validating proposals against allowed types
+- Checking voter eligibility and reputation requirements
+- Enforcing voting period constraints
+- Processing veto rights
+- Computing final proposal outcomes based on thresholds
+
 ## 8. User-Friendly Tools for Proposal Creation and Voting
 
 ### 8.1 Proposal Creation Modal
