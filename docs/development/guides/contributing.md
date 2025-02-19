@@ -202,6 +202,18 @@ To ensure mobile responsiveness of the frontend, follow these guidelines:
 - **Focus on the Code**: Keep the feedback focused on the code and avoid personal comments.
 - **Encourage Discussion**: Encourage open discussion and collaboration to find the best solutions.
 
+## 10. Glossary of Terms
+
+- **DID (Decentralized Identifier)**: A unique identifier used to represent an entity within the ICN.
+- **Proof of Cooperation (PoC)**: A consensus mechanism used to validate transactions in a cooperative model.
+- **Resource Allocation**: The process of distributing resources among cooperatives.
+- **Governance Transaction**: A transaction related to the governance of the cooperative, such as submitting proposals or casting votes.
+- **On-Chain Storage**: Storage of small metadata and proofs directly on the blockchain.
+- **Off-Chain Storage**: Storage of large files using external storage solutions like IPFS/Filecoin, with references stored on the blockchain.
+- **Reputation**: A score representing the trustworthiness and contributions of a user within the cooperative.
+- **Access Control**: Mechanisms to restrict access to resources based on permissions and roles.
+- **Signature Verification**: The process of verifying the authenticity of a transaction using cryptographic signatures.
+
 ## Appendix
 
 ### A. Additional Resources
