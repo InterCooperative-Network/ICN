@@ -1,4 +1,4 @@
-Project Docs Dump - Generated Wed 19 Feb 2025 12:39:41 AM UTC
+Project Docs Dump - Generated Wed 19 Feb 2025 03:37:15 AM UTC
 ======================================
 
 Docs Tree:
@@ -2053,6 +2053,26 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+### Update Federation Governance Rules
+- **Endpoint**: `POST /api/federation/update_governance_rules`
+- **Request Body**:
+  ```json
+  {
+    "federation_id": "federation123",
+    "rules": {
+      "min_votes_required": 5,
+      "approval_threshold_percent": 66,
+      "min_voting_period_hours": 24,
+      "max_voting_period_hours": 168,
+      "allowed_proposal_types": ["resource_allocation", "membership"],
+      "veto_rights": {
+        "admin": ["membership", "governance"],
+        "moderator": ["resource_allocation"]
+      }
+    }
+  }
+  ```
+
 ### Query Shared Resources
 - **Endpoint**: `GET /api/resources/query`
 - **Response**:
@@ -3194,7 +3214,7 @@ Implement a robust dispute resolution mechanism to handle disagreements or confl
 ### 5.2 Cross-Federation Coordination
 Enable federations to coordinate with each other for larger initiatives, such as shared resource pools across multiple federations, or federated governance for issues of common interest.
 
-## Appendix
+## 6. Appendix
 
 ### A. Summary of Federation Operations
 - **Initiate Federation**: Start a new federation with specific terms.
@@ -3284,6 +3304,46 @@ let operation = FederationOperation::UpdateFederationTerms {
     },
 };
 ```
+
+## 7. Cross-Federation Resource Sharing
+
+### 7.1 Resource Sharing Mechanisms
+The federation system supports secure resource sharing across federation boundaries through:
+- **Resource Pools**: Dedicated pools of resources that can be shared between federations
+- **Access Control**: Granular permissions for resource access between federations
+- **Usage Tracking**: Monitoring and accounting of shared resource usage
+- **Reputation Requirements**: Minimum reputation scores for cross-federation sharing
+
+### 7.2 Resource Pool Management
+Federation resource pools are managed through:
+```rust
+pub struct FederationResourcePool {
+    pub federation_id: String,
+    pub resources: HashMap<String, Resource>,
+    pub access_control: FederationAccessControl,
+}
+
+pub struct FederationAccessControl {
+    pub allowed_federations: Vec<String>,
+    pub min_reputation: i64,
+    pub max_allocation_per_federation: u64,
+}
+```
+
+### 7.3 Sharing Process
+1. Source federation creates a resource pool
+2. Access control rules are defined
+3. Target federation requests access
+4. Resources are allocated if all requirements are met
+5. Usage is monitored and tracked
+6. Resources are released when no longer needed
+
+### 7.4 Security Considerations
+- **Access Control**: Only authorized federations can access shared resources
+- **Quota Enforcement**: Maximum allocation limits per federation
+- **Reputation Requirements**: Minimum reputation scores for participation
+- **Usage Monitoring**: Track and audit resource usage
+- **Dispute Resolution**: Clear process for handling sharing conflicts
 
 
 ===================
@@ -3484,6 +3544,24 @@ As cooperatives grow or federate with others, the governance system must adapt t
 - **Local Governance**: Each cooperative maintains its own governance structure for local decision-making.
 - **Federated Governance**: Federations of cooperatives establish a higher-level governance structure to manage inter-cooperative affairs.
 - **Scalable Voting Mechanisms**: Voting mechanisms are designed to scale with the size of the cooperative, ensuring that all members have a voice in decision-making.
+
+## 7. Federation Governance Rules
+
+### 7.1 Rule Types
+Federation governance rules include:
+- Minimum required votes for proposals
+- Approval threshold percentage
+- Voting period duration limits
+- Allowed proposal types
+- Veto rights for specific roles
+
+### 7.2 Rule Enforcement
+The system enforces governance rules by:
+- Validating proposals against allowed types
+- Checking voter eligibility and reputation requirements
+- Enforcing voting period constraints
+- Processing veto rights
+- Computing final proposal outcomes based on thresholds
 
 ## 8. User-Friendly Tools for Proposal Creation and Voting
 
@@ -5598,6 +5676,27 @@ Resource management within ICN allows cooperatives to allocate, share, and track
 Regularly check the resource usage dashboard:
 - **Allocated Resources**: Overview of allocated resources and remaining capacity.
 - **Usage Trends**: Track member usage patterns to optimize future allocations.
+
+## Step 4: Cross-Federation Resource Sharing 
+1. Navigate to the Federation Resource tab.
+2. Select "Share Resources" and provide details:
+   - **Federation ID**: ID of the target federation
+   - **Resource Type**: Type of resource being shared
+   - **Amount**: Quantity to share
+   - **Duration**: Optional sharing duration
+   - **Terms**: Allocation and usage terms
+
+## Best Practices for Federation Resource Sharing
+- Maintain adequate resource reserves for your primary federation
+- Document clear access policies and terms of use
+- Monitor shared resource usage across federations
+- Establish reciprocal sharing agreements where beneficial
+
+## Managing Federation Resource Pools
+- **Resource Pool Creation**: Create dedicated resource pools for federation sharing
+- **Access Control**: Define which federations can access specific resources
+- **Usage Tracking**: Monitor resource consumption across federations
+- **Dispute Resolution**: Clear process for handling resource sharing conflicts
 
 ## Tips for Effective Resource Management
 - **Set Clear Limits**: Prevent overuse by establishing maximum allocations.
