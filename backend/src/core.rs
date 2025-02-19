@@ -75,6 +75,21 @@ impl Core {
         self._telemetry_manager.log("Core stopped.");
         Ok(())
     }
+
+    pub async fn secure_communication(&self, address: &str, message: &[u8]) -> Result<(), String> {
+        self._telemetry_manager.log("Starting secure communication...");
+        self._network_manager.connect(address).await?;
+        self._network_manager.send_message(address, message).await?;
+        self._telemetry_manager.log("Message sent.");
+        Ok(())
+    }
+
+    pub async fn handle_mutual_credit_transaction(&self, sender: &str, receiver: &str, amount: f64) -> Result<(), String> {
+        self._telemetry_manager.log("Handling mutual credit transaction...");
+        // Placeholder logic for mutual credit transaction
+        self._telemetry_manager.log("Mutual credit transaction completed.");
+        Ok(())
+    }
 }
 
 #[async_trait]
