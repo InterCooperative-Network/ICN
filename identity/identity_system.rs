@@ -90,7 +90,16 @@ impl IdentitySystem {
                     let verifying_key = VerifyingKey::from_bytes(public_key).expect("failed to decode public key");
                     verifying_key.verify(message, signature).is_ok()
                 },
-                _ => false,
+                Algorithm::Kyber => {
+                    // Kyber does not support signing and verification directly
+                    false
+                },
+                Algorithm::Dilithium => {
+                    dilithium::verify(public_key, message, signature)
+                },
+                Algorithm::Falcon => {
+                    falcon::verify(public_key, message, signature)
+                },
             }
         } else {
             false
@@ -206,6 +215,32 @@ mod tests {
 
         let message = b"test message";
         let signature = signing_key.sign(message).to_bytes().to_vec();
+
+        assert!(identity_system.verify_did(&did, message, &signature));
+    }
+
+    #[test]
+    fn test_register_and_verify_did_dilithium() {
+        let mut identity_system = IdentitySystem::new();
+        let (public_key, private_key) = dilithium::keypair();
+        let did = "did:example:dilithium".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 10, public_key.clone(), Algorithm::Dilithium);
+
+        let message = b"test message";
+        let signature = dilithium::sign(&private_key, message);
+
+        assert!(identity_system.verify_did(&did, message, &signature));
+    }
+
+    #[test]
+    fn test_register_and_verify_did_falcon() {
+        let mut identity_system = IdentitySystem::new();
+        let (public_key, private_key) = falcon::keypair();
+        let did = "did:example:falcon".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 10, public_key.clone(), Algorithm::Falcon);
+
+        let message = b"test message";
+        let signature = falcon::sign(&private_key, message);
 
         assert!(identity_system.verify_did(&did, message, &signature));
     }
