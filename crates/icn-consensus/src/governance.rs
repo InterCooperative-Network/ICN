@@ -38,6 +38,7 @@ pub enum ProposalType {
 pub struct GovernanceEngine {
     rules: ValidatorRules,
     active_validators: HashMap<String, ValidatorState>,
+    active_proposals: HashMap<String, VoteProposal>,
 }
 
 impl GovernanceEngine {
@@ -45,6 +46,7 @@ impl GovernanceEngine {
         Self {
             rules,
             active_validators: HashMap::new(),
+            active_proposals: HashMap::new(),
         }
     }
 
@@ -87,4 +89,52 @@ impl GovernanceEngine {
             }
         }
     }
+
+    fn is_eligible_voter(&self, voter_did: &str) -> bool {
+        // Placeholder logic to check if a voter is eligible
+        true
+    }
+
+    fn check_proposal_status(&self, proposal_id: &str) -> Result<VoteStatus, GovernanceError> {
+        // Placeholder logic to check the status of a proposal
+        Ok(VoteStatus::Approved)
+    }
+
+    fn add_validator(&mut self, info: ValidatorInfo) -> Result<(), GovernanceError> {
+        // Placeholder logic to add a validator
+        Ok(())
+    }
+
+    fn remove_validator(&mut self, did: &str) -> Result<(), GovernanceError> {
+        // Placeholder logic to remove a validator
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Vote {
+    pub proposal_id: String,
+    pub voter_did: String,
+    pub approve: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidatorInfo {
+    pub did: String,
+    pub coop_id: String,
+    pub public_key: String,
+    pub stake: u64,
+}
+
+#[derive(Debug)]
+pub enum VoteStatus {
+    Approved,
+    Rejected,
+    Pending,
+}
+
+#[derive(Debug)]
+pub enum GovernanceError {
+    ProposalNotFound,
+    NotEligibleToVote,
 }

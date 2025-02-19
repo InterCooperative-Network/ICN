@@ -12,7 +12,8 @@ impl RuntimeManager {
 
     pub async fn load_bytecode(&mut self, bytecode: &[u8]) -> Result<(), RuntimeError> {
         // Implementation to load and validate DSL bytecode
-        todo!("Implement bytecode loading")
+        self.dsl_context = Some(CoopLangAST::parse(bytecode)?);
+        Ok(())
     }
 
     pub async fn execute_cooperative_rules(&self, context: &ExecutionContext) -> Result<(), RuntimeError> {

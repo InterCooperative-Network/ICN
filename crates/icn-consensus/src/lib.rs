@@ -150,6 +150,32 @@ impl ConsensusEngine for ProofOfCooperation {
     async fn stop(&self) {
         // Stop the consensus process
     }
+
+    async fn submit_vote(&mut self, vote: Vote) -> Result<VoteStatus, GovernanceError> {
+        let proposal = self.active_proposals.get_mut(&vote.proposal_id)
+            .ok_or(GovernanceError::ProposalNotFound)?;
+        
+        if !self.is_eligible_voter(&vote.voter_did) {
+            return Err(GovernanceError::NotEligibleToVote);
+        }
+
+        proposal.votes.insert(vote);
+        self.check_proposal_status(&proposal.proposal_id)
+    }
+
+    async fn process_approved_proposal(&mut self, proposal_id: &str) -> Result<(), GovernanceError> {
+        let proposal = self.active_proposals.remove(proposal_id)
+            .ok_or(GovernanceError::ProposalNotFound)?;
+
+        match proposal.proposal_type {
+            ProposalType::AddValidator(info) => self.add_validator(info),
+            ProposalType::RemoveValidator(did) => self.remove_validator(&did),
+            ProposalType::UpdateRules(rules) => {
+                self.rules = rules;
+                Ok(())
+            }
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
