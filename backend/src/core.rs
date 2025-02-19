@@ -3,6 +3,8 @@ use crate::storage::StorageManager;
 use crate::networking::NetworkManager;
 use crate::identity::IdentityManager;
 use crate::reputation::ReputationManager;
+use async_trait::async_trait;
+use icn_consensus::ConsensusEngine;
 
 pub struct Core {
     _storage_manager: Arc<StorageManager>,
@@ -39,10 +41,49 @@ impl Core {
     }
 
     pub async fn start(&self) -> Result<(), String> {
+        self._telemetry_manager.log("Starting Core...");
+        if let Err(e) = self._network_manager.start().await {
+            return Err(format!("Failed to start network manager: {}", e));
+        }
+        if let Err(e) = self._runtime_manager.start().await {
+            return Err(format!("Failed to start runtime manager: {}", e));
+        }
+        if let Err(e) = self._identity_manager.start().await {
+            return Err(format!("Failed to start identity manager: {}", e));
+        }
+        if let Err(e) = self._reputation_manager.start().await {
+            return Err(format!("Failed to start reputation manager: {}", e));
+        }
+        self._telemetry_manager.log("Core started.");
         Ok(())
     }
 
     pub async fn stop(&self) -> Result<(), String> {
+        self._telemetry_manager.log("Stopping Core...");
+        if let Err(e) = self._runtime_manager.stop().await {
+            return Err(format!("Failed to stop runtime manager: {}", e));
+        }
+        if let Err(e) = self._network_manager.stop().await {
+            return Err(format!("Failed to stop network manager: {}", e));
+        }
+        if let Err(e) = self._identity_manager.stop().await {
+            return Err(format!("Failed to stop identity manager: {}", e));
+        }
+        if let Err(e) = self._reputation_manager.stop().await {
+            return Err(format!("Failed to stop reputation manager: {}", e));
+        }
+        self._telemetry_manager.log("Core stopped.");
         Ok(())
+    }
+}
+
+#[async_trait]
+impl ConsensusEngine for Core {
+    async fn start(&self) -> Result<(), String> {
+        self.start().await
+    }
+
+    async fn stop(&self) -> Result<(), String> {
+        self.stop().await
     }
 }

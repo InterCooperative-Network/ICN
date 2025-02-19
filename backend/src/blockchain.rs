@@ -12,6 +12,16 @@ impl Blockchain {
             pending_transactions: vec![],
         }
     }
-    
-    // Implementation using icn-types structures
+
+    pub fn add_block(&mut self, block: Block) {
+        self.blocks.push(block);
+    }
+
+    pub fn get_latest_block(&self) -> Option<&Block> {
+        self.blocks.last()
+    }
+
+    pub fn get_block_by_index(&self, index: usize) -> Option<&Block> {
+        self.blocks.get(index)
+    }
 }

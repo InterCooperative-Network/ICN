@@ -109,8 +109,18 @@ impl ResourceAllocationSystem {
         &self,
         allocation_id: &str,
     ) -> Result<(), ResourceError> {
-        // Implementation for releasing allocated resources
-        Ok(())
+        let mut allocations = self.allocations.write().await;
+        for (resource_id, resource_allocations) in allocations.iter_mut() {
+            if let Some(index) = resource_allocations.iter().position(|alloc| alloc.allocation_id == allocation_id) {
+                let allocation = resource_allocations.remove(index);
+                let mut resources = self.resources.write().await;
+                if let Some(resource) = resources.get_mut(&allocation.resource_id) {
+                    resource.available_amount += allocation.amount;
+                }
+                return Ok(());
+            }
+        }
+        Err(ResourceError::InvalidAllocation)
     }
 
     pub async fn adjust_price(
