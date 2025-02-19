@@ -41,6 +41,16 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "title": "Increase Resource Allocation",
+  "description": "Proposal to increase resource allocation for project X",
+  "created_by": "did:icn:example",
+  "ends_at": "2024-12-31T23:59:59Z"
+}
+```
+
 ### View Proposals
 - **Endpoint**: `GET /api/governance/proposals`
 - **Response**:
@@ -57,6 +67,21 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
     }
   ]
   ```
+
+#### Example
+```json
+[
+  {
+    "proposal_id": "12345",
+    "title": "Increase Resource Allocation",
+    "description": "Proposal to increase resource allocation for project X",
+    "status": "Open",
+    "created_by": "did:icn:example",
+    "ends_at": "2024-12-31T23:59:59Z",
+    "created_at": "2024-11-03T12:00:00Z"
+  }
+]
+```
 
 ### Vote on Proposal
 - **Endpoint**: `POST /api/governance/proposals/{proposal_id}/vote`
@@ -77,6 +102,14 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "voter": "did:icn:voter",
+  "approve": true
+}
+```
+
 ### Cross-Cooperative Interactions
 - **Endpoint**: `POST /api/governance/cross-cooperative/interactions`
 - **Request Body**:
@@ -87,6 +120,15 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
     "details": "Requesting 100 units of resource X"
   }
   ```
+
+#### Example
+```json
+{
+  "interaction_type": "ResourceSharing",
+  "cooperative_id": "cooperative123",
+  "details": "Requesting 100 units of resource X"
+}
+```
 
 ### Hybrid Offline/Online Participation
 - **Endpoint**: `POST /api/governance/hybrid-participation`
@@ -99,6 +141,15 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "cooperative_id": "cooperative123",
+  "participation_mode": "Offline",
+  "details": "Participating via offline methods due to low connectivity"
+}
+```
+
 ### Developer Tools
 - **Endpoint**: `GET /api/governance/developer-tools`
 - **Response**:
@@ -108,6 +159,14 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
     "api_docs_url": "https://icn-api-docs.example.com"
   }
   ```
+
+#### Example
+```json
+{
+  "sdk_url": "https://icn-sdk.example.com",
+  "api_docs_url": "https://icn-api-docs.example.com"
+}
+```
 
 ### Notification Endpoints
 
@@ -133,6 +192,16 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "event_type": "VotingDeadline",
+  "event_time": "2024-12-31T23:59:59Z",
+  "notification_method": "email",
+  "recipient": "did:icn:example"
+}
+```
+
 #### Send Notification
 - **Endpoint**: `POST /api/governance/notifications/send`
 - **Request Body**:
@@ -154,6 +223,16 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
     "recipient": "did:icn:example"
   }
   ```
+
+#### Example
+```json
+{
+  "event_type": "ProposalOutcome",
+  "message": "The proposal has been approved.",
+  "notification_method": "sms",
+  "recipient": "did:icn:example"
+}
+```
 
 ### Federation Endpoints
 
@@ -188,6 +267,20 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "federation_type": "Cooperative",
+  "partner_id": "did:icn:partner",
+  "terms": {
+    "minimum_reputation": 50,
+    "resource_sharing_policies": "Equal distribution",
+    "governance_rules": "Majority vote",
+    "duration": "2025-12-31T23:59:59Z"
+  }
+}
+```
+
 #### Join Federation
 - **Endpoint**: `POST /api/federation/join`
 - **Request Body**:
@@ -206,6 +299,14 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "federation_id": "federation123",
+  "commitment": ["Adhere to terms", "Contribute resources"]
+}
+```
+
 #### Leave Federation
 - **Endpoint**: `POST /api/federation/leave`
 - **Request Body**:
@@ -223,6 +324,14 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
     "reason": "No longer able to participate"
   }
   ```
+
+#### Example
+```json
+{
+  "federation_id": "federation123",
+  "reason": "No longer able to participate"
+}
+```
 
 #### Propose Action
 - **Endpoint**: `POST /api/federation/propose_action`
@@ -252,6 +361,19 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "federation_id": "federation123",
+  "action_type": "New Project",
+  "description": "Proposal for a new collaborative project",
+  "resources": {
+    "resourceX": 100,
+    "resourceY": 200
+  }
+}
+```
+
 #### Vote on Federation Proposal
 - **Endpoint**: `POST /api/federation/vote`
 - **Request Body**:
@@ -274,6 +396,16 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "federation_id": "federation123",
+  "proposal_id": "proposal456",
+  "approve": true,
+  "notes": "Support the project"
+}
+```
+
 #### Share Resources
 - **Endpoint**: `POST /api/federation/share_resources`
 - **Request Body**:
@@ -295,6 +427,16 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
     "recipient_id": "did:icn:recipient"
   }
   ```
+
+#### Example
+```json
+{
+  "federation_id": "federation123",
+  "resource_type": "resourceX",
+  "amount": 50,
+  "recipient_id": "did:icn:recipient"
+}
+```
 
 #### Update Federation Terms
 - **Endpoint**: `POST /api/federation/update_terms`
@@ -324,6 +466,19 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "federation_id": "federation123",
+  "new_terms": {
+    "minimum_reputation": 60,
+    "resource_sharing_policies": "Proportional distribution",
+    "governance_rules": "Supermajority vote",
+    "duration": "2026-12-31T23:59:59Z"
+  }
+}
+```
+
 ### Update Federation Governance Rules
 - **Endpoint**: `POST /api/federation/update_governance_rules`
 - **Request Body**:
@@ -344,6 +499,24 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "federation_id": "federation123",
+  "rules": {
+    "min_votes_required": 5,
+    "approval_threshold_percent": 66,
+    "min_voting_period_hours": 24,
+    "max_voting_period_hours": 168,
+    "allowed_proposal_types": ["resource_allocation", "membership"],
+    "veto_rights": {
+      "admin": ["membership", "governance"],
+      "moderator": ["resource_allocation"]
+    }
+  }
+}
+```
+
 ### Query Shared Resources
 - **Endpoint**: `GET /api/resources/query`
 - **Response**:
@@ -363,6 +536,24 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
     }
   ]
   ```
+
+#### Example
+```json
+[
+  {
+    "resource_id": "resource1",
+    "owner": "did:icn:owner1",
+    "quantity": 100,
+    "price_per_unit": 10.0
+  },
+  {
+    "resource_id": "resource2",
+    "owner": "did:icn:owner2",
+    "quantity": 200,
+    "price_per_unit": 20.0
+  }
+]
+```
 
 ## Integration and Interoperability
 

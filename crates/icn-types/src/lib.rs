@@ -546,7 +546,7 @@ impl Transaction {
         // Validate based on transaction type
         match &self.transaction_type {
             TransactionType::Transfer { receiver, amount } => {
-                !receiver.is_empty() && *amount > 0
+                !receiver.is_empty() && *amount > 0 && self.sender != *receiver
             },
             TransactionType::ContractExecution { contract_id, input_data } => {
                 !contract_id.is_empty() && !input_data.is_empty()
