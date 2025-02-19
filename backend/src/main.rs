@@ -27,6 +27,8 @@ use reqwest::Client;
 use tokio::signal;
 use async_trait::async_trait;
 use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError};
+use warp::http::Method;
+use warp::cors::Cors;
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -112,7 +114,7 @@ async fn main() -> Result<(), AppError> {
     // Start core system
     if let Err(e) = core.start().await {
         error!("Failed to start core system: {}", e);
-        return Ok(());
+        return Err(AppError::ConfigError(e));
     }
 
     // Set up WebSocket server
@@ -131,7 +133,7 @@ async fn main() -> Result<(), AppError> {
             let notification_manager = notification_manager.clone();
             let websocket_clients = websocket_clients.clone();
             async move {
-                handle_create_proposal(proposal, notification_manager, websocket_clients).await
+                handle_create_proposal(proposal, notification_manager, websocket_clients, db_pool.clone()).await
             }
         });
 
@@ -142,71 +144,11 @@ async fn main() -> Result<(), AppError> {
             let notification_manager = notification_manager.clone();
             let websocket_clients = websocket_clients.clone();
             async move {
-                handle_vote_on_proposal(proposal_id, vote, notification_manager, websocket_clients).await
+                handle_vote_on_proposal(proposal_id, vote, notification_manager, websocket_clients, db_pool.clone()).await
             }
         });
 
-    let initiate_federation = warp::path!("api" / "federation" / "initiate")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let join_federation = warp::path!("api" / "federation" / "join")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let leave_federation = warp::path!("api" / "federation" / "leave")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let propose_action = warp::path!("api" / "federation" / "propose_action")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let vote_on_federation_proposal = warp::path!("api" / "federation" / "vote")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let share_resources = warp::path!("api" / "federation" / "share_resources")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let update_federation_terms = warp::path!("api" / "federation" / "update_terms")
+    let federation_routes = warp::path("api/federation")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |operation: FederationOperation| {
@@ -224,17 +166,17 @@ async fn main() -> Result<(), AppError> {
             }
         });
 
+    let cors = warp::cors()
+        .allow_any_origin()
+        .allow_methods(&[Method::GET, Method::POST, Method::PUT, Method::DELETE])
+        .allow_headers(vec!["content-type"]);
+
     let routes = create_proposal
         .or(vote_on_proposal)
-        .or(initiate_federation)
-        .or(join_federation)
-        .or(leave_federation)
-        .or(propose_action)
-        .or(vote_on_federation_proposal)
-        .or(share_resources)
-        .or(update_federation_terms)
+        .or(federation_routes)
         .or(query_shared_resources)
-        .or(websocket_route);
+        .or(websocket_route)
+        .with(cors);
 
     let server = warp::serve(routes).run(([0, 0, 0, 0], 8081));
 
@@ -259,7 +201,11 @@ async fn main() -> Result<(), AppError> {
     Ok(())
 }
 
-async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: WebSocketClients, db_pool: PgPool) -> Result<impl warp::Reply, warp::Rejection> {
+    // Store proposal in the database
+    let db = Database::new(db_pool).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
+    db.create_proposal(&proposal).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
+
     // Logic to handle proposal creation
     let subject = format!("New Proposal Created: {}", proposal.title);
     let body = format!("A new proposal has been created by {}. Description: {}", proposal.created_by, proposal.description);
@@ -272,7 +218,11 @@ async fn handle_create_proposal(proposal: Proposal, notification_manager: Notifi
     Ok(warp::reply::json(&proposal))
 }
 
-async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: WebSocketClients, db_pool: PgPool) -> Result<impl warp::Reply, warp::Rejection> {
+    // Store vote in the database
+    let db = Database::new(db_pool).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
+    db.record_vote(&vote).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
+
     // Logic to handle voting on a proposal
     let subject = format!("New Vote on Proposal: {}", proposal_id);
     let body = format!("A new vote has been cast by {}. Approve: {}", vote.voter, vote.approve);
