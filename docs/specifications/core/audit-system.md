@@ -154,3 +154,155 @@ Consider integrating zero-knowledge proofs (ZKPs) to allow members to prove the 
 - **Query Audit Log**: Retrieves an audit entry based on its unique identifier.
 - **Verify Claim**: Verifies the authenticity of a recorded claim.
 
+### B. Federation-Related Actions
+The Audit System also includes federation-related actions to ensure transparency and accountability within federations. These actions are recorded in the audit log and can be queried and verified like other actions.
+
+#### Federation-Related Actions
+- **InitiateFederation**: Records the initiation of a new federation.
+- **JoinFederation**: Records the joining of a federation by a participant.
+- **LeaveFederation**: Records the exit of a participant from a federation.
+- **ProposeAction**: Records the proposal of an action within a federation.
+- **VoteOnProposal**: Records the voting on a proposal within a federation.
+- **ShareResources**: Records the sharing of resources within a federation.
+- **UpdateFederationTerms**: Records the updating of federation terms.
+
+#### Example: Initiate Federation
+```rust
+let audit_entry = AuditLog {
+    entry_id: "entry123".to_string(),
+    timestamp: 1637356800,
+    entity: "did:icn:initiator".to_string(),
+    action: "InitiateFederation".to_string(),
+    details: "Federation initiated with partner did:icn:partner".to_string(),
+};
+audit_system.create_audit_entry(audit_entry);
+```
+
+#### Example: Join Federation
+```rust
+let audit_entry = AuditLog {
+    entry_id: "entry124".to_string(),
+    timestamp: 1637356800,
+    entity: "did:icn:participant".to_string(),
+    action: "JoinFederation".to_string(),
+    details: "Joined federation with ID federation123".to_string(),
+};
+audit_system.create_audit_entry(audit_entry);
+```
+
+#### Example: Leave Federation
+```rust
+let audit_entry = AuditLog {
+    entry_id: "entry125".to_string(),
+    timestamp: 1637356800,
+    entity: "did:icn:participant".to_string(),
+    action: "LeaveFederation".to_string(),
+    details: "Left federation with ID federation123".to_string(),
+};
+audit_system.create_audit_entry(audit_entry);
+```
+
+#### Example: Propose Action
+```rust
+let audit_entry = AuditLog {
+    entry_id: "entry126".to_string(),
+    timestamp: 1637356800,
+    entity: "did:icn:member".to_string(),
+    action: "ProposeAction".to_string(),
+    details: "Proposed action within federation federation123".to_string(),
+};
+audit_system.create_audit_entry(audit_entry);
+```
+
+#### Example: Vote on Proposal
+```rust
+let audit_entry = AuditLog {
+    entry_id: "entry127".to_string(),
+    timestamp: 1637356800,
+    entity: "did:icn:member".to_string(),
+    action: "VoteOnProposal".to_string(),
+    details: "Voted on proposal proposal456 within federation federation123".to_string(),
+};
+audit_system.create_audit_entry(audit_entry);
+```
+
+#### Example: Share Resources
+```rust
+let audit_entry = AuditLog {
+    entry_id: "entry128".to_string(),
+    timestamp: 1637356800,
+    entity: "did:icn:member".to_string(),
+    action: "ShareResources".to_string(),
+    details: "Shared resources within federation federation123".to_string(),
+};
+audit_system.create_audit_entry(audit_entry);
+```
+
+#### Example: Update Federation Terms
+```rust
+let audit_entry = AuditLog {
+    entry_id: "entry129".to_string(),
+    timestamp: 1637356800,
+    entity: "did:icn:member".to_string(),
+    action: "UpdateFederationTerms".to_string(),
+    details: "Updated terms for federation federation123".to_string(),
+};
+audit_system.create_audit_entry(audit_entry);
+```
+
+### C. Advanced Tracking and Auditing for Shared Resources
+The Audit System includes advanced tracking and auditing for shared resources to ensure transparency and accountability in resource allocation and usage. These actions are recorded in the audit log and can be queried and verified like other actions.
+
+#### Shared Resource Actions
+- **ResourceTokenization**: Records the tokenization of a resource.
+- **SmartContractExecution**: Records the execution of a smart contract related to resource sharing.
+- **DynamicPricingAdjustment**: Records adjustments to resource pricing based on availability and demand.
+- **ReputationBasedAccess**: Records access to resources based on reputation scores.
+
+#### Example: Resource Tokenization
+```rust
+let audit_entry = AuditLog {
+    entry_id: "entry130".to_string(),
+    timestamp: 1637356800,
+    entity: "did:icn:resource_owner".to_string(),
+    action: "ResourceTokenization".to_string(),
+    details: "Tokenized resource with ID resource123".to_string(),
+};
+audit_system.create_audit_entry(audit_entry);
+```
+
+#### Example: Smart Contract Execution
+```rust
+let audit_entry = AuditLog {
+    entry_id: "entry131".to_string(),
+    timestamp: 1637356800,
+    entity: "did:icn:contract_executor".to_string(),
+    action: "SmartContractExecution".to_string(),
+    details: "Executed smart contract for resource sharing".to_string(),
+};
+audit_system.create_audit_entry(audit_entry);
+```
+
+#### Example: Dynamic Pricing Adjustment
+```rust
+let audit_entry = AuditLog {
+    entry_id: "entry132".to_string(),
+    timestamp: 1637356800,
+    entity: "did:icn:pricing_manager".to_string(),
+    action: "DynamicPricingAdjustment".to_string(),
+    details: "Adjusted pricing for resource resource123 based on availability and demand".to_string(),
+};
+audit_system.create_audit_entry(audit_entry);
+```
+
+#### Example: Reputation-Based Access
+```rust
+let audit_entry = AuditLog {
+    entry_id: "entry133".to_string(),
+    timestamp: 1637356800,
+    entity: "did:icn:resource_user".to_string(),
+    action: "ReputationBasedAccess".to_string(),
+    details: "Accessed resource resource123 based on reputation score".to_string(),
+};
+audit_system.create_audit_entry(audit_entry);
+```

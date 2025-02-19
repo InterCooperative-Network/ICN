@@ -2,7 +2,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
-use icn-types::Block;
+use icn_types::Block;
 
 /// Errors that can occur in storage operations
 #[derive(Error, Debug)]

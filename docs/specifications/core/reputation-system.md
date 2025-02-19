@@ -147,6 +147,15 @@ Permissions are checked against reputation thresholds to ensure that only partic
 ### 4.5 Reputation-Weighted Voting
 In the Proof of Cooperation consensus mechanism, voting power is influenced by the reputation scores of the participants. This ensures that participants with higher reputation scores have a greater impact on the decision-making process, while maintaining a cap to prevent centralization.
 
+### 4.6 Real-Time Reputation Recalibration
+Real-time reputation recalibration is implemented to ensure that reputation scores are continuously updated based on ongoing activities and contributions. This includes:
+
+- **Continuous Monitoring**: The reputation system is integrated with various components of the network, such as the consensus mechanism, governance, and resource sharing, to continuously monitor the activities and contributions of participants.
+- **Periodic Updates**: Periodic updates are scheduled to recalculate reputation scores based on recent activities and contributions. This is done using a background task or a scheduled job that runs at regular intervals.
+- **Event-Driven Recalibration**: An event-driven system is implemented that recalibrates reputation scores in response to specific events, such as successful block proposals, voting participation, or resource sharing.
+- **Decay Mechanism**: A decay mechanism is introduced that gradually reduces reputation scores over time if participants do not engage in positive activities. This encourages continuous participation and prevents reputation scores from remaining static.
+- **Reputation-Based Access Control**: Permissions and voting power are based on reputation scores, ensuring that only participants with sufficient reputation can perform critical actions.
+
 ## 5. Implementation Guidelines
 
 ### 5.1 Performance Considerations
@@ -186,3 +195,33 @@ The reputation management modules are now split into smaller submodules for bett
 
 #### relationship/interaction.rs
 - **interaction_tracking**: Manages the tracking of interactions and endorsements between entities.
+
+### C. Federation-Related Reputation Mechanisms
+
+The Reputation System also includes reputation-based access control and decay mechanisms for federations. These mechanisms ensure that only trusted members can influence critical decisions within federations and encourage continuous participation.
+
+#### Reputation-Based Access Control
+Permissions and voting power within federations are based on reputation scores. This ensures that only participants with sufficient reputation can perform critical actions, such as proposing actions, voting on proposals, or updating federation terms.
+
+#### Reputation Decay
+A decay mechanism gradually reduces reputation scores over time if participants do not engage in positive activities within federations. This encourages continuous participation and prevents reputation scores from remaining static.
+
+#### Example: Reputation-Based Access Control
+```rust
+pub fn is_eligible_for_federation(&self, did: &str, min_reputation: i32, federation_id: &str) -> bool {
+    self.get_reputation_score(did, "federation") >= min_reputation
+}
+```
+- **Input**: `did` (identifier of the entity), `min_reputation` (minimum required reputation score), `federation_id` (ID of the federation).
+- **Output**: Boolean indicating whether the entity is eligible for federation-related actions.
+
+#### Example: Reputation Decay in Federations
+```rust
+pub fn apply_federation_decay(&mut self, did: &str, decay_rate: f64) {
+    let current_score = self.get_reputation_score(did, "federation");
+    let new_score = (current_score as f64 * (1.0 - decay_rate)) as i32;
+    self.modify_reputation(did, new_score - current_score, "Reputation decay in federation", "federation");
+}
+```
+- **Input**: `did` (identifier of the entity), `decay_rate` (rate of reputation decay).
+- **Functionality**: Applies the decay rate to the reputation score within federations.

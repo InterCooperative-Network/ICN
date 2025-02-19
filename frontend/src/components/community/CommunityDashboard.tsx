@@ -10,7 +10,12 @@ const CommunityDashboard = () => {
     totalMembers: 0,
     activePolicies: 0,
     resourceUtilization: 0,
-    monthlyActivity: []
+    monthlyActivity: [],
+    reputationCategories: {
+      governance: 0,
+      resourceSharing: 0,
+      technicalContributions: 0
+    }
   });
   
   const [loading, setLoading] = useState(true);
@@ -26,7 +31,12 @@ const CommunityDashboard = () => {
         { month: 'Feb', activity: 75 },
         { month: 'Mar', activity: 85 },
         { month: 'Apr', activity: 90 }
-      ]
+      ],
+      reputationCategories: {
+        governance: 120,
+        resourceSharing: 80,
+        technicalContributions: 95
+      }
     };
 
     setMetrics(mockData);
@@ -136,6 +146,37 @@ const CommunityDashboard = () => {
                 <span>85%</span>
               </div>
               <Progress value={85} className="h-2" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Reputation Categories</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between text-sm mb-2">
+                <span>Governance</span>
+                <span>{metrics.reputationCategories.governance}</span>
+              </div>
+              <Progress value={metrics.reputationCategories.governance} className="h-2" />
+            </div>
+            <div>
+              <div className="flex justify-between text-sm mb-2">
+                <span>Resource Sharing</span>
+                <span>{metrics.reputationCategories.resourceSharing}</span>
+              </div>
+              <Progress value={metrics.reputationCategories.resourceSharing} className="h-2" />
+            </div>
+            <div>
+              <div className="flex justify-between text-sm mb-2">
+                <span>Technical Contributions</span>
+                <span>{metrics.reputationCategories.technicalContributions}</span>
+              </div>
+              <Progress value={metrics.reputationCategories.technicalContributions} className="h-2" />
             </div>
           </div>
         </CardContent>

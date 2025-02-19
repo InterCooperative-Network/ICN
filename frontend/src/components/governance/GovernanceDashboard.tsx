@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -6,6 +6,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
 import { AlertCircle, ChevronRight, Users, TrendingUp } from 'lucide-react'
+import { Dialog, DialogOverlay, DialogContent } from '@reach/dialog'
+import '@reach/dialog/styles.css'
 
 type Proposal = {
   id: string
@@ -32,6 +34,12 @@ type ReputationUpdate = {
   did: string
   change: number
   newTotal: number
+  category: string // Added category field
+}
+
+type WebSocketMessage = {
+  type: 'ProposalUpdate' | 'VoteUpdate' | 'ReputationUpdate'
+  data: Proposal | ReputationUpdate
 }
 
 const GovernanceDashboard = () => {
@@ -45,6 +53,11 @@ const GovernanceDashboard = () => {
   const [selectedTab, setSelectedTab] = useState('active')
   const [loading, setLoading] = useState(true)
   const [reputationUpdates, setReputationUpdates] = useState<ReputationUpdate[]>([])
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [newProposal, setNewProposal] = useState({ title: '', description: '' })
+  const [formErrors, setFormErrors] = useState({ title: '', description: '' })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const ws = useRef<WebSocket | null>(null)
 
   useEffect(() => {
     // Mock data - replace with actual API calls
@@ -93,12 +106,14 @@ const GovernanceDashboard = () => {
       {
         did: 'did:icn:alice',
         change: 10,
-        newTotal: 110
+        newTotal: 110,
+        category: 'governance' // Added category field
       },
       {
         did: 'did:icn:bob',
         change: -5,
-        newTotal: 95
+        newTotal: 95,
+        category: 'resource_sharing' // Added category field
       }
     ]
 
@@ -106,7 +121,72 @@ const GovernanceDashboard = () => {
     setVotingStats(mockStats)
     setReputationUpdates(mockReputationUpdates)
     setLoading(false)
+
+    // WebSocket connection for real-time updates
+    const connectWebSocket = () => {
+      try {
+        ws.current = new WebSocket('ws://localhost:8080/ws')
+
+        ws.current.onopen = () => {
+          console.log('WebSocket connected')
+        }
+
+        ws.current.onmessage = (event) => {
+          try {
+            const message: WebSocketMessage = JSON.parse(event.data)
+            handleWebSocketMessage(message)
+          } catch (e) {
+            console.error('Failed to parse WebSocket message:', e)
+          }
+        }
+
+        ws.current.onclose = () => {
+          console.log('WebSocket disconnected, attempting to reconnect...')
+          setTimeout(connectWebSocket, 5000)
+        }
+
+        ws.current.onerror = (error) => {
+          console.error('WebSocket error:', error)
+          ws.current?.close()
+        }
+      } catch (error) {
+        console.error('Failed to establish WebSocket connection:', error)
+        setTimeout(connectWebSocket, 5000)
+      }
+    }
+
+    connectWebSocket()
+
+    return () => {
+      if (ws.current) {
+        ws.current.close()
+      }
+    }
   }, [])
+
+  const handleWebSocketMessage = (message: WebSocketMessage) => {
+    switch (message.type) {
+      case 'ProposalUpdate':
+        setProposals((prevProposals) =>
+          prevProposals.map((proposal) =>
+            proposal.id === (message.data as Proposal).id ? (message.data as Proposal) : proposal
+          )
+        )
+        break
+      case 'VoteUpdate':
+        setProposals((prevProposals) =>
+          prevProposals.map((proposal) =>
+            proposal.id === (message.data as Proposal).id ? (message.data as Proposal) : proposal
+          )
+        )
+        break
+      case 'ReputationUpdate':
+        setReputationUpdates((prevUpdates) => [...prevUpdates, message.data as ReputationUpdate])
+        break
+      default:
+        console.error('Unknown WebSocket message type:', message.type)
+    }
+  }
 
   const calculateProgress = (votesFor: number, votesAgainst: number) => {
     const total = votesFor + votesAgainst
@@ -150,10 +230,10 @@ const GovernanceDashboard = () => {
             <p>Ends: {new Date(proposal.endsAt).toLocaleDateString()}</p>
           </div>
           {proposal.status === 'active' && (
-            <Button className="space-x-2">
-              <span>Vote Now</span>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            <div className="space-x-2">
+              <Button onClick={() => handleVote(proposal.id, true)}>Approve</Button>
+              <Button onClick={() => handleVote(proposal.id, false)}>Reject</Button>
+            </div>
           )}
         </div>
       </div>
@@ -179,9 +259,86 @@ const GovernanceDashboard = () => {
           <span>New Total</span>
           <span>{update.newTotal}</span>
         </div>
+        <div className="flex justify-between text-sm">
+          <span>Category</span>
+          <span>{update.category}</span>
+        </div>
       </div>
     </Card>
   )
+
+  const handleVote = async (proposalId: string, approve: boolean) => {
+    try {
+      const response = await fetch(`/api/governance/proposals/${proposalId}/vote`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ approve })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to cast vote')
+      }
+
+      // Update the proposal state with the new vote count
+      setProposals(prevProposals =>
+        prevProposals.map(proposal =>
+          proposal.id === proposalId
+            ? {
+                ...proposal,
+                votesFor: approve ? proposal.votesFor + 1 : proposal.votesFor,
+                votesAgainst: !approve ? proposal.votesAgainst + 1 : proposal.votesAgainst
+              }
+            : proposal
+        )
+      )
+    } catch (error) {
+      console.error('Error voting on proposal:', error)
+    }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setNewProposal(prevState => ({ ...prevState, [name]: value }))
+  }
+
+  const validateForm = () => {
+    const errors = { title: '', description: '' }
+    if (!newProposal.title) errors.title = 'Title is required'
+    if (!newProposal.description) errors.description = 'Description is required'
+    setFormErrors(errors)
+    return !errors.title && !errors.description
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!validateForm()) return
+
+    setIsSubmitting(true)
+    try {
+      const response = await fetch('/api/governance/proposals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(newProposal)
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to create proposal')
+      }
+
+      const createdProposal = await response.json()
+      setProposals(prevProposals => [...prevProposals, createdProposal])
+      setIsModalOpen(false)
+      setNewProposal({ title: '', description: '' })
+    } catch (error) {
+      console.error('Error creating proposal:', error)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   return (
     <div className="container mx-auto p-4 space-y-6">
@@ -253,6 +410,7 @@ const GovernanceDashboard = () => {
           <CardTitle>Proposals</CardTitle>
         </CardHeader>
         <CardContent>
+          <Button onClick={() => setIsModalOpen(true)}>Create Proposal</Button>
           <Tabs value={selectedTab} onValueChange={setSelectedTab}>
             <TabsList>
               <TabsTrigger value="active">Active</TabsTrigger>
@@ -304,6 +462,50 @@ const GovernanceDashboard = () => {
           Visit the delegation page to manage your voting power.
         </AlertDescription>
       </Alert>
+
+      <Dialog isOpen={isModalOpen} onDismiss={() => setIsModalOpen(false)} aria-label="Create Proposal">
+        <DialogOverlay />
+        <DialogContent>
+          <h2 className="text-xl font-bold mb-4">Create Proposal</h2>
+          <form onSubmit={handleSubmit}>
+            <div className="mb-4">
+              <label htmlFor="title" className="block text-sm font-medium text-gray-700">
+                Title
+              </label>
+              <input
+                type="text"
+                id="title"
+                name="title"
+                value={newProposal.title}
+                onChange={handleInputChange}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              />
+              {formErrors.title && <p className="text-red-500 text-sm mt-1">{formErrors.title}</p>}
+            </div>
+            <div className="mb-4">
+              <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                Description
+              </label>
+              <textarea
+                id="description"
+                name="description"
+                value={newProposal.description}
+                onChange={handleInputChange}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              />
+              {formErrors.description && <p className="text-red-500 text-sm mt-1">{formErrors.description}</p>}
+            </div>
+            <div className="flex justify-end">
+              <Button type="button" onClick={() => setIsModalOpen(false)} className="mr-2">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? 'Submitting...' : 'Submit'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

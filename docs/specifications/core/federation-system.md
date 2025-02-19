@@ -175,7 +175,7 @@ Implement a robust dispute resolution mechanism to handle disagreements or confl
 ### 5.2 Cross-Federation Coordination
 Enable federations to coordinate with each other for larger initiatives, such as shared resource pools across multiple federations, or federated governance for issues of common interest.
 
-## Appendix
+## 6. Appendix
 
 ### A. Summary of Federation Operations
 - **Initiate Federation**: Start a new federation with specific terms.
@@ -186,3 +186,122 @@ Enable federations to coordinate with each other for larger initiatives, such as
 - **Share Resources**: Contribute resources to other federation members.
 - **Update Terms**: Modify the terms of the federation agreement.
 
+### B. Examples of Federation Operations
+
+#### Example: Initiate Federation
+```rust
+let operation = FederationOperation::InitiateFederation {
+    federation_type: FederationType::Cooperative,
+    partner_id: "did:icn:partner".to_string(),
+    terms: FederationTerms {
+        minimum_reputation: 50,
+        resource_sharing_policies: "Equal distribution".to_string(),
+        governance_rules: "Majority vote".to_string(),
+        duration: "2025-12-31T23:59:59Z".to_string(),
+    },
+};
+```
+
+#### Example: Join Federation
+```rust
+let operation = FederationOperation::JoinFederation {
+    federation_id: "federation123".to_string(),
+    commitment: vec!["Adhere to terms".to_string(), "Contribute resources".to_string()],
+};
+```
+
+#### Example: Leave Federation
+```rust
+let operation = FederationOperation::LeaveFederation {
+    federation_id: "federation123".to_string(),
+    reason: "No longer able to participate".to_string(),
+};
+```
+
+#### Example: Propose Action
+```rust
+let operation = FederationOperation::ProposeAction {
+    federation_id: "federation123".to_string(),
+    action_type: "New Project".to_string(),
+    description: "Proposal for a new collaborative project".to_string(),
+    resources: {
+        let mut resources = HashMap::new();
+        resources.insert("resourceX".to_string(), 100);
+        resources.insert("resourceY".to_string(), 200);
+        resources
+    },
+};
+```
+
+#### Example: Vote on Proposal
+```rust
+let operation = FederationOperation::VoteOnProposal {
+    federation_id: "federation123".to_string(),
+    proposal_id: "proposal456".to_string(),
+    approve: true,
+    notes: Some("Support the project".to_string()),
+};
+```
+
+#### Example: Share Resources
+```rust
+let operation = FederationOperation::ShareResources {
+    federation_id: "federation123".to_string(),
+    resource_type: "resourceX".to_string(),
+    amount: 50,
+    recipient_id: "did:icn:recipient".to_string(),
+};
+```
+
+#### Example: Update Federation Terms
+```rust
+let operation = FederationOperation::UpdateFederationTerms {
+    federation_id: "federation123".to_string(),
+    new_terms: FederationTerms {
+        minimum_reputation: 60,
+        resource_sharing_policies: "Proportional distribution".to_string(),
+        governance_rules: "Supermajority vote".to_string(),
+        duration: "2026-12-31T23:59:59Z".to_string(),
+    },
+};
+```
+
+## 7. Cross-Federation Resource Sharing
+
+### 7.1 Resource Sharing Mechanisms
+The federation system supports secure resource sharing across federation boundaries through:
+- **Resource Pools**: Dedicated pools of resources that can be shared between federations
+- **Access Control**: Granular permissions for resource access between federations
+- **Usage Tracking**: Monitoring and accounting of shared resource usage
+- **Reputation Requirements**: Minimum reputation scores for cross-federation sharing
+
+### 7.2 Resource Pool Management
+Federation resource pools are managed through:
+```rust
+pub struct FederationResourcePool {
+    pub federation_id: String,
+    pub resources: HashMap<String, Resource>,
+    pub access_control: FederationAccessControl,
+}
+
+pub struct FederationAccessControl {
+    pub allowed_federations: Vec<String>,
+    pub min_reputation: i64,
+    pub max_allocation_per_federation: u64,
+}
+```
+
+### 7.3 Sharing Process
+1. Source federation creates a resource pool
+2. Access control rules are defined
+3. Target federation requests access
+4. Resources are allocated if all requirements are met
+5. Usage is monitored and tracked
+6. Resources are released when no longer needed
+
+### 7.4 Security Considerations
+- **Access Control**: Only authorized federations can access shared resources
+- **Quota Enforcement**: Maximum allocation limits per federation
+- **Reputation Requirements**: Minimum reputation scores for participation
+- **Usage Monitoring**: Track and audit resource usage
+- **Dispute Resolution**: Clear process for handling sharing conflicts
