@@ -1,9 +1,23 @@
+mod config;
+mod core;
+mod db;
+mod federation;
+mod notification;
+mod reputation;
+mod websocket;
+
+use crate::config::Config;
+use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
+use crate::db::Database;
+use crate::federation::{FederationOperation, FederationTerms, FederationType};
+use crate::notification::NotificationManager;
+use crate::reputation::ReputationManager;
+use crate::websocket::{WebSocketClients, handle_websocket, broadcast_message};
 use tokio;
 use log::{info, error};
 use env_logger;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use sha2::Digest;
 use futures_util::StreamExt;
 use warp::{Filter, ws::{WebSocket, Message}};
 use dashmap::DashMap;
@@ -12,11 +26,6 @@ use thiserror::Error;
 use reqwest::Client;
 use tokio::signal;
 use async_trait::async_trait;
-
-use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
-use crate::storage::{StorageManager, StorageBackend, StorageResult};
-use crate::networking::NetworkManager;
-use crate::identity::IdentityManager;
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -29,38 +38,6 @@ pub enum AppError {
     #[error("Validation error: {0}")]
     ValidationError(String),
 }
-
-#[derive(Debug, Deserialize)]
-struct Config {
-    database_url: String,
-    log_level: String,
-    reputation_decay_rate: f64,
-    reputation_adjustment_interval: u64,
-    reputation_initial_score: i64,
-    reputation_positive_contribution_weight: f64,
-    reputation_negative_contribution_weight: f64,
-    notification_email: String,
-    notification_sms: String,
-    governance_decay_rate: f64,
-    resource_sharing_decay_rate: f64,
-    technical_contributions_decay_rate: f64,
-    decay_exemptions: Vec<String>,
-}
-
-impl Config {
-    fn validate(&self) -> Result<(), AppError> {
-        if self.database_url.is_empty() {
-            return Err(AppError::ConfigError("database_url cannot be empty".to_string()));
-        }
-        if !(0.0..=1.0).contains(&self.reputation_decay_rate) {
-            return Err(AppError::ConfigError("reputation_decay_rate must be between 0 and 1".to_string()));
-        }
-        // Add other validation checks
-        Ok(())
-    }
-}
-
-type WebSocketClients = Arc<DashMap<String, warp::ws::WebSocket>>;
 
 #[derive(Serialize, Deserialize)]
 struct Proposal {
@@ -82,144 +59,11 @@ struct Vote {
 }
 
 #[derive(Serialize, Deserialize)]
-struct FederationTerms {
-    minimum_reputation: i64,
-    resource_sharing_policies: String,
-    governance_rules: String,
-    duration: String,
-}
-
-#[derive(Serialize, Deserialize)]
-enum FederationType {
-    Cooperative,
-    Community,
-    Hybrid,
-}
-
-#[derive(Serialize, Deserialize)]
-enum FederationOperation {
-    InitiateFederation {
-        federation_type: FederationType,
-        partner_id: String,
-        terms: FederationTerms,
-    },
-    JoinFederation {
-        federation_id: String,
-        commitment: Vec<String>,
-    },
-    LeaveFederation {
-        federation_id: String,
-        reason: String,
-    },
-    ProposeAction {
-        federation_id: String,
-        action_type: String,
-        description: String,
-        resources: std::collections::HashMap<String, u64>,
-    },
-    VoteOnProposal {
-        federation_id: String,
-        proposal_id: String,
-        approve: bool,
-        notes: Option<String>,
-    },
-    ShareResources {
-        federation_id: String,
-        resource_type: String,
-        amount: u64,
-        recipient_id: String,
-    },
-    UpdateFederationTerms {
-        federation_id: String,
-        new_terms: FederationTerms,
-    },
-}
-
-#[derive(Serialize, Deserialize)]
 struct TokenizedResource {
     resource_id: String,
     owner: String,
     quantity: u64,
     price_per_unit: f64,
-}
-
-struct NotificationManager {
-    client: Client,
-    email: String,
-    sms: String,
-}
-
-impl NotificationManager {
-    fn new(email: String, sms: String) -> Self {
-        NotificationManager {
-            client: Client::new(),
-            email,
-            sms,
-        }
-    }
-
-    async fn send_email(&self, subject: &str, body: &str) -> Result<(), reqwest::Error> {
-        self.client.post(&self.email)
-            .body(format!("Subject: {}\n\n{}", subject, body))
-            .send()
-            .await?;
-        Ok(())
-    }
-
-    async fn send_sms(&self, message: &str) -> Result<(), reqwest::Error> {
-        self.client.post(&self.sms)
-            .body(message.to_string())
-            .send()
-            .await?;
-        Ok(())
-    }
-
-    async fn send_notification(&self, subject: &str, body: &str) {
-        if let Err(e) = self.send_email(subject, body).await {
-            error!("Failed to send email notification: {}", e);
-            if let Err(e) = self.send_sms(body).await {
-                error!("Failed to send SMS notification: {}", e);
-            }
-        }
-    }
-}
-
-struct ReputationManager {
-    governance_decay_rate: f64,
-    resource_sharing_decay_rate: f64,
-    technical_contributions_decay_rate: f64,
-    decay_exemptions: Vec<String>,
-}
-
-impl ReputationManager {
-    fn new(
-        governance_decay_rate: f64,
-        resource_sharing_decay_rate: f64,
-        technical_contributions_decay_rate: f64,
-        decay_exemptions: Vec<String>,
-    ) -> Self {
-        ReputationManager {
-            governance_decay_rate,
-            resource_sharing_decay_rate,
-            technical_contributions_decay_rate,
-            decay_exemptions,
-        }
-    }
-
-    fn apply_decay(&self, did: &str, category: &str, reputation: &mut i64) {
-        if self.decay_exemptions.contains(&did.to_string()) {
-            return;
-        }
-
-        let decay_rate = match category {
-            "governance" => self.governance_decay_rate,
-            "resource_sharing" => self.resource_sharing_decay_rate,
-            "technical_contributions" => self.technical_contributions_decay_rate,
-            _ => 0.0,
-        };
-
-        *reputation = (*reputation as f64 * (1.0 - decay_rate)) as i64;
-    }
 }
 
 #[tokio::main]
@@ -228,7 +72,7 @@ async fn main() -> Result<(), AppError> {
     env_logger::init();
 
     // Load and validate configuration
-    let config: Config = load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
+    let config: Config = config::load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
     config.validate()?;
     
     // Set up database connection pool
@@ -488,47 +332,6 @@ async fn handle_query_shared_resources() -> Result<impl warp::Reply, warp::Rejec
         },
     ];
     Ok(warp::reply::json(&resources))
-}
-
-async fn handle_websocket(ws: WebSocket, websocket_clients: WebSocketClients) {
-    let client_id = uuid::Uuid::new_v4().to_string();
-    
-    // Split the WebSocket
-    let (mut ws_tx, mut ws_rx) = ws.split();
-
-    // Insert the sender into clients
-    websocket_clients.insert(client_id.clone(), ws_tx);
-
-    // Handle incoming messages
-    while let Some(result) = ws_rx.next().await {
-        match result {
-            Ok(msg) => {
-                log::debug!("Received message from {}: {:?}", client_id, msg);
-                // Handle the message
-            }
-            Err(e) => {
-                log::error!("WebSocket error for {}: {}", client_id, e);
-                break;
-            }
-        }
-    }
-
-    // Clean up on disconnect
-    log::info!("Client {} disconnected", client_id);
-    websocket_clients.remove(&client_id);
-}
-
-async fn broadcast_message(message: &Message, websocket_clients: WebSocketClients) {
-    let clients = websocket_clients.lock().unwrap();
-    for (_, client) in clients.iter() {
-        let _ = client.send(message.clone()).await;
-    }
-}
-
-fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
-    let config_str = std::fs::read_to_string("config.toml")?;
-    let config: Config = toml::from_str(&config_str)?;
-    Ok(config)
 }
 
 struct MockStorageBackend;

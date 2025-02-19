@@ -22,7 +22,7 @@ services:
       - icn-network
 
   db:
-    image: postgres:latest
+    image: postgres:13.3
     environment:
       POSTGRES_USER: icnuser
       POSTGRES_PASSWORD: icnpass
@@ -33,7 +33,7 @@ services:
       - icn-network
 
   docs:
-    image: squidfunk/mkdocs-material:latest
+    image: squidfunk/mkdocs-material:7.1.0
     volumes:
       - ../docs:/docs          
     ports:
