@@ -1,4 +1,4 @@
-Project Docs Dump - Generated Wed 19 Feb 2025 03:37:15 AM UTC
+Project Docs Dump - Generated Wed 19 Feb 2025 06:26:02 AM UTC
 ======================================
 
 Docs Tree:
@@ -86,6 +86,23 @@ CoopResource {
 }
 ```
 
+#### Example
+```rust
+let resource_transaction = CoopResource {
+    resource_id: "resource123".to_string(),
+    operation: ResourceOperation::Allocate,
+    metadata: ResourceMetadata {
+        description: "Allocating resource for project X".to_string(),
+        quantity: 100,
+    },
+    did_proof: DidProof {
+        did: "did:icn:example".to_string(),
+        signature: "signature123".to_string(),
+        timestamp: 1637356800,
+    },
+};
+```
+
 ### Governance Transactions
 ```rust
 GovernanceTransaction::SubmitProposal(proposal)
@@ -93,10 +110,31 @@ GovernanceTransaction::CastVote(vote)
 GovernanceTransaction::FinalizeProposal(id)
 ```
 
+#### Example
+```rust
+let proposal = Proposal {
+    id: "proposal123".to_string(),
+    title: "New Governance Policy".to_string(),
+    description: "Proposal to implement a new governance policy".to_string(),
+    created_by: "did:icn:example".to_string(),
+    ends_at: 1637356800,
+};
+
+let governance_transaction = GovernanceTransaction::SubmitProposal(proposal);
+```
+
 ## Storage Interface
 
 ### On-Chain Storage
 Limited to small metadata and proofs.
+
+#### Example
+```rust
+let on_chain_storage = OnChainStorage {
+    metadata: "Small metadata".to_string(),
+    proof: "proof123".to_string(),
+};
+```
 
 ### Off-Chain Storage
 Uses IPFS/Filecoin with on-chain references:
@@ -106,6 +144,22 @@ StorageReference {
     metadata: ResourceMetadata,
     access_control: AccessControl,
 }
+```
+
+#### Example
+```rust
+let off_chain_storage = StorageReference {
+    location: StorageType::IPFS("ipfs://example".to_string()),
+    metadata: ResourceMetadata {
+        description: "Large file stored off-chain".to_string(),
+        quantity: 1,
+    },
+    access_control: AccessControl {
+        owner_did: "did:icn:example".to_string(),
+        allowed_coops: vec!["coop1".to_string(), "coop2".to_string()],
+        permissions: Permissions::Read,
+    },
+};
 ```
 
 ## Authentication
@@ -118,6 +172,49 @@ DidProof {
     timestamp: u64,
 }
 ```
+
+### DID-Based Authentication Process
+1. **Generate DID**: Create a Decentralized Identifier (DID) for the user or entity.
+2. **Sign Transaction**: Use the private key associated with the DID to sign the transaction.
+3. **Verify Signature**: The system verifies the signature using the public key associated with the DID.
+4. **Timestamp Validation**: Ensure the timestamp is within an acceptable range to prevent replay attacks.
+
+#### Example
+```rust
+let did_proof = DidProof {
+    did: "did:icn:example".to_string(),
+    signature: "signature123".to_string(),
+    timestamp: 1637356800,
+};
+```
+
+## Error Handling
+
+### Common Errors
+- **InvalidDID**: The provided DID is not valid or not registered.
+- **InsufficientReputation**: The user does not have enough reputation to perform the action.
+- **SignatureVerificationFailed**: The signature verification process failed.
+- **ResourceNotFound**: The requested resource does not exist.
+- **UnauthorizedAccess**: The user does not have the necessary permissions to access the resource.
+
+### Error Resolution
+- **InvalidDID**: Ensure the DID is correctly formatted and registered in the system.
+- **InsufficientReputation**: Increase the user's reputation by participating in cooperative activities.
+- **SignatureVerificationFailed**: Verify that the correct private key was used to sign the transaction.
+- **ResourceNotFound**: Check the resource ID and ensure it exists in the system.
+- **UnauthorizedAccess**: Request the necessary permissions from the resource owner or cooperative.
+
+## Glossary of Terms
+
+- **DID (Decentralized Identifier)**: A unique identifier used to represent an entity within the ICN.
+- **Proof of Cooperation (PoC)**: A consensus mechanism used to validate transactions in a cooperative model.
+- **Resource Allocation**: The process of distributing resources among cooperatives.
+- **Governance Transaction**: A transaction related to the governance of the cooperative, such as submitting proposals or casting votes.
+- **On-Chain Storage**: Storage of small metadata and proofs directly on the blockchain.
+- **Off-Chain Storage**: Storage of large files using external storage solutions like IPFS/Filecoin, with references stored on the blockchain.
+- **Reputation**: A score representing the trustworthiness and contributions of a user within the cooperative.
+- **Access Control**: Mechanisms to restrict access to resources based on permissions and roles.
+- **Signature Verification**: The process of verifying the authenticity of a transaction using cryptographic signatures.
 
 
 ===================
@@ -384,6 +481,18 @@ To ensure mobile responsiveness of the frontend, follow these guidelines:
 - **Be Respectful**: Offer feedback in a respectful and supportive manner.
 - **Focus on the Code**: Keep the feedback focused on the code and avoid personal comments.
 - **Encourage Discussion**: Encourage open discussion and collaboration to find the best solutions.
+
+## 10. Glossary of Terms
+
+- **DID (Decentralized Identifier)**: A unique identifier used to represent an entity within the ICN.
+- **Proof of Cooperation (PoC)**: A consensus mechanism used to validate transactions in a cooperative model.
+- **Resource Allocation**: The process of distributing resources among cooperatives.
+- **Governance Transaction**: A transaction related to the governance of the cooperative, such as submitting proposals or casting votes.
+- **On-Chain Storage**: Storage of small metadata and proofs directly on the blockchain.
+- **Off-Chain Storage**: Storage of large files using external storage solutions like IPFS/Filecoin, with references stored on the blockchain.
+- **Reputation**: A score representing the trustworthiness and contributions of a user within the cooperative.
+- **Access Control**: Mechanisms to restrict access to resources based on permissions and roles.
+- **Signature Verification**: The process of verifying the authenticity of a transaction using cryptographic signatures.
 
 ## Appendix
 
@@ -1770,6 +1879,16 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "title": "Increase Resource Allocation",
+  "description": "Proposal to increase resource allocation for project X",
+  "created_by": "did:icn:example",
+  "ends_at": "2024-12-31T23:59:59Z"
+}
+```
+
 ### View Proposals
 - **Endpoint**: `GET /api/governance/proposals`
 - **Response**:
@@ -1786,6 +1905,21 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
     }
   ]
   ```
+
+#### Example
+```json
+[
+  {
+    "proposal_id": "12345",
+    "title": "Increase Resource Allocation",
+    "description": "Proposal to increase resource allocation for project X",
+    "status": "Open",
+    "created_by": "did:icn:example",
+    "ends_at": "2024-12-31T23:59:59Z",
+    "created_at": "2024-11-03T12:00:00Z"
+  }
+]
+```
 
 ### Vote on Proposal
 - **Endpoint**: `POST /api/governance/proposals/{proposal_id}/vote`
@@ -1806,6 +1940,14 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "voter": "did:icn:voter",
+  "approve": true
+}
+```
+
 ### Cross-Cooperative Interactions
 - **Endpoint**: `POST /api/governance/cross-cooperative/interactions`
 - **Request Body**:
@@ -1816,6 +1958,15 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
     "details": "Requesting 100 units of resource X"
   }
   ```
+
+#### Example
+```json
+{
+  "interaction_type": "ResourceSharing",
+  "cooperative_id": "cooperative123",
+  "details": "Requesting 100 units of resource X"
+}
+```
 
 ### Hybrid Offline/Online Participation
 - **Endpoint**: `POST /api/governance/hybrid-participation`
@@ -1828,6 +1979,15 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "cooperative_id": "cooperative123",
+  "participation_mode": "Offline",
+  "details": "Participating via offline methods due to low connectivity"
+}
+```
+
 ### Developer Tools
 - **Endpoint**: `GET /api/governance/developer-tools`
 - **Response**:
@@ -1837,6 +1997,14 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
     "api_docs_url": "https://icn-api-docs.example.com"
   }
   ```
+
+#### Example
+```json
+{
+  "sdk_url": "https://icn-sdk.example.com",
+  "api_docs_url": "https://icn-api-docs.example.com"
+}
+```
 
 ### Notification Endpoints
 
@@ -1862,6 +2030,16 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "event_type": "VotingDeadline",
+  "event_time": "2024-12-31T23:59:59Z",
+  "notification_method": "email",
+  "recipient": "did:icn:example"
+}
+```
+
 #### Send Notification
 - **Endpoint**: `POST /api/governance/notifications/send`
 - **Request Body**:
@@ -1883,6 +2061,16 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
     "recipient": "did:icn:example"
   }
   ```
+
+#### Example
+```json
+{
+  "event_type": "ProposalOutcome",
+  "message": "The proposal has been approved.",
+  "notification_method": "sms",
+  "recipient": "did:icn:example"
+}
+```
 
 ### Federation Endpoints
 
@@ -1917,6 +2105,20 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "federation_type": "Cooperative",
+  "partner_id": "did:icn:partner",
+  "terms": {
+    "minimum_reputation": 50,
+    "resource_sharing_policies": "Equal distribution",
+    "governance_rules": "Majority vote",
+    "duration": "2025-12-31T23:59:59Z"
+  }
+}
+```
+
 #### Join Federation
 - **Endpoint**: `POST /api/federation/join`
 - **Request Body**:
@@ -1935,6 +2137,14 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "federation_id": "federation123",
+  "commitment": ["Adhere to terms", "Contribute resources"]
+}
+```
+
 #### Leave Federation
 - **Endpoint**: `POST /api/federation/leave`
 - **Request Body**:
@@ -1952,6 +2162,14 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
     "reason": "No longer able to participate"
   }
   ```
+
+#### Example
+```json
+{
+  "federation_id": "federation123",
+  "reason": "No longer able to participate"
+}
+```
 
 #### Propose Action
 - **Endpoint**: `POST /api/federation/propose_action`
@@ -1981,6 +2199,19 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "federation_id": "federation123",
+  "action_type": "New Project",
+  "description": "Proposal for a new collaborative project",
+  "resources": {
+    "resourceX": 100,
+    "resourceY": 200
+  }
+}
+```
+
 #### Vote on Federation Proposal
 - **Endpoint**: `POST /api/federation/vote`
 - **Request Body**:
@@ -2003,6 +2234,16 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "federation_id": "federation123",
+  "proposal_id": "proposal456",
+  "approve": true,
+  "notes": "Support the project"
+}
+```
+
 #### Share Resources
 - **Endpoint**: `POST /api/federation/share_resources`
 - **Request Body**:
@@ -2024,6 +2265,16 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
     "recipient_id": "did:icn:recipient"
   }
   ```
+
+#### Example
+```json
+{
+  "federation_id": "federation123",
+  "resource_type": "resourceX",
+  "amount": 50,
+  "recipient_id": "did:icn:recipient"
+}
+```
 
 #### Update Federation Terms
 - **Endpoint**: `POST /api/federation/update_terms`
@@ -2053,6 +2304,19 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "federation_id": "federation123",
+  "new_terms": {
+    "minimum_reputation": 60,
+    "resource_sharing_policies": "Proportional distribution",
+    "governance_rules": "Supermajority vote",
+    "duration": "2026-12-31T23:59:59Z"
+  }
+}
+```
+
 ### Update Federation Governance Rules
 - **Endpoint**: `POST /api/federation/update_governance_rules`
 - **Request Body**:
@@ -2073,6 +2337,24 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
   }
   ```
 
+#### Example
+```json
+{
+  "federation_id": "federation123",
+  "rules": {
+    "min_votes_required": 5,
+    "approval_threshold_percent": 66,
+    "min_voting_period_hours": 24,
+    "max_voting_period_hours": 168,
+    "allowed_proposal_types": ["resource_allocation", "membership"],
+    "veto_rights": {
+      "admin": ["membership", "governance"],
+      "moderator": ["resource_allocation"]
+    }
+  }
+}
+```
+
 ### Query Shared Resources
 - **Endpoint**: `GET /api/resources/query`
 - **Response**:
@@ -2092,6 +2374,24 @@ The Governance API enables ICN members to submit, view, and vote on proposals. E
     }
   ]
   ```
+
+#### Example
+```json
+[
+  {
+    "resource_id": "resource1",
+    "owner": "did:icn:owner1",
+    "quantity": 100,
+    "price_per_unit": 10.0
+  },
+  {
+    "resource_id": "resource2",
+    "owner": "did:icn:owner2",
+    "quantity": 200,
+    "price_per_unit": 20.0
+  }
+]
+```
 
 ## Integration and Interoperability
 
