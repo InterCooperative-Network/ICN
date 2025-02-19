@@ -8,6 +8,7 @@ pub enum Transaction {
     ValidatorElection(ElectionTransaction),
     DidRegistry(DidRegistryTransaction),
     AttestMembership(AttestMembershipTransaction),
+    MutualCredit(MutualCreditTransaction),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -70,6 +71,15 @@ pub struct AttestMembershipTransaction {
     pub member_did: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MutualCreditTransaction {
+    pub sender_did: String,
+    pub receiver_did: String,
+    pub amount: i64, // positive value; sender’s balance decreases and receiver’s increases
+    pub signature: String,
+    pub timestamp: u64,
+}
+
 impl Transaction {
     pub fn verify_did_auth(&self) -> Result<bool, AuthError> {
         match self {
@@ -99,6 +109,9 @@ impl Transaction {
             Transaction::AttestMembership(tx) => {
                 Self::verify_did_signature(&tx.member_did, "zk_signature", "membership_claim")
             }
+            Transaction::MutualCredit(tx) => {
+                Self::verify_did_signature(&tx.sender_did, &tx.signature, &tx.receiver_did)
+            },
         }
     }
 
@@ -108,3 +121,6 @@ impl Transaction {
         Ok(true)
     }
 }
+
+#[derive(Debug)]
+pub struct AuthError(String);
