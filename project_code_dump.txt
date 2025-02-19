@@ -1,4 +1,4 @@
-Project Code Dump - Generated Wed 19 Feb 2025 12:39:47 AM UTC
+Project Code Dump - Generated Wed 19 Feb 2025 03:37:17 AM UTC
 ======================================
 
 LLM Context Information
@@ -31,7 +31,6 @@ Project Tree:
 .
 ├── backend
 │   ├── Cargo.lock
-│   ├── Cargo.toml
 │   ├── migrations
 │   │   └── 20240218000000_initial.sql
 │   └── src
@@ -127,7 +126,6 @@ Project Tree:
 │   ├── contracts
 │   ├── crates
 │   ├── frontend
-│   │   ├── package.json
 │   │   ├── package-lock.json
 │   │   └── src
 │   └── setup.sh
@@ -158,40 +156,6 @@ Project Tree:
     ├── install_docsctl.sh
     ├── README.md
     └── requirements.txt
-
-===================
-File: ./backend/Cargo.toml
-Size: 689 bytes
-Modified: 2025-02-18 07:13:32.972179500 +0000
-
-===================
-```toml
-[package]
-name = "icn-backend"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-tokio = { version = "1.0", features = ["full"] }
-warp = "0.3"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.0", features = ["v4"] }
-log = "0.4"
-env_logger = "0.9"
-futures-util = "0.3"
-sqlx = { version = "0.6", features = ["postgres", "runtime-tokio-rustls"] }
-thiserror = "1.0"
-dashmap = "5.4"
-lazy_static = "1.4"
-reqwest = { version = "0.11", features = ["json"] }
-icn-types = { path = "../crates/icn-types" }
-async-trait = "0.1"
-sha2 = "0.10"
-toml = "0.7"
-tokio-tungstenite = "0.21"
-```
 
 ===================
 File: ./scripts/backend/Cargo.toml
@@ -230,21 +194,31 @@ pub mod models;
 
 ===================
 File: ./backend/src/main.rs
-Size: 18754 bytes
-Modified: 2025-02-18 07:17:43.203396000 +0000
+Size: 14446 bytes
+Modified: 2025-02-19 03:17:24.478390200 +0000
 Dependencies:
+mod config;
+mod core;
+mod db;
+mod federation;
+mod notification;
+mod reputation;
+mod websocket;
 use async_trait::async_trait;
+use crate::config::Config;
 use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
-use crate::identity::IdentityManager;
-use crate::networking::NetworkManager;
-use crate::storage::{StorageManager, StorageBackend, StorageResult};
+use crate::db::Database;
+use crate::federation::{FederationOperation, FederationTerms, FederationType};
+use crate::notification::NotificationManager;
+use crate::reputation::ReputationManager;
+use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError};
+use crate::websocket::{WebSocketClients, handle_websocket, broadcast_message};
 use dashmap::DashMap;
 use env_logger;
 use futures_util::StreamExt;
 use log::{info, error};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use sha2::Digest;
 use sqlx::PgPool;
 use std::sync::Arc;
 use thiserror::Error;
@@ -254,12 +228,26 @@ use warp::{Filter, ws::{WebSocket, Message}};
 
 ===================
 ```rs
+mod config;
+mod core;
+mod db;
+mod federation;
+mod notification;
+mod reputation;
+mod websocket;
+
+use crate::config::Config;
+use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
+use crate::db::Database;
+use crate::federation::{FederationOperation, FederationTerms, FederationType};
+use crate::notification::NotificationManager;
+use crate::reputation::ReputationManager;
+use crate::websocket::{WebSocketClients, handle_websocket, broadcast_message};
 use tokio;
 use log::{info, error};
 use env_logger;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use sha2::Digest;
 use futures_util::StreamExt;
 use warp::{Filter, ws::{WebSocket, Message}};
 use dashmap::DashMap;
@@ -268,11 +256,7 @@ use thiserror::Error;
 use reqwest::Client;
 use tokio::signal;
 use async_trait::async_trait;
-
-use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
-use crate::storage::{StorageManager, StorageBackend, StorageResult};
-use crate::networking::NetworkManager;
-use crate::identity::IdentityManager;
+use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError};
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -285,38 +269,6 @@ pub enum AppError {
     #[error("Validation error: {0}")]
     ValidationError(String),
 }
-
-#[derive(Debug, Deserialize)]
-struct Config {
-    database_url: String,
-    log_level: String,
-    reputation_decay_rate: f64,
-    reputation_adjustment_interval: u64,
-    reputation_initial_score: i64,
-    reputation_positive_contribution_weight: f64,
-    reputation_negative_contribution_weight: f64,
-    notification_email: String,
-    notification_sms: String,
-    governance_decay_rate: f64,
-    resource_sharing_decay_rate: f64,
-    technical_contributions_decay_rate: f64,
-    decay_exemptions: Vec<String>,
-}
-
-impl Config {
-    fn validate(&self) -> Result<(), AppError> {
-        if self.database_url.is_empty() {
-            return Err(AppError::ConfigError("database_url cannot be empty".to_string()));
-        }
-        if !(0.0..=1.0).contains(&self.reputation_decay_rate) {
-            return Err(AppError::ConfigError("reputation_decay_rate must be between 0 and 1".to_string()));
-        }
-        // Add other validation checks
-        Ok(())
-    }
-}
-
-type WebSocketClients = Arc<DashMap<String, warp::ws::WebSocket>>;
 
 #[derive(Serialize, Deserialize)]
 struct Proposal {
@@ -338,144 +290,11 @@ struct Vote {
 }
 
 #[derive(Serialize, Deserialize)]
-struct FederationTerms {
-    minimum_reputation: i64,
-    resource_sharing_policies: String,
-    governance_rules: String,
-    duration: String,
-}
-
-#[derive(Serialize, Deserialize)]
-enum FederationType {
-    Cooperative,
-    Community,
-    Hybrid,
-}
-
-#[derive(Serialize, Deserialize)]
-enum FederationOperation {
-    InitiateFederation {
-        federation_type: FederationType,
-        partner_id: String,
-        terms: FederationTerms,
-    },
-    JoinFederation {
-        federation_id: String,
-        commitment: Vec<String>,
-    },
-    LeaveFederation {
-        federation_id: String,
-        reason: String,
-    },
-    ProposeAction {
-        federation_id: String,
-        action_type: String,
-        description: String,
-        resources: std::collections::HashMap<String, u64>,
-    },
-    VoteOnProposal {
-        federation_id: String,
-        proposal_id: String,
-        approve: bool,
-        notes: Option<String>,
-    },
-    ShareResources {
-        federation_id: String,
-        resource_type: String,
-        amount: u64,
-        recipient_id: String,
-    },
-    UpdateFederationTerms {
-        federation_id: String,
-        new_terms: FederationTerms,
-    },
-}
-
-#[derive(Serialize, Deserialize)]
 struct TokenizedResource {
     resource_id: String,
     owner: String,
     quantity: u64,
     price_per_unit: f64,
-}
-
-struct NotificationManager {
-    client: Client,
-    email: String,
-    sms: String,
-}
-
-impl NotificationManager {
-    fn new(email: String, sms: String) -> Self {
-        NotificationManager {
-            client: Client::new(),
-            email,
-            sms,
-        }
-    }
-
-    async fn send_email(&self, subject: &str, body: &str) -> Result<(), reqwest::Error> {
-        self.client.post(&self.email)
-            .body(format!("Subject: {}\n\n{}", subject, body))
-            .send()
-            .await?;
-        Ok(())
-    }
-
-    async fn send_sms(&self, message: &str) -> Result<(), reqwest::Error> {
-        self.client.post(&self.sms)
-            .body(message.to_string())
-            .send()
-            .await?;
-        Ok(())
-    }
-
-    async fn send_notification(&self, subject: &str, body: &str) {
-        if let Err(e) = self.send_email(subject, body).await {
-            error!("Failed to send email notification: {}", e);
-            if let Err(e) = self.send_sms(body).await {
-                error!("Failed to send SMS notification: {}", e);
-            }
-        }
-    }
-}
-
-struct ReputationManager {
-    governance_decay_rate: f64,
-    resource_sharing_decay_rate: f64,
-    technical_contributions_decay_rate: f64,
-    decay_exemptions: Vec<String>,
-}
-
-impl ReputationManager {
-    fn new(
-        governance_decay_rate: f64,
-        resource_sharing_decay_rate: f64,
-        technical_contributions_decay_rate: f64,
-        decay_exemptions: Vec<String>,
-    ) -> Self {
-        ReputationManager {
-            governance_decay_rate,
-            resource_sharing_decay_rate,
-            technical_contributions_decay_rate,
-            decay_exemptions,
-        }
-    }
-
-    fn apply_decay(&self, did: &str, category: &str, reputation: &mut i64) {
-        if self.decay_exemptions.contains(&did.to_string()) {
-            return;
-        }
-
-        let decay_rate = match category {
-            "governance" => self.governance_decay_rate,
-            "resource_sharing" => self.resource_sharing_decay_rate,
-            "technical_contributions" => self.technical_contributions_decay_rate,
-            _ => 0.0,
-        };
-
-        *reputation = (*reputation as f64 * (1.0 - decay_rate)) as i64;
-    }
 }
 
 #[tokio::main]
@@ -484,7 +303,7 @@ async fn main() -> Result<(), AppError> {
     env_logger::init();
 
     // Load and validate configuration
-    let config: Config = load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
+    let config: Config = config::load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
     config.validate()?;
     
     // Set up database connection pool
@@ -496,7 +315,7 @@ async fn main() -> Result<(), AppError> {
     let websocket_clients: WebSocketClients = Arc::new(DashMap::new());
 
     // Initialize components
-    let storage_manager = StorageManager::new(Box::new(MockStorageBackend));
+    let storage_manager = StorageManager::new(Box::new(DatabaseStorageBackend::new(db_pool.clone())));
     let network_manager = NetworkManager::new();
     let runtime_manager = RuntimeManager::new();
     let telemetry_manager = TelemetryManager::new(PrometheusMetrics, Logger, TracingSystem);
@@ -746,65 +565,71 @@ async fn handle_query_shared_resources() -> Result<impl warp::Reply, warp::Rejec
     Ok(warp::reply::json(&resources))
 }
 
-async fn handle_websocket(ws: WebSocket, websocket_clients: WebSocketClients) {
-    let client_id = uuid::Uuid::new_v4().to_string();
-    
-    // Split the WebSocket
-    let (mut ws_tx, mut ws_rx) = ws.split();
-
-    // Insert the sender into clients
-    websocket_clients.insert(client_id.clone(), ws_tx);
-
-    // Handle incoming messages
-    while let Some(result) = ws_rx.next().await {
-        match result {
-            Ok(msg) => {
-                log::debug!("Received message from {}: {:?}", client_id, msg);
-                // Handle the message
-            }
-            Err(e) => {
-                log::error!("WebSocket error for {}: {}", client_id, e);
-                break;
-            }
-        }
-    }
-
-    // Clean up on disconnect
-    log::info!("Client {} disconnected", client_id);
-    websocket_clients.remove(&client_id);
+struct DatabaseStorageBackend {
+    pool: PgPool,
 }
 
-async fn broadcast_message(message: &Message, websocket_clients: WebSocketClients) {
-    let clients = websocket_clients.lock().unwrap();
-    for (_, client) in clients.iter() {
-        let _ = client.send(message.clone()).await;
+impl DatabaseStorageBackend {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
     }
 }
-
-fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
-    let config_str = std::fs::read_to_string("config.toml")?;
-    let config: Config = toml::from_str(&config_str)?;
-    Ok(config)
-}
-
-struct MockStorageBackend;
 
 #[async_trait]
-impl StorageBackend for MockStorageBackend {
+impl StorageBackend for DatabaseStorageBackend {
     async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()> {
+        sqlx::query!(
+            r#"
+            INSERT INTO storage (key, value)
+            VALUES ($1, $2)
+            ON CONFLICT (key) DO UPDATE SET value = $2
+            "#,
+            key,
+            value
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     async fn get(&self, key: &str) -> StorageResult<Vec<u8>> {
-        Ok(vec![])
+        let result = sqlx::query!(
+            r#"
+            SELECT value FROM storage WHERE key = $1
+            "#,
+            key
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        Ok(result.value)
     }
 
     async fn delete(&self, key: &str) -> StorageResult<()> {
+        sqlx::query!(
+            r#"
+            DELETE FROM storage WHERE key = $1
+            "#,
+            key
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     async fn exists(&self, key: &str) -> StorageResult<bool> {
-        Ok(true)
+        let result = sqlx::query!(
+            r#"
+            SELECT EXISTS(SELECT 1 FROM storage WHERE key = $1)
+            "#,
+            key
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        Ok(result.exists.unwrap_or(false))
     }
 }
 ```
@@ -859,44 +684,16 @@ Modified: 2025-02-18 08:16:48.535122800 +0000
 ```
 
 ===================
-File: ./scripts/frontend/package.json
-Size: 393 bytes
-Modified: 2025-02-18 07:59:04.737349800 +0000
-
-===================
-```json
-{
-  "name": "frontend",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
-  "dependencies": {
-    "@types/react": "^19.0.10",
-    "@types/react-dom": "^19.0.4",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "typescript": "^5.7.3"
-  }
-}
-```
-
-===================
 File: ./.devcontainer/docker-compose.yml
-Size: 976 bytes
-Modified: 2025-01-16 22:02:57.707269200 +0000
+Size: 973 bytes
+Modified: 2025-02-19 00:47:20.891182900 +0000
 
 ===================
 
 ===================
 File: ./docker/docker-compose.yml
-Size: 1350 bytes
-Modified: 2025-02-18 08:18:23.157860900 +0000
+Size: 1347 bytes
+Modified: 2025-02-19 00:47:20.971282200 +0000
 
 ===================
 
@@ -922,21 +719,31 @@ pub mod models;
 
 ===================
 File: ./backend/src/main.rs
-Size: 18754 bytes
-Modified: 2025-02-18 07:17:43.203396000 +0000
+Size: 14446 bytes
+Modified: 2025-02-19 03:17:24.478390200 +0000
 Dependencies:
+mod config;
+mod core;
+mod db;
+mod federation;
+mod notification;
+mod reputation;
+mod websocket;
 use async_trait::async_trait;
+use crate::config::Config;
 use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
-use crate::identity::IdentityManager;
-use crate::networking::NetworkManager;
-use crate::storage::{StorageManager, StorageBackend, StorageResult};
+use crate::db::Database;
+use crate::federation::{FederationOperation, FederationTerms, FederationType};
+use crate::notification::NotificationManager;
+use crate::reputation::ReputationManager;
+use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError};
+use crate::websocket::{WebSocketClients, handle_websocket, broadcast_message};
 use dashmap::DashMap;
 use env_logger;
 use futures_util::StreamExt;
 use log::{info, error};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use sha2::Digest;
 use sqlx::PgPool;
 use std::sync::Arc;
 use thiserror::Error;
@@ -946,12 +753,26 @@ use warp::{Filter, ws::{WebSocket, Message}};
 
 ===================
 ```rs
+mod config;
+mod core;
+mod db;
+mod federation;
+mod notification;
+mod reputation;
+mod websocket;
+
+use crate::config::Config;
+use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
+use crate::db::Database;
+use crate::federation::{FederationOperation, FederationTerms, FederationType};
+use crate::notification::NotificationManager;
+use crate::reputation::ReputationManager;
+use crate::websocket::{WebSocketClients, handle_websocket, broadcast_message};
 use tokio;
 use log::{info, error};
 use env_logger;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use sha2::Digest;
 use futures_util::StreamExt;
 use warp::{Filter, ws::{WebSocket, Message}};
 use dashmap::DashMap;
@@ -960,11 +781,7 @@ use thiserror::Error;
 use reqwest::Client;
 use tokio::signal;
 use async_trait::async_trait;
-
-use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
-use crate::storage::{StorageManager, StorageBackend, StorageResult};
-use crate::networking::NetworkManager;
-use crate::identity::IdentityManager;
+use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError};
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -977,38 +794,6 @@ pub enum AppError {
     #[error("Validation error: {0}")]
     ValidationError(String),
 }
-
-#[derive(Debug, Deserialize)]
-struct Config {
-    database_url: String,
-    log_level: String,
-    reputation_decay_rate: f64,
-    reputation_adjustment_interval: u64,
-    reputation_initial_score: i64,
-    reputation_positive_contribution_weight: f64,
-    reputation_negative_contribution_weight: f64,
-    notification_email: String,
-    notification_sms: String,
-    governance_decay_rate: f64,
-    resource_sharing_decay_rate: f64,
-    technical_contributions_decay_rate: f64,
-    decay_exemptions: Vec<String>,
-}
-
-impl Config {
-    fn validate(&self) -> Result<(), AppError> {
-        if self.database_url.is_empty() {
-            return Err(AppError::ConfigError("database_url cannot be empty".to_string()));
-        }
-        if !(0.0..=1.0).contains(&self.reputation_decay_rate) {
-            return Err(AppError::ConfigError("reputation_decay_rate must be between 0 and 1".to_string()));
-        }
-        // Add other validation checks
-        Ok(())
-    }
-}
-
-type WebSocketClients = Arc<DashMap<String, warp::ws::WebSocket>>;
 
 #[derive(Serialize, Deserialize)]
 struct Proposal {
@@ -1030,144 +815,11 @@ struct Vote {
 }
 
 #[derive(Serialize, Deserialize)]
-struct FederationTerms {
-    minimum_reputation: i64,
-    resource_sharing_policies: String,
-    governance_rules: String,
-    duration: String,
-}
-
-#[derive(Serialize, Deserialize)]
-enum FederationType {
-    Cooperative,
-    Community,
-    Hybrid,
-}
-
-#[derive(Serialize, Deserialize)]
-enum FederationOperation {
-    InitiateFederation {
-        federation_type: FederationType,
-        partner_id: String,
-        terms: FederationTerms,
-    },
-    JoinFederation {
-        federation_id: String,
-        commitment: Vec<String>,
-    },
-    LeaveFederation {
-        federation_id: String,
-        reason: String,
-    },
-    ProposeAction {
-        federation_id: String,
-        action_type: String,
-        description: String,
-        resources: std::collections::HashMap<String, u64>,
-    },
-    VoteOnProposal {
-        federation_id: String,
-        proposal_id: String,
-        approve: bool,
-        notes: Option<String>,
-    },
-    ShareResources {
-        federation_id: String,
-        resource_type: String,
-        amount: u64,
-        recipient_id: String,
-    },
-    UpdateFederationTerms {
-        federation_id: String,
-        new_terms: FederationTerms,
-    },
-}
-
-#[derive(Serialize, Deserialize)]
 struct TokenizedResource {
     resource_id: String,
     owner: String,
     quantity: u64,
     price_per_unit: f64,
-}
-
-struct NotificationManager {
-    client: Client,
-    email: String,
-    sms: String,
-}
-
-impl NotificationManager {
-    fn new(email: String, sms: String) -> Self {
-        NotificationManager {
-            client: Client::new(),
-            email,
-            sms,
-        }
-    }
-
-    async fn send_email(&self, subject: &str, body: &str) -> Result<(), reqwest::Error> {
-        self.client.post(&self.email)
-            .body(format!("Subject: {}\n\n{}", subject, body))
-            .send()
-            .await?;
-        Ok(())
-    }
-
-    async fn send_sms(&self, message: &str) -> Result<(), reqwest::Error> {
-        self.client.post(&self.sms)
-            .body(message.to_string())
-            .send()
-            .await?;
-        Ok(())
-    }
-
-    async fn send_notification(&self, subject: &str, body: &str) {
-        if let Err(e) = self.send_email(subject, body).await {
-            error!("Failed to send email notification: {}", e);
-            if let Err(e) = self.send_sms(body).await {
-                error!("Failed to send SMS notification: {}", e);
-            }
-        }
-    }
-}
-
-struct ReputationManager {
-    governance_decay_rate: f64,
-    resource_sharing_decay_rate: f64,
-    technical_contributions_decay_rate: f64,
-    decay_exemptions: Vec<String>,
-}
-
-impl ReputationManager {
-    fn new(
-        governance_decay_rate: f64,
-        resource_sharing_decay_rate: f64,
-        technical_contributions_decay_rate: f64,
-        decay_exemptions: Vec<String>,
-    ) -> Self {
-        ReputationManager {
-            governance_decay_rate,
-            resource_sharing_decay_rate,
-            technical_contributions_decay_rate,
-            decay_exemptions,
-        }
-    }
-
-    fn apply_decay(&self, did: &str, category: &str, reputation: &mut i64) {
-        if self.decay_exemptions.contains(&did.to_string()) {
-            return;
-        }
-
-        let decay_rate = match category {
-            "governance" => self.governance_decay_rate,
-            "resource_sharing" => self.resource_sharing_decay_rate,
-            "technical_contributions" => self.technical_contributions_decay_rate,
-            _ => 0.0,
-        };
-
-        *reputation = (*reputation as f64 * (1.0 - decay_rate)) as i64;
-    }
 }
 
 #[tokio::main]
@@ -1176,7 +828,7 @@ async fn main() -> Result<(), AppError> {
     env_logger::init();
 
     // Load and validate configuration
-    let config: Config = load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
+    let config: Config = config::load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
     config.validate()?;
     
     // Set up database connection pool
@@ -1188,7 +840,7 @@ async fn main() -> Result<(), AppError> {
     let websocket_clients: WebSocketClients = Arc::new(DashMap::new());
 
     // Initialize components
-    let storage_manager = StorageManager::new(Box::new(MockStorageBackend));
+    let storage_manager = StorageManager::new(Box::new(DatabaseStorageBackend::new(db_pool.clone())));
     let network_manager = NetworkManager::new();
     let runtime_manager = RuntimeManager::new();
     let telemetry_manager = TelemetryManager::new(PrometheusMetrics, Logger, TracingSystem);
@@ -1438,81 +1090,89 @@ async fn handle_query_shared_resources() -> Result<impl warp::Reply, warp::Rejec
     Ok(warp::reply::json(&resources))
 }
 
-async fn handle_websocket(ws: WebSocket, websocket_clients: WebSocketClients) {
-    let client_id = uuid::Uuid::new_v4().to_string();
-    
-    // Split the WebSocket
-    let (mut ws_tx, mut ws_rx) = ws.split();
-
-    // Insert the sender into clients
-    websocket_clients.insert(client_id.clone(), ws_tx);
-
-    // Handle incoming messages
-    while let Some(result) = ws_rx.next().await {
-        match result {
-            Ok(msg) => {
-                log::debug!("Received message from {}: {:?}", client_id, msg);
-                // Handle the message
-            }
-            Err(e) => {
-                log::error!("WebSocket error for {}: {}", client_id, e);
-                break;
-            }
-        }
-    }
-
-    // Clean up on disconnect
-    log::info!("Client {} disconnected", client_id);
-    websocket_clients.remove(&client_id);
+struct DatabaseStorageBackend {
+    pool: PgPool,
 }
 
-async fn broadcast_message(message: &Message, websocket_clients: WebSocketClients) {
-    let clients = websocket_clients.lock().unwrap();
-    for (_, client) in clients.iter() {
-        let _ = client.send(message.clone()).await;
+impl DatabaseStorageBackend {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
     }
 }
-
-fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
-    let config_str = std::fs::read_to_string("config.toml")?;
-    let config: Config = toml::from_str(&config_str)?;
-    Ok(config)
-}
-
-struct MockStorageBackend;
 
 #[async_trait]
-impl StorageBackend for MockStorageBackend {
+impl StorageBackend for DatabaseStorageBackend {
     async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()> {
+        sqlx::query!(
+            r#"
+            INSERT INTO storage (key, value)
+            VALUES ($1, $2)
+            ON CONFLICT (key) DO UPDATE SET value = $2
+            "#,
+            key,
+            value
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     async fn get(&self, key: &str) -> StorageResult<Vec<u8>> {
-        Ok(vec![])
+        let result = sqlx::query!(
+            r#"
+            SELECT value FROM storage WHERE key = $1
+            "#,
+            key
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        Ok(result.value)
     }
 
     async fn delete(&self, key: &str) -> StorageResult<()> {
+        sqlx::query!(
+            r#"
+            DELETE FROM storage WHERE key = $1
+            "#,
+            key
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     async fn exists(&self, key: &str) -> StorageResult<bool> {
-        Ok(true)
+        let result = sqlx::query!(
+            r#"
+            SELECT EXISTS(SELECT 1 FROM storage WHERE key = $1)
+            "#,
+            key
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        Ok(result.exists.unwrap_or(false))
     }
 }
 ```
 
 ===================
 File: ./crates/icn-consensus/src/lib.rs
-Size: 6994 bytes
-Modified: 2025-01-25 22:00:31.170012700 +0000
+Size: 11682 bytes
+Modified: 2025-02-19 03:24:56.930983200 +0000
 Dependencies:
 use async_trait::async_trait;
 use bit_set::BitSet;
+use federation::{Federation, FederationError};
 use icn_core::ReputationManager;
 use icn_types::Block;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
+use thiserror::Error;
 use tokio::task;
 use tokio::time::sleep;
 use trie_rs::Trie;
@@ -1523,6 +1183,7 @@ pub mod proof_of_cooperation;
 pub mod validation;
 pub mod round_management;
 pub mod timeout_handling;
+pub mod federation;
 
 use async_trait::async_trait;
 use std::collections::{HashMap, VecDeque};
@@ -1534,6 +1195,20 @@ use icn_types::Block;
 use std::sync::Arc;
 use bit_set::BitSet;
 use trie_rs::Trie;
+use thiserror::Error;
+use federation::{Federation, FederationError};
+
+#[derive(Error, Debug)]
+pub enum ConsensusError {
+    #[error("Failed to reach consensus: {0}")]
+    ConsensusFailure(String),
+    #[error("Block validation failed: {0}")]
+    ValidationFailure(String),
+    #[error("Timeout occurred: {0}")]
+    TimeoutError(String),
+    #[error("BFT error: {0}")]
+    BftError(String),
+}
 
 pub struct ProofOfCooperation {
     current_round: u64,
@@ -1545,6 +1220,7 @@ pub struct ProofOfCooperation {
     timeout_handling: timeout_handling::TimeoutHandling,
     reputation_manager: Arc<dyn ReputationManager>,
     federation_operations: HashMap<String, FederationOperation>,
+    federations: HashMap<String, Federation>,
 }
 
 impl ProofOfCooperation {
@@ -1559,6 +1235,7 @@ impl ProofOfCooperation {
             timeout_handling: timeout_handling::TimeoutHandling::new(Duration::from_secs(60)),
             reputation_manager,
             federation_operations: HashMap::new(),
+            federations: HashMap::new(),
         }
     }
 
@@ -1586,14 +1263,29 @@ impl ProofOfCooperation {
         }
     }
 
-    pub async fn finalize_block(&self) -> Option<Block> {
-        let total_reputation: i64 = self.participants.iter().map(|p| self.reputation_manager.get_reputation(p, "consensus")).sum();
-        let approval_reputation: i64 = self.participants.iter().enumerate().filter(|(i, _)| self.votes.contains(*i)).map(|(_, p)| self.reputation_manager.get_reputation(p, "consensus")).sum();
+    pub async fn finalize_block(&mut self) -> Result<Option<Block>, ConsensusError> {
+        let (total_reputation, approval_reputation) = self.parallel_vote_counting().await
+            .map_err(|e| ConsensusError::ConsensusFailure(e.to_string()))?;
 
-        if approval_reputation > total_reputation / 2 {
-            self.proposed_block.clone()
+        // BFT requirement: Need more than 2/3 of total reputation for finalization
+        let bft_threshold = (total_reputation as f64 * 2.0 / 3.0) as i64;
+        
+        if approval_reputation > bft_threshold {
+            if let Some(block) = &self.proposed_block {
+                // Update block metadata before finalization
+                let mut final_block = block.clone();
+                let consensus_duration = self.round_start_time.elapsed().as_millis() as u64;
+                final_block.metadata.consensus_duration_ms = consensus_duration;
+                
+                // Clear round state
+                self.start_round();
+                
+                Ok(Some(final_block))
+            } else {
+                Err(ConsensusError::ConsensusFailure("No proposed block".into()))
+            }
         } else {
-            None
+            Ok(None)
         }
     }
 
@@ -1635,10 +1327,50 @@ impl ProofOfCooperation {
         Ok((total_reputation, approval_reputation))
     }
 
+    pub async fn select_validators(&mut self, min_reputation: i64) -> Result<Vec<String>, ConsensusError> {
+        let mut validators = Vec::new();
+        let participants: Vec<_> = self.participants.iter().cloned().collect();
+
+        for participant in participants {
+            if self.reputation_manager.is_eligible(&participant, min_reputation, "consensus") {
+                validators.push(participant);
+            }
+        }
+
+        // BFT requirement: Need at least 3f + 1 validators where f is max faulty nodes
+        let min_validators = (self.max_faulty_nodes() * 3) + 1;
+        if validators.len() < min_validators {
+            return Err(ConsensusError::BftError(
+                format!("Insufficient validators: {} (need {})", validators.len(), min_validators)
+            ));
+        }
+
+        Ok(validators)
+    }
+
+    fn max_faulty_nodes(&self) -> usize {
+        self.participants.len() / 3
+    }
+
+    pub async fn handle_consensus_round(&mut self) -> Result<Option<Block>, ConsensusError> {
+        // Start timeout handler
+        let timeout_handler = self.timeout_handling.start_timeout();
+        
+        tokio::select! {
+            result = self.finalize_block() => {
+                result
+            }
+            _ = timeout_handler => {
+                self.handle_timeout().await;
+                Err(ConsensusError::TimeoutError("Consensus round timed out".into()))
+            }
+        }
+    }
+
     pub fn handle_federation_operation(&mut self, operation: FederationOperation) {
         match operation {
             FederationOperation::InitiateFederation { federation_type, partner_id, terms } => {
-                // Handle federation initiation logic
+                self.create_federation(partner_id, federation_type, terms).unwrap();
             }
             FederationOperation::JoinFederation { federation_id, commitment } => {
                 // Handle joining federation logic
@@ -1660,6 +1392,37 @@ impl ProofOfCooperation {
             }
         }
     }
+
+    pub fn create_federation(
+        &mut self,
+        creator_id: String,
+        federation_type: FederationType,
+        terms: FederationTerms,
+    ) -> Result<String, ConsensusError> {
+        // Verify creator's reputation
+        let creator_reputation = self.reputation_manager.get_reputation(&creator_id, "consensus");
+        if creator_reputation < terms.minimum_reputation {
+            return Err(ConsensusError::ConsensusFailure(
+                "Insufficient reputation to create federation".into(),
+            ));
+        }
+
+        // Generate unique federation ID
+        let federation_id = format!("fed_{}", uuid::Uuid::new_v4());
+
+        // Create new federation
+        let federation = Federation::new(
+            federation_id.clone(),
+            federation_type,
+            terms,
+            creator_id,
+        );
+
+        // Store federation
+        self.federations.insert(federation_id.clone(), federation);
+
+        Ok(federation_id)
+    }
 }
 
 #[async_trait]
@@ -1670,6 +1433,32 @@ impl ConsensusEngine for ProofOfCooperation {
 
     async fn stop(&self) {
         // Stop the consensus process
+    }
+
+    async fn submit_vote(&mut self, vote: Vote) -> Result<VoteStatus, GovernanceError> {
+        let proposal = self.active_proposals.get_mut(&vote.proposal_id)
+            .ok_or(GovernanceError::ProposalNotFound)?;
+        
+        if !self.is_eligible_voter(&vote.voter_did) {
+            return Err(GovernanceError::NotEligibleToVote);
+        }
+
+        proposal.votes.insert(vote);
+        self.check_proposal_status(&proposal.proposal_id)
+    }
+
+    async fn process_approved_proposal(&mut self, proposal_id: &str) -> Result<(), GovernanceError> {
+        let proposal = self.active_proposals.remove(proposal_id)
+            .ok_or(GovernanceError::ProposalNotFound)?;
+
+        match proposal.proposal_type {
+            ProposalType::AddValidator(info) => self.add_validator(info),
+            ProposalType::RemoveValidator(did) => self.remove_validator(&did),
+            ProposalType::UpdateRules(rules) => {
+                self.rules = rules;
+                Ok(())
+            }
+        }
     }
 }
 
@@ -1731,7 +1520,7 @@ enum FederationType {
 ===================
 File: ./crates/icn-core/src/lib.rs
 Size: 8529 bytes
-Modified: 2025-02-18 06:52:03.327222100 +0000
+Modified: 2025-02-19 03:17:24.482393600 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_consensus::ProofOfCooperation;
@@ -2356,8 +2145,8 @@ fn compile_state_validation(bytecode: &mut Vec<u8>, validation: &StateValidation
 
 ===================
 File: ./crates/icn-federation/src/lib.rs
-Size: 4796 bytes
-Modified: 2025-02-18 06:45:18.493755100 +0000
+Size: 11401 bytes
+Modified: 2025-02-19 03:36:31.441583200 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_types::{Block, Transaction};
@@ -2380,12 +2169,168 @@ pub struct Federation {
     pub id: String,
     pub name: String,
     pub federation_type: FederationType,
-    pub members: Vec<String>, // DIDs of member cooperatives
+    pub members: HashMap<String, MemberStatus>, // DID -> status
+    pub member_roles: HashMap<String, MemberRole>, // DID -> role
     pub terms: FederationTerms,
     pub resources: HashMap<String, ResourcePool>,
-    pub proposals: Vec<FederationProposal>,
+    pub proposals: Vec<FederationProposal>, // Add proposals field
     pub created_at: u64,
     pub status: FederationStatus,
+}
+
+impl Federation {
+    pub fn add_member(&mut self, did: String, role: MemberRole) -> Result<(), FederationError> {
+        if self.members.contains_key(&did) {
+            return Err(FederationError::AlreadyMember);
+        }
+
+        // Verify member meets minimum reputation requirements
+        if !self.verify_member_eligibility(&did) {
+            return Err(FederationError::InsufficientReputation(
+                "Member does not meet minimum reputation requirements".to_string(),
+            ));
+        }
+
+        self.members.insert(did, MemberStatus::Active);
+        Ok(())
+    }
+
+    pub fn remove_member(&mut self, did: &str) -> Result<(), FederationError> {
+        if !self.members.contains_key(did) {
+            return Err(FederationError::MemberNotFound);
+        }
+
+        self.members.remove(did);
+        Ok(())
+    }
+
+    pub fn get_member_status(&self, did: &str) -> Option<&MemberStatus> {
+        self.members.get(did)
+    }
+
+    pub fn update_member_status(&mut self, did: &str, status: MemberStatus) -> Result<(), FederationError> {
+        if let Some(member_status) = self.members.get_mut(did) {
+            *member_status = status;
+            Ok(())
+        } else {
+            Err(FederationError::MemberNotFound)
+        }
+    }
+
+    pub fn get_active_members(&self) -> Vec<String> {
+        self.members
+            .iter()
+            .filter(|(_, status)| matches!(status, MemberStatus::Active))
+            .map(|(did, _)| did.clone())
+            .collect()
+    }
+
+    pub fn verify_member_eligibility(&self, did: &str) -> bool {
+        // This would integrate with the reputation system in practice
+        true // Simplified for example
+    }
+
+    pub fn submit_proposal(&mut self, proposal: FederationProposal) -> Result<(), FederationError> {
+        // Validate proposal
+        self.validate_proposal(&proposal)?;
+
+        // Set proposal voting period
+        let mut proposal = proposal;
+        proposal.voting_ends_at = chrono::Utc::now().timestamp() as u64 + 
+            (self.terms.governance_rules.max_voting_period_hours * 3600);
+
+        self.proposals.push(proposal);
+        Ok(())
+    }
+
+    pub fn vote(&mut self, vote: Vote) -> Result<(), FederationError> {
+        // Validate vote
+        self.validate_vote(&vote)?;
+
+        // Get proposal
+        let proposal = self.proposals.iter_mut()
+            .find(|p| p.id == vote.proposal_id)
+            .ok_or(FederationError::ProposalNotFound)?;
+
+        // Record vote
+        proposal.votes.insert(vote.voter, vote.approve);
+
+        // Check if voting period ended and finalize if needed
+        let now = chrono::Utc::now().timestamp() as u64;
+        if now > proposal.voting_ends_at {
+            proposal.status = self.finalize_proposal(&proposal.id)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_proposal(&self, proposal: &FederationProposal) -> Result<(), FederationError> {
+        // Check if proposal type is allowed
+        if !self.terms.governance_rules.allowed_proposal_types.contains(&proposal.proposal_type.to_string()) {
+            return Err(FederationError::InvalidProposalType);
+        }
+
+        // Validate proposer has sufficient reputation
+        if !self.verify_member_eligibility(&proposal.proposer) {
+            return Err(FederationError::InsufficientReputation(
+                "Proposer does not meet minimum reputation requirements".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_vote(&self, vote: &Vote) -> Result<(), FederationError> {
+        // Check if voter is a member
+        if !self.members.contains_key(&vote.voter) {
+            return Err(FederationError::UnauthorizedAction);
+        }
+
+        // Check if proposal exists
+        let proposal = self.proposals.iter()
+            .find(|p| p.id == vote.proposal_id)
+            .ok_or(FederationError::ProposalNotFound)?;
+
+        // Check if voting period is still open
+        let now = chrono::Utc::now().timestamp() as u64;
+        if now > proposal.voting_ends_at {
+            return Err(FederationError::VotingPeriodEnded);
+        }
+
+        // Check for veto rights
+        if let Some(member_role) = self.member_roles.get(&vote.voter) {
+            if let Some(veto_actions) = self.terms.governance_rules.veto_rights.get(&member_role.to_string()) {
+                if veto_actions.contains(&proposal.proposal_type.to_string()) && !vote.approve {
+                    // Record veto
+                    return Ok(());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn finalize_proposal(&mut self, proposal_id: &str) -> Result<ProposalStatus, FederationError> {
+        let proposal = self.proposals.iter_mut()
+            .find(|p| p.id == proposal_id)
+            .ok_or(FederationError::ProposalNotFound)?;
+
+        let total_votes = proposal.votes.len() as u32;
+        if total_votes < self.terms.governance_rules.min_votes_required {
+            return Ok(ProposalStatus::Rejected);
+        }
+
+        let approval_votes = proposal.votes.values().filter(|&v| *v).count() as u32;
+        let approval_percentage = (approval_votes * 100) / total_votes;
+
+        if approval_percentage >= self.terms.governance_rules.approval_threshold_percent {
+            proposal.status = ProposalStatus::Approved;
+        } else {
+            proposal.status = ProposalStatus::Rejected;
+        }
+
+        Ok(proposal.status.clone())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2405,6 +2350,7 @@ pub struct FederationProposal {
     pub votes: HashMap<String, bool>, // DID -> vote
     pub status: ProposalStatus,
     pub created_at: u64,
+    pub voting_ends_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2449,7 +2395,8 @@ impl FederationManager {
             id: federation_id.clone(),
             name,
             federation_type,
-            members: vec![founding_member],
+            members: vec![founding_member].into_iter().map(|m| (m, MemberStatus::Active)).collect(),
+            member_roles: HashMap::new(),
             terms: initial_terms,
             resources: HashMap::new(),
             proposals: Vec::new(),
@@ -2472,7 +2419,7 @@ impl FederationManager {
         let mut federations = self.federations.write().await;
         
         if let Some(federation) = federations.get_mut(federation_id) {
-            if federation.members.contains(&member_did.to_string()) {
+            if federation.members.contains_key(member_did) {
                 return Err(FederationError::AlreadyMember);
             }
 
@@ -2481,7 +2428,7 @@ impl FederationManager {
                 return Err(FederationError::InvalidCommitment);
             }
 
-            federation.members.push(member_did.to_string());
+            federation.members.insert(member_did.to_string(), MemberStatus::Active);
             Ok(())
         } else {
             Err(FederationError::FederationNotFound)
@@ -2511,8 +2458,18 @@ pub enum FederationType {
 pub struct FederationTerms {
     pub minimum_reputation: i64,
     pub resource_sharing_policies: String,
-    pub governance_rules: String,
+    pub governance_rules: GovernanceRules,
     pub duration: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GovernanceRules {
+    pub min_votes_required: u32,
+    pub approval_threshold_percent: u32,
+    pub min_voting_period_hours: u32,
+    pub max_voting_period_hours: u32,
+    pub allowed_proposal_types: Vec<String>,
+    pub veto_rights: HashMap<String, Vec<String>>, // role -> action types that can be vetoed
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2530,6 +2487,27 @@ pub enum ProposalStatus {
     Expired,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum MemberRole {
+    Admin,
+    Member,
+    Observer,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MemberStatus {
+    Active,
+    Inactive,
+    Suspended,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Vote {
+    pub voter: String,
+    pub proposal_id: String,
+    pub approve: bool,
+}
+
 #[derive(Debug)]
 pub enum FederationError {
     FederationNotFound,
@@ -2537,6 +2515,13 @@ pub enum FederationError {
     InvalidCommitment,
     InsufficientResources,
     UnauthorizedAction,
+    MemberNotFound,
+    InvalidStatusTransition,
+    InsufficientPermissions,
+    InvalidProposalType,
+    VotingPeriodEnded,
+    ProposalNotFound,
+    InsufficientReputation(String),
 }
 ```
 
@@ -2558,8 +2543,8 @@ use icn_types::Transaction;
 
 ===================
 File: ./crates/icn-resource/src/lib.rs
-Size: 4307 bytes
-Modified: 2025-02-18 06:45:18.489379000 +0000
+Size: 6916 bytes
+Modified: 2025-02-19 03:33:41.116129300 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_federation::ResourceManager;
@@ -2593,6 +2578,20 @@ pub struct ResourceConstraints {
     pub min_reputation: i64,
     pub max_allocation: u64,
     pub time_limit: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationResourcePool {
+    pub federation_id: String,
+    pub resources: HashMap<String, Resource>,
+    pub access_control: FederationAccessControl,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationAccessControl {
+    pub allowed_federations: Vec<String>,
+    pub min_reputation: i64,
+    pub max_allocation_per_federation: u64,
 }
 
 pub struct ResourceAllocationSystem {
@@ -2681,8 +2680,18 @@ impl ResourceAllocationSystem {
         &self,
         allocation_id: &str,
     ) -> Result<(), ResourceError> {
-        // Implementation for releasing allocated resources
-        Ok(())
+        let mut allocations = self.allocations.write().await;
+        for (resource_id, resource_allocations) in allocations.iter_mut() {
+            if let Some(index) = resource_allocations.iter().position(|alloc| alloc.allocation_id == allocation_id) {
+                let allocation = resource_allocations.remove(index);
+                let mut resources = self.resources.write().await;
+                if let Some(resource) = resources.get_mut(&allocation.resource_id) {
+                    resource.available_amount += allocation.amount;
+                }
+                return Ok(());
+            }
+        }
+        Err(ResourceError::InvalidAllocation)
     }
 
     pub async fn adjust_price(
@@ -2697,6 +2706,48 @@ impl ResourceAllocationSystem {
         } else {
             Err(ResourceError::ResourceNotFound)
         }
+    }
+
+    pub async fn create_federation_pool(
+        &self,
+        federation_id: String,
+        access_control: FederationAccessControl,
+    ) -> Result<(), ResourceError> {
+        let pool = FederationResourcePool {
+            federation_id: federation_id.clone(),
+            resources: HashMap::new(),
+            access_control,
+        };
+        
+        let mut resources = self.resources.write().await;
+        resources.insert(federation_id, pool);
+        Ok(())
+    }
+
+    pub async fn share_with_federation(
+        &self,
+        source_federation: &str,
+        target_federation: &str, 
+        resource_id: &str,
+        amount: u64,
+    ) -> Result<String, ResourceError> {
+        let mut resources = self.resources.write().await;
+        
+        // Verify federation access permissions
+        let source_pool = resources.get(source_federation)
+            .ok_or(ResourceError::ResourceNotFound)?;
+            
+        if !source_pool.access_control.allowed_federations.contains(&target_federation.to_string()) {
+            return Err(ResourceError::UnauthorizedAction);
+        }
+
+        // Create allocation record
+        let allocation_id = format!("alloc_{}", uuid::Uuid::new_v4());
+        
+        // Allocate resources to target federation
+        self.allocate(resource_id, target_federation.to_string(), amount).await?;
+
+        Ok(allocation_id)
     }
 }
 
@@ -2725,8 +2776,8 @@ pub enum ResourceError {
 
 ===================
 File: ./crates/icn-runtime/src/lib.rs
-Size: 4115 bytes
-Modified: 2025-02-18 06:52:03.314058600 +0000
+Size: 4266 bytes
+Modified: 2025-02-19 03:17:24.483393900 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_dsl::CoopLangAST;
@@ -2748,7 +2799,8 @@ impl RuntimeManager {
 
     pub async fn load_bytecode(&mut self, bytecode: &[u8]) -> Result<(), RuntimeError> {
         // Implementation to load and validate DSL bytecode
-        todo!("Implement bytecode loading")
+        self.dsl_context = Some(CoopLangAST::parse(bytecode)?);
+        Ok(())
     }
 
     pub async fn execute_cooperative_rules(&self, context: &ExecutionContext) -> Result<(), RuntimeError> {
@@ -2993,8 +3045,8 @@ mod tests {
 
 ===================
 File: ./crates/icn-types/src/lib.rs
-Size: 20588 bytes
-Modified: 2025-02-18 07:12:54.022123900 +0000
+Size: 21279 bytes
+Modified: 2025-02-19 03:23:34.160359600 +0000
 Dependencies:
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
@@ -3110,6 +3162,26 @@ pub struct BlockMetadata {
     
     /// Summary of relationship transactions
     pub relationship_updates: RelationshipMetadata,
+
+    /// Fault tolerance level for Byzantine fault tolerance
+    pub fault_tolerance: Option<u32>,
+}
+
+impl BlockMetadata {
+    pub fn with_bft_info(&mut self, quorum_size: u32, fault_tolerance: u32) {
+        self.validator_count = quorum_size;
+        self.fault_tolerance = Some(fault_tolerance);
+        self.consensus_duration_ms = 0; // Will be set during finalization
+    }
+
+    pub fn is_bft_valid(&self) -> bool {
+        if let Some(fault_tolerance) = self.fault_tolerance {
+            // Check if we have enough validators (3f + 1)
+            self.validator_count >= (fault_tolerance * 3) + 1
+        } else {
+            false
+        }
+    }
 }
 
 /// Metadata specific to relationship transactions in the block
@@ -3145,6 +3217,7 @@ impl Block {
             resources_used,
             size: 0,
             relationship_updates: relationship_metadata,
+            fault_tolerance: None,
         };
 
         let mut block = Block {

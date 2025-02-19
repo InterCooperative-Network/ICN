@@ -10,10 +10,11 @@ pub struct Federation {
     pub id: String,
     pub name: String,
     pub federation_type: FederationType,
-    pub members: Vec<String>, // DIDs of member cooperatives
+    pub members: HashMap<String, MemberStatus>, // DID -> status
+    pub member_roles: HashMap<String, MemberRole>, // DID -> role
     pub terms: FederationTerms,
     pub resources: HashMap<String, ResourcePool>,
-    pub proposals: Vec<FederationProposal>,
+    pub proposals: Vec<FederationProposal>, // Add proposals field
     pub created_at: u64,
     pub status: FederationStatus,
 }
@@ -70,6 +71,40 @@ impl Federation {
         true // Simplified for example
     }
 
+    pub fn submit_proposal(&mut self, proposal: FederationProposal) -> Result<(), FederationError> {
+        // Validate proposal
+        self.validate_proposal(&proposal)?;
+
+        // Set proposal voting period
+        let mut proposal = proposal;
+        proposal.voting_ends_at = chrono::Utc::now().timestamp() as u64 + 
+            (self.terms.governance_rules.max_voting_period_hours * 3600);
+
+        self.proposals.push(proposal);
+        Ok(())
+    }
+
+    pub fn vote(&mut self, vote: Vote) -> Result<(), FederationError> {
+        // Validate vote
+        self.validate_vote(&vote)?;
+
+        // Get proposal
+        let proposal = self.proposals.iter_mut()
+            .find(|p| p.id == vote.proposal_id)
+            .ok_or(FederationError::ProposalNotFound)?;
+
+        // Record vote
+        proposal.votes.insert(vote.voter, vote.approve);
+
+        // Check if voting period ended and finalize if needed
+        let now = chrono::Utc::now().timestamp() as u64;
+        if now > proposal.voting_ends_at {
+            proposal.status = self.finalize_proposal(&proposal.id)?;
+        }
+
+        Ok(())
+    }
+
     pub fn validate_proposal(&self, proposal: &FederationProposal) -> Result<(), FederationError> {
         // Check if proposal type is allowed
         if !self.terms.governance_rules.allowed_proposal_types.contains(&proposal.proposal_type.to_string()) {
@@ -105,7 +140,7 @@ impl Federation {
 
         // Check for veto rights
         if let Some(member_role) = self.member_roles.get(&vote.voter) {
-            if let Some(veto_actions) = self.terms.governance_rules.veto_rights.get(member_role) {
+            if let Some(veto_actions) = self.terms.governance_rules.veto_rights.get(&member_role.to_string()) {
                 if veto_actions.contains(&proposal.proposal_type.to_string()) && !vote.approve {
                     // Record veto
                     return Ok(());
@@ -156,6 +191,7 @@ pub struct FederationProposal {
     pub votes: HashMap<String, bool>, // DID -> vote
     pub status: ProposalStatus,
     pub created_at: u64,
+    pub voting_ends_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -200,7 +236,8 @@ impl FederationManager {
             id: federation_id.clone(),
             name,
             federation_type,
-            members: vec![founding_member],
+            members: vec![founding_member].into_iter().map(|m| (m, MemberStatus::Active)).collect(),
+            member_roles: HashMap::new(),
             terms: initial_terms,
             resources: HashMap::new(),
             proposals: Vec::new(),
@@ -223,7 +260,7 @@ impl FederationManager {
         let mut federations = self.federations.write().await;
         
         if let Some(federation) = federations.get_mut(federation_id) {
-            if federation.members.contains(&member_did.to_string()) {
+            if federation.members.contains_key(member_did) {
                 return Err(FederationError::AlreadyMember);
             }
 
@@ -232,7 +269,7 @@ impl FederationManager {
                 return Err(FederationError::InvalidCommitment);
             }
 
-            federation.members.push(member_did.to_string());
+            federation.members.insert(member_did.to_string(), MemberStatus::Active);
             Ok(())
         } else {
             Err(FederationError::FederationNotFound)
@@ -262,7 +299,7 @@ pub enum FederationType {
 pub struct FederationTerms {
     pub minimum_reputation: i64,
     pub resource_sharing_policies: String,
-    pub governance_rules: String,
+    pub governance_rules: GovernanceRules,
     pub duration: String,
 }
 
@@ -298,6 +335,20 @@ pub enum MemberRole {
     Observer,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MemberStatus {
+    Active,
+    Inactive,
+    Suspended,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Vote {
+    pub voter: String,
+    pub proposal_id: String,
+    pub approve: bool,
+}
+
 #[derive(Debug)]
 pub enum FederationError {
     FederationNotFound,
@@ -311,4 +362,5 @@ pub enum FederationError {
     InvalidProposalType,
     VotingPeriodEnded,
     ProposalNotFound,
+    InsufficientReputation(String),
 }
