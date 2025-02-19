@@ -7,7 +7,7 @@ edition = "2021"
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
 serde = "1.0"
-tokio-tungstenite = "0.15"
+tokio-tungstenite = "0.26"
 warp = "0.3"
 futures-util = "0.3"
 icn-types = { path = "../icn-types" }
