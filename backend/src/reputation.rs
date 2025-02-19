@@ -17,11 +17,13 @@ impl ReputationManager {
 
     pub async fn dynamic_adjustment(&self, did: &str, contribution: i64) -> Result<(), String> {
         // Logic to adjust reputation based on contributions
+        // Placeholder logic
         Ok(())
     }
 
     pub async fn apply_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> {
         // Logic to apply decay to reputation
+        // Placeholder logic
         Ok(())
     }
 
