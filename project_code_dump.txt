@@ -1,4 +1,4 @@
-Project Code Dump - Generated Wed 19 Feb 2025 03:37:17 AM UTC
+Project Code Dump - Generated Wed 19 Feb 2025 06:25:02 AM UTC
 ======================================
 
 LLM Context Information
@@ -194,8 +194,8 @@ pub mod models;
 
 ===================
 File: ./backend/src/main.rs
-Size: 14446 bytes
-Modified: 2025-02-19 03:17:24.478390200 +0000
+Size: 12612 bytes
+Modified: 2025-02-19 06:23:14.794625000 +0000
 Dependencies:
 mod config;
 mod core;
@@ -224,7 +224,9 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio;
 use tokio::signal;
+use warp::cors::Cors;
 use warp::{Filter, ws::{WebSocket, Message}};
+use warp::http::Method;
 
 ===================
 ```rs
@@ -257,6 +259,8 @@ use reqwest::Client;
 use tokio::signal;
 use async_trait::async_trait;
 use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError};
+use warp::http::Method;
+use warp::cors::Cors;
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -342,7 +346,7 @@ async fn main() -> Result<(), AppError> {
     // Start core system
     if let Err(e) = core.start().await {
         error!("Failed to start core system: {}", e);
-        return Ok(());
+        return Err(AppError::ConfigError(e));
     }
 
     // Set up WebSocket server
@@ -361,7 +365,7 @@ async fn main() -> Result<(), AppError> {
             let notification_manager = notification_manager.clone();
             let websocket_clients = websocket_clients.clone();
             async move {
-                handle_create_proposal(proposal, notification_manager, websocket_clients).await
+                handle_create_proposal(proposal, notification_manager, websocket_clients, db_pool.clone()).await
             }
         });
 
@@ -372,71 +376,11 @@ async fn main() -> Result<(), AppError> {
             let notification_manager = notification_manager.clone();
             let websocket_clients = websocket_clients.clone();
             async move {
-                handle_vote_on_proposal(proposal_id, vote, notification_manager, websocket_clients).await
+                handle_vote_on_proposal(proposal_id, vote, notification_manager, websocket_clients, db_pool.clone()).await
             }
         });
 
-    let initiate_federation = warp::path!("api" / "federation" / "initiate")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let join_federation = warp::path!("api" / "federation" / "join")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let leave_federation = warp::path!("api" / "federation" / "leave")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let propose_action = warp::path!("api" / "federation" / "propose_action")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let vote_on_federation_proposal = warp::path!("api" / "federation" / "vote")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let share_resources = warp::path!("api" / "federation" / "share_resources")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let update_federation_terms = warp::path!("api" / "federation" / "update_terms")
+    let federation_routes = warp::path("api/federation")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |operation: FederationOperation| {
@@ -454,17 +398,17 @@ async fn main() -> Result<(), AppError> {
             }
         });
 
+    let cors = warp::cors()
+        .allow_any_origin()
+        .allow_methods(&[Method::GET, Method::POST, Method::PUT, Method::DELETE])
+        .allow_headers(vec!["content-type"]);
+
     let routes = create_proposal
         .or(vote_on_proposal)
-        .or(initiate_federation)
-        .or(join_federation)
-        .or(leave_federation)
-        .or(propose_action)
-        .or(vote_on_federation_proposal)
-        .or(share_resources)
-        .or(update_federation_terms)
+        .or(federation_routes)
         .or(query_shared_resources)
-        .or(websocket_route);
+        .or(websocket_route)
+        .with(cors);
 
     let server = warp::serve(routes).run(([0, 0, 0, 0], 8081));
 
@@ -489,7 +433,11 @@ async fn main() -> Result<(), AppError> {
     Ok(())
 }
 
-async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: WebSocketClients, db_pool: PgPool) -> Result<impl warp::Reply, warp::Rejection> {
+    // Store proposal in the database
+    let db = Database::new(db_pool).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
+    db.create_proposal(&proposal).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
+
     // Logic to handle proposal creation
     let subject = format!("New Proposal Created: {}", proposal.title);
     let body = format!("A new proposal has been created by {}. Description: {}", proposal.created_by, proposal.description);
@@ -502,7 +450,11 @@ async fn handle_create_proposal(proposal: Proposal, notification_manager: Notifi
     Ok(warp::reply::json(&proposal))
 }
 
-async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: WebSocketClients, db_pool: PgPool) -> Result<impl warp::Reply, warp::Rejection> {
+    // Store vote in the database
+    let db = Database::new(db_pool).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
+    db.record_vote(&vote).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
+
     // Logic to handle voting on a proposal
     let subject = format!("New Vote on Proposal: {}", proposal_id);
     let body = format!("A new vote has been cast by {}. Approve: {}", vote.voter, vote.approve);
@@ -649,8 +601,8 @@ fn main() {
 
 ===================
 File: ./frontend/package.json
-Size: 600 bytes
-Modified: 2025-02-18 08:16:48.535122800 +0000
+Size: 499 bytes
+Modified: 2025-02-19 06:23:14.811145100 +0000
 
 ===================
 ```json
@@ -672,10 +624,7 @@ Modified: 2025-02-18 08:16:48.535122800 +0000
     "react-dom": "latest"
   },
   "devDependencies": {
-    "eslint": "^7.32.0",
-    "prettier": "^2.3.2",
-    "eslint-config-prettier": "^8.3.0",
-    "eslint-plugin-prettier": "^3.4.0"
+main
   },
   "keywords": [],
   "author": "",
@@ -719,8 +668,8 @@ pub mod models;
 
 ===================
 File: ./backend/src/main.rs
-Size: 14446 bytes
-Modified: 2025-02-19 03:17:24.478390200 +0000
+Size: 12612 bytes
+Modified: 2025-02-19 06:23:14.794625000 +0000
 Dependencies:
 mod config;
 mod core;
@@ -749,7 +698,9 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio;
 use tokio::signal;
+use warp::cors::Cors;
 use warp::{Filter, ws::{WebSocket, Message}};
+use warp::http::Method;
 
 ===================
 ```rs
@@ -782,6 +733,8 @@ use reqwest::Client;
 use tokio::signal;
 use async_trait::async_trait;
 use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError};
+use warp::http::Method;
+use warp::cors::Cors;
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -867,7 +820,7 @@ async fn main() -> Result<(), AppError> {
     // Start core system
     if let Err(e) = core.start().await {
         error!("Failed to start core system: {}", e);
-        return Ok(());
+        return Err(AppError::ConfigError(e));
     }
 
     // Set up WebSocket server
@@ -886,7 +839,7 @@ async fn main() -> Result<(), AppError> {
             let notification_manager = notification_manager.clone();
             let websocket_clients = websocket_clients.clone();
             async move {
-                handle_create_proposal(proposal, notification_manager, websocket_clients).await
+                handle_create_proposal(proposal, notification_manager, websocket_clients, db_pool.clone()).await
             }
         });
 
@@ -897,71 +850,11 @@ async fn main() -> Result<(), AppError> {
             let notification_manager = notification_manager.clone();
             let websocket_clients = websocket_clients.clone();
             async move {
-                handle_vote_on_proposal(proposal_id, vote, notification_manager, websocket_clients).await
+                handle_vote_on_proposal(proposal_id, vote, notification_manager, websocket_clients, db_pool.clone()).await
             }
         });
 
-    let initiate_federation = warp::path!("api" / "federation" / "initiate")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let join_federation = warp::path!("api" / "federation" / "join")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let leave_federation = warp::path!("api" / "federation" / "leave")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let propose_action = warp::path!("api" / "federation" / "propose_action")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let vote_on_federation_proposal = warp::path!("api" / "federation" / "vote")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let share_resources = warp::path!("api" / "federation" / "share_resources")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let update_federation_terms = warp::path!("api" / "federation" / "update_terms")
+    let federation_routes = warp::path("api/federation")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |operation: FederationOperation| {
@@ -979,17 +872,17 @@ async fn main() -> Result<(), AppError> {
             }
         });
 
+    let cors = warp::cors()
+        .allow_any_origin()
+        .allow_methods(&[Method::GET, Method::POST, Method::PUT, Method::DELETE])
+        .allow_headers(vec!["content-type"]);
+
     let routes = create_proposal
         .or(vote_on_proposal)
-        .or(initiate_federation)
-        .or(join_federation)
-        .or(leave_federation)
-        .or(propose_action)
-        .or(vote_on_federation_proposal)
-        .or(share_resources)
-        .or(update_federation_terms)
+        .or(federation_routes)
         .or(query_shared_resources)
-        .or(websocket_route);
+        .or(websocket_route)
+        .with(cors);
 
     let server = warp::serve(routes).run(([0, 0, 0, 0], 8081));
 
@@ -1014,7 +907,11 @@ async fn main() -> Result<(), AppError> {
     Ok(())
 }
 
-async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: WebSocketClients, db_pool: PgPool) -> Result<impl warp::Reply, warp::Rejection> {
+    // Store proposal in the database
+    let db = Database::new(db_pool).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
+    db.create_proposal(&proposal).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
+
     // Logic to handle proposal creation
     let subject = format!("New Proposal Created: {}", proposal.title);
     let body = format!("A new proposal has been created by {}. Description: {}", proposal.created_by, proposal.description);
@@ -1027,7 +924,11 @@ async fn handle_create_proposal(proposal: Proposal, notification_manager: Notifi
     Ok(warp::reply::json(&proposal))
 }
 
-async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: WebSocketClients, db_pool: PgPool) -> Result<impl warp::Reply, warp::Rejection> {
+    // Store vote in the database
+    let db = Database::new(db_pool).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
+    db.record_vote(&vote).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
+
     // Logic to handle voting on a proposal
     let subject = format!("New Vote on Proposal: {}", proposal_id);
     let body = format!("A new vote has been cast by {}. Approve: {}", vote.voter, vote.approve);
@@ -1161,8 +1062,8 @@ impl StorageBackend for DatabaseStorageBackend {
 
 ===================
 File: ./crates/icn-consensus/src/lib.rs
-Size: 11682 bytes
-Modified: 2025-02-19 03:24:56.930983200 +0000
+Size: 11843 bytes
+Modified: 2025-02-19 06:23:14.795626300 +0000
 Dependencies:
 use async_trait::async_trait;
 use bit_set::BitSet;
@@ -1221,6 +1122,7 @@ pub struct ProofOfCooperation {
     reputation_manager: Arc<dyn ReputationManager>,
     federation_operations: HashMap<String, FederationOperation>,
     federations: HashMap<String, Federation>,
+    round_start_time: std::time::Instant,
 }
 
 impl ProofOfCooperation {
@@ -1236,6 +1138,7 @@ impl ProofOfCooperation {
             reputation_manager,
             federation_operations: HashMap::new(),
             federations: HashMap::new(),
+            round_start_time: std::time::Instant::now(),
         }
     }
 
@@ -1244,6 +1147,7 @@ impl ProofOfCooperation {
         self.proposed_block = None;
         self.votes.clear();
         self.vote_trie = Trie::new();
+        self.round_start_time = std::time::Instant::now();
     }
 
     pub fn propose_block(&mut self, block: Block) {
@@ -1519,8 +1423,8 @@ enum FederationType {
 
 ===================
 File: ./crates/icn-core/src/lib.rs
-Size: 8529 bytes
-Modified: 2025-02-19 03:17:24.482393600 +0000
+Size: 8706 bytes
+Modified: 2025-02-19 06:23:14.796627700 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_consensus::ProofOfCooperation;
@@ -1576,27 +1480,22 @@ impl Core {
         }
     }
 
-    pub async fn start(&self) {
+    pub async fn start(&self) -> Result<(), String> {
         self.telemetry.log("Starting Core...");
         if let Err(e) = self.consensus.start().await {
-            error!("Failed to start consensus: {}", e);
-            return;
+            return Err(format!("Failed to start consensus: {}", e));
         }
         if let Err(e) = self.network.start().await {
-            error!("Failed to start network: {}", e);
-            return;
+            return Err(format!("Failed to start network: {}", e));
         }
         if let Err(e) = self.runtime.start().await {
-            error!("Failed to start runtime: {}", e);
-            return;
+            return Err(format!("Failed to start runtime: {}", e));
         }
         if let Err(e) = self.identity.start().await {
-            error!("Failed to start identity: {}", e);
-            return;
+            return Err(format!("Failed to start identity: {}", e));
         }
         if let Err(e) = self.reputation.start().await {
-            error!("Failed to start reputation: {}", e);
-            return;
+            return Err(format!("Failed to start reputation: {}", e));
         }
 
         // Start real-time reputation recalibration
@@ -1610,38 +1509,42 @@ impl Core {
         });
 
         self.telemetry.log("Core started.");
+        Ok(())
     }
 
-    pub async fn stop(&self) {
+    pub async fn stop(&self) -> Result<(), String> {
         self.telemetry.log("Stopping Core...");
         if let Err(e) = self.runtime.stop().await {
-            error!("Failed to stop runtime: {}", e);
+            return Err(format!("Failed to stop runtime: {}", e));
         }
         if let Err(e) = self.network.stop().await {
-            error!("Failed to stop network: {}", e);
+            return Err(format!("Failed to stop network: {}", e));
         }
         if let Err(e) = self.consensus.stop().await {
-            error!("Failed to stop consensus: {}", e);
+            return Err(format!("Failed to stop consensus: {}", e));
         }
         if let Err(e) = self.identity.stop().await {
-            error!("Failed to stop identity: {}", e);
+            return Err(format!("Failed to stop identity: {}", e));
         }
         if let Err(e) = self.reputation.stop().await {
-            error!("Failed to stop reputation: {}", e);
+            return Err(format!("Failed to stop reputation: {}", e));
         }
         self.telemetry.log("Core stopped.");
+        Ok(())
     }
 
-    pub async fn process_transaction(&self, transaction: Transaction) {
+    pub async fn process_transaction(&self, transaction: Transaction) -> Result<(), String> {
         self.telemetry.log("Processing transaction...");
         self.runtime.execute_transaction(transaction).await;
         self.telemetry.log("Transaction processed.");
+        Ok(())
     }
 
-    pub async fn add_block(&self, block: Block) {
+    pub async fn add_block(&self, block: Block) -> Result<(), String> {
         self.telemetry.log("Adding block...");
         self.storage.store_block(block).await;
         self.telemetry.log("Block added.");
+        Ok(())
     }
 
     pub async fn create_proposal(&self, proposal: Proposal) -> Result<(), Box<dyn std::error::Error>> {
@@ -2527,8 +2430,8 @@ pub enum FederationError {
 
 ===================
 File: ./crates/icn-p2p/src/lib.rs
-Size: 86 bytes
-Modified: 2025-01-16 22:02:57.863770400 +0000
+Size: 93 bytes
+Modified: 2025-02-19 06:23:14.798626400 +0000
 Dependencies:
 use icn_types::Transaction;
 
@@ -2539,12 +2442,13 @@ pub mod protocol;
 pub mod networking;
 
 use icn_types::Transaction;
+
 ```
 
 ===================
 File: ./crates/icn-resource/src/lib.rs
 Size: 6916 bytes
-Modified: 2025-02-19 03:33:41.116129300 +0000
+Modified: 2025-02-19 06:23:14.798626400 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_federation::ResourceManager;
@@ -3045,8 +2949,8 @@ mod tests {
 
 ===================
 File: ./crates/icn-types/src/lib.rs
-Size: 21279 bytes
-Modified: 2025-02-19 03:23:34.160359600 +0000
+Size: 21959 bytes
+Modified: 2025-02-19 06:23:14.807143300 +0000
 Dependencies:
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
@@ -3609,7 +3513,7 @@ impl Transaction {
         // Validate based on transaction type
         match &self.transaction_type {
             TransactionType::Transfer { receiver, amount } => {
-                !receiver.is_empty() && *amount > 0
+                !receiver.is_empty() && *amount > 0 && self.sender != *receiver
             },
             TransactionType::ContractExecution { contract_id, input_data } => {
                 !contract_id.is_empty() && !input_data.is_empty()
