@@ -1,13 +1,20 @@
-FROM node:18-alpine AS builder
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
+# Use Node.js base image
+FROM node:23-slim
 
-FROM node:18-alpine AS runner
-WORKDIR /app
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+# Set working directory
+WORKDIR /usr/src/app
+
+# Copy everything from frontend directory
+COPY frontend/package.json frontend/package-lock.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy the rest of the frontend source code
+COPY frontend/. ./
+
+# Expose the frontend port
+EXPOSE 3000
+
+# Start the frontend app
 CMD ["npm", "start"]

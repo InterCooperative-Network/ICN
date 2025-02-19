@@ -2,11 +2,11 @@ use std::time::SystemTime;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
-use serde_derive::{Serialize, Deserialize};
 use tokio::task;
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::sync::Mutex;
+
+use std::sync::Mutex; // Remove Arc since it's unused
 use lazy_static::lazy_static;
 use thiserror::Error;
 
@@ -99,6 +99,26 @@ pub struct BlockMetadata {
     
     /// Summary of relationship transactions
     pub relationship_updates: RelationshipMetadata,
+
+    /// Fault tolerance level for Byzantine fault tolerance
+    pub fault_tolerance: Option<u32>,
+}
+
+impl BlockMetadata {
+    pub fn with_bft_info(&mut self, quorum_size: u32, fault_tolerance: u32) {
+        self.validator_count = quorum_size;
+        self.fault_tolerance = Some(fault_tolerance);
+        self.consensus_duration_ms = 0; // Will be set during finalization
+    }
+
+    pub fn is_bft_valid(&self) -> bool {
+        if let Some(fault_tolerance) = self.fault_tolerance {
+            // Check if we have enough validators (3f + 1)
+            self.validator_count >= (fault_tolerance * 3) + 1
+        } else {
+            false
+        }
+    }
 }
 
 /// Metadata specific to relationship transactions in the block
@@ -134,6 +154,7 @@ impl Block {
             resources_used,
             size: 0,
             relationship_updates: relationship_metadata,
+            fault_tolerance: None,
         };
 
         let mut block = Block {
@@ -170,12 +191,9 @@ impl Block {
         hasher.update(&self.previous_hash);
         hasher.update(self.timestamp.to_string());
         
-        // Add transaction hashes
-        let transaction_hashes: Vec<String> = self.transactions.par_iter()
-            .map(|tx| tx.hash.clone())
-            .collect();
-        for tx_hash in transaction_hashes {
-            hasher.update(tx_hash);
+        // Add entire transaction data
+        for tx in &self.transactions {
+            hasher.update(serde_json::to_string(tx).unwrap());
         }
         
         // Add proposer
@@ -243,42 +261,8 @@ impl Block {
             return Err(BlockError::InvalidTimestamp);
         }
 
-        // Group transactions by type
-        let mut grouped_transactions: HashMap<&str, Vec<&Transaction>> = HashMap::new();
-        for tx in &self.transactions {
-            let tx_type = match &tx.transaction_type {
-                TransactionType::Transfer { .. } => "Transfer",
-                TransactionType::ContractExecution { .. } => "ContractExecution",
-                TransactionType::RecordContribution { .. } => "RecordContribution",
-                TransactionType::RecordMutualAid { .. } => "RecordMutualAid",
-                TransactionType::UpdateRelationship { .. } => "UpdateRelationship",
-                TransactionType::AddEndorsement { .. } => "AddEndorsement",
-            };
-            grouped_transactions.entry(tx_type).or_default().push(tx);
-        }
-
-        // Validate transactions in parallel
-        let validation_tasks: Vec<_> = grouped_transactions.iter()
-            .flat_map(|(_, txs)| txs.iter().map(|tx| {
-                let tx_hash = tx.hash.clone();
-                task::spawn(async move {
-                    let mut cache = TRANSACTION_CACHE.lock().unwrap();
-                    if let Some(&is_valid) = cache.get(&tx_hash) {
-                        is_valid
-                    } else {
-                        let is_valid = tx.validate();
-                        cache.insert(tx_hash, is_valid);
-                        is_valid
-                    }
-                })
-            }))
-            .collect();
-
-        for task in validation_tasks {
-            if !task.await.unwrap() {
-                return Err(BlockError::InvalidTransaction("One or more invalid transactions".into()));
-            }
-        }
+        // Validate transactions
+        self.validate_transactions().await?;
 
         // Verify resource usage
         let calculated_resources: u64 = self.transactions.iter()
@@ -292,6 +276,34 @@ impl Block {
         let calculated_metadata = Self::calculate_relationship_metadata(&self.transactions);
         if calculated_metadata != self.metadata.relationship_updates {
             return Err(BlockError::MetadataMismatch);
+        }
+
+        Ok(())
+    }
+
+    /// Validates the transactions in the block
+    async fn validate_transactions(&self) -> Result<(), BlockError> {
+        let validation_tasks: Vec<_> = self.transactions.iter()
+            .map(|tx| {
+                let tx = tx.clone();
+                task::spawn(async move {
+                    let tx_hash = tx.hash.clone();
+                    let mut cache = TRANSACTION_CACHE.lock().unwrap();
+                    if let Some(&is_valid) = cache.get(&tx_hash) {
+                        is_valid
+                    } else {
+                        let is_valid = tx.validate();
+                        cache.insert(tx_hash, is_valid);
+                        is_valid
+                    }
+                })
+            })
+            .collect();
+
+        for task in validation_tasks {
+            if !task.await.unwrap() {
+                return Err(BlockError::InvalidTransaction("One or more invalid transactions".into()));
+            }
         }
 
         Ok(())
@@ -429,6 +441,19 @@ pub enum TransactionType {
     },
 }
 
+impl TransactionType {
+    pub fn as_str(&self) -> &str {
+        match self {
+            TransactionType::Transfer { .. } => "Transfer",
+            TransactionType::ContractExecution { .. } => "ContractExecution",
+            TransactionType::RecordContribution { .. } => "RecordContribution",
+            TransactionType::RecordMutualAid { .. } => "RecordMutualAid",
+            TransactionType::UpdateRelationship { .. } => "UpdateRelationship",
+            TransactionType::AddEndorsement { .. } => "AddEndorsement",
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Transaction {
     pub sender: String,
@@ -521,7 +546,7 @@ impl Transaction {
         // Validate based on transaction type
         match &self.transaction_type {
             TransactionType::Transfer { receiver, amount } => {
-                !receiver.is_empty() && *amount > 0
+                !receiver.is_empty() && *amount > 0 && self.sender != *receiver
             },
             TransactionType::ContractExecution { contract_id, input_data } => {
                 !contract_id.is_empty() && !input_data.is_empty()
@@ -568,10 +593,60 @@ impl Transaction {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        bytes.extend(self.sender.as_bytes());
-        bytes.extend(self.hash.as_bytes());
-        bytes.extend(&self.timestamp.to_be_bytes());
-        bytes
+        bincode::serialize(self).unwrap_or_default()
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationType {
+    Cooperative,
+    Community, 
+    Hybrid
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationTerms {
+    pub minimum_reputation: i64,
+    pub resource_sharing_policies: String,
+    pub governance_rules: String,
+    pub duration: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationOperation {
+    InitiateFederation {
+        federation_type: FederationType,
+        partner_id: String,
+        terms: FederationTerms,
+    },
+    JoinFederation {
+        federation_id: String,
+        commitment: Vec<String>,
+    },
+    LeaveFederation {
+        federation_id: String,
+        reason: String,
+    },
+    ProposeAction {
+        federation_id: String,
+        action_type: String,
+        description: String,
+        resources: HashMap<String, u64>,
+    },
+    VoteOnProposal {
+        federation_id: String,
+        proposal_id: String,
+        approve: bool,
+        notes: Option<String>,
+    },
+    ShareResources {
+        federation_id: String,
+        resource_type: String,
+        amount: u64,
+        recipient_id: String,
+    },
+    UpdateFederationTerms {
+        federation_id: String,
+        new_terms: FederationTerms,
+    },
 }

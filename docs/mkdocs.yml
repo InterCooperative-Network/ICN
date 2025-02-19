@@ -16,6 +16,7 @@ nav:
       - Diagrams:
           - Component Diagram: architecture/diagrams/component/component.md
           - System Diagram: architecture/diagrams/system/system.md
+          - High-Level Architecture Diagram: architecture/diagrams/mermaid/component-diagram.mermaid
   - Specifications:
       - API Governance: specifications/api/governance-api.md
       - Audit System: specifications/core/audit-system.md

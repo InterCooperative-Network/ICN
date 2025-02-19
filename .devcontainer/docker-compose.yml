@@ -9,6 +9,8 @@ services:
       - "8081:8081"  
     environment:
       - DATABASE_URL=postgres://icnuser:icnpass@db:5432/icndb
+    networks:
+      - icn-network
 
   frontend:
     build:
@@ -16,21 +18,29 @@ services:
       dockerfile: ../docker/frontend.Dockerfile  
     ports:
       - "3000:3000"
+    networks:
+      - icn-network
 
   db:
-    image: postgres:latest
+    image: postgres:13.3
     environment:
       POSTGRES_USER: icnuser
       POSTGRES_PASSWORD: icnpass
       POSTGRES_DB: icndb
     ports:
       - "5432:5432"
+    networks:
+      - icn-network
 
   docs:
-    image: squidfunk/mkdocs-material:latest
+    image: squidfunk/mkdocs-material:7.1.0
     volumes:
       - ../docs:/docs          
     ports:
       - "8000:8000"
     working_dir: /docs
     command: /bin/sh -c "pip install mkdocs-mermaid2-plugin && mkdocs serve -a 0.0.0.0:8000"
+
+networks:
+  icn-network:
+    driver: bridge

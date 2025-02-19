@@ -1,0 +1,11 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+program      = { SOI ~ statement* ~ EOI }
+statement    = _{ governance_rule | reputation_rule | marketplace_rule | threshold_rule | federation_rule }
+governance_rule = { "governance" ~ "{" ~ rule_statement* ~ "}" }
+reputation_rule = { "reputation" ~ "{" ~ rule_statement* ~ "}" }
+marketplace_rule = { "marketplace" ~ "{" ~ rule_statement* ~ "}" }
+threshold_rule   = { "threshold" ~ "{" ~ rule_statement* ~ "}" }
+federation_rule  = { "federation" ~ "{" ~ rule_statement* ~ "}" }
+rule_statement   = { key ~ ":" ~ value }
+key            = @{ ASCII_ALPHANUMERIC+ }
+value          = @{ (!"}" ~ ANY)+ }

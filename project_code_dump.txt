@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sun Dec 15 04:50:54 UTC 2024
+Project Code Dump - Generated Wed 19 Feb 2025 03:37:17 AM UTC
 ======================================
 
 LLM Context Information
@@ -29,15 +29,34 @@ File Organization:
 Project Tree:
 =============
 .
-├── ICN.code-workspace
 ├── backend
-│   └── Cargo.toml
+│   ├── Cargo.lock
+│   ├── migrations
+│   │   └── 20240218000000_initial.sql
+│   └── src
+│       ├── blockchain.rs
+│       ├── core.rs
+│       ├── db.rs
+│       ├── governance.rs
+│       ├── identity.rs
+│       ├── lib.rs
+│       ├── main.rs
+│       ├── models.rs
+│       ├── networking.rs
+│       ├── reputation.rs
+│       ├── storage.rs
+│       └── vm.rs
+├── Cargo.lock
+├── Cargo.toml
+├── config
+│   └── feature-flags.json
 ├── contracts
 │   └── cooperative
 │       └── src
 ├── crates
 │   ├── icn-consensus
 │   │   ├── Cargo.toml
+│   │   ├── README.md
 │   │   └── src
 │   ├── icn-core
 │   │   ├── Cargo.toml
@@ -45,8 +64,15 @@ Project Tree:
 │   ├── icn-crypto
 │   │   ├── Cargo.toml
 │   │   └── src
+│   ├── icn-dsl
+│   │   ├── Cargo.toml
+│   │   └── src
+│   ├── icn-federation
+│   │   └── src
 │   ├── icn-p2p
 │   │   ├── Cargo.toml
+│   │   └── src
+│   ├── icn-resource
 │   │   └── src
 │   ├── icn-runtime
 │   │   ├── Cargo.toml
@@ -63,12 +89,27 @@ Project Tree:
 │   ├── backend_new.Dockerfile
 │   ├── docker-compose.yml
 │   └── frontend.Dockerfile
+├── DSL_ICN.txt
 ├── frontend
 │   ├── package.json
+│   ├── postcss.config.js
 │   ├── src
-│   │   └── components
+│   │   ├── components
+│   │   └── styles
+│   ├── tailwind.config.js
 │   └── tsconfig.json
 ├── generate_code_dump.sh
+├── grammar
+│   ├── coop_lang.pest
+│   └── did_grammar.peg
+├── ICN.code-workspace
+├── icn-consensus
+│   └── src
+│       └── lib.rs
+├── icn-core
+│   └── src
+│       ├── storage.rs
+│       └── transaction.rs
 ├── identity
 │   ├── did.rs
 │   ├── identity_system.rs
@@ -77,66 +118,1690 @@ Project Tree:
 ├── inventory_nodes.sh
 ├── project_code_dump.txt
 ├── project_docs_dump.txt
+├── README.md
+├── scripts
+│   ├── backend
+│   │   ├── Cargo.toml
+│   │   └── src
+│   ├── contracts
+│   ├── crates
+│   ├── frontend
+│   │   ├── package-lock.json
+│   │   └── src
+│   └── setup.sh
 ├── setup_and_run_script.sh
 ├── setup_docs.sh
 ├── setup_venv.sh
+├── src
+│   ├── attestation
+│   ├── block.rs
+│   ├── dsl
+│   │   ├── governance.rs
+│   │   ├── grammar.pest
+│   │   ├── mod.rs
+│   │   ├── parser.rs
+│   │   └── vm.rs
+│   ├── feature-flags
+│   ├── governance
+│   └── parser.rs
 ├── start_docs_server.sh
 └── tools
-    ├── README.md
     ├── activate-docs-env.sh
     ├── activate-docs-env.sh.bak
     ├── doctools
-    │   ├── __init__.py
     │   ├── docmanager.py
     │   ├── docsctl
+    │   ├── __init__.py
     │   └── specgen.py
     ├── install_docsctl.sh
+    ├── README.md
     └── requirements.txt
 
 ===================
-File: ./backend/Cargo.toml
-Size: 597 bytes
-Modified: 2024-12-15 04:28:45.682118797 +0000
+File: ./scripts/backend/Cargo.toml
+Size: 78 bytes
+Modified: 2025-02-18 07:59:01.136149500 +0000
 
 ===================
 ```toml
 [package]
-name = "icn-backend"
+name = "backend"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-icn-types = { path = "../crates/icn-types" }
-icn-core = { path = "../crates/icn-core" }
-icn-consensus = { path = "../crates/icn-consensus" }
-icn-crypto = { path = "../crates/icn-crypto" }
-icn-p2p = { path = "../crates/icn-p2p" }
-icn-runtime = { path = "../crates/icn-runtime" }
-icn-storage = { path = "../crates/icn-storage" }
-serde = "1.0"
-secp256k1 = "0.21"
-chrono = "0.4"
-sha2 = "0.9"
-tokio-tungstenite = "0.15"
-warp = "0.3"
-futures-util = "0.3"
-hashbrown = "0.11"
-tokio = { version = "1", features = ["full"] }
 ```
 
 ===================
-File: ./docker/docker-compose.yml
-Size: 829 bytes
-Modified: 2024-12-15 04:28:47.482118852 +0000
+File: ./backend/src/lib.rs
+Size: 169 bytes
+Modified: 2025-02-18 07:17:44.613675800 +0000
+Dependencies:
 
 ===================
+```rs
+pub mod blockchain;
+pub mod core;
+pub mod db;
+pub mod identity;
+pub mod reputation;
+pub mod governance;
+pub mod vm;
+pub mod networking;
+pub mod storage;
+pub mod models;
+```
+
+===================
+File: ./backend/src/main.rs
+Size: 14446 bytes
+Modified: 2025-02-19 03:17:24.478390200 +0000
+Dependencies:
+mod config;
+mod core;
+mod db;
+mod federation;
+mod notification;
+mod reputation;
+mod websocket;
+use async_trait::async_trait;
+use crate::config::Config;
+use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
+use crate::db::Database;
+use crate::federation::{FederationOperation, FederationTerms, FederationType};
+use crate::notification::NotificationManager;
+use crate::reputation::ReputationManager;
+use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError};
+use crate::websocket::{WebSocketClients, handle_websocket, broadcast_message};
+use dashmap::DashMap;
+use env_logger;
+use futures_util::StreamExt;
+use log::{info, error};
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
+use std::sync::Arc;
+use thiserror::Error;
+use tokio;
+use tokio::signal;
+use warp::{Filter, ws::{WebSocket, Message}};
+
+===================
+```rs
+mod config;
+mod core;
+mod db;
+mod federation;
+mod notification;
+mod reputation;
+mod websocket;
+
+use crate::config::Config;
+use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
+use crate::db::Database;
+use crate::federation::{FederationOperation, FederationTerms, FederationType};
+use crate::notification::NotificationManager;
+use crate::reputation::ReputationManager;
+use crate::websocket::{WebSocketClients, handle_websocket, broadcast_message};
+use tokio;
+use log::{info, error};
+use env_logger;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use futures_util::StreamExt;
+use warp::{Filter, ws::{WebSocket, Message}};
+use dashmap::DashMap;
+use sqlx::PgPool;
+use thiserror::Error;
+use reqwest::Client;
+use tokio::signal;
+use async_trait::async_trait;
+use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError};
+
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+    #[error("Database error: {0}")]
+    DatabaseError(#[from] sqlx::Error),
+    #[error("WebSocket error: {0}")]
+    WebSocketError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+}
+
+#[derive(Serialize, Deserialize)]
+struct Proposal {
+    id: String,
+    title: String,
+    description: String,
+    status: String,
+    votes_for: i64,
+    votes_against: i64,
+    created_by: String,
+    ends_at: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Vote {
+    proposal_id: String,
+    voter: String,
+    approve: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TokenizedResource {
+    resource_id: String,
+    owner: String,
+    quantity: u64,
+    price_per_unit: f64,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), AppError> {
+    // Initialize logging with env_logger
+    env_logger::init();
+
+    // Load and validate configuration
+    let config: Config = config::load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
+    config.validate()?;
+    
+    // Set up database connection pool
+    let db_pool = PgPool::connect(&config.database_url)
+        .await
+        .map_err(AppError::DatabaseError)?;
+
+    // Initialize WebSocket clients using DashMap
+    let websocket_clients: WebSocketClients = Arc::new(DashMap::new());
+
+    // Initialize components
+    let storage_manager = StorageManager::new(Box::new(DatabaseStorageBackend::new(db_pool.clone())));
+    let network_manager = NetworkManager::new();
+    let runtime_manager = RuntimeManager::new();
+    let telemetry_manager = TelemetryManager::new(PrometheusMetrics, Logger, TracingSystem);
+    let identity_manager = IdentityManager::new();
+    let reputation_manager = ReputationManager::new(
+        config.governance_decay_rate,
+        config.resource_sharing_decay_rate,
+        config.technical_contributions_decay_rate,
+        config.decay_exemptions.clone(),
+    );
+
+    let notification_manager = NotificationManager::new(config.notification_email.clone(), config.notification_sms.clone());
+
+    // Create core system
+    let core = Core::new(
+        Arc::new(storage_manager),
+        Arc::new(network_manager),
+        Arc::new(runtime_manager),
+        Arc::new(telemetry_manager),
+        Arc::new(identity_manager),
+        Arc::new(reputation_manager),
+    );
+
+    // Start core system
+    if let Err(e) = core.start().await {
+        error!("Failed to start core system: {}", e);
+        return Ok(());
+    }
+
+    // Set up WebSocket server
+    let websocket_route = warp::path("ws")
+        .and(warp::ws())
+        .map(move |ws: warp::ws::Ws| {
+            let websocket_clients = websocket_clients.clone();
+            ws.on_upgrade(move |socket| handle_websocket(socket, websocket_clients))
+        });
+
+    // Set up Warp server
+    let create_proposal = warp::path!("api" / "governance" / "proposals")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |proposal: Proposal| {
+            let notification_manager = notification_manager.clone();
+            let websocket_clients = websocket_clients.clone();
+            async move {
+                handle_create_proposal(proposal, notification_manager, websocket_clients).await
+            }
+        });
+
+    let vote_on_proposal = warp::path!("api" / "governance" / "proposals" / String / "vote")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |proposal_id: String, vote: Vote| {
+            let notification_manager = notification_manager.clone();
+            let websocket_clients = websocket_clients.clone();
+            async move {
+                handle_vote_on_proposal(proposal_id, vote, notification_manager, websocket_clients).await
+            }
+        });
+
+    let initiate_federation = warp::path!("api" / "federation" / "initiate")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let join_federation = warp::path!("api" / "federation" / "join")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let leave_federation = warp::path!("api" / "federation" / "leave")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let propose_action = warp::path!("api" / "federation" / "propose_action")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let vote_on_federation_proposal = warp::path!("api" / "federation" / "vote")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let share_resources = warp::path!("api" / "federation" / "share_resources")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let update_federation_terms = warp::path!("api" / "federation" / "update_terms")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let query_shared_resources = warp::path!("api" / "resources" / "query")
+        .and(warp::get())
+        .and_then(move || {
+            async move {
+                handle_query_shared_resources().await
+            }
+        });
+
+    let routes = create_proposal
+        .or(vote_on_proposal)
+        .or(initiate_federation)
+        .or(join_federation)
+        .or(leave_federation)
+        .or(propose_action)
+        .or(vote_on_federation_proposal)
+        .or(share_resources)
+        .or(update_federation_terms)
+        .or(query_shared_resources)
+        .or(websocket_route);
+
+    let server = warp::serve(routes).run(([0, 0, 0, 0], 8081));
+
+    // Handle graceful shutdown
+    let shutdown_signal = async {
+        signal::ctrl_c().await.expect("Failed to install CTRL+C signal handler");
+    };
+
+    info!("Warp server started.");
+    let (_, server_result) = tokio::join!(shutdown_signal, server);
+
+    if let Err(e) = server_result {
+        error!("Warp server encountered an error: {}", e);
+    }
+
+    // Stop core system
+    if let Err(e) = core.stop().await {
+        error!("Failed to stop core system: {}", e);
+    }
+
+    info!("Backend application stopped.");
+    Ok(())
+}
+
+async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
+    // Logic to handle proposal creation
+    let subject = format!("New Proposal Created: {}", proposal.title);
+    let body = format!("A new proposal has been created by {}. Description: {}", proposal.created_by, proposal.description);
+    notification_manager.send_notification(&subject, &body).await;
+
+    // Broadcast proposal update via WebSocket
+    let message = warp::ws::Message::text(serde_json::to_string(&proposal).unwrap());
+    broadcast_message(&message, websocket_clients).await;
+
+    Ok(warp::reply::json(&proposal))
+}
+
+async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
+    // Logic to handle voting on a proposal
+    let subject = format!("New Vote on Proposal: {}", proposal_id);
+    let body = format!("A new vote has been cast by {}. Approve: {}", vote.voter, vote.approve);
+    notification_manager.send_notification(&subject, &body).await;
+
+    // Broadcast vote update via WebSocket
+    let message = warp::ws::Message::text(serde_json::to_string(&vote).unwrap());
+    broadcast_message(&message, websocket_clients).await;
+
+    Ok(warp::reply::json(&vote))
+}
+
+async fn handle_federation_operation(operation: FederationOperation, notification_manager: NotificationManager) -> Result<impl warp::Reply, warp::Rejection> {
+    // Logic to handle federation operations
+    let subject = match &operation {
+        FederationOperation::InitiateFederation { federation_type, partner_id, terms } => {
+            format!("Federation Initiated: {:?}", federation_type)
+        }
+        FederationOperation::JoinFederation { federation_id, commitment } => {
+            format!("Joined Federation: {}", federation_id)
+        }
+        FederationOperation::LeaveFederation { federation_id, reason } => {
+            format!("Left Federation: {}", federation_id)
+        }
+        FederationOperation::ProposeAction { federation_id, action_type, description, resources } => {
+            format!("Action Proposed in Federation: {}", federation_id)
+        }
+        FederationOperation::VoteOnProposal { federation_id, proposal_id, approve, notes } => {
+            format!("Vote on Federation Proposal: {}", proposal_id)
+        }
+        FederationOperation::ShareResources { federation_id, resource_type, amount, recipient_id } => {
+            format!("Resources Shared in Federation: {}", federation_id)
+        }
+        FederationOperation::UpdateFederationTerms { federation_id, new_terms } => {
+            format!("Federation Terms Updated: {}", federation_id)
+        }
+    };
+
+    let body = format!("Federation operation executed: {:?}", operation);
+    notification_manager.send_notification(&subject, &body).await;
+    Ok(warp::reply::json(&operation))
+}
+
+async fn handle_query_shared_resources() -> Result<impl warp::Reply, warp::Rejection> {
+    // Logic to handle querying shared resources
+    let resources = vec![
+        TokenizedResource {
+            resource_id: "resource1".to_string(),
+            owner: "did:icn:owner1".to_string(),
+            quantity: 100,
+            price_per_unit: 10.0,
+        },
+        TokenizedResource {
+            resource_id: "resource2".to_string(),
+            owner: "did:icn:owner2".to_string(),
+            quantity: 200,
+            price_per_unit: 20.0,
+        },
+    ];
+    Ok(warp::reply::json(&resources))
+}
+
+struct DatabaseStorageBackend {
+    pool: PgPool,
+}
+
+impl DatabaseStorageBackend {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl StorageBackend for DatabaseStorageBackend {
+    async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()> {
+        sqlx::query!(
+            r#"
+            INSERT INTO storage (key, value)
+            VALUES ($1, $2)
+            ON CONFLICT (key) DO UPDATE SET value = $2
+            "#,
+            key,
+            value
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn get(&self, key: &str) -> StorageResult<Vec<u8>> {
+        let result = sqlx::query!(
+            r#"
+            SELECT value FROM storage WHERE key = $1
+            "#,
+            key
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        Ok(result.value)
+    }
+
+    async fn delete(&self, key: &str) -> StorageResult<()> {
+        sqlx::query!(
+            r#"
+            DELETE FROM storage WHERE key = $1
+            "#,
+            key
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn exists(&self, key: &str) -> StorageResult<bool> {
+        let result = sqlx::query!(
+            r#"
+            SELECT EXISTS(SELECT 1 FROM storage WHERE key = $1)
+            "#,
+            key
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        Ok(result.exists.unwrap_or(false))
+    }
+}
+```
+
+===================
+File: ./scripts/backend/src/main.rs
+Size: 45 bytes
+Modified: 2025-02-18 07:59:01.140151200 +0000
+Dependencies:
+
+===================
+```rs
+fn main() {
+    println!("Hello, world!");
+}
+```
+
+===================
+File: ./frontend/package.json
+Size: 600 bytes
+Modified: 2025-02-18 08:16:48.535122800 +0000
+
+===================
+```json
+{
+  "name": "icn-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for the Inter-Cooperative Network",
+  "main": "index.js",
+  "scripts": {
+    "start": "next start",
+    "build": "next build",
+    "dev": "next dev",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "eslint": "^7.32.0",
+    "prettier": "^2.3.2",
+    "eslint-config-prettier": "^8.3.0",
+    "eslint-plugin-prettier": "^3.4.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
+```
+
+===================
+File: ./.devcontainer/docker-compose.yml
+Size: 973 bytes
+Modified: 2025-02-19 00:47:20.891182900 +0000
+
+===================
+
+===================
+File: ./docker/docker-compose.yml
+Size: 1347 bytes
+Modified: 2025-02-19 00:47:20.971282200 +0000
+
+===================
+
+===================
+File: ./backend/src/lib.rs
+Size: 169 bytes
+Modified: 2025-02-18 07:17:44.613675800 +0000
+Dependencies:
+
+===================
+```rs
+pub mod blockchain;
+pub mod core;
+pub mod db;
+pub mod identity;
+pub mod reputation;
+pub mod governance;
+pub mod vm;
+pub mod networking;
+pub mod storage;
+pub mod models;
+```
+
+===================
+File: ./backend/src/main.rs
+Size: 14446 bytes
+Modified: 2025-02-19 03:17:24.478390200 +0000
+Dependencies:
+mod config;
+mod core;
+mod db;
+mod federation;
+mod notification;
+mod reputation;
+mod websocket;
+use async_trait::async_trait;
+use crate::config::Config;
+use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
+use crate::db::Database;
+use crate::federation::{FederationOperation, FederationTerms, FederationType};
+use crate::notification::NotificationManager;
+use crate::reputation::ReputationManager;
+use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError};
+use crate::websocket::{WebSocketClients, handle_websocket, broadcast_message};
+use dashmap::DashMap;
+use env_logger;
+use futures_util::StreamExt;
+use log::{info, error};
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
+use std::sync::Arc;
+use thiserror::Error;
+use tokio;
+use tokio::signal;
+use warp::{Filter, ws::{WebSocket, Message}};
+
+===================
+```rs
+mod config;
+mod core;
+mod db;
+mod federation;
+mod notification;
+mod reputation;
+mod websocket;
+
+use crate::config::Config;
+use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
+use crate::db::Database;
+use crate::federation::{FederationOperation, FederationTerms, FederationType};
+use crate::notification::NotificationManager;
+use crate::reputation::ReputationManager;
+use crate::websocket::{WebSocketClients, handle_websocket, broadcast_message};
+use tokio;
+use log::{info, error};
+use env_logger;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use futures_util::StreamExt;
+use warp::{Filter, ws::{WebSocket, Message}};
+use dashmap::DashMap;
+use sqlx::PgPool;
+use thiserror::Error;
+use reqwest::Client;
+use tokio::signal;
+use async_trait::async_trait;
+use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError};
+
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+    #[error("Database error: {0}")]
+    DatabaseError(#[from] sqlx::Error),
+    #[error("WebSocket error: {0}")]
+    WebSocketError(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+}
+
+#[derive(Serialize, Deserialize)]
+struct Proposal {
+    id: String,
+    title: String,
+    description: String,
+    status: String,
+    votes_for: i64,
+    votes_against: i64,
+    created_by: String,
+    ends_at: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Vote {
+    proposal_id: String,
+    voter: String,
+    approve: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TokenizedResource {
+    resource_id: String,
+    owner: String,
+    quantity: u64,
+    price_per_unit: f64,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), AppError> {
+    // Initialize logging with env_logger
+    env_logger::init();
+
+    // Load and validate configuration
+    let config: Config = config::load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
+    config.validate()?;
+    
+    // Set up database connection pool
+    let db_pool = PgPool::connect(&config.database_url)
+        .await
+        .map_err(AppError::DatabaseError)?;
+
+    // Initialize WebSocket clients using DashMap
+    let websocket_clients: WebSocketClients = Arc::new(DashMap::new());
+
+    // Initialize components
+    let storage_manager = StorageManager::new(Box::new(DatabaseStorageBackend::new(db_pool.clone())));
+    let network_manager = NetworkManager::new();
+    let runtime_manager = RuntimeManager::new();
+    let telemetry_manager = TelemetryManager::new(PrometheusMetrics, Logger, TracingSystem);
+    let identity_manager = IdentityManager::new();
+    let reputation_manager = ReputationManager::new(
+        config.governance_decay_rate,
+        config.resource_sharing_decay_rate,
+        config.technical_contributions_decay_rate,
+        config.decay_exemptions.clone(),
+    );
+
+    let notification_manager = NotificationManager::new(config.notification_email.clone(), config.notification_sms.clone());
+
+    // Create core system
+    let core = Core::new(
+        Arc::new(storage_manager),
+        Arc::new(network_manager),
+        Arc::new(runtime_manager),
+        Arc::new(telemetry_manager),
+        Arc::new(identity_manager),
+        Arc::new(reputation_manager),
+    );
+
+    // Start core system
+    if let Err(e) = core.start().await {
+        error!("Failed to start core system: {}", e);
+        return Ok(());
+    }
+
+    // Set up WebSocket server
+    let websocket_route = warp::path("ws")
+        .and(warp::ws())
+        .map(move |ws: warp::ws::Ws| {
+            let websocket_clients = websocket_clients.clone();
+            ws.on_upgrade(move |socket| handle_websocket(socket, websocket_clients))
+        });
+
+    // Set up Warp server
+    let create_proposal = warp::path!("api" / "governance" / "proposals")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |proposal: Proposal| {
+            let notification_manager = notification_manager.clone();
+            let websocket_clients = websocket_clients.clone();
+            async move {
+                handle_create_proposal(proposal, notification_manager, websocket_clients).await
+            }
+        });
+
+    let vote_on_proposal = warp::path!("api" / "governance" / "proposals" / String / "vote")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |proposal_id: String, vote: Vote| {
+            let notification_manager = notification_manager.clone();
+            let websocket_clients = websocket_clients.clone();
+            async move {
+                handle_vote_on_proposal(proposal_id, vote, notification_manager, websocket_clients).await
+            }
+        });
+
+    let initiate_federation = warp::path!("api" / "federation" / "initiate")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let join_federation = warp::path!("api" / "federation" / "join")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let leave_federation = warp::path!("api" / "federation" / "leave")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let propose_action = warp::path!("api" / "federation" / "propose_action")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let vote_on_federation_proposal = warp::path!("api" / "federation" / "vote")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let share_resources = warp::path!("api" / "federation" / "share_resources")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let update_federation_terms = warp::path!("api" / "federation" / "update_terms")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
+
+    let query_shared_resources = warp::path!("api" / "resources" / "query")
+        .and(warp::get())
+        .and_then(move || {
+            async move {
+                handle_query_shared_resources().await
+            }
+        });
+
+    let routes = create_proposal
+        .or(vote_on_proposal)
+        .or(initiate_federation)
+        .or(join_federation)
+        .or(leave_federation)
+        .or(propose_action)
+        .or(vote_on_federation_proposal)
+        .or(share_resources)
+        .or(update_federation_terms)
+        .or(query_shared_resources)
+        .or(websocket_route);
+
+    let server = warp::serve(routes).run(([0, 0, 0, 0], 8081));
+
+    // Handle graceful shutdown
+    let shutdown_signal = async {
+        signal::ctrl_c().await.expect("Failed to install CTRL+C signal handler");
+    };
+
+    info!("Warp server started.");
+    let (_, server_result) = tokio::join!(shutdown_signal, server);
+
+    if let Err(e) = server_result {
+        error!("Warp server encountered an error: {}", e);
+    }
+
+    // Stop core system
+    if let Err(e) = core.stop().await {
+        error!("Failed to stop core system: {}", e);
+    }
+
+    info!("Backend application stopped.");
+    Ok(())
+}
+
+async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
+    // Logic to handle proposal creation
+    let subject = format!("New Proposal Created: {}", proposal.title);
+    let body = format!("A new proposal has been created by {}. Description: {}", proposal.created_by, proposal.description);
+    notification_manager.send_notification(&subject, &body).await;
+
+    // Broadcast proposal update via WebSocket
+    let message = warp::ws::Message::text(serde_json::to_string(&proposal).unwrap());
+    broadcast_message(&message, websocket_clients).await;
+
+    Ok(warp::reply::json(&proposal))
+}
+
+async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: WebSocketClients) -> Result<impl warp::Reply, warp::Rejection> {
+    // Logic to handle voting on a proposal
+    let subject = format!("New Vote on Proposal: {}", proposal_id);
+    let body = format!("A new vote has been cast by {}. Approve: {}", vote.voter, vote.approve);
+    notification_manager.send_notification(&subject, &body).await;
+
+    // Broadcast vote update via WebSocket
+    let message = warp::ws::Message::text(serde_json::to_string(&vote).unwrap());
+    broadcast_message(&message, websocket_clients).await;
+
+    Ok(warp::reply::json(&vote))
+}
+
+async fn handle_federation_operation(operation: FederationOperation, notification_manager: NotificationManager) -> Result<impl warp::Reply, warp::Rejection> {
+    // Logic to handle federation operations
+    let subject = match &operation {
+        FederationOperation::InitiateFederation { federation_type, partner_id, terms } => {
+            format!("Federation Initiated: {:?}", federation_type)
+        }
+        FederationOperation::JoinFederation { federation_id, commitment } => {
+            format!("Joined Federation: {}", federation_id)
+        }
+        FederationOperation::LeaveFederation { federation_id, reason } => {
+            format!("Left Federation: {}", federation_id)
+        }
+        FederationOperation::ProposeAction { federation_id, action_type, description, resources } => {
+            format!("Action Proposed in Federation: {}", federation_id)
+        }
+        FederationOperation::VoteOnProposal { federation_id, proposal_id, approve, notes } => {
+            format!("Vote on Federation Proposal: {}", proposal_id)
+        }
+        FederationOperation::ShareResources { federation_id, resource_type, amount, recipient_id } => {
+            format!("Resources Shared in Federation: {}", federation_id)
+        }
+        FederationOperation::UpdateFederationTerms { federation_id, new_terms } => {
+            format!("Federation Terms Updated: {}", federation_id)
+        }
+    };
+
+    let body = format!("Federation operation executed: {:?}", operation);
+    notification_manager.send_notification(&subject, &body).await;
+    Ok(warp::reply::json(&operation))
+}
+
+async fn handle_query_shared_resources() -> Result<impl warp::Reply, warp::Rejection> {
+    // Logic to handle querying shared resources
+    let resources = vec![
+        TokenizedResource {
+            resource_id: "resource1".to_string(),
+            owner: "did:icn:owner1".to_string(),
+            quantity: 100,
+            price_per_unit: 10.0,
+        },
+        TokenizedResource {
+            resource_id: "resource2".to_string(),
+            owner: "did:icn:owner2".to_string(),
+            quantity: 200,
+            price_per_unit: 20.0,
+        },
+    ];
+    Ok(warp::reply::json(&resources))
+}
+
+struct DatabaseStorageBackend {
+    pool: PgPool,
+}
+
+impl DatabaseStorageBackend {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl StorageBackend for DatabaseStorageBackend {
+    async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()> {
+        sqlx::query!(
+            r#"
+            INSERT INTO storage (key, value)
+            VALUES ($1, $2)
+            ON CONFLICT (key) DO UPDATE SET value = $2
+            "#,
+            key,
+            value
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn get(&self, key: &str) -> StorageResult<Vec<u8>> {
+        let result = sqlx::query!(
+            r#"
+            SELECT value FROM storage WHERE key = $1
+            "#,
+            key
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        Ok(result.value)
+    }
+
+    async fn delete(&self, key: &str) -> StorageResult<()> {
+        sqlx::query!(
+            r#"
+            DELETE FROM storage WHERE key = $1
+            "#,
+            key
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn exists(&self, key: &str) -> StorageResult<bool> {
+        let result = sqlx::query!(
+            r#"
+            SELECT EXISTS(SELECT 1 FROM storage WHERE key = $1)
+            "#,
+            key
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        Ok(result.exists.unwrap_or(false))
+    }
+}
+```
+
+===================
+File: ./crates/icn-consensus/src/lib.rs
+Size: 11682 bytes
+Modified: 2025-02-19 03:24:56.930983200 +0000
+Dependencies:
+use async_trait::async_trait;
+use bit_set::BitSet;
+use federation::{Federation, FederationError};
+use icn_core::ReputationManager;
+use icn_types::Block;
+use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
+use std::time::Duration;
+use thiserror::Error;
+use tokio::task;
+use tokio::time::sleep;
+use trie_rs::Trie;
+
+===================
+```rs
+pub mod proof_of_cooperation;
+pub mod validation;
+pub mod round_management;
+pub mod timeout_handling;
+pub mod federation;
+
+use async_trait::async_trait;
+use std::collections::{HashMap, VecDeque};
+use std::time::Duration;
+use tokio::time::sleep;
+use tokio::task;
+use icn_core::ReputationManager;
+use icn_types::Block;
+use std::sync::Arc;
+use bit_set::BitSet;
+use trie_rs::Trie;
+use thiserror::Error;
+use federation::{Federation, FederationError};
+
+#[derive(Error, Debug)]
+pub enum ConsensusError {
+    #[error("Failed to reach consensus: {0}")]
+    ConsensusFailure(String),
+    #[error("Block validation failed: {0}")]
+    ValidationFailure(String),
+    #[error("Timeout occurred: {0}")]
+    TimeoutError(String),
+    #[error("BFT error: {0}")]
+    BftError(String),
+}
+
+pub struct ProofOfCooperation {
+    current_round: u64,
+    participants: VecDeque<String>,
+    proposed_block: Option<Block>,
+    votes: BitSet,
+    vote_trie: Trie,
+    timeout: Duration,
+    timeout_handling: timeout_handling::TimeoutHandling,
+    reputation_manager: Arc<dyn ReputationManager>,
+    federation_operations: HashMap<String, FederationOperation>,
+    federations: HashMap<String, Federation>,
+}
+
+impl ProofOfCooperation {
+    pub fn new(reputation_manager: Arc<dyn ReputationManager>) -> Self {
+        ProofOfCooperation {
+            current_round: 0,
+            participants: VecDeque::new(),
+            proposed_block: None,
+            votes: BitSet::new(),
+            vote_trie: Trie::new(),
+            timeout: Duration::from_secs(60),
+            timeout_handling: timeout_handling::TimeoutHandling::new(Duration::from_secs(60)),
+            reputation_manager,
+            federation_operations: HashMap::new(),
+            federations: HashMap::new(),
+        }
+    }
+
+    pub fn start_round(&mut self) {
+        self.current_round += 1;
+        self.proposed_block = None;
+        self.votes.clear();
+        self.vote_trie = Trie::new();
+    }
+
+    pub fn propose_block(&mut self, block: Block) {
+        self.proposed_block = Some(block);
+    }
+
+    pub fn vote(&mut self, participant: String, vote: bool) {
+        if self.is_eligible(&participant) {
+            let index = self.participants.iter().position(|p| p == &participant).unwrap_or_else(|| {
+                self.participants.push_back(participant.clone());
+                self.participants.len() - 1
+            });
+            if vote {
+                self.votes.insert(index);
+            }
+            self.vote_trie.insert(&participant);
+        }
+    }
+
+    pub async fn finalize_block(&mut self) -> Result<Option<Block>, ConsensusError> {
+        let (total_reputation, approval_reputation) = self.parallel_vote_counting().await
+            .map_err(|e| ConsensusError::ConsensusFailure(e.to_string()))?;
+
+        // BFT requirement: Need more than 2/3 of total reputation for finalization
+        let bft_threshold = (total_reputation as f64 * 2.0 / 3.0) as i64;
+        
+        if approval_reputation > bft_threshold {
+            if let Some(block) = &self.proposed_block {
+                // Update block metadata before finalization
+                let mut final_block = block.clone();
+                let consensus_duration = self.round_start_time.elapsed().as_millis() as u64;
+                final_block.metadata.consensus_duration_ms = consensus_duration;
+                
+                // Clear round state
+                self.start_round();
+                
+                Ok(Some(final_block))
+            } else {
+                Err(ConsensusError::ConsensusFailure("No proposed block".into()))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn handle_timeout(&self) {
+        if let Err(e) = self.timeout_handling.handle_timeout().await {
+            eprintln!("Error handling timeout: {}", e);
+        }
+    }
+
+    fn is_eligible(&self, participant: &str) -> bool {
+        self.reputation_manager.is_eligible(participant, 10, "consensus")
+    }
+
+    pub async fn parallel_vote_counting(&self) -> Result<(i64, i64), Box<dyn std::error::Error>> {
+        let chunks: Vec<_> = self.participants.chunks(self.participants.len() / 4).collect();
+        let mut handles = vec![];
+
+        for chunk in chunks {
+            let chunk = chunk.to_vec();
+            let reputation_manager = self.reputation_manager.clone();
+            let votes = self.votes.clone();
+            let handle = task::spawn(async move {
+                let total_reputation: i64 = chunk.iter().map(|p| reputation_manager.get_reputation(p, "consensus")).sum();
+                let approval_reputation: i64 = chunk.iter().enumerate().filter(|(i, _)| votes.contains(*i)).map(|(_, p)| reputation_manager.get_reputation(p, "consensus")).sum();
+                Ok((total_reputation, approval_reputation))
+            });
+            handles.push(handle);
+        }
+
+        let mut total_reputation = 0;
+        let mut approval_reputation = 0;
+
+        for handle in handles {
+            let (chunk_total, chunk_approval) = handle.await??;
+            total_reputation += chunk_total;
+            approval_reputation += chunk_approval;
+        }
+
+        Ok((total_reputation, approval_reputation))
+    }
+
+    pub async fn select_validators(&mut self, min_reputation: i64) -> Result<Vec<String>, ConsensusError> {
+        let mut validators = Vec::new();
+        let participants: Vec<_> = self.participants.iter().cloned().collect();
+
+        for participant in participants {
+            if self.reputation_manager.is_eligible(&participant, min_reputation, "consensus") {
+                validators.push(participant);
+            }
+        }
+
+        // BFT requirement: Need at least 3f + 1 validators where f is max faulty nodes
+        let min_validators = (self.max_faulty_nodes() * 3) + 1;
+        if validators.len() < min_validators {
+            return Err(ConsensusError::BftError(
+                format!("Insufficient validators: {} (need {})", validators.len(), min_validators)
+            ));
+        }
+
+        Ok(validators)
+    }
+
+    fn max_faulty_nodes(&self) -> usize {
+        self.participants.len() / 3
+    }
+
+    pub async fn handle_consensus_round(&mut self) -> Result<Option<Block>, ConsensusError> {
+        // Start timeout handler
+        let timeout_handler = self.timeout_handling.start_timeout();
+        
+        tokio::select! {
+            result = self.finalize_block() => {
+                result
+            }
+            _ = timeout_handler => {
+                self.handle_timeout().await;
+                Err(ConsensusError::TimeoutError("Consensus round timed out".into()))
+            }
+        }
+    }
+
+    pub fn handle_federation_operation(&mut self, operation: FederationOperation) {
+        match operation {
+            FederationOperation::InitiateFederation { federation_type, partner_id, terms } => {
+                self.create_federation(partner_id, federation_type, terms).unwrap();
+            }
+            FederationOperation::JoinFederation { federation_id, commitment } => {
+                // Handle joining federation logic
+            }
+            FederationOperation::LeaveFederation { federation_id, reason } => {
+                // Handle leaving federation logic
+            }
+            FederationOperation::ProposeAction { federation_id, action_type, description, resources } => {
+                // Handle proposing action logic
+            }
+            FederationOperation::VoteOnProposal { federation_id, proposal_id, approve, notes } => {
+                // Handle voting on proposal logic
+            }
+            FederationOperation::ShareResources { federation_id, resource_type, amount, recipient_id } => {
+                // Handle sharing resources logic
+            }
+            FederationOperation::UpdateFederationTerms { federation_id, new_terms } => {
+                // Handle updating federation terms logic
+            }
+        }
+    }
+
+    pub fn create_federation(
+        &mut self,
+        creator_id: String,
+        federation_type: FederationType,
+        terms: FederationTerms,
+    ) -> Result<String, ConsensusError> {
+        // Verify creator's reputation
+        let creator_reputation = self.reputation_manager.get_reputation(&creator_id, "consensus");
+        if creator_reputation < terms.minimum_reputation {
+            return Err(ConsensusError::ConsensusFailure(
+                "Insufficient reputation to create federation".into(),
+            ));
+        }
+
+        // Generate unique federation ID
+        let federation_id = format!("fed_{}", uuid::Uuid::new_v4());
+
+        // Create new federation
+        let federation = Federation::new(
+            federation_id.clone(),
+            federation_type,
+            terms,
+            creator_id,
+        );
+
+        // Store federation
+        self.federations.insert(federation_id.clone(), federation);
+
+        Ok(federation_id)
+    }
+}
+
+#[async_trait]
+impl ConsensusEngine for ProofOfCooperation {
+    async fn start(&self) {
+        // Start the consensus process
+    }
+
+    async fn stop(&self) {
+        // Stop the consensus process
+    }
+
+    async fn submit_vote(&mut self, vote: Vote) -> Result<VoteStatus, GovernanceError> {
+        let proposal = self.active_proposals.get_mut(&vote.proposal_id)
+            .ok_or(GovernanceError::ProposalNotFound)?;
+        
+        if !self.is_eligible_voter(&vote.voter_did) {
+            return Err(GovernanceError::NotEligibleToVote);
+        }
+
+        proposal.votes.insert(vote);
+        self.check_proposal_status(&proposal.proposal_id)
+    }
+
+    async fn process_approved_proposal(&mut self, proposal_id: &str) -> Result<(), GovernanceError> {
+        let proposal = self.active_proposals.remove(proposal_id)
+            .ok_or(GovernanceError::ProposalNotFound)?;
+
+        match proposal.proposal_type {
+            ProposalType::AddValidator(info) => self.add_validator(info),
+            ProposalType::RemoveValidator(did) => self.remove_validator(&did),
+            ProposalType::UpdateRules(rules) => {
+                self.rules = rules;
+                Ok(())
+            }
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+enum FederationOperation {
+    InitiateFederation {
+        federation_type: FederationType,
+        partner_id: String,
+        terms: FederationTerms,
+    },
+    JoinFederation {
+        federation_id: String,
+        commitment: Vec<String>,
+    },
+    LeaveFederation {
+        federation_id: String,
+        reason: String,
+    },
+    ProposeAction {
+        federation_id: String,
+        action_type: String,
+        description: String,
+        resources: std::collections::HashMap<String, u64>,
+    },
+    VoteOnProposal {
+        federation_id: String,
+        proposal_id: String,
+        approve: bool,
+        notes: Option<String>,
+    },
+    ShareResources {
+        federation_id: String,
+        resource_type: String,
+        amount: u64,
+        recipient_id: String,
+    },
+    UpdateFederationTerms {
+        federation_id: String,
+        new_terms: FederationTerms,
+    },
+}
+
+#[derive(Serialize, Deserialize)]
+struct FederationTerms {
+    minimum_reputation: i64,
+    resource_sharing_policies: String,
+    governance_rules: String,
+    duration: String,
+}
+
+#[derive(Serialize, Deserialize)]
+enum FederationType {
+    Cooperative,
+    Community,
+    Hybrid,
+}
+```
+
+===================
+File: ./crates/icn-core/src/lib.rs
+Size: 8529 bytes
+Modified: 2025-02-19 03:17:24.482393600 +0000
+Dependencies:
+use async_trait::async_trait;
+use icn_consensus::ProofOfCooperation;
+use icn_types::{Block, Transaction, FederationType, FederationTerms, FederationOperation};
+use log::{info, error};
+use std::sync::Arc;
+use tokio::time::{sleep, Duration};
+
+===================
+```rs
+use std::sync::Arc;
+use async_trait::async_trait;
+use icn_types::{Block, Transaction, FederationType, FederationTerms, FederationOperation};
+use icn_consensus::ProofOfCooperation;
+use tokio::time::{sleep, Duration};
+use log::{info, error};
+
+pub struct Core {
+    consensus: Arc<dyn ConsensusEngine>,
+    storage: Arc<dyn StorageManager>,
+    network: Arc<dyn NetworkManager>,
+    runtime: Arc<dyn RuntimeManager>,
+    telemetry: Arc<TelemetryManager>,
+    identity: Arc<dyn IdentityManager>,
+    reputation: Arc<dyn ReputationManager>,
+    federation_manager: Arc<FederationManager>,
+    resource_system: Arc<ResourceAllocationSystem>,
+}
+
+impl Core {
+    pub fn new(
+        storage: Arc<dyn StorageManager>,
+        network: Arc<dyn NetworkManager>,
+        runtime: Arc<dyn RuntimeManager>,
+        telemetry: Arc<TelemetryManager>,
+        identity: Arc<dyn IdentityManager>,
+        reputation: Arc<dyn ReputationManager>,
+    ) -> Self {
+        let resource_system = Arc::new(ResourceAllocationSystem::new());
+        let federation_manager = Arc::new(FederationManager::new(resource_system.clone()));
+        let consensus = Arc::new(ProofOfCooperation::new(reputation.clone()));
+
+        Core {
+            consensus,
+            storage,
+            network,
+            runtime,
+            telemetry,
+            identity,
+            reputation,
+            federation_manager,
+            resource_system,
+        }
+    }
+
+    pub async fn start(&self) {
+        self.telemetry.log("Starting Core...");
+        if let Err(e) = self.consensus.start().await {
+            error!("Failed to start consensus: {}", e);
+            return;
+        }
+        if let Err(e) = self.network.start().await {
+            error!("Failed to start network: {}", e);
+            return;
+        }
+        if let Err(e) = self.runtime.start().await {
+            error!("Failed to start runtime: {}", e);
+            return;
+        }
+        if let Err(e) = self.identity.start().await {
+            error!("Failed to start identity: {}", e);
+            return;
+        }
+        if let Err(e) = self.reputation.start().await {
+            error!("Failed to start reputation: {}", e);
+            return;
+        }
+
+        // Start real-time reputation recalibration
+        let reputation_system = self.reputation.clone();
+        tokio::spawn(async move {
+            loop {
+                reputation_system.dynamic_adjustment("did:icn:test", 10).await;
+                reputation_system.apply_decay("did:icn:test", 0.1).await;
+                sleep(Duration::from_secs(10)).await;
+            }
+        });
+
+        self.telemetry.log("Core started.");
+    }
+
+    pub async fn stop(&self) {
+        self.telemetry.log("Stopping Core...");
+        if let Err(e) = self.runtime.stop().await {
+            error!("Failed to stop runtime: {}", e);
+        }
+        if let Err(e) = self.network.stop().await {
+            error!("Failed to stop network: {}", e);
+        }
+        if let Err(e) = self.consensus.stop().await {
+            error!("Failed to stop consensus: {}", e);
+        }
+        if let Err(e) = self.identity.stop().await {
+            error!("Failed to stop identity: {}", e);
+        }
+        if let Err(e) = self.reputation.stop().await {
+            error!("Failed to stop reputation: {}", e);
+        }
+        self.telemetry.log("Core stopped.");
+    }
+
+    pub async fn process_transaction(&self, transaction: Transaction) {
+        self.telemetry.log("Processing transaction...");
+        self.runtime.execute_transaction(transaction).await;
+        self.telemetry.log("Transaction processed.");
+    }
+
+    pub async fn add_block(&self, block: Block) {
+        self.telemetry.log("Adding block...");
+        self.storage.store_block(block).await;
+        self.telemetry.log("Block added.");
+    }
+
+    pub async fn create_proposal(&self, proposal: Proposal) -> Result<(), Box<dyn std::error::Error>> {
+        self.telemetry.log("Creating proposal...");
+        // Logic to handle proposal creation
+        self.telemetry.log("Proposal created.");
+        Ok(())
+    }
+
+    pub async fn vote_on_proposal(&self, vote: Vote) -> Result<(), Box<dyn std::error::Error>> {
+        self.telemetry.log("Voting on proposal...");
+        // Logic to handle voting on a proposal
+        self.telemetry.log("Vote cast.");
+        Ok(())
+    }
+
+    pub async fn handle_federation_operation(&self, operation: FederationOperation) -> Result<(), Box<dyn std::error::Error>> {
+        self.telemetry.log("Handling federation operation...");
+        
+        match operation {
+            FederationOperation::InitiateFederation { federation_type, partner_id, terms } => {
+                self.federation_manager.create_federation(
+                    format!("Federation with {}", partner_id),
+                    federation_type,
+                    terms,
+                    partner_id,
+                ).await?;
+            }
+            FederationOperation::JoinFederation { federation_id, commitment } => {
+                // Get the requesting member's DID from context
+                let member_did = "did:icn:requesting_member"; // This should come from auth context
+                self.federation_manager.join_federation(&federation_id, member_did, commitment).await?;
+            }
+            // ... handle other federation operations ...
+        }
+
+        self.telemetry.log("Federation operation handled.");
+        Ok(())
+    }
+
+    pub async fn allocate_resource(&self, request: ResourceAllocation) -> Result<String, Box<dyn std::error::Error>> {
+        self.telemetry.log("Allocating resources...");
+        let allocation_id = self.resource_system.allocate(
+            &request.resource_type,
+            request.recipient,
+            request.amount,
+        ).await?;
+        self.telemetry.log("Resources allocated.");
+        Ok(allocation_id)
+    }
+
+    pub async fn load_cooperative_rules(&self, dsl_code: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // Parse DSL code
+        let ast = icn_dsl::CoopLangAST::parse(dsl_code)
+            .map_err(|e| format!("Failed to parse DSL: {}", e))?;
+        
+        // Compile to ICVM bytecode
+        let bytecode = icn_dsl::compile_to_icvm(&ast);
+        
+        // Load into VM
+        self.runtime.load_bytecode(&bytecode).await?;
+        
+        Ok(())
+    }
+}
+
+#[async_trait]
+pub trait ConsensusEngine {
+    async fn get_reputation(&self, did: String, category: String) -> Result<i64, Box<dyn std::error::Error>>;
+    async fn is_eligible(&self, did: String, min_reputation: i64, category: String) -> Result<bool, Box<dyn std::error::Error>>;
+    async fn dynamic_adjustment(&self, did: String, contribution: i64) -> Result<(), Box<dyn std::error::Error>>;
+    async fn apply_decay(&self, did: String, decay_rate: f64) -> Result<(), Box<dyn std::error::Error>>;
+    async fn reputation_based_access(&self, did: String, min_reputation: i64) -> Result<bool, Box<dyn std::error::Error>>;
+}
+
+pub struct TelemetryManager {
+    metrics: PrometheusMetrics,
+    logger: Logger,
+    traces: TracingSystem,
+}
+
+impl TelemetryManager {
+    pub fn new(metrics: PrometheusMetrics, logger: Logger, traces: TracingSystem) -> Self {
+        TelemetryManager {
+            metrics,
+            logger,
+            traces,
+        }
+    }
+
+    pub fn log(&self, message: &str) {
+        self.logger.log(message);
+        self.traces.trace(message);
+    }
+
+    pub fn record_metric(&self, name: &str, value: f64) {
+        self.metrics.record(name, value);
+    }
+}
+
+pub struct PrometheusMetrics;
+
+impl PrometheusMetrics {
+    pub fn record(&self, name: &str, value: f64) {
+        // Record the metric
+    }
+}
+
+pub struct Logger;
+
+impl Logger {
+    pub fn log(&self, message: &str) {
+        // Log the message
+    }
+}
+
+pub struct TracingSystem;
+
+impl TracingSystem {
+    pub fn trace(&self, message: &str) {
+        // Trace the message
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Proposal {
+    id: String,
+    title: String,
+    description: String,
+    status: String,
+    votes_for: i64,
+    votes_against: i64,
+    created_by: String,
+    ends_at: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Vote {
+    proposal_id: String,
+    voter: String,
+    approve: bool,
+}
+```
 
 ===================
 File: ./crates/icn-crypto/src/lib.rs
-Size: 4011 bytes
-Modified: 2024-12-15 04:49:21.330156894 +0000
+Size: 5761 bytes
+Modified: 2025-01-16 22:02:57.844616100 +0000
 Dependencies:
-use p256::ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
+use dilithium::keypair as dilithium_keypair;
+use dilithium::sign as dilithium_sign;
+use dilithium::verify as dilithium_verify;
+use ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
+use falcon::keypair as falcon_keypair;
+use falcon::sign as falcon_sign;
+use falcon::verify as falcon_verify;
+use icn_types::Algorithm;
+use kyber::decapsulate as kyber_decapsulate;
+use kyber::encapsulate as kyber_encapsulate;
+use kyber::keypair as kyber_keypair;
 use rsa::{RSAPrivateKey, RSAPublicKey, PaddingScheme};
 use secp256k1::{Secp256k1, SecretKey, PublicKey, Message, Signature};
 use sha2::{Sha256, Digest};
@@ -146,12 +1811,25 @@ use sha2::{Sha256, Digest};
 use secp256k1::{Secp256k1, SecretKey, PublicKey, Message, Signature};
 use sha2::{Sha256, Digest};
 use rsa::{RSAPrivateKey, RSAPublicKey, PaddingScheme};
-use p256::ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
+use ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
+use icn_types::Algorithm;
+use kyber::keypair as kyber_keypair;
+use kyber::encapsulate as kyber_encapsulate;
+use kyber::decapsulate as kyber_decapsulate;
+use dilithium::keypair as dilithium_keypair;
+use dilithium::sign as dilithium_sign;
+use dilithium::verify as dilithium_verify;
+use falcon::keypair as falcon_keypair;
+use falcon::sign as falcon_sign;
+use falcon::verify as falcon_verify;
 
 pub enum Algorithm {
     Secp256k1,
     RSA,
     ECDSA,
+    Kyber,
+    Dilithium,
+    Falcon,
 }
 
 pub struct KeyPair {
@@ -171,25 +1849,49 @@ impl KeyPair {
                     private_key: private_key[..].to_vec(),
                     algorithm,
                 }
-            }
+            },
             Algorithm::RSA => {
                 let private_key = RSAPrivateKey::new(&mut rand::thread_rng(), 2048).expect("failed to generate a key");
                 let public_key = RSAPublicKey::from(&private_key);
                 KeyPair {
-                    public_key: public_key.to_pkcs1().unwrap(),
-                    private_key: private_key.to_pkcs1().unwrap(),
+                    public_key: public_key.to_pkcs1().expect("failed to encode public key"),
+                    private_key: private_key.to_pkcs1().expect("failed to encode private key"),
                     algorithm,
                 }
-            }
+            },
             Algorithm::ECDSA => {
                 let signing_key = SigningKey::random(&mut rand::thread_rng());
                 let verifying_key = VerifyingKey::from(&signing_key);
                 KeyPair {
-                    public_key: verifying_key.to_encoded_point(false).as_bytes().to_vec(),
+                    public_key: verifying_key.to_bytes().to_vec(),
                     private_key: signing_key.to_bytes().to_vec(),
                     algorithm,
                 }
-            }
+            },
+            Algorithm::Kyber => {
+                let (public_key, private_key) = kyber_keypair();
+                KeyPair {
+                    public_key,
+                    private_key,
+                    algorithm,
+                }
+            },
+            Algorithm::Dilithium => {
+                let (public_key, private_key) = dilithium_keypair();
+                KeyPair {
+                    public_key,
+                    private_key,
+                    algorithm,
+                }
+            },
+            Algorithm::Falcon => {
+                let (public_key, private_key) = falcon_keypair();
+                KeyPair {
+                    public_key,
+                    private_key,
+                    algorithm,
+                }
+            },
         }
     }
 
@@ -200,16 +1902,23 @@ impl KeyPair {
                 let private_key = SecretKey::from_slice(&self.private_key).expect("32 bytes");
                 let message = Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
                 secp.sign(&message, &private_key).serialize_compact().to_vec()
-            }
+            },
             Algorithm::RSA => {
-                let private_key = RSAPrivateKey::from_pkcs1(&self.private_key).expect("valid RSA private key");
+                let private_key = RSAPrivateKey::from_pkcs1(&self.private_key).expect("failed to decode private key");
                 let padding = PaddingScheme::new_pkcs1v15_sign(None);
-                private_key.sign(padding, &Sha256::digest(message)).expect("failed to sign").to_vec()
-            }
+                private_key.sign(padding, &Sha256::digest(message)).expect("failed to sign message")
+            },
             Algorithm::ECDSA => {
-                let signing_key = SigningKey::from_bytes(&self.private_key).expect("valid ECDSA private key");
-                signing_key.sign(message).as_ref().to_vec()
-            }
+                let signing_key = SigningKey::from_bytes(&self.private_key).expect("failed to decode private key");
+                signing_key.sign(message).to_bytes().to_vec()
+            },
+            Algorithm::Dilithium => {
+                dilithium_sign(&self.private_key, message)
+            },
+            Algorithm::Falcon => {
+                falcon_sign(&self.private_key, message)
+            },
+            _ => vec![],
         }
     }
 
@@ -217,20 +1926,27 @@ impl KeyPair {
         match self.algorithm {
             Algorithm::Secp256k1 => {
                 let secp = Secp256k1::new();
-                let public_key = PublicKey::from_slice(&self.public_key).expect("valid secp256k1 public key");
+                let public_key = PublicKey::from_slice(&self.public_key).expect("invalid public key");
                 let message = Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
-                let signature = Signature::from_compact(signature).expect("valid secp256k1 signature");
+                let signature = Signature::from_compact(signature).expect("invalid signature");
                 secp.verify(&message, &signature, &public_key).is_ok()
-            }
+            },
             Algorithm::RSA => {
-                let public_key = RSAPublicKey::from_pkcs1(&self.public_key).expect("valid RSA public key");
+                let public_key = RSAPublicKey::from_pkcs1(&self.public_key).expect("failed to decode public key");
                 let padding = PaddingScheme::new_pkcs1v15_sign(None);
                 public_key.verify(padding, &Sha256::digest(message), signature).is_ok()
-            }
+            },
             Algorithm::ECDSA => {
-                let verifying_key = VerifyingKey::from_sec1_bytes(&self.public_key).expect("valid ECDSA public key");
+                let verifying_key = VerifyingKey::from_bytes(&self.public_key).expect("failed to decode public key");
                 verifying_key.verify(message, signature).is_ok()
-            }
+            },
+            Algorithm::Dilithium => {
+                dilithium_verify(&self.public_key, message, signature)
+            },
+            Algorithm::Falcon => {
+                falcon_verify(&self.public_key, message, signature)
+            },
+            _ => false,
         }
     }
 }
@@ -241,132 +1957,935 @@ pub fn hash(data: &[u8]) -> Vec<u8> {
 ```
 
 ===================
-File: ./crates/icn-consensus/src/lib.rs
-Size: 2335 bytes
-Modified: 2024-12-15 04:28:47.482118852 +0000
+File: ./crates/icn-dsl/src/lib.rs
+Size: 5568 bytes
+Modified: 2025-02-18 06:50:47.143649200 +0000
 Dependencies:
-use async_trait::async_trait;
-use icn_core::ReputationManager;
-use std::collections::HashMap;
-use std::time::Duration;
-use tokio::time::sleep;
+use nom::{
 
 ===================
 ```rs
-pub mod proof_of_cooperation;
-pub mod validation;
-pub mod round_management;
-pub mod timeout_handling;
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_while1},
+    character::complete::{char, multispace0, multispace1},
+    combinator::{map, opt},
+    multi::{many0, many1},
+    sequence::{delimited, preceded, terminated, tuple},
+    IResult,
+};
 
-use async_trait::async_trait;
-use std::collections::HashMap;
-use std::time::Duration;
-use tokio::time::sleep;
-use icn_core::ReputationManager;
-
-pub struct ProofOfCooperation {
-    current_round: u64,
-    participants: Vec<String>,
-    proposed_block: Option<Block>,
-    votes: HashMap<String, bool>,
-    timeout: Duration,
-    timeout_handling: timeout_handling::TimeoutHandling,
-    reputation_manager: Arc<dyn ReputationManager>,
+#[derive(Debug, Clone)]
+pub struct CoopLangAST {
+    pub governance: Option<GovernanceNode>,
+    pub reputation: Option<ReputationNode>,
+    pub marketplace: Option<MarketplaceNode>,
+    pub federation: Option<FederationNode>,
+    pub validation: Option<ValidationNode>,
+    pub logging: Option<LoggingNode>,
 }
 
-impl ProofOfCooperation {
-    pub fn new(reputation_manager: Arc<dyn ReputationManager>) -> Self {
-        ProofOfCooperation {
-            current_round: 0,
-            participants: Vec::new(),
-            proposed_block: None,
-            votes: HashMap::new(),
-            timeout: Duration::from_secs(60),
-            timeout_handling: timeout_handling::TimeoutHandling::new(Duration::from_secs(60)),
-            reputation_manager,
+#[derive(Debug, Clone)]
+pub struct ValidationNode {
+    pub pre_checks: Vec<Check>,
+    pub post_checks: Vec<Check>,
+    pub state_validation: Option<StateValidation>,
+    pub resource_checks: Option<ResourceChecks>,
+    pub custom_merge: Option<CustomMerge>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Check {
+    pub condition: String,
+    pub action: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct StateValidation {
+    pub current: Option<String>,
+    pub expected: Option<String>,
+    pub transition: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CustomMerge {
+    pub strategy: String,
+    pub handlers: Vec<ConflictHandler>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConflictHandler {
+    pub field_path: String,
+    pub resolution_type: String,
+}
+
+// Parser implementation
+impl CoopLangAST {
+    pub fn parse(input: &str) -> IResult<&str, Self> {
+        let (input, _) = multispace0(input)?;
+        let (input, governance) = opt(Self::parse_governance_section)(input)?;
+        let (input, reputation) = opt(Self::parse_reputation_section)(input)?;
+        let (input, marketplace) = opt(Self::parse_marketplace_section)(input)?;
+        let (input, federation) = opt(Self::parse_federation_section)(input)?;
+        let (input, validation) = opt(Self::parse_validation_section)(input)?;
+        let (input, logging) = opt(Self::parse_logging_section)(input)?;
+        
+        Ok((input, CoopLangAST {
+            governance,
+            reputation,
+            marketplace,
+            federation,
+            validation,
+            logging,
+        }))
+    }
+
+    fn parse_validation_section(input: &str) -> IResult<&str, ValidationNode> {
+        let (input, _) = tag("validation:")(input)?;
+        let (input, _) = multispace1(input)?;
+        
+        let (input, pre_checks) = Self::parse_checks("pre_checks:")(input)?;
+        let (input, post_checks) = Self::parse_checks("post_checks:")(input)?;
+        let (input, state_validation) = opt(Self::parse_state_validation)(input)?;
+        let (input, resource_checks) = opt(Self::parse_resource_checks)(input)?;
+        let (input, custom_merge) = opt(Self::parse_custom_merge)(input)?;
+
+        Ok((input, ValidationNode {
+            pre_checks,
+            post_checks,
+            state_validation,
+            resource_checks,
+            custom_merge,
+        }))
+    }
+
+    fn parse_checks(label: &'static str) -> impl Fn(&str) -> IResult<&str, Vec<Check>> {
+        move |input: &str| {
+            let (input, _) = tag(label)(input)?;
+            let (input, _) = multispace1(input)?;
+            many0(Self::parse_check)(input)
         }
     }
 
-    pub fn start_round(&mut self) {
-        self.current_round += 1;
-        self.proposed_block = None;
-        self.votes.clear();
+    fn parse_check(input: &str) -> IResult<&str, Check> {
+        let (input, _) = char('-')(input)?;
+        let (input, _) = multispace0(input)?;
+        let (input, condition) = take_while1(|c| c != ':')(input)?;
+        let (input, _) = char(':')(input)?;
+        let (input, _) = multispace0(input)?;
+        let (input, action) = take_while1(|c| c != '\n')(input)?;
+        let (input, _) = multispace0(input)?;
+
+        Ok((input, Check {
+            condition: condition.trim().to_string(),
+            action: action.trim().to_string(),
+        }))
     }
 
-    pub fn propose_block(&mut self, block: Block) {
-        self.proposed_block = Some(block);
-    }
+    // Add other section parsers similarly...
+}
 
-    pub fn vote(&mut self, participant: String, vote: bool) {
-        if self.is_eligible(&participant) {
-            self.votes.insert(participant, vote);
+// Bytecode generation
+pub fn compile_to_icvm(ast: &CoopLangAST) -> Vec<u8> {
+    let mut bytecode = Vec::new();
+
+    // Header
+    bytecode.extend_from_slice(&[0x49, 0x43, 0x56, 0x4D]); // "ICVM" magic bytes
+    bytecode.push(0x01); // Version
+
+    // Compile validation rules
+    if let Some(validation) = &ast.validation {
+        bytecode.push(0x01); // Validation section marker
+        
+        // Pre-checks
+        bytecode.push(validation.pre_checks.len() as u8);
+        for check in &validation.pre_checks {
+            compile_check(&mut bytecode, check);
         }
-    }
 
-    pub fn finalize_block(&self) -> Option<Block> {
-        let total_reputation: i64 = self.votes.keys().map(|p| self.reputation_manager.get_reputation(p, "consensus")).sum();
-        let approval_reputation: i64 = self.votes.iter().filter(|&(_, &v)| v).map(|(p, _)| self.reputation_manager.get_reputation(p, "consensus")).sum();
+        // Post-checks
+        bytecode.push(validation.post_checks.len() as u8);
+        for check in &validation.post_checks {
+            compile_check(&mut bytecode, check);
+        }
 
-        if approval_reputation > total_reputation / 2 {
-            self.proposed_block.clone()
+        // State validation
+        if let Some(state_validation) = &validation.state_validation {
+            bytecode.push(0x01);
+            compile_state_validation(&mut bytecode, state_validation);
         } else {
-            None
+            bytecode.push(0x00);
         }
     }
 
-    pub async fn handle_timeout(&self) {
-        self.timeout_handling.handle_timeout().await;
+    // Compile other sections similarly...
+
+    bytecode
+}
+
+fn compile_check(bytecode: &mut Vec<u8>, check: &Check) {
+    // Convert check condition to bytecode operations
+    bytecode.extend_from_slice(check.condition.as_bytes());
+    bytecode.push(0x00); // Null terminator
+    bytecode.extend_from_slice(check.action.as_bytes());
+    bytecode.push(0x00); // Null terminator
+}
+
+fn compile_state_validation(bytecode: &mut Vec<u8>, validation: &StateValidation) {
+    if let Some(current) = &validation.current {
+        bytecode.push(0x01);
+        bytecode.extend_from_slice(current.as_bytes());
+        bytecode.push(0x00);
+    } else {
+        bytecode.push(0x00);
+    }
+    // Similarly for expected and transition...
+}
+```
+
+===================
+File: ./crates/icn-federation/src/lib.rs
+Size: 11401 bytes
+Modified: 2025-02-19 03:36:31.441583200 +0000
+Dependencies:
+use async_trait::async_trait;
+use icn_types::{Block, Transaction};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+===================
+```rs
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use icn_types::{Block, Transaction};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Federation {
+    pub id: String,
+    pub name: String,
+    pub federation_type: FederationType,
+    pub members: HashMap<String, MemberStatus>, // DID -> status
+    pub member_roles: HashMap<String, MemberRole>, // DID -> role
+    pub terms: FederationTerms,
+    pub resources: HashMap<String, ResourcePool>,
+    pub proposals: Vec<FederationProposal>, // Add proposals field
+    pub created_at: u64,
+    pub status: FederationStatus,
+}
+
+impl Federation {
+    pub fn add_member(&mut self, did: String, role: MemberRole) -> Result<(), FederationError> {
+        if self.members.contains_key(&did) {
+            return Err(FederationError::AlreadyMember);
+        }
+
+        // Verify member meets minimum reputation requirements
+        if !self.verify_member_eligibility(&did) {
+            return Err(FederationError::InsufficientReputation(
+                "Member does not meet minimum reputation requirements".to_string(),
+            ));
+        }
+
+        self.members.insert(did, MemberStatus::Active);
+        Ok(())
     }
 
-    fn is_eligible(&self, participant: &str) -> bool {
-        self.reputation_manager.is_eligible(participant, 10, "consensus")
+    pub fn remove_member(&mut self, did: &str) -> Result<(), FederationError> {
+        if !self.members.contains_key(did) {
+            return Err(FederationError::MemberNotFound);
+        }
+
+        self.members.remove(did);
+        Ok(())
+    }
+
+    pub fn get_member_status(&self, did: &str) -> Option<&MemberStatus> {
+        self.members.get(did)
+    }
+
+    pub fn update_member_status(&mut self, did: &str, status: MemberStatus) -> Result<(), FederationError> {
+        if let Some(member_status) = self.members.get_mut(did) {
+            *member_status = status;
+            Ok(())
+        } else {
+            Err(FederationError::MemberNotFound)
+        }
+    }
+
+    pub fn get_active_members(&self) -> Vec<String> {
+        self.members
+            .iter()
+            .filter(|(_, status)| matches!(status, MemberStatus::Active))
+            .map(|(did, _)| did.clone())
+            .collect()
+    }
+
+    pub fn verify_member_eligibility(&self, did: &str) -> bool {
+        // This would integrate with the reputation system in practice
+        true // Simplified for example
+    }
+
+    pub fn submit_proposal(&mut self, proposal: FederationProposal) -> Result<(), FederationError> {
+        // Validate proposal
+        self.validate_proposal(&proposal)?;
+
+        // Set proposal voting period
+        let mut proposal = proposal;
+        proposal.voting_ends_at = chrono::Utc::now().timestamp() as u64 + 
+            (self.terms.governance_rules.max_voting_period_hours * 3600);
+
+        self.proposals.push(proposal);
+        Ok(())
+    }
+
+    pub fn vote(&mut self, vote: Vote) -> Result<(), FederationError> {
+        // Validate vote
+        self.validate_vote(&vote)?;
+
+        // Get proposal
+        let proposal = self.proposals.iter_mut()
+            .find(|p| p.id == vote.proposal_id)
+            .ok_or(FederationError::ProposalNotFound)?;
+
+        // Record vote
+        proposal.votes.insert(vote.voter, vote.approve);
+
+        // Check if voting period ended and finalize if needed
+        let now = chrono::Utc::now().timestamp() as u64;
+        if now > proposal.voting_ends_at {
+            proposal.status = self.finalize_proposal(&proposal.id)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_proposal(&self, proposal: &FederationProposal) -> Result<(), FederationError> {
+        // Check if proposal type is allowed
+        if !self.terms.governance_rules.allowed_proposal_types.contains(&proposal.proposal_type.to_string()) {
+            return Err(FederationError::InvalidProposalType);
+        }
+
+        // Validate proposer has sufficient reputation
+        if !self.verify_member_eligibility(&proposal.proposer) {
+            return Err(FederationError::InsufficientReputation(
+                "Proposer does not meet minimum reputation requirements".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_vote(&self, vote: &Vote) -> Result<(), FederationError> {
+        // Check if voter is a member
+        if !self.members.contains_key(&vote.voter) {
+            return Err(FederationError::UnauthorizedAction);
+        }
+
+        // Check if proposal exists
+        let proposal = self.proposals.iter()
+            .find(|p| p.id == vote.proposal_id)
+            .ok_or(FederationError::ProposalNotFound)?;
+
+        // Check if voting period is still open
+        let now = chrono::Utc::now().timestamp() as u64;
+        if now > proposal.voting_ends_at {
+            return Err(FederationError::VotingPeriodEnded);
+        }
+
+        // Check for veto rights
+        if let Some(member_role) = self.member_roles.get(&vote.voter) {
+            if let Some(veto_actions) = self.terms.governance_rules.veto_rights.get(&member_role.to_string()) {
+                if veto_actions.contains(&proposal.proposal_type.to_string()) && !vote.approve {
+                    // Record veto
+                    return Ok(());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn finalize_proposal(&mut self, proposal_id: &str) -> Result<ProposalStatus, FederationError> {
+        let proposal = self.proposals.iter_mut()
+            .find(|p| p.id == proposal_id)
+            .ok_or(FederationError::ProposalNotFound)?;
+
+        let total_votes = proposal.votes.len() as u32;
+        if total_votes < self.terms.governance_rules.min_votes_required {
+            return Ok(ProposalStatus::Rejected);
+        }
+
+        let approval_votes = proposal.votes.values().filter(|&v| *v).count() as u32;
+        let approval_percentage = (approval_votes * 100) / total_votes;
+
+        if approval_percentage >= self.terms.governance_rules.approval_threshold_percent {
+            proposal.status = ProposalStatus::Approved;
+        } else {
+            proposal.status = ProposalStatus::Rejected;
+        }
+
+        Ok(proposal.status.clone())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourcePool {
+    pub resource_type: String,
+    pub total_amount: u64,
+    pub available_amount: u64,
+    pub contributors: HashMap<String, u64>, // DID -> amount contributed
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationProposal {
+    pub id: String,
+    pub proposer: String,
+    pub proposal_type: ProposalType,
+    pub description: String,
+    pub votes: HashMap<String, bool>, // DID -> vote
+    pub status: ProposalStatus,
+    pub created_at: u64,
+    pub voting_ends_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ProposalType {
+    AddMember(String),
+    RemoveMember(String),
+    UpdateTerms(FederationTerms),
+    AllocateResources(ResourceAllocation),
+    UpdatePolicy(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceAllocation {
+    pub resource_type: String,
+    pub amount: u64,
+    pub recipient: String,
+    pub duration: Option<u64>,
+}
+
+pub struct FederationManager {
+    federations: Arc<RwLock<HashMap<String, Federation>>>,
+    resource_manager: Arc<dyn ResourceManager>,
+}
+
+impl FederationManager {
+    pub fn new(resource_manager: Arc<dyn ResourceManager>) -> Self {
+        Self {
+            federations: Arc::new(RwLock::new(HashMap::new())),
+            resource_manager,
+        }
+    }
+
+    pub async fn create_federation(
+        &self,
+        name: String,
+        federation_type: FederationType,
+        initial_terms: FederationTerms,
+        founding_member: String,
+    ) -> Result<String, FederationError> {
+        let federation_id = format!("fed_{}", uuid::Uuid::new_v4());
+        let federation = Federation {
+            id: federation_id.clone(),
+            name,
+            federation_type,
+            members: vec![founding_member].into_iter().map(|m| (m, MemberStatus::Active)).collect(),
+            member_roles: HashMap::new(),
+            terms: initial_terms,
+            resources: HashMap::new(),
+            proposals: Vec::new(),
+            created_at: chrono::Utc::now().timestamp() as u64,
+            status: FederationStatus::Active,
+        };
+
+        let mut federations = self.federations.write().await;
+        federations.insert(federation_id.clone(), federation);
+
+        Ok(federation_id)
+    }
+
+    pub async fn join_federation(
+        &self,
+        federation_id: &str,
+        member_did: &str,
+        commitment: Vec<String>,
+    ) -> Result<(), FederationError> {
+        let mut federations = self.federations.write().await;
+        
+        if let Some(federation) = federations.get_mut(federation_id) {
+            if federation.members.contains_key(member_did) {
+                return Err(FederationError::AlreadyMember);
+            }
+
+            // Verify commitments against federation terms
+            if !self.verify_commitments(&federation.terms, &commitment).await {
+                return Err(FederationError::InvalidCommitment);
+            }
+
+            federation.members.insert(member_did.to_string(), MemberStatus::Active);
+            Ok(())
+        } else {
+            Err(FederationError::FederationNotFound)
+        }
+    }
+
+    async fn verify_commitments(&self, terms: &FederationTerms, commitment: &[String]) -> bool {
+        // Add commitment verification logic here
+        true // Placeholder
     }
 }
 
 #[async_trait]
-impl ConsensusEngine for ProofOfCooperation {
-    async fn start(&self) {
-        // Start the consensus process
-    }
+pub trait ResourceManager: Send + Sync {
+    async fn allocate_resources(&self, allocation: ResourceAllocation) -> Result<(), String>;
+    async fn release_resources(&self, resource_type: &str, amount: u64) -> Result<(), String>;
+}
 
-    async fn stop(&self) {
-        // Stop the consensus process
-    }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationType {
+    Cooperative,
+    Community,
+    Hybrid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationTerms {
+    pub minimum_reputation: i64,
+    pub resource_sharing_policies: String,
+    pub governance_rules: GovernanceRules,
+    pub duration: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GovernanceRules {
+    pub min_votes_required: u32,
+    pub approval_threshold_percent: u32,
+    pub min_voting_period_hours: u32,
+    pub max_voting_period_hours: u32,
+    pub allowed_proposal_types: Vec<String>,
+    pub veto_rights: HashMap<String, Vec<String>>, // role -> action types that can be vetoed
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationStatus {
+    Active,
+    Suspended,
+    Dissolved,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ProposalStatus {
+    Active,
+    Approved,
+    Rejected,
+    Expired,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum MemberRole {
+    Admin,
+    Member,
+    Observer,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MemberStatus {
+    Active,
+    Inactive,
+    Suspended,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Vote {
+    pub voter: String,
+    pub proposal_id: String,
+    pub approve: bool,
+}
+
+#[derive(Debug)]
+pub enum FederationError {
+    FederationNotFound,
+    AlreadyMember,
+    InvalidCommitment,
+    InsufficientResources,
+    UnauthorizedAction,
+    MemberNotFound,
+    InvalidStatusTransition,
+    InsufficientPermissions,
+    InvalidProposalType,
+    VotingPeriodEnded,
+    ProposalNotFound,
+    InsufficientReputation(String),
 }
 ```
 
 ===================
 File: ./crates/icn-p2p/src/lib.rs
-Size: 57 bytes
-Modified: 2024-12-15 04:28:47.482118852 +0000
+Size: 86 bytes
+Modified: 2025-01-16 22:02:57.863770400 +0000
 Dependencies:
+use icn_types::Transaction;
 
 ===================
 ```rs
 pub mod websocket;
 pub mod protocol;
 pub mod networking;
+
+use icn_types::Transaction;
+```
+
+===================
+File: ./crates/icn-resource/src/lib.rs
+Size: 6916 bytes
+Modified: 2025-02-19 03:33:41.116129300 +0000
+Dependencies:
+use async_trait::async_trait;
+use icn_federation::ResourceManager;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+===================
+```rs
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use icn_federation::ResourceManager;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Resource {
+    pub id: String,
+    pub resource_type: String,
+    pub owner: String,
+    pub total_amount: u64,
+    pub available_amount: u64,
+    pub price_per_unit: f64,
+    pub constraints: ResourceConstraints,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceConstraints {
+    pub min_reputation: i64,
+    pub max_allocation: u64,
+    pub time_limit: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationResourcePool {
+    pub federation_id: String,
+    pub resources: HashMap<String, Resource>,
+    pub access_control: FederationAccessControl,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationAccessControl {
+    pub allowed_federations: Vec<String>,
+    pub min_reputation: i64,
+    pub max_allocation_per_federation: u64,
+}
+
+pub struct ResourceAllocationSystem {
+    resources: Arc<RwLock<HashMap<String, Resource>>>,
+    allocations: Arc<RwLock<HashMap<String, Vec<ResourceAllocation>>>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceAllocation {
+    pub allocation_id: String,
+    pub resource_id: String,
+    pub recipient: String,
+    pub amount: u64,
+    pub allocated_at: u64,
+    pub expires_at: Option<u64>,
+}
+
+impl ResourceAllocationSystem {
+    pub fn new() -> Self {
+        Self {
+            resources: Arc::new(RwLock::new(HashMap::new())),
+            allocations: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    pub async fn register_resource(
+        &self,
+        owner: String,
+        resource_type: String,
+        amount: u64,
+        price: f64,
+        constraints: ResourceConstraints,
+    ) -> Result<String, ResourceError> {
+        let resource_id = format!("res_{}", uuid::Uuid::new_v4());
+        let resource = Resource {
+            id: resource_id.clone(),
+            resource_type,
+            owner,
+            total_amount: amount,
+            available_amount: amount,
+            price_per_unit: price,
+            constraints,
+        };
+
+        let mut resources = self.resources.write().await;
+        resources.insert(resource_id.clone(), resource);
+
+        Ok(resource_id)
+    }
+
+    pub async fn allocate(
+        &self,
+        resource_id: &str,
+        recipient: String,
+        amount: u64,
+    ) -> Result<String, ResourceError> {
+        let mut resources = self.resources.write().await;
+        let resource = resources.get_mut(resource_id)
+            .ok_or(ResourceError::ResourceNotFound)?;
+
+        if resource.available_amount < amount {
+            return Err(ResourceError::InsufficientResources);
+        }
+
+        let allocation_id = format!("alloc_{}", uuid::Uuid::new_v4());
+        let allocation = ResourceAllocation {
+            allocation_id: allocation_id.clone(),
+            resource_id: resource_id.to_string(),
+            recipient,
+            amount,
+            allocated_at: chrono::Utc::now().timestamp() as u64,
+            expires_at: None,
+        };
+
+        resource.available_amount -= amount;
+
+        let mut allocations = self.allocations.write().await;
+        allocations.entry(resource_id.to_string())
+            .or_insert_with(Vec::new)
+            .push(allocation);
+
+        Ok(allocation_id)
+    }
+
+    pub async fn release(
+        &self,
+        allocation_id: &str,
+    ) -> Result<(), ResourceError> {
+        let mut allocations = self.allocations.write().await;
+        for (resource_id, resource_allocations) in allocations.iter_mut() {
+            if let Some(index) = resource_allocations.iter().position(|alloc| alloc.allocation_id == allocation_id) {
+                let allocation = resource_allocations.remove(index);
+                let mut resources = self.resources.write().await;
+                if let Some(resource) = resources.get_mut(&allocation.resource_id) {
+                    resource.available_amount += allocation.amount;
+                }
+                return Ok(());
+            }
+        }
+        Err(ResourceError::InvalidAllocation)
+    }
+
+    pub async fn adjust_price(
+        &self,
+        resource_id: &str,
+        new_price: f64,
+    ) -> Result<(), ResourceError> {
+        let mut resources = self.resources.write().await;
+        if let Some(resource) = resources.get_mut(resource_id) {
+            resource.price_per_unit = new_price;
+            Ok(())
+        } else {
+            Err(ResourceError::ResourceNotFound)
+        }
+    }
+
+    pub async fn create_federation_pool(
+        &self,
+        federation_id: String,
+        access_control: FederationAccessControl,
+    ) -> Result<(), ResourceError> {
+        let pool = FederationResourcePool {
+            federation_id: federation_id.clone(),
+            resources: HashMap::new(),
+            access_control,
+        };
+        
+        let mut resources = self.resources.write().await;
+        resources.insert(federation_id, pool);
+        Ok(())
+    }
+
+    pub async fn share_with_federation(
+        &self,
+        source_federation: &str,
+        target_federation: &str, 
+        resource_id: &str,
+        amount: u64,
+    ) -> Result<String, ResourceError> {
+        let mut resources = self.resources.write().await;
+        
+        // Verify federation access permissions
+        let source_pool = resources.get(source_federation)
+            .ok_or(ResourceError::ResourceNotFound)?;
+            
+        if !source_pool.access_control.allowed_federations.contains(&target_federation.to_string()) {
+            return Err(ResourceError::UnauthorizedAction);
+        }
+
+        // Create allocation record
+        let allocation_id = format!("alloc_{}", uuid::Uuid::new_v4());
+        
+        // Allocate resources to target federation
+        self.allocate(resource_id, target_federation.to_string(), amount).await?;
+
+        Ok(allocation_id)
+    }
+}
+
+#[async_trait]
+impl ResourceManager for ResourceAllocationSystem {
+    async fn allocate_resources(&self, allocation: icn_federation::ResourceAllocation) -> Result<(), String> {
+        self.allocate(&allocation.resource_type, allocation.recipient, allocation.amount)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    async fn release_resources(&self, resource_type: &str, amount: u64) -> Result<(), String> {
+        // Implementation for releasing resources back to the pool
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub enum ResourceError {
+    ResourceNotFound,
+    InsufficientResources,
+    InvalidAllocation,
+    UnauthorizedAction,
+}
 ```
 
 ===================
 File: ./crates/icn-runtime/src/lib.rs
-Size: 518 bytes
-Modified: 2024-12-15 04:28:47.482118852 +0000
+Size: 4266 bytes
+Modified: 2025-02-19 03:17:24.483393900 +0000
 Dependencies:
 use async_trait::async_trait;
+use icn_dsl::CoopLangAST;
 use icn_types::{Block, Transaction};
 
 ===================
 ```rs
 use async_trait::async_trait;
 use icn_types::{Block, Transaction};
+use icn_dsl::CoopLangAST;
 
 pub struct RuntimeManager {
     // Fields for the RuntimeManager struct
+    dsl_context: Option<CoopLangAST>,
 }
 
 impl RuntimeManager {
     // Methods for the RuntimeManager struct
+
+    pub async fn load_bytecode(&mut self, bytecode: &[u8]) -> Result<(), RuntimeError> {
+        // Implementation to load and validate DSL bytecode
+        self.dsl_context = Some(CoopLangAST::parse(bytecode)?);
+        Ok(())
+    }
+
+    pub async fn execute_cooperative_rules(&self, context: &ExecutionContext) -> Result<(), RuntimeError> {
+        if let Some(ast) = &self.dsl_context {
+            // Execute validation rules
+            if let Some(validation) = &ast.validation {
+                self.execute_validation_rules(validation, context).await?;
+            }
+
+            // Execute governance rules
+            if let Some(governance) = &ast.governance {
+                self.execute_governance_rules(governance, context).await?;
+            }
+
+            // Execute marketplace rules
+            if let Some(marketplace) = &ast.marketplace {
+                self.execute_marketplace_rules(marketplace, context).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn execute_governance_rules(&self, governance: &GovernanceNode, context: &ExecutionContext) -> Result<(), RuntimeError> {
+        // Implementation for executing governance rules
+        Ok(())
+    }
+
+    async fn execute_marketplace_rules(&self, marketplace: &MarketplaceNode, context: &ExecutionContext) -> Result<(), RuntimeError> {
+        // Implementation for executing marketplace rules
+        Ok(())
+    }
+
+    async fn evaluate_condition(&self, condition: &str, context: &ExecutionContext) -> Result<bool, RuntimeError> {
+        // Parse and evaluate condition expression
+        // This could use a simple expression evaluator or more complex logic
+        Ok(true) // Placeholder
+    }
+}
+
+#[async_trait]
+pub trait ValidationExecutor {
+    async fn execute_validation_rules(&self, validation: &ValidationNode, context: &ExecutionContext) -> Result<(), RuntimeError>;
+    async fn execute_check(&self, check: &Check, context: &ExecutionContext) -> Result<(), RuntimeError>;
+    async fn validate_state(&self, validation: &StateValidation, context: &ExecutionContext) -> Result<(), RuntimeError>;
+}
+
+#[async_trait]
+impl ValidationExecutor for RuntimeManager {
+    async fn execute_validation_rules(&self, validation: &ValidationNode, context: &ExecutionContext) -> Result<(), RuntimeError> {
+        // Execute pre-checks
+        for check in &validation.pre_checks {
+            self.execute_check(check, context).await?;
+        }
+
+        // Validate state if specified
+        if let Some(state_validation) = &validation.state_validation {
+            self.validate_state(state_validation, context).await?;
+        }
+
+        // Execute post-checks
+        for check in &validation.post_checks {
+            self.execute_check(check, context).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn execute_check(&self, check: &Check, context: &ExecutionContext) -> Result<(), RuntimeError> {
+        let condition_result = self.evaluate_condition(&check.condition, context).await?;
+        if !condition_result {
+            return Err(RuntimeError::ValidationFailed(check.action.clone()));
+        }
+        Ok(())
+    }
+
+    async fn validate_state(&self, validation: &StateValidation, context: &ExecutionContext) -> Result<(), RuntimeError> {
+        if let Some(current) = &validation.current {
+            let state = self.get_current_state(context).await?;
+            if state != *current {
+                return Err(RuntimeError::InvalidState);
+            }
+        }
+        // Similarly check expected state and transitions...
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -385,19 +2904,159 @@ impl ContractExecution {
 ```
 
 ===================
+File: ./crates/icn-storage/src/lib.rs
+Size: 3686 bytes
+Modified: 2025-01-16 22:02:57.927141600 +0000
+Dependencies:
+mod tests {
+use icn_types::Block;
+use serde::{Serialize, Deserialize};
+use std::sync::Arc;
+use thiserror::Error;
+use tokio::sync::Mutex;
+
+===================
+```rs
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use serde::{Serialize, Deserialize};
+use thiserror::Error;
+use icn_types::Block;
+
+/// Errors that can occur in storage operations
+#[derive(Error, Debug)]
+pub enum StorageError {
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+    
+    #[error("Item not found: {0}")]
+    NotFound(String),
+    
+    #[error("Invalid data: {0}")]
+    InvalidData(String),
+}
+
+/// Represents the result of storage operations
+pub type StorageResult<T> = Result<T, StorageError>;
+
+/// Core storage interface for the system
+#[async_trait::async_trait]
+pub trait StorageBackend: Send + Sync {
+    /// Store a value with the given key
+    async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()>;
+    
+    /// Retrieve a value by key
+    async fn get(&self, key: &str) -> StorageResult<Vec<u8>>;
+    
+    /// Delete a value by key
+    async fn delete(&self, key: &str) -> StorageResult<()>;
+    
+    /// Check if a key exists
+    async fn exists(&self, key: &str) -> StorageResult<bool>;
+}
+
+/// Manages persistent storage for the system
+pub struct StorageManager {
+    backend: Arc<Mutex<Box<dyn StorageBackend>>>,
+}
+
+impl StorageManager {
+    /// Create a new storage manager with the given backend
+    pub fn new(backend: Box<dyn StorageBackend>) -> Self {
+        Self {
+            backend: Arc::new(Mutex::new(backend)),
+        }
+    }
+    
+    /// Store a serializable value
+    pub async fn store<T: Serialize>(&self, key: &str, value: &T) -> StorageResult<()> {
+        let serialized = serde_json::to_vec(value)
+            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            
+        let backend = self.backend.lock().await;
+        backend.set(key, &serialized).await
+    }
+    
+    /// Retrieve and deserialize a value
+    pub async fn retrieve<T: for<'de> Deserialize<'de>>(&self, key: &str) -> StorageResult<T> {
+        let backend = self.backend.lock().await;
+        let data = backend.get(key).await?;
+        
+        serde_json::from_slice(&data)
+            .map_err(|e| StorageError::SerializationError(e.to_string()))
+    }
+    
+    /// Delete a stored value
+    pub async fn remove(&self, key: &str) -> StorageResult<()> {
+        let backend = self.backend.lock().await;
+        backend.delete(key).await
+    }
+    
+    /// Check if a key exists in storage
+    pub async fn has_key(&self, key: &str) -> StorageResult<bool> {
+        let backend = self.backend.lock().await;
+        backend.exists(key).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    
+    // Mock storage backend for testing
+    struct MockStorage {
+        data: HashMap<String, Vec<u8>>,
+    }
+    
+    #[async_trait::async_trait]
+    impl StorageBackend for MockStorage {
+        async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()> {
+            self.data.insert(key.to_string(), value.to_vec());
+            Ok(())
+        }
+        
+        async fn get(&self, key: &str) -> StorageResult<Vec<u8>> {
+            self.data.get(key)
+                .cloned()
+                .ok_or_else(|| StorageError::NotFound(key.to_string()))
+        }
+        
+        async fn delete(&self, key: &str) -> StorageResult<()> {
+            self.data.remove(key);
+            Ok(())
+        }
+        
+        async fn exists(&self, key: &str) -> StorageResult<bool> {
+            Ok(self.data.contains_key(key))
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_basic_storage_operations() {
+        // Test implementation here
+        // Will add comprehensive tests as we develop
+    }
+}
+```
+
+===================
 File: ./crates/icn-types/src/lib.rs
-Size: 18487 bytes
-Modified: 2024-12-15 04:28:47.482118852 +0000
+Size: 21279 bytes
+Modified: 2025-02-19 03:23:34.160359600 +0000
 Dependencies:
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
 use rayon::prelude::*;
 use serde::{Serialize, Deserialize};
-use serde_derive::{Serialize, Deserialize};
 use sha2::{Sha256, Digest};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::Mutex; // Remove Arc since it's unused
 use std::time::SystemTime;
+use thiserror::Error;
 use tokio::task;
 
 ===================
@@ -406,12 +3065,38 @@ use std::time::SystemTime;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
-use serde_derive::{Serialize, Deserialize};
 use tokio::task;
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::sync::Mutex;
+
+use std::sync::Mutex; // Remove Arc since it's unused
 use lazy_static::lazy_static;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum BlockError {
+    #[error("Invalid block hash")]
+    InvalidHash,
+    #[error("Previous hash mismatch")]
+    PreviousHashMismatch,
+    #[error("Invalid block index")]
+    InvalidIndex,
+    #[error("Invalid timestamp")]
+    InvalidTimestamp,
+    #[error("Invalid transaction: {0}")]
+    InvalidTransaction(String),
+    #[error("Resource usage mismatch")]
+    ResourceMismatch,
+    #[error("Relationship metadata mismatch")]
+    MetadataMismatch,
+}
+
+#[derive(Debug)]
+pub struct ResourceDebt {
+    pub cpu_debt: u64,
+    pub memory_debt: u64,
+    pub bandwidth_debt: u64,
+}
 
 /// Represents a block in the blockchain
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -477,6 +3162,26 @@ pub struct BlockMetadata {
     
     /// Summary of relationship transactions
     pub relationship_updates: RelationshipMetadata,
+
+    /// Fault tolerance level for Byzantine fault tolerance
+    pub fault_tolerance: Option<u32>,
+}
+
+impl BlockMetadata {
+    pub fn with_bft_info(&mut self, quorum_size: u32, fault_tolerance: u32) {
+        self.validator_count = quorum_size;
+        self.fault_tolerance = Some(fault_tolerance);
+        self.consensus_duration_ms = 0; // Will be set during finalization
+    }
+
+    pub fn is_bft_valid(&self) -> bool {
+        if let Some(fault_tolerance) = self.fault_tolerance {
+            // Check if we have enough validators (3f + 1)
+            self.validator_count >= (fault_tolerance * 3) + 1
+        } else {
+            false
+        }
+    }
 }
 
 /// Metadata specific to relationship transactions in the block
@@ -512,6 +3217,7 @@ impl Block {
             resources_used,
             size: 0,
             relationship_updates: relationship_metadata,
+            fault_tolerance: None,
         };
 
         let mut block = Block {
@@ -548,12 +3254,9 @@ impl Block {
         hasher.update(&self.previous_hash);
         hasher.update(self.timestamp.to_string());
         
-        // Add transaction hashes
-        let transaction_hashes: Vec<String> = self.transactions.par_iter()
-            .map(|tx| tx.hash.clone())
-            .collect();
-        for tx_hash in transaction_hashes {
-            hasher.update(tx_hash);
+        // Add entire transaction data
+        for tx in &self.transactions {
+            hasher.update(serde_json::to_string(tx).unwrap());
         }
         
         // Add proposer
@@ -592,24 +3295,22 @@ impl Block {
     }
 
     /// Verifies the block's integrity
-    pub async fn verify(&self, previous_block: Option<&Block>) -> Result<(), String> {
+    pub async fn verify(&self, previous_block: Option<&Block>) -> Result<(), BlockError> {
         // Verify hash
         if self.hash != self.calculate_hash() {
-            return Err("Invalid block hash".to_string());
+            return Err(BlockError::InvalidHash);
         }
 
-        // Verify previous hash and index if we have a parent block
+        // Verify previous block linkage
         if let Some(prev) = previous_block {
             if self.previous_hash != prev.hash {
-                return Err("Previous hash mismatch".to_string());
+                return Err(BlockError::PreviousHashMismatch);
             }
-
             if self.index != prev.index + 1 {
-                return Err("Invalid block index".to_string());
+                return Err(BlockError::InvalidIndex);
             }
-
             if self.timestamp <= prev.timestamp {
-                return Err("Invalid timestamp".to_string());
+                return Err(BlockError::InvalidTimestamp);
             }
         }
 
@@ -620,28 +3321,36 @@ impl Block {
             .as_millis() as u64;
 
         if self.timestamp > current_time + 5000 { // Allow 5 second drift
-            return Err("Block timestamp is in the future".to_string());
+            return Err(BlockError::InvalidTimestamp);
         }
 
-        // Group transactions by type
-        let mut grouped_transactions: HashMap<&str, Vec<&Transaction>> = HashMap::new();
-        for tx in &self.transactions {
-            let tx_type = match &tx.transaction_type {
-                TransactionType::Transfer { .. } => "Transfer",
-                TransactionType::ContractExecution { .. } => "ContractExecution",
-                TransactionType::RecordContribution { .. } => "RecordContribution",
-                TransactionType::RecordMutualAid { .. } => "RecordMutualAid",
-                TransactionType::UpdateRelationship { .. } => "UpdateRelationship",
-                TransactionType::AddEndorsement { .. } => "AddEndorsement",
-            };
-            grouped_transactions.entry(tx_type).or_default().push(tx);
+        // Validate transactions
+        self.validate_transactions().await?;
+
+        // Verify resource usage
+        let calculated_resources: u64 = self.transactions.iter()
+            .map(|tx| tx.resource_cost)
+            .sum();
+        if calculated_resources != self.metadata.resources_used {
+            return Err(BlockError::ResourceMismatch);
         }
 
-        // Validate transactions in parallel
-        let validation_tasks: Vec<_> = grouped_transactions.iter()
-            .flat_map(|(_, txs)| txs.iter().map(|tx| {
-                let tx_hash = tx.hash.clone();
+        // Verify relationship metadata
+        let calculated_metadata = Self::calculate_relationship_metadata(&self.transactions);
+        if calculated_metadata != self.metadata.relationship_updates {
+            return Err(BlockError::MetadataMismatch);
+        }
+
+        Ok(())
+    }
+
+    /// Validates the transactions in the block
+    async fn validate_transactions(&self) -> Result<(), BlockError> {
+        let validation_tasks: Vec<_> = self.transactions.iter()
+            .map(|tx| {
+                let tx = tx.clone();
                 task::spawn(async move {
+                    let tx_hash = tx.hash.clone();
                     let mut cache = TRANSACTION_CACHE.lock().unwrap();
                     if let Some(&is_valid) = cache.get(&tx_hash) {
                         is_valid
@@ -651,27 +3360,13 @@ impl Block {
                         is_valid
                     }
                 })
-            }))
+            })
             .collect();
 
         for task in validation_tasks {
             if !task.await.unwrap() {
-                return Err("Invalid transaction".to_string());
+                return Err(BlockError::InvalidTransaction("One or more invalid transactions".into()));
             }
-        }
-
-        // Verify resource usage
-        let calculated_resources: u64 = self.transactions.iter()
-            .map(|tx| tx.resource_cost)
-            .sum();
-        if calculated_resources != self.metadata.resources_used {
-            return Err("Resource usage mismatch".to_string());
-        }
-
-        // Verify relationship metadata
-        let calculated_metadata = Self::calculate_relationship_metadata(&self.transactions);
-        if calculated_metadata != self.metadata.relationship_updates {
-            return Err("Relationship metadata mismatch".to_string());
         }
 
         Ok(())
@@ -743,6 +3438,25 @@ impl Block {
     pub fn size(&self) -> u64 {
         self.metadata.size
     }
+
+    /// Finalizes the block and ensures all validations pass
+    pub async fn finalize(&mut self) -> Result<(), BlockError> {
+        self.verify(None).await?;
+        
+        let resource_usage = self.transactions.par_iter()
+            .map(|tx| tx.resource_cost)
+            .sum();
+            
+        self.metadata.resources_used = resource_usage;
+        
+        self.metadata.size = bincode::serialize(&self)
+            .map_err(|_| BlockError::InvalidHash)?
+            .len() as u64;
+            
+        self.hash = self.calculate_hash();
+        
+        Ok(())
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -788,6 +3502,19 @@ pub enum TransactionType {
         context: String,
         skills: Vec<String>,
     },
+}
+
+impl TransactionType {
+    pub fn as_str(&self) -> &str {
+        match self {
+            TransactionType::Transfer { .. } => "Transfer",
+            TransactionType::ContractExecution { .. } => "ContractExecution",
+            TransactionType::RecordContribution { .. } => "RecordContribution",
+            TransactionType::RecordMutualAid { .. } => "RecordMutualAid",
+            TransactionType::UpdateRelationship { .. } => "UpdateRelationship",
+            TransactionType::AddEndorsement { .. } => "AddEndorsement",
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -929,321 +3656,129 @@ impl Transaction {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        bytes.extend(self.sender.as_bytes());
-        bytes.extend(self.hash.as_bytes());
-        bytes.extend(&self.timestamp.to_be_bytes());
-        bytes
+        bincode::serialize(self).unwrap_or_default()
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationType {
+    Cooperative,
+    Community, 
+    Hybrid
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationTerms {
+    pub minimum_reputation: i64,
+    pub resource_sharing_policies: String,
+    pub governance_rules: String,
+    pub duration: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationOperation {
+    InitiateFederation {
+        federation_type: FederationType,
+        partner_id: String,
+        terms: FederationTerms,
+    },
+    JoinFederation {
+        federation_id: String,
+        commitment: Vec<String>,
+    },
+    LeaveFederation {
+        federation_id: String,
+        reason: String,
+    },
+    ProposeAction {
+        federation_id: String,
+        action_type: String,
+        description: String,
+        resources: HashMap<String, u64>,
+    },
+    VoteOnProposal {
+        federation_id: String,
+        proposal_id: String,
+        approve: bool,
+        notes: Option<String>,
+    },
+    ShareResources {
+        federation_id: String,
+        resource_type: String,
+        amount: u64,
+        recipient_id: String,
+    },
+    UpdateFederationTerms {
+        federation_id: String,
+        new_terms: FederationTerms,
+    },
 }
 ```
 
 ===================
-File: ./crates/icn-storage/src/lib.rs
-Size: 3664 bytes
-Modified: 2024-12-15 04:28:47.482118852 +0000
+File: ./icn-consensus/src/lib.rs
+Size: 1234 bytes
+Modified: 2025-02-18 05:59:31.559796600 +0000
 Dependencies:
-mod tests {
-use serde::{Serialize, Deserialize};
-use std::sync::Arc;
-use thiserror::Error;
-use tokio::sync::Mutex;
 
 ===================
 ```rs
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use serde::{Serialize, Deserialize};
-use thiserror::Error;
+// ...existing code...
 
-/// Errors that can occur in storage operations
-#[derive(Error, Debug)]
-pub enum StorageError {
-    #[error("Database error: {0}")]
-    DatabaseError(String),
-    
-    #[error("Serialization error: {0}")]
-    SerializationError(String),
-    
-    #[error("Item not found: {0}")]
-    NotFound(String),
-    
-    #[error("Invalid data: {0}")]
-    InvalidData(String),
+// Define the structure for cooperative governance rules
+struct GovernanceRules {
+    max_validators: usize,
+    min_stake: u64,
+    election_period: u64,
+    // ...other rules...
 }
 
-/// Represents the result of storage operations
-pub type StorageResult<T> = Result<T, StorageError>;
-
-/// Core storage interface for the system
-#[async_trait::async_trait]
-pub trait StorageBackend: Send + Sync {
-    /// Store a value with the given key
-    async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()>;
-    
-    /// Retrieve a value by key
-    async fn get(&self, key: &str) -> StorageResult<Vec<u8>>;
-    
-    /// Delete a value by key
-    async fn delete(&self, key: &str) -> StorageResult<()>;
-    
-    /// Check if a key exists
-    async fn exists(&self, key: &str) -> StorageResult<bool>;
+// Define the structure for a validator
+struct Validator {
+    id: String,
+    stake: u64,
+    // ...other properties...
 }
 
-/// Manages persistent storage for the system
-pub struct StorageManager {
-    backend: Arc<Mutex<Box<dyn StorageBackend>>>,
+// Define the structure for the genesis block
+struct GenesisBlock {
+    initial_validators: Vec<Validator>,
+    // ...other properties...
 }
 
-impl StorageManager {
-    /// Create a new storage manager with the given backend
-    pub fn new(backend: Box<dyn StorageBackend>) -> Self {
-        Self {
-            backend: Arc::new(Mutex::new(backend)),
-        }
-    }
-    
-    /// Store a serializable value
-    pub async fn store<T: Serialize>(&self, key: &str, value: &T) -> StorageResult<()> {
-        let serialized = serde_json::to_vec(value)
-            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-            
-        let backend = self.backend.lock().await;
-        backend.set(key, &serialized).await
-    }
-    
-    /// Retrieve and deserialize a value
-    pub async fn retrieve<T: for<'de> Deserialize<'de>>(&self, key: &str) -> StorageResult<T> {
-        let backend = self.backend.lock().await;
-        let data = backend.get(key).await?;
-        
-        serde_json::from_slice(&data)
-            .map_err(|e| StorageError::SerializationError(e.to_string()))
-    }
-    
-    /// Delete a stored value
-    pub async fn remove(&self, key: &str) -> StorageResult<()> {
-        let backend = self.backend.lock().await;
-        backend.delete(key).await
-    }
-    
-    /// Check if a key exists in storage
-    pub async fn has_key(&self, key: &str) -> StorageResult<bool> {
-        let backend = self.backend.lock().await;
-        backend.exists(key).await
+// Function to enforce cooperative governance rules
+fn enforce_governance_rules(validators: &mut Vec<Validator>, rules: &GovernanceRules) {
+    // Implement rules to prevent centralized control
+    // ...code to enforce rules...
+}
+
+// Function to finalize the genesis block format
+fn finalize_genesis_block(validators: Vec<Validator>) -> GenesisBlock {
+    GenesisBlock {
+        initial_validators: validators,
+        // ...initialize other properties...
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashMap;
-    
-    // Mock storage backend for testing
-    struct MockStorage {
-        data: HashMap<String, Vec<u8>>,
-    }
-    
-    #[async_trait::async_trait]
-    impl StorageBackend for MockStorage {
-        async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()> {
-            self.data.insert(key.to_string(), value.to_vec());
-            Ok(())
-        }
-        
-        async fn get(&self, key: &str) -> StorageResult<Vec<u8>> {
-            self.data.get(key)
-                .cloned()
-                .ok_or_else(|| StorageError::NotFound(key.to_string()))
-        }
-        
-        async fn delete(&self, key: &str) -> StorageResult<()> {
-            self.data.remove(key);
-            Ok(())
-        }
-        
-        async fn exists(&self, key: &str) -> StorageResult<bool> {
-            Ok(self.data.contains_key(key))
-        }
-    }
-    
-    #[tokio::test]
-    async fn test_basic_storage_operations() {
-        // Test implementation here
-        // Will add comprehensive tests as we develop
-    }
+// Function to develop a validator election mechanism
+fn elect_validators(current_validators: &Vec<Validator>, candidates: &Vec<Validator>, rules: &GovernanceRules) -> Vec<Validator> {
+    // Implement democratic election mechanism
+    // ...code to elect validators...
 }
+
+// ...existing code...
 ```
 
 ===================
-File: ./crates/icn-core/src/lib.rs
-Size: 4079 bytes
-Modified: 2024-12-15 04:49:21.354156894 +0000
+File: ./scripts/backend/src/main.rs
+Size: 45 bytes
+Modified: 2025-02-18 07:59:01.140151200 +0000
 Dependencies:
-use async_trait::async_trait;
-use icn_consensus::ProofOfCooperation;
-use icn_types::{Block, Transaction};
-use std::sync::Arc;
 
 ===================
 ```rs
-use std::sync::Arc;
-use async_trait::async_trait;
-use icn_types::{Block, Transaction};
-use icn_consensus::ProofOfCooperation;
-
-pub struct Core {
-    consensus: Arc<dyn ConsensusEngine>,
-    storage: Arc<dyn StorageManager>,
-    network: Arc<dyn NetworkManager>,
-    runtime: Arc<dyn RuntimeManager>,
-    telemetry: Arc<TelemetryManager>,
-    identity: Arc<dyn IdentityManager>,
-    reputation: Arc<dyn ReputationManager>,
-}
-
-impl Core {
-    pub fn new(
-        storage: Arc<dyn StorageManager>,
-        network: Arc<dyn NetworkManager>,
-        runtime: Arc<dyn RuntimeManager>,
-        telemetry: Arc<TelemetryManager>,
-        identity: Arc<dyn IdentityManager>,
-        reputation: Arc<dyn ReputationManager>,
-    ) -> Self {
-        let consensus = Arc::new(ProofOfCooperation::new(reputation.clone()));
-        Core {
-            consensus,
-            storage,
-            network,
-            runtime,
-            telemetry,
-            identity,
-            reputation,
-        }
-    }
-
-    pub async fn start(&self) {
-        self.telemetry.log("Starting Core...");
-        self.consensus.start().await;
-        self.network.start().await;
-        self.runtime.start().await;
-        self.identity.start().await;
-        self.reputation.start().await;
-        self.telemetry.log("Core started.");
-    }
-
-    pub async fn stop(&self) {
-        self.telemetry.log("Stopping Core...");
-        self.runtime.stop().await;
-        self.network.stop().await;
-        self.consensus.stop().await;
-        self.identity.stop().await;
-        self.reputation.stop().await;
-        self.telemetry.log("Core stopped.");
-    }
-
-    pub async fn process_transaction(&self, transaction: Transaction) {
-        self.telemetry.log("Processing transaction...");
-        self.runtime.execute_transaction(transaction).await;
-        self.telemetry.log("Transaction processed.");
-    }
-
-    pub async fn add_block(&self, block: Block) {
-        self.telemetry.log("Adding block...");
-        self.storage.store_block(block).await;
-        self.telemetry.log("Block added.");
-    }
-}
-
-#[async_trait]
-pub trait ConsensusEngine {
-    async fn start(&self);
-    async fn stop(&self);
-}
-
-#[async_trait]
-pub trait StorageManager {
-    async fn store_block(&self, block: Block);
-}
-
-#[async_trait]
-pub trait NetworkManager {
-    async fn start(&self);
-    async fn stop(&self);
-}
-
-#[async_trait]
-pub trait RuntimeManager {
-    async fn start(&self);
-    async fn stop(&self);
-    async fn execute_transaction(&self, transaction: Transaction);
-}
-
-#[async_trait]
-pub trait IdentityManager {
-    async fn start(&self);
-    async fn stop(&self);
-    async fn register_did(&self, did: String, public_key: String);
-    async fn verify_did(&self, did: String, signature: String) -> bool;
-}
-
-#[async_trait]
-pub trait ReputationManager {
-    async fn start(&self);
-    async fn stop(&self);
-    async fn adjust_reputation(&self, did: String, change: i64, category: String);
-    async fn get_reputation(&self, did: String, category: String) -> i64;
-    async fn is_eligible(&self, did: String, min_reputation: i64, category: String) -> bool;
-}
-pub struct TelemetryManager {
-    metrics: PrometheusMetrics,
-    logger: Logger,
-    traces: TracingSystem,
-}
-
-impl TelemetryManager {
-    pub fn new(metrics: PrometheusMetrics, logger: Logger, traces: TracingSystem) -> Self {
-        TelemetryManager {
-            metrics,
-            logger,
-            traces,
-        }
-    }
-
-    pub fn log(&self, message: &str) {
-        self.logger.log(message);
-        self.traces.trace(message);
-    }
-
-    pub fn record_metric(&self, name: &str, value: f64) {
-        self.metrics.record(name, value);
-    }
-}
-
-pub struct PrometheusMetrics;
-
-impl PrometheusMetrics {
-    pub fn record(&self, name: &str, value: f64) {
-        // Record the metric
-    }
-}
-
-pub struct Logger;
-
-impl Logger {
-    pub fn log(&self, message: &str) {
-        // Log the message
-    }
-}
-
-pub struct TracingSystem;
-
-impl TracingSystem {
-    pub fn trace(&self, message: &str) {
-        // Trace the message
-    }
+fn main() {
+    println!("Hello, world!");
 }
 ```
 
