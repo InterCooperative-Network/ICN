@@ -328,4 +328,29 @@ mod tests {
         did.rotate_key().unwrap();
         assert_ne!(old_public_key, did.public_key);
     }
+
+    #[test]
+    fn test_detailed_validation_error_handling() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+        let message = b"test message";
+        let invalid_signature = vec![0u8; 64];
+        let result = did.verify_signature(message, &invalid_signature);
+        assert!(matches!(result, Err(DIDError::SignatureVerification)));
+    }
+
+    #[test]
+    fn test_comprehensive_test_coverage() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+        let message = b"test message";
+        let signature = did.sign_message(message).unwrap();
+        assert!(did.verify_signature(message, &signature).unwrap());
+
+        let long_message = vec![0u8; 10000];
+        let signature = did.sign_message(&long_message).unwrap();
+        assert!(did.verify_signature(&long_message, &signature).unwrap());
+
+        let empty_message = b"";
+        let signature = did.sign_message(empty_message).unwrap();
+        assert!(did.verify_signature(empty_message, &signature).unwrap());
+    }
 }
