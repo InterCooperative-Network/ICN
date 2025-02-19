@@ -250,3 +250,14 @@ pub struct Vote {
     voter: String,
     approve: bool,
 }
+
+pub mod blockchain;
+pub mod core;
+pub mod db;
+pub mod identity;
+pub mod reputation;
+pub mod governance;   // <-- new module export
+pub mod vm;
+pub mod networking;
+pub mod storage;
+pub mod models;
