@@ -17,5 +17,5 @@ ecdsa = "0.13"
 kyber = "0.1"
 dilithium = "0.1"
 falcon = "0.5.5"
-rand = "0.8"
+rand = "0.9"
 icn-types = { path = "../icn-types" }
