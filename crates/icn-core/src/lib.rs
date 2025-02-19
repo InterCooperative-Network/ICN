@@ -43,27 +43,22 @@ impl Core {
         }
     }
 
-    pub async fn start(&self) {
+    pub async fn start(&self) -> Result<(), String> {
         self.telemetry.log("Starting Core...");
         if let Err(e) = self.consensus.start().await {
-            error!("Failed to start consensus: {}", e);
-            return;
+            return Err(format!("Failed to start consensus: {}", e));
         }
         if let Err(e) = self.network.start().await {
-            error!("Failed to start network: {}", e);
-            return;
+            return Err(format!("Failed to start network: {}", e));
         }
         if let Err(e) = self.runtime.start().await {
-            error!("Failed to start runtime: {}", e);
-            return;
+            return Err(format!("Failed to start runtime: {}", e));
         }
         if let Err(e) = self.identity.start().await {
-            error!("Failed to start identity: {}", e);
-            return;
+            return Err(format!("Failed to start identity: {}", e));
         }
         if let Err(e) = self.reputation.start().await {
-            error!("Failed to start reputation: {}", e);
-            return;
+            return Err(format!("Failed to start reputation: {}", e));
         }
 
         // Start real-time reputation recalibration
@@ -77,38 +72,42 @@ impl Core {
         });
 
         self.telemetry.log("Core started.");
+        Ok(())
     }
 
-    pub async fn stop(&self) {
+    pub async fn stop(&self) -> Result<(), String> {
         self.telemetry.log("Stopping Core...");
         if let Err(e) = self.runtime.stop().await {
-            error!("Failed to stop runtime: {}", e);
+            return Err(format!("Failed to stop runtime: {}", e));
         }
         if let Err(e) = self.network.stop().await {
-            error!("Failed to stop network: {}", e);
+            return Err(format!("Failed to stop network: {}", e));
         }
         if let Err(e) = self.consensus.stop().await {
-            error!("Failed to stop consensus: {}", e);
+            return Err(format!("Failed to stop consensus: {}", e));
         }
         if let Err(e) = self.identity.stop().await {
-            error!("Failed to stop identity: {}", e);
+            return Err(format!("Failed to stop identity: {}", e));
         }
         if let Err(e) = self.reputation.stop().await {
-            error!("Failed to stop reputation: {}", e);
+            return Err(format!("Failed to stop reputation: {}", e));
         }
         self.telemetry.log("Core stopped.");
+        Ok(())
     }
 
-    pub async fn process_transaction(&self, transaction: Transaction) {
+    pub async fn process_transaction(&self, transaction: Transaction) -> Result<(), String> {
         self.telemetry.log("Processing transaction...");
         self.runtime.execute_transaction(transaction).await;
         self.telemetry.log("Transaction processed.");
+        Ok(())
     }
 
-    pub async fn add_block(&self, block: Block) {
+    pub async fn add_block(&self, block: Block) -> Result<(), String> {
         self.telemetry.log("Adding block...");
         self.storage.store_block(block).await;
         self.telemetry.log("Block added.");
+        Ok(())
     }
 
     pub async fn create_proposal(&self, proposal: Proposal) -> Result<(), Box<dyn std::error::Error>> {

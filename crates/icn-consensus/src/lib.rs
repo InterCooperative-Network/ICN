@@ -40,6 +40,7 @@ pub struct ProofOfCooperation {
     reputation_manager: Arc<dyn ReputationManager>,
     federation_operations: HashMap<String, FederationOperation>,
     federations: HashMap<String, Federation>,
+    round_start_time: std::time::Instant,
 }
 
 impl ProofOfCooperation {
@@ -55,6 +56,7 @@ impl ProofOfCooperation {
             reputation_manager,
             federation_operations: HashMap::new(),
             federations: HashMap::new(),
+            round_start_time: std::time::Instant::now(),
         }
     }
 
@@ -63,6 +65,7 @@ impl ProofOfCooperation {
         self.proposed_block = None;
         self.votes.clear();
         self.vote_trie = Trie::new();
+        self.round_start_time = std::time::Instant::now();
     }
 
     pub fn propose_block(&mut self, block: Block) {
