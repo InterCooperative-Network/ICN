@@ -27,7 +27,7 @@ services:
       - icn-network
 
   db:
-    image: postgres:latest
+    image: postgres:13.3
     restart: unless-stopped
     environment:
       POSTGRES_USER: icnuser
@@ -46,7 +46,7 @@ services:
       - db_data:/var/lib/postgresql/data  # Persist DB data
 
   docs:
-    image: squidfunk/mkdocs-material:latest
+    image: squidfunk/mkdocs-material:7.1.0
     volumes:
       - ../docs:/docs
     ports:

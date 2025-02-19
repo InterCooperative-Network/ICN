@@ -1,5 +1,5 @@
-# Use latest Rust image
-FROM rust:latest
+# Use specific Rust version
+FROM rust:1.71.0
 
 # Set work directory
 WORKDIR /usr/src/app

@@ -2,64 +2,25 @@ use crate::models::{Proposal, Vote};
 use sqlx::PgPool;
 use std::sync::Arc;
 use log::{info, error};
+use crate::db::Database;
 
 pub struct GovernanceEngine {
-    db_pool: Arc<PgPool>,
+    db: Arc<Database>,
 }
 
 impl GovernanceEngine {
-    pub fn new(pool: Arc<PgPool>) -> Self {
+    pub fn new(db: Arc<Database>) -> Self {
         Self {
-            db_pool: pool
+            db
         }
     }
 
     pub async fn create_proposal(&self, proposal: Proposal) -> Result<i64, sqlx::Error> {
-        match sqlx::query!(
-            r#"
-            INSERT INTO proposals (title, description, created_by, ends_at)
-            VALUES ($1, $2, $3, $4)
-            RETURNING id
-            "#,
-            proposal.title,
-            proposal.description,
-            proposal.created_by,
-            proposal.ends_at
-        )
-        .fetch_one(&*self.db_pool)
-        .await {
-            Ok(row) => {
-                info!("Proposal created with ID: {}", row.id);
-                Ok(row.id)
-            },
-            Err(e) => {
-                error!("Failed to create proposal: {}", e);
-                Err(e)
-            }
-        }
+        self.db.create_proposal(&proposal).await
     }
 
     pub async fn record_vote(&self, vote: Vote) -> Result<(), sqlx::Error> {
-        match sqlx::query!(
-            r#"
-            INSERT INTO votes (proposal_id, voter, approve)
-            VALUES ($1, $2, $3)
-            "#,
-            vote.proposal_id,
-            vote.voter,
-            vote.approve
-        )
-        .execute(&*self.db_pool)
-        .await {
-            Ok(_) => {
-                info!("Vote recorded for proposal ID: {}", vote.proposal_id);
-                Ok(())
-            },
-            Err(e) => {
-                error!("Failed to record vote: {}", e);
-                Err(e)
-            }
-        }
+        self.db.record_vote(&vote).await
     }
 
     pub async fn list_proposals(&self) -> Result<Vec<Proposal>, sqlx::Error> {
@@ -70,7 +31,7 @@ impl GovernanceEngine {
             FROM proposals
             "#
         )
-        .fetch_all(&*self.db_pool)
+        .fetch_all(&*self.db.db_pool)
         .await?;
         Ok(proposals)
     }
