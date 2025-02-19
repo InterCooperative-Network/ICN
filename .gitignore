@@ -3,9 +3,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-/target
-
-
 # Environment and virtual environments
 .env
 .venv
@@ -126,5 +123,3 @@ tools/.env/
 *.d
 *.rs.bk
 *.log
-project_docs_dump.txt
-project_code_dump.txt
