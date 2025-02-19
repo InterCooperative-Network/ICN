@@ -37,6 +37,10 @@ impl Database {
         .fetch_one(&self.pool)
         .await
         .map(|row| row.id)
+        .map_err(|e| {
+            eprintln!("Error creating proposal: {}", e);
+            e
+        })
     }
 
     pub async fn record_vote(&self, vote: &Vote) -> Result<(), sqlx::Error> {
@@ -50,7 +54,11 @@ impl Database {
             vote.approve
         )
         .execute(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            eprintln!("Error recording vote: {}", e);
+            e
+        })?;
         
         Ok(())
     }

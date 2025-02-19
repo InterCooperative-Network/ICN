@@ -26,6 +26,7 @@ use thiserror::Error;
 use reqwest::Client;
 use tokio::signal;
 use async_trait::async_trait;
+use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError};
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -84,7 +85,7 @@ async fn main() -> Result<(), AppError> {
     let websocket_clients: WebSocketClients = Arc::new(DashMap::new());
 
     // Initialize components
-    let storage_manager = StorageManager::new(Box::new(MockStorageBackend));
+    let storage_manager = StorageManager::new(Box::new(DatabaseStorageBackend::new(db_pool.clone())));
     let network_manager = NetworkManager::new();
     let runtime_manager = RuntimeManager::new();
     let telemetry_manager = TelemetryManager::new(PrometheusMetrics, Logger, TracingSystem);
@@ -334,23 +335,70 @@ async fn handle_query_shared_resources() -> Result<impl warp::Reply, warp::Rejec
     Ok(warp::reply::json(&resources))
 }
 
-struct MockStorageBackend;
+struct DatabaseStorageBackend {
+    pool: PgPool,
+}
+
+impl DatabaseStorageBackend {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
 
 #[async_trait]
-impl StorageBackend for MockStorageBackend {
+impl StorageBackend for DatabaseStorageBackend {
     async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()> {
+        sqlx::query!(
+            r#"
+            INSERT INTO storage (key, value)
+            VALUES ($1, $2)
+            ON CONFLICT (key) DO UPDATE SET value = $2
+            "#,
+            key,
+            value
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     async fn get(&self, key: &str) -> StorageResult<Vec<u8>> {
-        Ok(vec![])
+        let result = sqlx::query!(
+            r#"
+            SELECT value FROM storage WHERE key = $1
+            "#,
+            key
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        Ok(result.value)
     }
 
     async fn delete(&self, key: &str) -> StorageResult<()> {
+        sqlx::query!(
+            r#"
+            DELETE FROM storage WHERE key = $1
+            "#,
+            key
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     async fn exists(&self, key: &str) -> StorageResult<bool> {
-        Ok(true)
+        let result = sqlx::query!(
+            r#"
+            SELECT EXISTS(SELECT 1 FROM storage WHERE key = $1)
+            "#,
+            key
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        Ok(result.exists.unwrap_or(false))
     }
 }

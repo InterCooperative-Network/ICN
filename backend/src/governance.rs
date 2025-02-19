@@ -16,11 +16,17 @@ impl GovernanceEngine {
     }
 
     pub async fn create_proposal(&self, proposal: Proposal) -> Result<i64, sqlx::Error> {
-        self.db.create_proposal(&proposal).await
+        self.db.create_proposal(&proposal).await.map_err(|e| {
+            error!("Error creating proposal: {}", e);
+            e
+        })
     }
 
     pub async fn record_vote(&self, vote: Vote) -> Result<(), sqlx::Error> {
-        self.db.record_vote(&vote).await
+        self.db.record_vote(&vote).await.map_err(|e| {
+            error!("Error recording vote: {}", e);
+            e
+        })
     }
 
     pub async fn list_proposals(&self) -> Result<Vec<Proposal>, sqlx::Error> {
@@ -32,7 +38,11 @@ impl GovernanceEngine {
             "#
         )
         .fetch_all(&*self.db.db_pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            error!("Error listing proposals: {}", e);
+            e
+        })?;
         Ok(proposals)
     }
 }
