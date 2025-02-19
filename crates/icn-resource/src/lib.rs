@@ -23,6 +23,20 @@ pub struct ResourceConstraints {
     pub time_limit: Option<u64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationResourcePool {
+    pub federation_id: String,
+    pub resources: HashMap<String, Resource>,
+    pub access_control: FederationAccessControl,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationAccessControl {
+    pub allowed_federations: Vec<String>,
+    pub min_reputation: i64,
+    pub max_allocation_per_federation: u64,
+}
+
 pub struct ResourceAllocationSystem {
     resources: Arc<RwLock<HashMap<String, Resource>>>,
     allocations: Arc<RwLock<HashMap<String, Vec<ResourceAllocation>>>>,
@@ -135,6 +149,48 @@ impl ResourceAllocationSystem {
         } else {
             Err(ResourceError::ResourceNotFound)
         }
+    }
+
+    pub async fn create_federation_pool(
+        &self,
+        federation_id: String,
+        access_control: FederationAccessControl,
+    ) -> Result<(), ResourceError> {
+        let pool = FederationResourcePool {
+            federation_id: federation_id.clone(),
+            resources: HashMap::new(),
+            access_control,
+        };
+        
+        let mut resources = self.resources.write().await;
+        resources.insert(federation_id, pool);
+        Ok(())
+    }
+
+    pub async fn share_with_federation(
+        &self,
+        source_federation: &str,
+        target_federation: &str, 
+        resource_id: &str,
+        amount: u64,
+    ) -> Result<String, ResourceError> {
+        let mut resources = self.resources.write().await;
+        
+        // Verify federation access permissions
+        let source_pool = resources.get(source_federation)
+            .ok_or(ResourceError::ResourceNotFound)?;
+            
+        if !source_pool.access_control.allowed_federations.contains(&target_federation.to_string()) {
+            return Err(ResourceError::UnauthorizedAction);
+        }
+
+        // Create allocation record
+        let allocation_id = format!("alloc_{}", uuid::Uuid::new_v4());
+        
+        // Allocate resources to target federation
+        self.allocate(resource_id, target_federation.to_string(), amount).await?;
+
+        Ok(allocation_id)
     }
 }
 

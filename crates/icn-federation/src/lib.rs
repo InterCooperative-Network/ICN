@@ -18,6 +18,127 @@ pub struct Federation {
     pub status: FederationStatus,
 }
 
+impl Federation {
+    pub fn add_member(&mut self, did: String, role: MemberRole) -> Result<(), FederationError> {
+        if self.members.contains_key(&did) {
+            return Err(FederationError::AlreadyMember);
+        }
+
+        // Verify member meets minimum reputation requirements
+        if !self.verify_member_eligibility(&did) {
+            return Err(FederationError::InsufficientReputation(
+                "Member does not meet minimum reputation requirements".to_string(),
+            ));
+        }
+
+        self.members.insert(did, MemberStatus::Active);
+        Ok(())
+    }
+
+    pub fn remove_member(&mut self, did: &str) -> Result<(), FederationError> {
+        if !self.members.contains_key(did) {
+            return Err(FederationError::MemberNotFound);
+        }
+
+        self.members.remove(did);
+        Ok(())
+    }
+
+    pub fn get_member_status(&self, did: &str) -> Option<&MemberStatus> {
+        self.members.get(did)
+    }
+
+    pub fn update_member_status(&mut self, did: &str, status: MemberStatus) -> Result<(), FederationError> {
+        if let Some(member_status) = self.members.get_mut(did) {
+            *member_status = status;
+            Ok(())
+        } else {
+            Err(FederationError::MemberNotFound)
+        }
+    }
+
+    pub fn get_active_members(&self) -> Vec<String> {
+        self.members
+            .iter()
+            .filter(|(_, status)| matches!(status, MemberStatus::Active))
+            .map(|(did, _)| did.clone())
+            .collect()
+    }
+
+    pub fn verify_member_eligibility(&self, did: &str) -> bool {
+        // This would integrate with the reputation system in practice
+        true // Simplified for example
+    }
+
+    pub fn validate_proposal(&self, proposal: &FederationProposal) -> Result<(), FederationError> {
+        // Check if proposal type is allowed
+        if !self.terms.governance_rules.allowed_proposal_types.contains(&proposal.proposal_type.to_string()) {
+            return Err(FederationError::InvalidProposalType);
+        }
+
+        // Validate proposer has sufficient reputation
+        if !self.verify_member_eligibility(&proposal.proposer) {
+            return Err(FederationError::InsufficientReputation(
+                "Proposer does not meet minimum reputation requirements".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_vote(&self, vote: &Vote) -> Result<(), FederationError> {
+        // Check if voter is a member
+        if !self.members.contains_key(&vote.voter) {
+            return Err(FederationError::UnauthorizedAction);
+        }
+
+        // Check if proposal exists
+        let proposal = self.proposals.iter()
+            .find(|p| p.id == vote.proposal_id)
+            .ok_or(FederationError::ProposalNotFound)?;
+
+        // Check if voting period is still open
+        let now = chrono::Utc::now().timestamp() as u64;
+        if now > proposal.voting_ends_at {
+            return Err(FederationError::VotingPeriodEnded);
+        }
+
+        // Check for veto rights
+        if let Some(member_role) = self.member_roles.get(&vote.voter) {
+            if let Some(veto_actions) = self.terms.governance_rules.veto_rights.get(member_role) {
+                if veto_actions.contains(&proposal.proposal_type.to_string()) && !vote.approve {
+                    // Record veto
+                    return Ok(());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn finalize_proposal(&mut self, proposal_id: &str) -> Result<ProposalStatus, FederationError> {
+        let proposal = self.proposals.iter_mut()
+            .find(|p| p.id == proposal_id)
+            .ok_or(FederationError::ProposalNotFound)?;
+
+        let total_votes = proposal.votes.len() as u32;
+        if total_votes < self.terms.governance_rules.min_votes_required {
+            return Ok(ProposalStatus::Rejected);
+        }
+
+        let approval_votes = proposal.votes.values().filter(|&v| *v).count() as u32;
+        let approval_percentage = (approval_votes * 100) / total_votes;
+
+        if approval_percentage >= self.terms.governance_rules.approval_threshold_percent {
+            proposal.status = ProposalStatus::Approved;
+        } else {
+            proposal.status = ProposalStatus::Rejected;
+        }
+
+        Ok(proposal.status.clone())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourcePool {
     pub resource_type: String,
@@ -146,6 +267,16 @@ pub struct FederationTerms {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GovernanceRules {
+    pub min_votes_required: u32,
+    pub approval_threshold_percent: u32,
+    pub min_voting_period_hours: u32,
+    pub max_voting_period_hours: u32,
+    pub allowed_proposal_types: Vec<String>,
+    pub veto_rights: HashMap<String, Vec<String>>, // role -> action types that can be vetoed
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FederationStatus {
     Active,
     Suspended,
@@ -160,6 +291,13 @@ pub enum ProposalStatus {
     Expired,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum MemberRole {
+    Admin,
+    Member,
+    Observer,
+}
+
 #[derive(Debug)]
 pub enum FederationError {
     FederationNotFound,
@@ -167,4 +305,10 @@ pub enum FederationError {
     InvalidCommitment,
     InsufficientResources,
     UnauthorizedAction,
+    MemberNotFound,
+    InvalidStatusTransition,
+    InsufficientPermissions,
+    InvalidProposalType,
+    VotingPeriodEnded,
+    ProposalNotFound,
 }

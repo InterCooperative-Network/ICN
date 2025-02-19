@@ -175,7 +175,7 @@ Implement a robust dispute resolution mechanism to handle disagreements or confl
 ### 5.2 Cross-Federation Coordination
 Enable federations to coordinate with each other for larger initiatives, such as shared resource pools across multiple federations, or federated governance for issues of common interest.
 
-## Appendix
+## 6. Appendix
 
 ### A. Summary of Federation Operations
 - **Initiate Federation**: Start a new federation with specific terms.
@@ -265,3 +265,43 @@ let operation = FederationOperation::UpdateFederationTerms {
     },
 };
 ```
+
+## 7. Cross-Federation Resource Sharing
+
+### 7.1 Resource Sharing Mechanisms
+The federation system supports secure resource sharing across federation boundaries through:
+- **Resource Pools**: Dedicated pools of resources that can be shared between federations
+- **Access Control**: Granular permissions for resource access between federations
+- **Usage Tracking**: Monitoring and accounting of shared resource usage
+- **Reputation Requirements**: Minimum reputation scores for cross-federation sharing
+
+### 7.2 Resource Pool Management
+Federation resource pools are managed through:
+```rust
+pub struct FederationResourcePool {
+    pub federation_id: String,
+    pub resources: HashMap<String, Resource>,
+    pub access_control: FederationAccessControl,
+}
+
+pub struct FederationAccessControl {
+    pub allowed_federations: Vec<String>,
+    pub min_reputation: i64,
+    pub max_allocation_per_federation: u64,
+}
+```
+
+### 7.3 Sharing Process
+1. Source federation creates a resource pool
+2. Access control rules are defined
+3. Target federation requests access
+4. Resources are allocated if all requirements are met
+5. Usage is monitored and tracked
+6. Resources are released when no longer needed
+
+### 7.4 Security Considerations
+- **Access Control**: Only authorized federations can access shared resources
+- **Quota Enforcement**: Maximum allocation limits per federation
+- **Reputation Requirements**: Minimum reputation scores for participation
+- **Usage Monitoring**: Track and audit resource usage
+- **Dispute Resolution**: Clear process for handling sharing conflicts

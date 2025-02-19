@@ -846,3 +846,80 @@ async fn test_websocket_connection() {
     // Test sending and receiving messages
     // ...existing test code...
 }
+
+#[tokio::test]
+async fn test_federation_member_management() {
+    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+    
+    let federation_id = "federation123".to_string();
+    let member_did = "did:icn:member1".to_string();
+    
+    // Test adding member
+    {
+        let mut identity = identity_system.lock().unwrap();
+        identity.assign_federation_role(
+            federation_id.clone(),
+            member_did.clone(),
+            "member".to_string(),
+        ).unwrap();
+    }
+
+    // Verify member role
+    {
+        let identity = identity_system.lock().unwrap();
+        let roles = identity.get_federation_roles(&federation_id, &member_did);
+        assert!(roles.contains(&"member".to_string()));
+    }
+
+    // Test role revocation
+    {
+        let mut identity = identity_system.lock().unwrap();
+        identity.revoke_federation_role(
+            &federation_id,
+            &member_did,
+            "member",
+        ).unwrap();
+        
+        let roles = identity.get_federation_roles(&federation_id, &member_did);
+        assert!(roles.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn test_federation_member_status_updates() {
+    let mut federation = Federation::new(
+        "federation123".to_string(),
+        FederationType::Cooperative,
+        FederationTerms {
+            minimum_reputation: 50,
+            resource_sharing_policies: "Equal distribution".to_string(),
+            governance_rules: "Majority vote".to_string(),
+            duration: "2025-12-31T23:59:59Z".to_string(),
+        },
+        "did:icn:admin".to_string(),
+    );
+
+    let member_did = "did:icn:member1".to_string();
+
+    // Test adding member
+    assert!(federation.add_member(member_did.clone(), MemberRole::Member).is_ok());
+    
+    // Verify member status
+    assert_eq!(
+        federation.get_member_status(&member_did),
+        Some(&MemberStatus::Active)
+    );
+
+    // Test updating member status
+    assert!(federation.update_member_status(&member_did, MemberStatus::Suspended).is_ok());
+    
+    assert_eq!(
+        federation.get_member_status(&member_did),
+        Some(&MemberStatus::Suspended)
+    );
+
+    // Verify active members list
+    let active_members = federation.get_active_members();
+    assert!(!active_members.contains(&member_did));
+}

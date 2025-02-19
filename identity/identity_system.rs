@@ -63,12 +63,38 @@ impl IdentitySystem {
         self.roles.get(did).cloned().unwrap_or_default()
     }
 
-    pub fn assign_federation_role(&mut self, federation_id: String, did: String, role: String) {
-        self.federation_roles.entry(federation_id).or_insert_with(HashMap::new).entry(did).or_insert_with(Vec::new).push(role);
+    pub fn assign_federation_role(&mut self, federation_id: String, did: String, role: String) -> Result<(), String> {
+        self.federation_roles
+            .entry(federation_id)
+            .or_default()
+            .entry(did)
+            .or_default()
+            .push(role);
+        Ok(())
     }
 
     pub fn get_federation_roles(&self, federation_id: &str, did: &str) -> Vec<String> {
-        self.federation_roles.get(federation_id).and_then(|roles| roles.get(did)).cloned().unwrap_or_default()
+        self.federation_roles
+            .get(federation_id)
+            .and_then(|roles| roles.get(did))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub fn revoke_federation_role(&mut self, federation_id: &str, did: &str, role: &str) -> Result<(), String> {
+        if let Some(roles) = self.federation_roles.get_mut(federation_id) {
+            if let Some(user_roles) = roles.get_mut(did) {
+                user_roles.retain(|r| r != role);
+                return Ok(());
+            }
+        }
+        Err("Federation or DID not found".to_string())
+    }
+
+    pub fn verify_federation_role(&self, federation_id: &str, did: &str, required_role: &str) -> bool {
+        self.get_federation_roles(federation_id, did)
+            .iter()
+            .any(|role| role == required_role)
     }
 
     pub fn verify_did(&self, did: &str, message: &[u8], signature: &[u8]) -> bool {
@@ -305,8 +331,8 @@ mod tests {
         let did = "did:example:secp256k1".to_string();
         identity_system.register_did(did.clone(), vec!["read".to_string()], 10, vec![], Algorithm::Secp256k1);
 
-        identity_system.assign_federation_role(federation_id.clone(), did.clone(), "admin".to_string());
-        identity_system.assign_federation_role(federation_id.clone(), did.clone(), "member".to_string());
+        identity_system.assign_federation_role(federation_id.clone(), did.clone(), "admin".to_string()).unwrap();
+        identity_system.assign_federation_role(federation_id.clone(), did.clone(), "member".to_string()).unwrap();
 
         let roles = identity_system.get_federation_roles(&federation_id, &did);
         assert_eq!(roles, vec!["admin".to_string(), "member".to_string()]);
