@@ -5,13 +5,13 @@ use std::sync::Arc;
 pub fn identity_routes(
     identity_service: Arc<dyn IdentityService>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    let create_identity = warp::path!("api" / "identity" / "create")
+    let create_identity = warp::path!("api" / "v1" / "identity" / "create")
         .and(warp::post())
         .and(warp::body::json())
         .and(with_identity_service(identity_service.clone()))
         .and_then(handle_create_identity);
 
-    let get_identity = warp::path!("api" / "identity" / "get" / String)
+    let get_identity = warp::path!("api" / "v1" / "identity" / "get" / String)
         .and(warp::get())
         .and(with_identity_service(identity_service.clone()))
         .and_then(handle_get_identity);

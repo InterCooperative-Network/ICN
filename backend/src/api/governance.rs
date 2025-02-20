@@ -22,13 +22,13 @@ struct VoteRequest {
 pub fn governance_routes(
     governance_service: Arc<Mutex<GovernanceService>>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    let create_proposal = warp::path!("api" / "governance" / "proposals")
+    let create_proposal = warp::path!("api" / "v1" / "governance" / "proposals")
         .and(warp::post())
         .and(warp::body::json())
         .and(with_governance_service(governance_service.clone()))
         .and_then(create_proposal_handler);
 
-    let vote_on_proposal = warp::path!("api" / "governance" / "proposals" / String / "vote")
+    let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
         .and(warp::post())
         .and(warp::body::json())
         .and(with_governance_service(governance_service.clone()))
