@@ -126,7 +126,7 @@ async fn main() -> Result<(), AppError> {
         });
 
     // Set up Warp server
-    let create_proposal = warp::path!("api" / "governance" / "proposals")
+    let create_proposal = warp::path!("api" / "v1" / "governance" / "proposals")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |proposal: Proposal| {
@@ -137,7 +137,7 @@ async fn main() -> Result<(), AppError> {
             }
         });
 
-    let vote_on_proposal = warp::path!("api" / "governance" / "proposals" / String / "vote")
+    let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |proposal_id: String, vote: Vote| {
@@ -148,7 +148,7 @@ async fn main() -> Result<(), AppError> {
             }
         });
 
-    let federation_routes = warp::path("api/federation")
+    let federation_routes = warp::path("api/v1/federation")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |operation: FederationOperation| {
@@ -158,7 +158,7 @@ async fn main() -> Result<(), AppError> {
             }
         });
 
-    let query_shared_resources = warp::path!("api" / "resources" / "query")
+    let query_shared_resources = warp::path!("api" / "v1" / "resources" / "query")
         .and(warp::get())
         .and_then(move || {
             async move {
