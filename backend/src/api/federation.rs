@@ -20,13 +20,13 @@ struct JoinFederationRequest {
 pub fn federation_routes(
     federation_service: Arc<Mutex<FederationService>>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    let initiate_federation = warp::path!("api" / "federation" / "initiate")
+    let initiate_federation = warp::path!("api" / "v1" / "federation" / "initiate")
         .and(warp::post())
         .and(warp::body::json())
         .and(with_federation_service(federation_service.clone()))
         .and_then(initiate_federation_handler);
 
-    let join_federation = warp::path!("api" / "federation" / "join")
+    let join_federation = warp::path!("api" / "v1" / "federation" / "join")
         .and(warp::post())
         .and(warp::body::json())
         .and(with_federation_service(federation_service.clone()))
