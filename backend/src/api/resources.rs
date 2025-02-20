@@ -13,7 +13,7 @@ struct QuerySharedResourcesRequest {
 pub fn resource_routes(
     resource_service: Arc<Mutex<ResourceService>>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    let query_shared_resources = warp::path!("api" / "resources" / "query")
+    let query_shared_resources = warp::path!("api" / "v1" / "resources" / "query")
         .and(warp::get())
         .and(warp::body::json())
         .and(with_resource_service(resource_service.clone()))
