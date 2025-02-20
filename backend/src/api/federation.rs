@@ -2,7 +2,7 @@ use warp::Filter;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use crate::services::federation_service::{FederationService, FederationOperation};
+use icn_federation::{FederationService, FederationOperation};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct InitiateFederationRequest {
