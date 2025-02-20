@@ -2,17 +2,3 @@
 name = "icn-crypto"
 version = "0.1.0"
 edition = "2021"
-
-[dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_derive = "1.0"
-lazy_static = "1.4"
-rayon = "1.6"
-chrono = { version = "0.4", features = ["serde"] }
-bincode = "1.3"
-
-kyber = "0.1"
-dilithium = "0.1"
-falcon = "0.5.5"
-rand = "0.9"
-icn-types = { path = "../icn-types" }
