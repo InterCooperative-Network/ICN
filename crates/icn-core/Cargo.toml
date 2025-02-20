@@ -2,10 +2,3 @@
 name = "icn-core"
 version = "0.1.0"
 edition = "2021"
-
-[dependencies]
-icn-types = { path = "../icn-types" }
-tokio = { version = "1", features = ["full"] }
-async-trait = "0.1"
-chrono = "0.4"
-sha2 = "0.10"

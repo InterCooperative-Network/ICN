@@ -2,11 +2,3 @@
 name = "icn-storage"
 version = "0.1.0"
 edition = "2021"
-
-[dependencies]
-tokio = { version = "1", features = ["full"] }
-async-trait = "0.1"
-serde = "1.0"
-
-serde_json = "1.0"
-icn-types = { path = "../icn-types" }
