@@ -10,5 +10,8 @@
         "vadimcn.vscode-lldb",
         "mutantdino.resourcemonitor"
     ],
-    "postCreateCommand": "cargo build --release"
+    "postCreateCommand": "cargo build --release",
+    "tasks": {
+      "build": "cargo build"
+    }
 }
