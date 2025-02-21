@@ -1,0 +1,12 @@
+[package]
+name = "consensus"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+tendermint = "0.23.0"
+tokio = { version = "1", features = ["full"] }
+
+[lib]
+name = "consensus"
+path = "src/lib.rs"

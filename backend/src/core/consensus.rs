@@ -1,5 +1,9 @@
 use async_trait::async_trait;
 use crate::reputation::ReputationManager;
+use tendermint::lite::{self, TrustedState, ValidatorSet};
+use tendermint::rpc::Client;
+use tokio::sync::Mutex;
+use std::sync::Arc;
 
 #[async_trait]
 pub trait ConsensusEngine {
@@ -10,6 +14,9 @@ pub trait ConsensusEngine {
     async fn dynamic_adjustment(&self, did: &str, contribution: i64) -> Result<(), String>;
     async fn apply_decay(&self, did: &str, decay_rate: f64) -> Result<(), String>;
     async fn reputation_based_access(&self, did: &str, min_reputation: i64) -> Result<bool, String>;
+    async fn propose_block(&self, block: tendermint::block::Block) -> Result<(), String>;
+    async fn vote_on_block(&self, block: tendermint::block::Block, vote: bool) -> Result<(), String>;
+    async fn finalize_block(&self, block: tendermint::block::Block) -> Result<(), String>;
 }
 
 pub struct ProofOfCooperation {
@@ -45,35 +52,69 @@ impl ProofOfCooperation {
     }
 }
 
+pub struct TendermintConsensus {
+    client: Client,
+    trusted_state: Arc<Mutex<TrustedState>>,
+}
+
+impl TendermintConsensus {
+    pub fn new(client: Client, trusted_state: TrustedState) -> Self {
+        Self {
+            client,
+            trusted_state: Arc::new(Mutex::new(trusted_state)),
+        }
+    }
+}
+
 #[async_trait]
-impl ConsensusEngine for ProofOfCooperation {
+impl ConsensusEngine for TendermintConsensus {
     async fn start(&self) -> Result<(), String> {
-        // Placeholder logic for starting the consensus engine
+        // Placeholder logic for starting the Tendermint consensus engine
         Ok(())
     }
 
     async fn stop(&self) -> Result<(), String> {
-        // Placeholder logic for stopping the consensus engine
+        // Placeholder logic for stopping the Tendermint consensus engine
         Ok(())
     }
 
     async fn get_reputation(&self, did: &str, category: &str) -> Result<i64, String> {
-        self.reputation_manager.get_reputation(did, category).await
+        // Placeholder logic for getting reputation
+        Ok(0)
     }
 
     async fn is_eligible(&self, did: &str, min_reputation: i64, category: &str) -> Result<bool, String> {
-        self.reputation_manager.is_eligible(did, min_reputation, category).await
+        // Placeholder logic for checking eligibility
+        Ok(true)
     }
 
     async fn dynamic_adjustment(&self, did: &str, contribution: i64) -> Result<(), String> {
-        self.reputation_manager.dynamic_adjustment(did, contribution).await
+        // Placeholder logic for dynamic adjustment
+        Ok(())
     }
 
     async fn apply_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> {
-        self.reputation_manager.apply_decay(did, decay_rate).await
+        // Placeholder logic for applying decay
+        Ok(())
     }
 
     async fn reputation_based_access(&self, did: &str, min_reputation: i64) -> Result<bool, String> {
-        self.reputation_manager.reputation_based_access(did, min_reputation).await
+        // Placeholder logic for reputation-based access
+        Ok(true)
+    }
+
+    async fn propose_block(&self, block: tendermint::block::Block) -> Result<(), String> {
+        // Placeholder logic for proposing a block
+        Ok(())
+    }
+
+    async fn vote_on_block(&self, block: tendermint::block::Block, vote: bool) -> Result<(), String> {
+        // Placeholder logic for voting on a block
+        Ok(())
+    }
+
+    async fn finalize_block(&self, block: tendermint::block::Block) -> Result<(), String> {
+        // Placeholder logic for finalizing a block
+        Ok(())
     }
 }

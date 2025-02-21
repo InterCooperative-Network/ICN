@@ -5,6 +5,9 @@ use crate::identity::IdentityManager;
 use crate::reputation::ReputationManager;
 use async_trait::async_trait;
 use icn_consensus::ConsensusEngine;
+use tendermint::rpc::Client;
+use tendermint::lite::TrustedState;
+use crate::core::consensus::TendermintConsensus;
 
 pub struct Core {
     _storage_manager: Arc<StorageManager>,
@@ -13,6 +16,7 @@ pub struct Core {
     _telemetry_manager: Arc<TelemetryManager>,
     _identity_manager: Arc<IdentityManager>,
     _reputation_manager: Arc<ReputationManager>,
+    _consensus_engine: Arc<dyn ConsensusEngine>,
 }
 
 pub struct TelemetryManager;
@@ -29,6 +33,7 @@ impl Core {
         telemetry_manager: Arc<TelemetryManager>,
         identity_manager: Arc<IdentityManager>,
         reputation_manager: Arc<ReputationManager>,
+        consensus_engine: Arc<dyn ConsensusEngine>,
     ) -> Self {
         Core {
             _storage_manager: storage_manager,
@@ -37,6 +42,7 @@ impl Core {
             _telemetry_manager: telemetry_manager,
             _identity_manager: identity_manager,
             _reputation_manager: reputation_manager,
+            _consensus_engine: consensus_engine,
         }
     }
 
@@ -53,6 +59,9 @@ impl Core {
         }
         if let Err(e) = self._reputation_manager.start().await {
             return Err(format!("Failed to start reputation manager: {}", e));
+        }
+        if let Err(e) = self._consensus_engine.start().await {
+            return Err(format!("Failed to start consensus engine: {}", e));
         }
         self._telemetry_manager.log("Core started.");
         Ok(())
@@ -71,6 +80,9 @@ impl Core {
         }
         if let Err(e) = self._reputation_manager.stop().await {
             return Err(format!("Failed to stop reputation manager: {}", e));
+        }
+        if let Err(e) = self._consensus_engine.stop().await {
+            return Err(format!("Failed to stop consensus engine: {}", e));
         }
         self._telemetry_manager.log("Core stopped.");
         Ok(())

@@ -1,0 +1,17 @@
+[package]
+name = "frontend"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+tokio = { version = "1.30", features = ["full"] }
+tendermint = "0.23"
+serde = { version = "1.0", features = ["derive"] }
+
+[lib]
+name = "frontend_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "frontend_bin"
+path = "src/main.rs"
