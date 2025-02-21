@@ -92,11 +92,13 @@ async fn main() -> Result<(), AppError> {
     let runtime_manager = RuntimeManager::new();
     let telemetry_manager = TelemetryManager::new(PrometheusMetrics, Logger, TracingSystem);
     let identity_manager = IdentityManager::new();
+    let reputation_cache = ReputationCache::new(config.reputation_cache_max_size);
     let reputation_manager = ReputationManager::new(
         config.governance_decay_rate,
         config.resource_sharing_decay_rate,
         config.technical_contributions_decay_rate,
         config.decay_exemptions.clone(),
+        reputation_cache,
     );
 
     let notification_manager = NotificationManager::new(config.notification_email.clone(), config.notification_sms.clone());
