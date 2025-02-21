@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use sqlx::PgPool;
+use std::sync::Arc;
 
 pub type StorageResult<T> = Result<T, StorageError>;
 
@@ -32,11 +33,11 @@ impl StorageManager {
 }
 
 pub struct DatabaseStorageBackend {
-    pool: PgPool,
+    pool: Arc<PgPool>,
 }
 
 impl DatabaseStorageBackend {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: Arc<PgPool>) -> Self {
         Self { pool }
     }
 }
@@ -53,7 +54,7 @@ impl StorageBackend for DatabaseStorageBackend {
             key,
             value
         )
-        .execute(&self.pool)
+        .execute(&*self.pool)
         .await?;
         Ok(())
     }
@@ -65,7 +66,7 @@ impl StorageBackend for DatabaseStorageBackend {
             "#,
             key
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&*self.pool)
         .await?;
         Ok(result.value)
     }
@@ -77,7 +78,7 @@ impl StorageBackend for DatabaseStorageBackend {
             "#,
             key
         )
-        .execute(&self.pool)
+        .execute(&*self.pool)
         .await?;
         Ok(())
     }
@@ -89,7 +90,7 @@ impl StorageBackend for DatabaseStorageBackend {
             "#,
             key
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&*self.pool)
         .await?;
         Ok(result.exists.unwrap_or(false))
     }

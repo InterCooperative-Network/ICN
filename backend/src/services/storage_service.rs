@@ -1,13 +1,14 @@
 use async_trait::async_trait;
 use sqlx::PgPool;
+use std::sync::Arc;
 use crate::storage::{StorageBackend, StorageResult, StorageError};
 
 pub struct StorageService {
-    pool: PgPool,
+    pool: Arc<PgPool>,
 }
 
 impl StorageService {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: Arc<PgPool>) -> Self {
         Self { pool }
     }
 }
@@ -24,7 +25,7 @@ impl StorageBackend for StorageService {
             key,
             value
         )
-        .execute(&self.pool)
+        .execute(&*self.pool)
         .await?;
         Ok(())
     }
@@ -36,7 +37,7 @@ impl StorageBackend for StorageService {
             "#,
             key
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&*self.pool)
         .await?;
         Ok(result.value)
     }
@@ -48,7 +49,7 @@ impl StorageBackend for StorageService {
             "#,
             key
         )
-        .execute(&self.pool)
+        .execute(&*self.pool)
         .await?;
         Ok(())
     }
@@ -60,7 +61,7 @@ impl StorageBackend for StorageService {
             "#,
             key
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&*self.pool)
         .await?;
         Ok(result.exists.unwrap_or(false))
     }
