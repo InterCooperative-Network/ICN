@@ -923,3 +923,55 @@ async fn test_federation_member_status_updates() {
     let active_members = federation.get_active_members();
     assert!(!active_members.contains(&member_did));
 }
+
+// Tests for key rotation and revocation
+
+#[tokio::test]
+async fn test_key_rotation_and_revocation() {
+    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+
+    // Register a DID
+    {
+        let mut identity = identity_system.lock().unwrap();
+        identity.register_did(
+            DID::new("did:icn:test".to_string(), Algorithm::Secp256k1),
+            vec!["transfer".to_string()],
+        );
+    }
+
+    // Rotate the key
+    {
+        let mut identity = identity_system.lock().unwrap();
+        assert!(identity.rotate_key("did:icn:test").is_ok());
+    }
+
+    // Revoke the key
+    {
+        let mut identity = identity_system.lock().unwrap();
+        assert!(identity.revoke_key("did:icn:test").is_ok());
+    }
+}
+
+// Tests for BLS threshold signatures
+
+#[tokio::test]
+async fn test_bls_threshold_signatures() {
+    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+    let message = b"test message";
+
+    // Generate BLS private keys
+    let private_keys: Vec<BlsPrivateKey> = (0..3).map(|_| BlsPrivateKey::generate(&mut rand::thread_rng())).collect();
+    let public_keys: Vec<BlsPublicKey> = private_keys.iter().map(|key| BlsPublicKey::from(key)).collect();
+
+    // Generate BLS threshold signature
+    let signature = {
+        let mut identity = identity_system.lock().unwrap();
+        identity.generate_bls_threshold_signature(message, private_keys.clone()).unwrap()
+    };
+
+    // Verify BLS threshold signature
+    {
+        let identity = identity_system.lock().unwrap();
+        assert!(identity.verify_bls_threshold_signature(message, &signature, public_keys.clone()).unwrap());
+    }
+}

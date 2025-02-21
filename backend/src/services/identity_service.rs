@@ -6,6 +6,8 @@ use crate::database::db::Database;
 pub trait IdentityService: Send + Sync {
     async fn create_identity(&self, identity: &str) -> Result<(), String>;
     async fn get_identity(&self, identity: &str) -> Result<String, String>;
+    async fn rotate_key(&self, identity: &str) -> Result<(), String>;
+    async fn revoke_key(&self, identity: &str) -> Result<(), String>;
 }
 
 pub struct IdentityServiceImpl {
@@ -26,5 +28,15 @@ impl IdentityService for IdentityServiceImpl {
 
     async fn get_identity(&self, identity: &str) -> Result<String, String> {
         self.db.retrieve_identity(identity).await.map_err(|e| e.to_string())
+    }
+
+    async fn rotate_key(&self, identity: &str) -> Result<(), String> {
+        // Implement key rotation logic here
+        Ok(())
+    }
+
+    async fn revoke_key(&self, identity: &str) -> Result<(), String> {
+        // Implement key revocation logic here
+        Ok(())
     }
 }
