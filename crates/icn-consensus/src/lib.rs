@@ -245,6 +245,57 @@ impl ProofOfCooperation {
 
         Ok(federation_id)
     }
+
+    pub async fn adjust_validator_set(&mut self) -> Result<(), ConsensusError> {
+        // Get current validator counts for BFT calculation
+        let current_size = self.participants.len();
+        let min_validators = (current_size / 3) * 3 + 1; // 3f + 1 where f is max faulty
+
+        // Remove validators that fell below minimum reputation
+        let mut to_remove = Vec::new();
+        for participant in self.participants.iter() {
+            if !self.reputation_manager.is_eligible(participant, 50, "consensus") {
+                to_remove.push(participant.clone());
+            }
+        }
+
+        // Remove disqualified validators if we maintain BFT requirements
+        if (current_size - to_remove.len()) >= min_validators {
+            for participant in to_remove {
+                if let Some(pos) = self.participants.iter().position(|x| x == &participant) {
+                    self.participants.remove(pos);
+                }
+            }
+        }
+
+        // Add new validators that meet higher reputation threshold
+        let new_validators = self.select_validators(80).await?;
+        
+        // Add new validators while maintaining max size limit
+        let max_validators = 100; // Example maximum validator set size
+        for validator in new_validators {
+            if self.participants.len() >= max_validators {
+                break;
+            }
+            if !self.participants.contains(&validator) {
+                self.participants.push_back(validator);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn start_validator_rotation(&mut self) {
+        tokio::spawn(async move {
+            let rotation_interval = Duration::from_secs(3600); // 1 hour
+            loop {
+                sleep(rotation_interval).await;
+                if let Err(e) = self.adjust_validator_set().await {
+                    error!("Failed to adjust validator set: {}", e);
+                }
+            }
+        });
+    }
 }
 
 #[async_trait]

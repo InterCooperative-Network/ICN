@@ -412,6 +412,22 @@ impl Block {
         self.add_signature(validator_did, signature, 1.0).await?;
         Ok(())
     }
+
+    pub fn update_validator_metadata(&mut self, validator: String, reputation: i64) {
+        let validator_meta = BlockSignature {
+            validator_did: validator,
+            signature: String::new(),
+            timestamp: Utc::now(),
+            voting_power: reputation as f64,
+        };
+        self.signatures.push(validator_meta);
+        
+        // Update validator count and total voting power
+        self.metadata.validator_count = self.signatures.len() as u32;
+        self.metadata.total_voting_power = self.signatures.iter()
+            .map(|s| s.voting_power)
+            .sum();
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

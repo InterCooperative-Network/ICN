@@ -20,6 +20,29 @@ impl ProofOfCooperation {
     pub fn new(reputation_manager: ReputationManager) -> Self {
         Self { reputation_manager }
     }
+
+    pub async fn verify_validator_set(&self) -> Result<bool, String> {
+        let total_validators = self.reputation_manager.count_eligible_validators(50, "consensus").await?;
+        let max_faulty = total_validators / 3;
+        
+        // Verify we maintain BFT properties
+        if total_validators < (3 * max_faulty + 1) {
+            return Ok(false);
+        }
+
+        // Verify validator diversity
+        let unique_organizations = self.reputation_manager.count_unique_organizations().await?;
+        if unique_organizations < (2 * max_faulty + 1) {
+            return Ok(false);
+        }
+
+        Ok(true)
+    }
+
+    pub async fn reputation_based_access(&self, did: &str, min_reputation: i64) -> Result<bool, String> {
+        let reputation = self.reputation_manager.get_reputation(did, "consensus").await?;
+        Ok(reputation >= min_reputation)
+    }
 }
 
 #[async_trait]
