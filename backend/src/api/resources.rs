@@ -39,7 +39,21 @@ async fn query_shared_resources_handler(
 
     let mut service = resource_service.lock().await;
     match service.query_shared_resources(query).await {
-        Ok(resources) => Ok(warp::reply::json(&resources)),
+        Ok(resources) => {
+            // Use EXPLAIN ANALYZE to verify index usage
+            let explain_query = format!(
+                "EXPLAIN ANALYZE SELECT * FROM resources WHERE resource_type = '{}' AND owner = '{}'",
+                request.resource_type,
+                request.owner.clone().unwrap_or_default()
+            );
+            let explain_result = sqlx::query(&explain_query)
+                .fetch_all(&service.pool)
+                .await
+                .map_err(|e| warp::reject::custom(e))?;
+            println!("EXPLAIN ANALYZE result: {:?}", explain_result);
+
+            Ok(warp::reply::json(&resources))
+        },
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
