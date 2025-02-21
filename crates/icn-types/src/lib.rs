@@ -82,25 +82,12 @@ pub struct BlockSignature {
 /// Additional metadata about block creation and validation
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlockMetadata {
-    /// Time taken to reach consensus (milliseconds)
     pub consensus_duration_ms: u64,
-    
-    /// Number of validators that participated
     pub validator_count: u32,
-    
-    /// Total voting power that approved the block
     pub total_voting_power: f64,
-    
-    /// Total resources consumed by transactions in the block
     pub resources_used: u64,
-    
-    /// Size of the block in bytes
     pub size: u64,
-    
-    /// Summary of relationship transactions
     pub relationship_updates: RelationshipMetadata,
-
-    /// Fault tolerance level for Byzantine fault tolerance
     pub fault_tolerance: Option<u32>,
 }
 
@@ -457,9 +444,11 @@ impl TransactionType {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Transaction {
     pub sender: String,
+    pub receiver: String,
+    pub amount: u64,
+    pub hash: String,
     pub transaction_type: TransactionType,
     pub timestamp: u128,
-    pub hash: String,
     pub resource_cost: u64,      // Resource points required for this transaction
     pub resource_priority: u8,    // Priority level for resource allocation (1-10)
 }
