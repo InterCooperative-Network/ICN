@@ -8,6 +8,7 @@ use crate::did::creation::Algorithm;
 use crate::did::creation::DID;
 use crate::did::creation::DIDError;
 use tokio::time::sleep;
+use bls_signatures::{PrivateKey as BlsPrivateKey, PublicKey as BlsPublicKey, Signature as BlsSignature, Serialize as BlsSerialize, AggregatePublicKey, AggregateSignature};
 
 pub struct IdentitySystem {
     permissions: HashMap<String, Vec<String>>,
@@ -126,6 +127,11 @@ impl IdentitySystem {
                 Algorithm::Falcon => {
                     falcon::verify(public_key, message, signature)
                 },
+                Algorithm::BLS => {
+                    let public_key = BlsPublicKey::from_bytes(public_key).map_err(|_| DIDError::InvalidKey).unwrap();
+                    let signature = BlsSignature::from_bytes(signature).map_err(|_| DIDError::SignatureVerification).unwrap();
+                    public_key.verify(message, &signature)
+                },
             }
         } else {
             false
@@ -192,6 +198,18 @@ impl IdentitySystem {
             }
         });
     }
+
+    pub fn generate_bls_threshold_signature(&self, message: &[u8], private_keys: Vec<BlsPrivateKey>) -> Result<Vec<u8>, DIDError> {
+        let signatures: Vec<BlsSignature> = private_keys.iter().map(|key| key.sign(message)).collect();
+        let aggregate_signature = AggregateSignature::aggregate(&signatures).map_err(|_| DIDError::SignatureVerification)?;
+        Ok(aggregate_signature.as_bytes().to_vec())
+    }
+
+    pub fn verify_bls_threshold_signature(&self, message: &[u8], signature: &[u8], public_keys: Vec<BlsPublicKey>) -> Result<bool, DIDError> {
+        let aggregate_public_key = AggregatePublicKey::aggregate(&public_keys).map_err(|_| DIDError::InvalidKey)?;
+        let signature = BlsSignature::from_bytes(signature).map_err(|_| DIDError::SignatureVerification)?;
+        Ok(aggregate_public_key.verify(message, &signature))
+    }
 }
 
 #[cfg(test)]
@@ -200,6 +218,7 @@ mod tests {
     use secp256k1::{Secp256k1, SecretKey, PublicKey, Signature};
     use rsa::{RSAPrivateKey, RSAPublicKey};
     use ecdsa::{SigningKey, VerifyingKey, signature::Signer};
+    use bls_signatures::{PrivateKey as BlsPrivateKey, PublicKey as BlsPublicKey};
 
     #[test]
     fn test_register_and_verify_did_secp256k1() {
@@ -336,5 +355,17 @@ mod tests {
 
         let roles = identity_system.get_federation_roles(&federation_id, &did);
         assert_eq!(roles, vec!["admin".to_string(), "member".to_string()]);
+    }
+
+    #[test]
+    fn test_generate_and_verify_bls_threshold_signature() {
+        let identity_system = IdentitySystem::new();
+        let message = b"test message";
+
+        let private_keys: Vec<BlsPrivateKey> = (0..3).map(|_| BlsPrivateKey::generate(&mut rand::thread_rng())).collect();
+        let public_keys: Vec<BlsPublicKey> = private_keys.iter().map(|key| BlsPublicKey::from(key)).collect();
+
+        let signature = identity_system.generate_bls_threshold_signature(message, private_keys).unwrap();
+        assert!(identity_system.verify_bls_threshold_signature(message, &signature, public_keys).unwrap());
     }
 }
