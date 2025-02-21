@@ -30,6 +30,11 @@ Proof of Cooperation is the core consensus mechanism used within ICN. It leverag
 Federated consensus is used for specific federations within ICN that require more localized decision-making. This mechanism allows federated groups to reach agreement independently of the broader network.
 - **Use Case**: Federations making autonomous decisions about local resource allocation or governance.
 
+### 1.3 Tendermint Consensus
+Tendermint is a Byzantine Fault Tolerant (BFT) consensus algorithm integrated into ICN to enhance fault tolerance and performance. It ensures finality and smooth state propagation even in adversarial conditions.
+- **Use Case**: High-throughput and fault-tolerant consensus for critical operations.
+- **Validator Selection**: Validators are selected based on a rotating leader election mechanism.
+
 ## 2. System Components
 
 ### 2.1 Consensus Nodes
