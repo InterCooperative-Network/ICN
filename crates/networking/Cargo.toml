@@ -1,0 +1,12 @@
+[package]
+name = "networking"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+tendermint = "0.23"
+
+[lib]
+name = "networking"
+path = "src/lib.rs"

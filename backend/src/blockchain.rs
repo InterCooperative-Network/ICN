@@ -1,16 +1,25 @@
 use icn_types::{Block, Transaction};
 use sha2::{Sha256, Digest};
+use tendermint::block::Block as TendermintBlock;
+use tendermint::lite::TrustedState;
+use tendermint::rpc::Client;
+use tokio::sync::Mutex;
+use std::sync::Arc;
 
 pub struct Blockchain {
     pub blocks: Vec<Block>,
     pub pending_transactions: Vec<Transaction>,
+    pub tendermint_client: Client,
+    pub trusted_state: Arc<Mutex<TrustedState>>,
 }
 
 impl Blockchain {
-    pub fn new() -> Self {
+    pub fn new(tendermint_client: Client, trusted_state: TrustedState) -> Self {
         Self {
             blocks: vec![],
             pending_transactions: vec![],
+            tendermint_client,
+            trusted_state: Arc::new(Mutex::new(trusted_state)),
         }
     }
 
@@ -82,5 +91,20 @@ impl Blockchain {
     pub fn validate_contribution(&self, contribution: &Contribution) -> Result<bool, String> {
         // Placeholder logic for contribution validation
         Ok(true)
+    }
+
+    pub async fn propose_block(&self, block: TendermintBlock) -> Result<(), String> {
+        // Placeholder logic for proposing a block using Tendermint
+        Ok(())
+    }
+
+    pub async fn vote_on_tendermint_block(&self, block: TendermintBlock, vote: bool) -> Result<(), String> {
+        // Placeholder logic for voting on a block using Tendermint
+        Ok(())
+    }
+
+    pub async fn finalize_tendermint_block(&self, block: TendermintBlock) -> Result<(), String> {
+        // Placeholder logic for finalizing a block using Tendermint
+        Ok(())
     }
 }
