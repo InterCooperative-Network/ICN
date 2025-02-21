@@ -21,4 +21,45 @@ impl GovernanceService {
         let db = self.db.lock().await;
         record_vote_in_db(&*db, &vote).await
     }
+    
+    // New handler for creating proposals
+    pub async fn handle_create_proposal(
+        &self,
+        proposal: Proposal,
+        notification_manager: crate::notification::NotificationManager,
+        websocket_clients: crate::websocket::WebSocketClients,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        match self.create_proposal(proposal.clone()).await {
+            Ok(id) => {
+                let subject = format!("New Proposal Created: {}", proposal.title);
+                let body = format!("A new proposal has been created by {}. Description: {}",
+                    proposal.created_by, proposal.description);
+                notification_manager.send_notification(&subject, &body).await;
+                let message = warp::ws::Message::text(serde_json::to_string(&proposal).unwrap());
+                crate::websocket::broadcast_message(&message, websocket_clients).await;
+                Ok(warp::reply::json(&id))
+            },
+            Err(e) => Err(warp::reject::custom(e)),
+        }
+    }
+    
+    // New handler for voting on proposals
+    pub async fn handle_vote_on_proposal(
+        &self,
+        vote: Vote,
+        notification_manager: crate::notification::NotificationManager,
+        websocket_clients: crate::websocket::WebSocketClients,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        match self.record_vote(vote.clone()).await {
+            Ok(_) => {
+                let subject = format!("New Vote on Proposal: {}", vote.proposal_id);
+                let body = format!("A new vote has been cast by {}. Approve: {}", vote.voter, vote.approve);
+                notification_manager.send_notification(&subject, &body).await;
+                let message = warp::ws::Message::text(serde_json::to_string(&vote).unwrap());
+                crate::websocket::broadcast_message(&message, websocket_clients).await;
+                Ok(warp::reply::json(&"Vote recorded"))
+            },
+            Err(e) => Err(warp::reject::custom(e)),
+        }
+    }
 }

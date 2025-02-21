@@ -1,4 +1,4 @@
-Project Code Dump - Generated Wed 19 Feb 2025 09:59:01 AM UTC
+Project Code Dump - Generated Fri 21 Feb 2025 12:12:33 AM UTC
 ======================================
 
 LLM Context Information
@@ -31,19 +31,25 @@ Project Tree:
 .
 ├── backend
 │   ├── Cargo.lock
+│   ├── Cargo.toml
 │   ├── migrations
 │   │   └── 20240218000000_initial.sql
 │   └── src
+│       ├── api
 │       ├── blockchain.rs
+│       ├── core
 │       ├── core.rs
+│       ├── database
 │       ├── db.rs
 │       ├── governance.rs
 │       ├── identity.rs
 │       ├── lib.rs
 │       ├── main.rs
 │       ├── models.rs
+│       ├── networking
 │       ├── networking.rs
 │       ├── reputation.rs
+│       ├── services
 │       ├── storage.rs
 │       └── vm.rs
 ├── Cargo.lock
@@ -68,6 +74,8 @@ Project Tree:
 │   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-federation
+│   │   └── src
+│   ├── icn-mutual-credit
 │   │   └── src
 │   ├── icn-p2p
 │   │   ├── Cargo.toml
@@ -116,6 +124,8 @@ Project Tree:
 │   └── mod.rs
 ├── improved-setup.sh
 ├── inventory_nodes.sh
+├── messaging
+│   └── server.rs
 ├── project_code_dump.txt
 ├── project_docs_dump.txt
 ├── README.md
@@ -158,6 +168,26 @@ Project Tree:
     └── requirements.txt
 
 ===================
+File: ./backend/Cargo.toml
+Size: 316 bytes
+Modified: 2025-02-21 00:12:17.638854100 +0000
+
+===================
+```toml
+[package]
+name = "backend"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+tokio = { version = "1.30", features = ["full"] }
+warp = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+sqlx = { version = "0.7", features = ["postgres", "runtime-tokio"] }
+icn-federation = { path = "../crates/icn-federation" }
+```
+
+===================
 File: ./scripts/backend/Cargo.toml
 Size: 78 bytes
 Modified: 2025-02-18 07:59:01.136149500 +0000
@@ -174,28 +204,24 @@ edition = "2021"
 
 ===================
 File: ./backend/src/lib.rs
-Size: 169 bytes
-Modified: 2025-02-18 07:17:44.613675800 +0000
+Size: 97 bytes
+Modified: 2025-02-21 00:12:17.835165200 +0000
 Dependencies:
 
 ===================
 ```rs
-pub mod blockchain;
-pub mod core;
-pub mod db;
-pub mod identity;
-pub mod reputation;
-pub mod governance;
-pub mod vm;
+pub mod api;
+pub mod services;
+pub mod database;
 pub mod networking;
-pub mod storage;
-pub mod models;
+pub mod core;
+pub mod main;
 ```
 
 ===================
 File: ./backend/src/main.rs
-Size: 12612 bytes
-Modified: 2025-02-19 06:23:14.794625000 +0000
+Size: 12391 bytes
+Modified: 2025-02-21 00:12:17.844168900 +0000
 Dependencies:
 mod config;
 mod core;
@@ -324,11 +350,13 @@ async fn main() -> Result<(), AppError> {
     let runtime_manager = RuntimeManager::new();
     let telemetry_manager = TelemetryManager::new(PrometheusMetrics, Logger, TracingSystem);
     let identity_manager = IdentityManager::new();
+    let reputation_cache = ReputationCache::new(config.reputation_cache_max_size);
     let reputation_manager = ReputationManager::new(
         config.governance_decay_rate,
         config.resource_sharing_decay_rate,
         config.technical_contributions_decay_rate,
         config.decay_exemptions.clone(),
+        reputation_cache,
     );
 
     let notification_manager = NotificationManager::new(config.notification_email.clone(), config.notification_sms.clone());
@@ -358,7 +386,7 @@ async fn main() -> Result<(), AppError> {
         });
 
     // Set up Warp server
-    let create_proposal = warp::path!("api" / "governance" / "proposals")
+    let create_proposal = warp::path!("api" / "v1" / "governance" / "proposals")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |proposal: Proposal| {
@@ -369,7 +397,7 @@ async fn main() -> Result<(), AppError> {
             }
         });
 
-    let vote_on_proposal = warp::path!("api" / "governance" / "proposals" / String / "vote")
+    let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |proposal_id: String, vote: Vote| {
@@ -380,7 +408,7 @@ async fn main() -> Result<(), AppError> {
             }
         });
 
-    let federation_routes = warp::path("api/federation")
+    let federation_routes = warp::path("api/v1/federation")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |operation: FederationOperation| {
@@ -390,7 +418,7 @@ async fn main() -> Result<(), AppError> {
             }
         });
 
-    let query_shared_resources = warp::path!("api" / "resources" / "query")
+    let query_shared_resources = warp::path!("api" / "v1" / "resources" / "query")
         .and(warp::get())
         .and_then(move || {
             async move {
@@ -647,29 +675,378 @@ Modified: 2025-02-19 00:47:20.971282200 +0000
 ===================
 
 ===================
+File: ./backend/src/api/federation.rs
+Size: 2556 bytes
+Modified: 2025-02-21 00:12:17.654853100 +0000
+Dependencies:
+use icn_federation::{FederationService, FederationOperation};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use warp::Filter;
+
+===================
+```rs
+use warp::Filter;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use icn_federation::{FederationService, FederationOperation};
+
+#[derive(Debug, Deserialize, Serialize)]
+struct InitiateFederationRequest {
+    federation_type: String,
+    partner_id: String,
+    terms: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct JoinFederationRequest {
+    federation_id: String,
+    commitment: String,
+}
+
+pub fn federation_routes(
+    federation_service: Arc<Mutex<FederationService>>,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    let initiate_federation = warp::path!("api" / "v1" / "federation" / "initiate")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(initiate_federation_handler);
+
+    let join_federation = warp::path!("api" / "v1" / "federation" / "join")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(join_federation_handler);
+
+    initiate_federation.or(join_federation)
+}
+
+fn with_federation_service(
+    federation_service: Arc<Mutex<FederationService>>,
+) -> impl Filter<Extract = (Arc<Mutex<FederationService>>,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || federation_service.clone())
+}
+
+async fn initiate_federation_handler(
+    request: InitiateFederationRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let operation = FederationOperation::InitiateFederation {
+        federation_type: request.federation_type,
+        partner_id: request.partner_id,
+        terms: request.terms,
+    };
+
+    let mut service = federation_service.lock().await;
+    match service.handle_operation(operation).await {
+        Ok(_) => Ok(warp::reply::json(&"Federation initiated")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn join_federation_handler(
+    request: JoinFederationRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let operation = FederationOperation::JoinFederation {
+        federation_id: request.federation_id,
+        commitment: request.commitment,
+    };
+
+    let mut service = federation_service.lock().await;
+    match service.handle_operation(operation).await {
+        Ok(_) => Ok(warp::reply::json(&"Joined federation")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+```
+
+===================
+File: ./backend/src/api/governance.rs
+Size: 2546 bytes
+Modified: 2025-02-21 00:12:17.665854800 +0000
+Dependencies:
+use crate::services::governance_service::{GovernanceService, Proposal, Vote};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use warp::Filter;
+
+===================
+```rs
+use warp::Filter;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use crate::services::governance_service::{GovernanceService, Proposal, Vote};
+
+#[derive(Debug, Deserialize, Serialize)]
+struct CreateProposalRequest {
+    title: String,
+    description: String,
+    created_by: String,
+    ends_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct VoteRequest {
+    proposal_id: String,
+    voter: String,
+    approve: bool,
+}
+
+pub fn governance_routes(
+    governance_service: Arc<Mutex<GovernanceService>>,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    let create_proposal = warp::path!("api" / "v1" / "governance" / "proposals")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_governance_service(governance_service.clone()))
+        .and_then(create_proposal_handler);
+
+    let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_governance_service(governance_service.clone()))
+        .and_then(vote_on_proposal_handler);
+
+    create_proposal.or(vote_on_proposal)
+}
+
+fn with_governance_service(
+    governance_service: Arc<Mutex<GovernanceService>>,
+) -> impl Filter<Extract = (Arc<Mutex<GovernanceService>>,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || governance_service.clone())
+}
+
+async fn create_proposal_handler(
+    request: CreateProposalRequest,
+    governance_service: Arc<Mutex<GovernanceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let proposal = Proposal {
+        title: request.title,
+        description: request.description,
+        created_by: request.created_by,
+        ends_at: request.ends_at,
+    };
+
+    let mut service = governance_service.lock().await;
+    match service.create_proposal(proposal).await {
+        Ok(proposal_id) => Ok(warp::reply::json(&proposal_id)),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn vote_on_proposal_handler(
+    request: VoteRequest,
+    governance_service: Arc<Mutex<GovernanceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let vote = Vote {
+        proposal_id: request.proposal_id,
+        voter: request.voter,
+        approve: request.approve,
+    };
+
+    let mut service = governance_service.lock().await;
+    match service.record_vote(vote).await {
+        Ok(_) => Ok(warp::reply::json(&"Vote recorded")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+```
+
+===================
+File: ./backend/src/api/identity.rs
+Size: 1686 bytes
+Modified: 2025-02-21 00:12:17.677853300 +0000
+Dependencies:
+use crate::services::identity_service::{IdentityService, IdentityServiceImpl};
+use std::sync::Arc;
+use warp::Filter;
+
+===================
+```rs
+use warp::Filter;
+use crate::services::identity_service::{IdentityService, IdentityServiceImpl};
+use std::sync::Arc;
+
+pub fn identity_routes(
+    identity_service: Arc<dyn IdentityService>,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    let create_identity = warp::path!("api" / "v1" / "identity" / "create")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_identity_service(identity_service.clone()))
+        .and_then(handle_create_identity);
+
+    let get_identity = warp::path!("api" / "v1" / "identity" / "get" / String)
+        .and(warp::get())
+        .and(with_identity_service(identity_service.clone()))
+        .and_then(handle_get_identity);
+
+    create_identity.or(get_identity)
+}
+
+fn with_identity_service(
+    identity_service: Arc<dyn IdentityService>,
+) -> impl Filter<Extract = (Arc<dyn IdentityService>,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || identity_service.clone())
+}
+
+async fn handle_create_identity(
+    identity: String,
+    identity_service: Arc<dyn IdentityService>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    identity_service.create_identity(&identity).await.map_err(|e| {
+        warp::reject::custom(warp::reject::custom(e))
+    })?;
+    Ok(warp::reply::with_status("Identity created", warp::http::StatusCode::CREATED))
+}
+
+async fn handle_get_identity(
+    identity: String,
+    identity_service: Arc<dyn IdentityService>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let data = identity_service.get_identity(&identity).await.map_err(|e| {
+        warp::reject::custom(warp::reject::custom(e))
+    })?;
+    Ok(warp::reply::json(&data))
+}
+```
+
+===================
+File: ./backend/src/api/reputation.rs
+Size: 909 bytes
+Modified: 2025-02-21 00:12:17.688851100 +0000
+Dependencies:
+use crate::services::reputation_service::{get_reputation, adjust_reputation};
+use warp::Filter;
+
+===================
+```rs
+use warp::Filter;
+use crate::services::reputation_service::{get_reputation, adjust_reputation};
+
+pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::path("api")
+        .and(
+            warp::path("v1")
+                .and(
+                    warp::path("reputation")
+                        .and(
+                            warp::path("get")
+                                .and(warp::get())
+                                .and(warp::query::<String>())
+                                .and_then(get_reputation)
+                        )
+                        .or(
+                            warp::path("adjust")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(adjust_reputation)
+                        )
+                )
+        )
+}
+```
+
+===================
+File: ./backend/src/api/resources.rs
+Size: 2100 bytes
+Modified: 2025-02-21 00:12:21.812455800 +0000
+Dependencies:
+use crate::services::resource_service::{ResourceService, ResourceQuery};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use warp::Filter;
+
+===================
+```rs
+use warp::Filter;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use crate::services::resource_service::{ResourceService, ResourceQuery};
+
+#[derive(Debug, Deserialize, Serialize)]
+struct QuerySharedResourcesRequest {
+    resource_type: String,
+    owner: Option<String>,
+}
+
+pub fn resource_routes(
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    let query_shared_resources = warp::path!("api" / "v1" / "resources" / "query")
+        .and(warp::get())
+        .and(warp::body::json())
+        .and(with_resource_service(resource_service.clone()))
+        .and_then(query_shared_resources_handler);
+
+    query_shared_resources
+}
+
+fn with_resource_service(
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> impl Filter<Extract = (Arc<Mutex<ResourceService>>,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || resource_service.clone())
+}
+
+async fn query_shared_resources_handler(
+    request: QuerySharedResourcesRequest,
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let query = ResourceQuery {
+        resource_type: request.resource_type,
+        owner: request.owner,
+    };
+
+    let mut service = resource_service.lock().await;
+    match service.query_shared_resources(query).await {
+        Ok(resources) => {
+            // Use EXPLAIN ANALYZE to verify index usage
+            let explain_query = format!(
+                "EXPLAIN ANALYZE SELECT * FROM resources WHERE resource_type = '{}' AND owner = '{}'",
+                request.resource_type,
+                request.owner.clone().unwrap_or_default()
+            );
+            let explain_result = sqlx::query(&explain_query)
+                .fetch_all(&service.pool)
+                .await
+                .map_err(|e| warp::reject::custom(e))?;
+            println!("EXPLAIN ANALYZE result: {:?}", explain_result);
+
+            Ok(warp::reply::json(&resources))
+        },
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+```
+
+===================
 File: ./backend/src/lib.rs
-Size: 169 bytes
-Modified: 2025-02-18 07:17:44.613675800 +0000
+Size: 97 bytes
+Modified: 2025-02-21 00:12:17.835165200 +0000
 Dependencies:
 
 ===================
 ```rs
-pub mod blockchain;
-pub mod core;
-pub mod db;
-pub mod identity;
-pub mod reputation;
-pub mod governance;
-pub mod vm;
+pub mod api;
+pub mod services;
+pub mod database;
 pub mod networking;
-pub mod storage;
-pub mod models;
+pub mod core;
+pub mod main;
 ```
 
 ===================
 File: ./backend/src/main.rs
-Size: 12612 bytes
-Modified: 2025-02-19 06:23:14.794625000 +0000
+Size: 12391 bytes
+Modified: 2025-02-21 00:12:17.844168900 +0000
 Dependencies:
 mod config;
 mod core;
@@ -798,11 +1175,13 @@ async fn main() -> Result<(), AppError> {
     let runtime_manager = RuntimeManager::new();
     let telemetry_manager = TelemetryManager::new(PrometheusMetrics, Logger, TracingSystem);
     let identity_manager = IdentityManager::new();
+    let reputation_cache = ReputationCache::new(config.reputation_cache_max_size);
     let reputation_manager = ReputationManager::new(
         config.governance_decay_rate,
         config.resource_sharing_decay_rate,
         config.technical_contributions_decay_rate,
         config.decay_exemptions.clone(),
+        reputation_cache,
     );
 
     let notification_manager = NotificationManager::new(config.notification_email.clone(), config.notification_sms.clone());
@@ -832,7 +1211,7 @@ async fn main() -> Result<(), AppError> {
         });
 
     // Set up Warp server
-    let create_proposal = warp::path!("api" / "governance" / "proposals")
+    let create_proposal = warp::path!("api" / "v1" / "governance" / "proposals")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |proposal: Proposal| {
@@ -843,7 +1222,7 @@ async fn main() -> Result<(), AppError> {
             }
         });
 
-    let vote_on_proposal = warp::path!("api" / "governance" / "proposals" / String / "vote")
+    let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |proposal_id: String, vote: Vote| {
@@ -854,7 +1233,7 @@ async fn main() -> Result<(), AppError> {
             }
         });
 
-    let federation_routes = warp::path("api/federation")
+    let federation_routes = warp::path("api/v1/federation")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |operation: FederationOperation| {
@@ -864,7 +1243,7 @@ async fn main() -> Result<(), AppError> {
             }
         });
 
-    let query_shared_resources = warp::path!("api" / "resources" / "query")
+    let query_shared_resources = warp::path!("api" / "v1" / "resources" / "query")
         .and(warp::get())
         .and_then(move || {
             async move {
@@ -1423,8 +1802,8 @@ enum FederationType {
 
 ===================
 File: ./crates/icn-core/src/lib.rs
-Size: 8706 bytes
-Modified: 2025-02-19 06:23:14.796627700 +0000
+Size: 8914 bytes
+Modified: 2025-02-19 21:25:52.327008500 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_consensus::ProofOfCooperation;
@@ -1687,6 +2066,17 @@ pub struct Vote {
     voter: String,
     approve: bool,
 }
+
+pub mod blockchain;
+pub mod core;
+pub mod db;
+pub mod identity;
+pub mod reputation;
+pub mod governance;   // <-- new module export
+pub mod vm;
+pub mod networking;
+pub mod storage;
+pub mod models;
 ```
 
 ===================
@@ -2426,6 +2816,92 @@ pub enum FederationError {
     ProposalNotFound,
     InsufficientReputation(String),
 }
+```
+
+===================
+File: ./crates/icn-mutual-credit/src/lib.rs
+Size: 2371 bytes
+Modified: 2025-02-21 00:12:18.003726000 +0000
+Dependencies:
+use chrono::Utc;
+use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
+
+===================
+```rs
+use std::collections::HashMap;
+use chrono::Utc;
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MutualCreditTransaction {
+    pub sender_did: String,
+    pub receiver_did: String,
+    pub amount: i64,
+    pub signature: String,
+    pub timestamp: i64,
+}
+
+pub struct MutualCreditLedger {
+    // Maps member DID to current credit balance.
+    pub balances: HashMap<String, i64>,
+    // Ordered list of all mutual credit transactions.
+    pub history: Vec<MutualCreditTransaction>,
+}
+
+impl MutualCreditLedger {
+    pub fn new() -> Self {
+        Self {
+            balances: HashMap::new(),
+            history: Vec::new(),
+        }
+    }
+
+    // Process a new mutual credit transaction.
+    pub fn process_transaction(&mut self, tx: MutualCreditTransaction) -> Result<(), String> {
+        // Verify sender signature (placeholder)
+        if !Self::verify_signature(&tx.sender_did, &tx.signature, tx.amount) {
+            return Err("Invalid signature".into());
+        }
+        // Update sender and receiver balances
+        *self.balances.entry(tx.sender_did.clone()).or_insert(0) -= tx.amount;
+        *self.balances.entry(tx.receiver_did.clone()).or_insert(0) += tx.amount;
+        // Append to history
+        self.history.push(tx);
+        Ok(())
+    }
+
+    // Dummy signature verifier (to be replaced with actual verification logic)
+    fn verify_signature(_did: &str, _signature: &str, _amount: i64) -> bool {
+        true // In practice, verify using the sender's DID key.
+    }
+
+    // Get balance summary for a member
+    pub fn get_balance(&self, did: &str) -> i64 {
+        *self.balances.get(did).unwrap_or(&0)
+    }
+
+    // Print simple ledger summary (for logging)
+    pub fn print_summary(&self) {
+        for (did, balance) in &self.balances {
+            println!("Member {}: Balance {}", did, balance);
+        }
+    }
+}
+
+// Example usage (to be removed or used in unit tests)
+// fn main() {
+//     let mut ledger = MutualCreditLedger::new();
+//     let tx = MutualCreditTransaction {
+//         sender_did: "did:icn:member1".into(),
+//         receiver_did: "did:icn:member2".into(),
+//         amount: 50,
+//         signature: "signature_placeholder".into(),
+//         timestamp: Utc::now().timestamp(),
+//     };
+//     ledger.process_transaction(tx).unwrap();
+//     ledger.print_summary();
+// }
 ```
 
 ===================

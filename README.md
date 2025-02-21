@@ -51,7 +51,14 @@ The ICN project is organized into several directories, each serving a specific p
 - **backend**: Contains the Rust code for the backend services.
 - **frontend**: Contains the JavaScript code for the frontend application.
 - **contracts**: Contains the smart contracts for governance and cooperative operations.
-- **crates**: Contains various Rust crates used by the backend services.
+- **crates**:
+  - **core**: Contains core libraries (icn-core, icn-crypto, icn-dsl, icn-types).
+  - **consensus**: Contains the consensus mechanism (icn-consensus).
+  - **networking**: Contains networking libraries (icn-p2p, icn-federation).
+  - **storage**: Contains persistence and storage management (icn-storage).
+  - **runtime**: Contains runtime support (icn-runtime).
+  - **resources**: Contains resource management (icn-resource).
+  - **finance**: Contains the mutual credit system (icn-mutual-credit).
 - **docker**: Contains Dockerfiles and Docker Compose configurations for containerizing the services.
 - **docs**: Contains the project documentation, including setup guides, contribution guides, and API documentation.
 - **scripts**: Contains various scripts for setup, deployment, and management of the project.
