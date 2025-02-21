@@ -1,5 +1,5 @@
 use warp::Filter;
-use crate::services::reputation_service::{get_reputation, adjust_reputation};
+use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution};
 
 pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path("api")
@@ -18,6 +18,12 @@ pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = wa
                                 .and(warp::post())
                                 .and(warp::body::json())
                                 .and_then(adjust_reputation)
+                        )
+                        .or(
+                            warp::path("verify")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(verify_contribution)
                         )
                 )
         )

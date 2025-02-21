@@ -16,3 +16,11 @@ pub struct Vote {
     pub voter: String,
     pub approve: bool,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Contribution {
+    pub id: i64,
+    pub did: String,
+    pub score: i64,
+    pub timestamp: f64,
+}
