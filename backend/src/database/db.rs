@@ -19,6 +19,20 @@ impl Database {
             .run(&pool)
             .await?;
             
+        // Create indexes on the resources table
+        sqlx::query!("CREATE INDEX IF NOT EXISTS idx_resource_owner ON resources(owner);")
+            .execute(&pool)
+            .await?;
+        sqlx::query!("CREATE INDEX IF NOT EXISTS idx_resource_type ON resources(resource_type);")
+            .execute(&pool)
+            .await?;
+        sqlx::query!("CREATE INDEX IF NOT EXISTS idx_resource_created_at ON resources(created_at);")
+            .execute(&pool)
+            .await?;
+        sqlx::query!("CREATE INDEX IF NOT EXISTS idx_resource_updated_at ON resources(updated_at);")
+            .execute(&pool)
+            .await?;
+
         Ok(Self { pool })
     }
 
