@@ -381,6 +381,37 @@ impl Block {
         
         Ok(())
     }
+
+    /// Initiates a consensus round among the validators
+    pub async fn start_consensus_round(&mut self) -> Result<(), BlockError> {
+        // Simulate consensus round
+        let consensus_duration = 1000; // Simulated duration in milliseconds
+        tokio::time::sleep(tokio::time::Duration::from_millis(consensus_duration)).await;
+
+        // Simulate validator signatures
+        let validators = vec!["validator1", "validator2", "validator3"];
+        for validator in validators {
+            let signature = format!("signature_of_{}", validator);
+            self.add_signature(validator.to_string(), signature, 1.0).await?;
+        }
+
+        // Update metadata after consensus
+        self.update_metadata(consensus_duration, bincode::serialize(&self).unwrap().len() as u64);
+
+        Ok(())
+    }
+
+    /// Records a validator's vote on the block
+    pub async fn vote_on_block(&mut self, validator_did: String, vote: bool) -> Result<(), BlockError> {
+        let signature = if vote {
+            format!("signature_of_{}", validator_did)
+        } else {
+            return Err(BlockError::InvalidTransaction("Validator voted against the block".into()));
+        };
+
+        self.add_signature(validator_did, signature, 1.0).await?;
+        Ok(())
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
