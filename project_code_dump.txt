@@ -1,4 +1,4 @@
-Project Code Dump - Generated Fri 21 Feb 2025 12:26:43 AM UTC
+Project Code Dump - Generated Fri 21 Feb 2025 12:45:59 AM UTC
 ======================================
 
 LLM Context Information
@@ -3379,8 +3379,8 @@ mod tests {
 
 ===================
 File: ./crates/icn-types/src/lib.rs
-Size: 21959 bytes
-Modified: 2025-02-19 06:23:14.807143300 +0000
+Size: 22917 bytes
+Modified: 2025-02-21 00:41:22.682757300 +0000
 Dependencies:
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
@@ -3479,25 +3479,12 @@ pub struct BlockSignature {
 /// Additional metadata about block creation and validation
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlockMetadata {
-    /// Time taken to reach consensus (milliseconds)
     pub consensus_duration_ms: u64,
-    
-    /// Number of validators that participated
     pub validator_count: u32,
-    
-    /// Total voting power that approved the block
     pub total_voting_power: f64,
-    
-    /// Total resources consumed by transactions in the block
     pub resources_used: u64,
-    
-    /// Size of the block in bytes
     pub size: u64,
-    
-    /// Summary of relationship transactions
     pub relationship_updates: RelationshipMetadata,
-
-    /// Fault tolerance level for Byzantine fault tolerance
     pub fault_tolerance: Option<u32>,
 }
 
@@ -3791,6 +3778,37 @@ impl Block {
         
         Ok(())
     }
+
+    /// Initiates a consensus round among the validators
+    pub async fn start_consensus_round(&mut self) -> Result<(), BlockError> {
+        // Simulate consensus round
+        let consensus_duration = 1000; // Simulated duration in milliseconds
+        tokio::time::sleep(tokio::time::Duration::from_millis(consensus_duration)).await;
+
+        // Simulate validator signatures
+        let validators = vec!["validator1", "validator2", "validator3"];
+        for validator in validators {
+            let signature = format!("signature_of_{}", validator);
+            self.add_signature(validator.to_string(), signature, 1.0).await?;
+        }
+
+        // Update metadata after consensus
+        self.update_metadata(consensus_duration, bincode::serialize(&self).unwrap().len() as u64);
+
+        Ok(())
+    }
+
+    /// Records a validator's vote on the block
+    pub async fn vote_on_block(&mut self, validator_did: String, vote: bool) -> Result<(), BlockError> {
+        let signature = if vote {
+            format!("signature_of_{}", validator_did)
+        } else {
+            return Err(BlockError::InvalidTransaction("Validator voted against the block".into()));
+        };
+
+        self.add_signature(validator_did, signature, 1.0).await?;
+        Ok(())
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -3854,9 +3872,11 @@ impl TransactionType {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Transaction {
     pub sender: String,
+    pub receiver: String,
+    pub amount: u64,
+    pub hash: String,
     pub transaction_type: TransactionType,
     pub timestamp: u128,
-    pub hash: String,
     pub resource_cost: u64,      // Resource points required for this transaction
     pub resource_priority: u8,    // Priority level for resource allocation (1-10)
 }

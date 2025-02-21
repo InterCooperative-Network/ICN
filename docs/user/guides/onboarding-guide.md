@@ -1,4 +1,3 @@
-
 ---
 
 ### `onboarding-guide.md` (Under `user/guides/`)

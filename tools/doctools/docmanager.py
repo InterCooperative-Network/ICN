@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 import re
 import shutil
+import uuid
 
 class DocManager:
     def __init__(self, root_dir="docs"):
@@ -181,6 +182,38 @@ class DocManager:
         # Save index
         index_path = self.root_dir / "INDEX.md"
         index_path.write_text(index_content)
+
+    def generate_did(self):
+        # Logic to generate a new DID
+        did = f"did:example:{uuid.uuid4()}"
+        return did
+
+    def get_reputation(self, did):
+        """Retrieve the reputation score for a given DID."""
+        # Placeholder logic for retrieving reputation score
+        # In a real implementation, this would query a database or an external service
+        reputation_data = {
+            "did:example:123": 75,
+            "did:example:456": 60,
+            "did:example:789": 90,
+        }
+        return reputation_data.get(did, 0)
+
+    def update_reputation(self, did, change):
+        """Update the reputation score for a given DID."""
+        # Placeholder logic for updating reputation score
+        # In a real implementation, this would update a database or an external service
+        reputation_data = {
+            "did:example:123": 75,
+            "did:example:456": 60,
+            "did:example:789": 90,
+        }
+        if did in reputation_data:
+            reputation_data[did] += change
+            reputation_data[did] = max(0, reputation_data[did])  # Ensure reputation is not negative
+        else:
+            reputation_data[did] = max(0, change)  # Initialize new DID with the change value if positive
+        return reputation_data.get(did, 0)
 
 
 def main():
