@@ -21,6 +21,9 @@ use icn_types::{
 
 use reqwest::Client;
 use serde_json::json;
+use tendermint::rpc::Client as TendermintClient;
+use tendermint::lite::TrustedState;
+use crate::core::consensus::TendermintConsensus;
 
 // Remove the unused imports of non-existent crates
 // use icn_consensus;
@@ -974,4 +977,27 @@ async fn test_bls_threshold_signatures() {
         let identity = identity_system.lock().unwrap();
         assert!(identity.verify_bls_threshold_signature(message, &signature, public_keys.clone()).unwrap());
     }
+}
+
+#[tokio::test]
+async fn test_tendermint_consensus_integration() {
+    let tendermint_client = TendermintClient::new("http://localhost:26657").unwrap();
+    let trusted_state = TrustedState::default();
+    let tendermint_consensus = TendermintConsensus::new(tendermint_client, trusted_state);
+
+    // Test starting the Tendermint consensus engine
+    assert!(tendermint_consensus.start().await.is_ok());
+
+    // Test proposing a block
+    let block = tendermint::block::Block::default();
+    assert!(tendermint_consensus.propose_block(block.clone()).await.is_ok());
+
+    // Test voting on a block
+    assert!(tendermint_consensus.vote_on_block(block.clone(), true).await.is_ok());
+
+    // Test finalizing a block
+    assert!(tendermint_consensus.finalize_block(block).await.is_ok());
+
+    // Test stopping the Tendermint consensus engine
+    assert!(tendermint_consensus.stop().await.is_ok());
 }
