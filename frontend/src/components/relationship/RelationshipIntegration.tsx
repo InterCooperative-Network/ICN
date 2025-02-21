@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { HandHeart, MessageCircle, Users } from 'lucide-react';
+import { FixedSizeList as List } from 'react-window';
 
 // Types for our relationship data
 interface Contribution {
@@ -58,6 +59,70 @@ interface ReputationUpdate {
   newTotal: number;
   category: string; // Added category field
 }
+
+const RelationshipRow = ({ index, style, data }) => {
+  const relationship = data[index];
+  return (
+    <div style={style}>
+      <Card key={index} className="p-4">
+        <div className="space-y-4">
+          <div>
+            <h3 className="font-medium">
+              Relationship with {relationship.memberTwo}
+            </h3>
+            <p className="text-sm text-gray-500">
+              Since {new Date(relationship.started).toLocaleDateString()}
+            </p>
+          </div>
+          
+          <div className="bg-gray-50 p-4 rounded">
+            <h4 className="text-sm font-medium mb-1">Our Story</h4>
+            <p className="text-gray-600">{relationship.story}</p>
+          </div>
+
+          <div>
+            <h4 className="text-sm font-medium mb-2">Recent Interactions</h4>
+            {relationship.interactions.slice(-3).map((interaction, j) => (
+              <div key={j} className="mb-2 text-sm">
+                <p className="font-medium">{interaction.description}</p>
+                <p className="text-gray-600">
+                  {new Date(interaction.date).toLocaleDateString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+const MutualAidRow = ({ index, style, data }) => {
+  const interaction = data[index];
+  return (
+    <div style={style}>
+      <Card key={index} className="p-4">
+        <div className="flex items-start gap-4">
+          <HandHeart className="h-5 w-5 text-green-500 mt-1" />
+          <div>
+            <h3 className="font-medium">{interaction.description}</h3>
+            <p className="text-sm text-gray-500">
+              {new Date(interaction.date).toLocaleDateString()}
+            </p>
+            {interaction.impactStory && (
+              <p className="mt-2 text-gray-600">{interaction.impactStory}</p>
+            )}
+            {interaction.reciprocityNotes && (
+              <p className="mt-2 text-sm text-gray-600 italic">
+                {interaction.reciprocityNotes}
+              </p>
+            )}
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+};
 
 export default function RelationshipIntegration() {
   const [loading, setLoading] = useState(true);
@@ -126,6 +191,10 @@ export default function RelationshipIntegration() {
         wsRef.current = null;
       }
     };
+  }, []);
+
+  const getListHeight = useCallback(() => {
+    return Math.min(window.innerHeight * 0.6, 800);
   }, []);
 
   if (loading) {
@@ -232,29 +301,15 @@ export default function RelationshipIntegration() {
               <CardTitle>Mutual Aid Network</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {mutualAid.map((interaction, i) => (
-                  <Card key={i} className="p-4">
-                    <div className="flex items-start gap-4">
-                      <HandHeart className="h-5 w-5 text-green-500 mt-1" />
-                      <div>
-                        <h3 className="font-medium">{interaction.description}</h3>
-                        <p className="text-sm text-gray-500">
-                          {new Date(interaction.date).toLocaleDateString()}
-                        </p>
-                        {interaction.impactStory && (
-                          <p className="mt-2 text-gray-600">{interaction.impactStory}</p>
-                        )}
-                        {interaction.reciprocityNotes && (
-                          <p className="mt-2 text-sm text-gray-600 italic">
-                            {interaction.reciprocityNotes}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+              <List
+                height={getListHeight()}
+                itemCount={mutualAid.length}
+                itemSize={180}
+                width="100%"
+                itemData={mutualAid}
+              >
+                {MutualAidRow}
+              </List>
             </CardContent>
           </Card>
         </TabsContent>
@@ -265,39 +320,15 @@ export default function RelationshipIntegration() {
               <CardTitle>Your Relationships</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {relationships.map((relationship, i) => (
-                  <Card key={i} className="p-4">
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="font-medium">
-                          Relationship with {relationship.memberTwo}
-                        </h3>
-                        <p className="text-sm text-gray-500">
-                          Since {new Date(relationship.started).toLocaleDateString()}
-                        </p>
-                      </div>
-                      
-                      <div className="bg-gray-50 p-4 rounded">
-                        <h4 className="text-sm font-medium mb-1">Our Story</h4>
-                        <p className="text-gray-600">{relationship.story}</p>
-                      </div>
-
-                      <div>
-                        <h4 className="text-sm font-medium mb-2">Recent Interactions</h4>
-                        {relationship.interactions.slice(-3).map((interaction, j) => (
-                          <div key={j} className="mb-2 text-sm">
-                            <p className="font-medium">{interaction.description}</p>
-                            <p className="text-gray-600">
-                              {new Date(interaction.date).toLocaleDateString()}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+              <List
+                height={getListHeight()}
+                itemCount={relationships.length}
+                itemSize={180}
+                width="100%"
+                itemData={relationships}
+              >
+                {RelationshipRow}
+              </List>
             </CardContent>
           </Card>
         </TabsContent>
