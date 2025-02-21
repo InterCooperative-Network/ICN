@@ -3,23 +3,17 @@ use crate::models::{Proposal, Vote};
 use std::env;
 
 pub struct Database {
-    pool: PgPool,
+    pub db_pool: PgPool,
 }
 
 impl Database {
     pub async fn new() -> Result<Self, sqlx::Error> {
-        // Load from environment variable with fallback
-        let database_url = env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://icnuser:icnpass@db:5432/icndb".to_string());
-            
-        let pool = PgPool::connect(&database_url).await?;
-        
-        // Run migrations
-        sqlx::migrate!("./migrations")
-            .run(&pool)
-            .await?;
-            
-        Ok(Self { pool })
+        let pool = create_pool().await?;
+        Ok(Self { db_pool: pool })
+    }
+
+    pub async fn with_pool(pool: PgPool) -> Self {
+        Self { db_pool: pool }
     }
 
     pub async fn create_proposal(&self, proposal: &Proposal) -> Result<i64, sqlx::Error> {
@@ -34,7 +28,7 @@ impl Database {
             proposal.created_by,
             proposal.ends_at
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&self.db_pool)
         .await
         .map(|row| row.id)
         .map_err(|e| {
@@ -53,7 +47,7 @@ impl Database {
             vote.voter,
             vote.approve
         )
-        .execute(&self.pool)
+        .execute(&self.db_pool)
         .await
         .map_err(|e| {
             eprintln!("Error recording vote: {}", e);
@@ -73,7 +67,7 @@ impl Database {
             identity,
             data
         )
-        .execute(&self.pool)
+        .execute(&self.db_pool)
         .await
         .map_err(|e| {
             eprintln!("Error storing identity: {}", e);
@@ -90,7 +84,7 @@ impl Database {
             "#,
             identity
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&self.db_pool)
         .await
         .map_err(|e| {
             eprintln!("Error retrieving identity: {}", e);
@@ -99,4 +93,18 @@ impl Database {
         
         Ok(result.data)
     }
+}
+
+pub async fn create_pool() -> Result<PgPool, sqlx::Error> {
+    let database_url = env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://icnuser:icnpass@db:5432/icndb".to_string());
+        
+    let pool = PgPool::connect(&database_url).await?;
+    
+    // Run migrations
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await?;
+        
+    Ok(pool)
 }

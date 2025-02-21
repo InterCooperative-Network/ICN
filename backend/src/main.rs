@@ -29,6 +29,7 @@ use async_trait::async_trait;
 use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError};
 use warp::http::Method;
 use warp::cors::Cors;
+use crate::db::create_pool;
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -78,20 +79,19 @@ async fn main() -> Result<(), AppError> {
     let config: Config = config::load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
     config.validate()?;
     
-    // Set up database connection pool
-    let db_pool = PgPool::connect(&config.database_url)
+    // Create a single database pool
+    let db_pool = create_pool()
         .await
         .map_err(AppError::DatabaseError)?;
+    let db_pool = Arc::new(db_pool);
     
-    // Instantiate GovernanceService using the db_pool
-    use crate::services::governance_service::GovernanceService;
+    // Share the pool with all services
+    let storage_backend = DatabaseStorageBackend::new(db_pool.clone());
+    let storage_manager = StorageManager::new(Box::new(storage_backend));
     let governance_service = Arc::new(Mutex::new(GovernanceService::new(db_pool.clone())));
     
-    // Initialize WebSocket clients using DashMap
+    // Initialize other components with shared pool
     let websocket_clients: WebSocketClients = Arc::new(DashMap::new());
-
-    // Initialize components
-    let storage_manager = StorageManager::new(Box::new(DatabaseStorageBackend::new(db_pool.clone())));
     let network_manager = NetworkManager::new();
     let runtime_manager = RuntimeManager::new();
     let telemetry_manager = TelemetryManager::new(PrometheusMetrics, Logger, TracingSystem);
