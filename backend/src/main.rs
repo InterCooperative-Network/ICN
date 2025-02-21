@@ -5,6 +5,7 @@ mod federation;
 mod notification;
 mod reputation;
 mod websocket;
+mod middleware;
 
 use crate::config::Config;
 use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
@@ -30,6 +31,7 @@ use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError
 use warp::http::Method;
 use warp::cors::Cors;
 use crate::db::create_pool;
+use middleware::rate_limit::with_rate_limit;
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -131,45 +133,53 @@ async fn main() -> Result<(), AppError> {
             ws.on_upgrade(move |socket| handle_websocket(socket, websocket_clients))
         });
     
-    // Update create_proposal route to use GovernanceService's handler
-    let create_proposal = warp::path!("api" / "v1" / "governance" / "proposals")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |proposal: Proposal| {
-            let ns = notification_manager.clone();
-            let wc = websocket_clients.clone();
-            let gs = governance_service.clone();
-            async move {
-                let mut service = gs.lock().await;
-                service.handle_create_proposal(proposal, ns, wc).await
-            }
-        });
-    
-    // Update vote_on_proposal route to use GovernanceService's handler
-    let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |proposal_id: String, vote: Vote| {
-            let ns = notification_manager.clone();
-            let wc = websocket_clients.clone();
-            let gs = governance_service.clone();
-            async move {
-                // Set the proposal_id in vote if not matching
-                let vote = Vote { proposal_id, ..vote };
-                let mut service = gs.lock().await;
-                service.handle_vote_on_proposal(vote, ns, wc).await
-            }
-        });
+    // Apply rate limits to routes
+    let create_proposal = with_rate_limit(
+        warp::path!("api" / "v1" / "governance" / "proposals")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and_then(move |proposal: Proposal| {
+                let ns = notification_manager.clone();
+                let wc = websocket_clients.clone();
+                let gs = governance_service.clone();
+                async move {
+                    let mut service = gs.lock().await;
+                    service.handle_create_proposal(proposal, ns, wc).await
+                }
+            }),
+        10 // 10 requests per second
+    );
 
-    let federation_routes = warp::path("api/v1/federation")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
+    let vote_on_proposal = with_rate_limit(
+        warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and_then(move |proposal_id: String, vote: Vote| {
+                let ns = notification_manager.clone();
+                let wc = websocket_clients.clone();
+                let gs = governance_service.clone();
+                async move {
+                    // Set the proposal_id in vote if not matching
+                    let vote = Vote { proposal_id, ..vote };
+                    let mut service = gs.lock().await;
+                    service.handle_vote_on_proposal(vote, ns, wc).await
+                }
+            }),
+        20 // 20 requests per second
+    );
+
+    let federation_routes = with_rate_limit(
+        warp::path("api/v1/federation")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and_then(move |operation: FederationOperation| {
+                let notification_manager = notification_manager.clone();
+                async move {
+                    handle_federation_operation(operation, notification_manager).await
+                }
+            }),
+        5 // 5 requests per second
+    );
 
     let query_shared_resources = warp::path!("api" / "v1" / "resources" / "query")
         .and(warp::get())
