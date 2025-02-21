@@ -57,7 +57,7 @@ const GovernanceDashboard = () => {
   const [newProposal, setNewProposal] = useState({ title: '', description: '' })
   const [formErrors, setFormErrors] = useState({ title: '', description: '' })
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const ws = useRef<WebSocket | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
     // Mock data - replace with actual API calls
@@ -124,42 +124,49 @@ const GovernanceDashboard = () => {
 
     // WebSocket connection for real-time updates
     const connectWebSocket = () => {
-      try {
-        ws.current = new WebSocket('ws://localhost:8080/ws')
+      if (!wsRef.current) {
+        try {
+          wsRef.current = new WebSocket('ws://localhost:8080/ws')
 
-        ws.current.onopen = () => {
-          console.log('WebSocket connected')
-        }
-
-        ws.current.onmessage = (event) => {
-          try {
-            const message: WebSocketMessage = JSON.parse(event.data)
-            handleWebSocketMessage(message)
-          } catch (e) {
-            console.error('Failed to parse WebSocket message:', e)
+          wsRef.current.onopen = () => {
+            console.log('WebSocket connected')
           }
-        }
 
-        ws.current.onclose = () => {
-          console.log('WebSocket disconnected, attempting to reconnect...')
+          wsRef.current.onmessage = (event) => {
+            try {
+              const message: WebSocketMessage = JSON.parse(event.data)
+              handleWebSocketMessage(message)
+            } catch (e) {
+              console.error('Failed to parse WebSocket message:', e)
+            }
+          }
+
+          wsRef.current.onclose = () => {
+            console.log('WebSocket disconnected, attempting to reconnect...')
+            wsRef.current = null
+            setTimeout(connectWebSocket, 5000)
+          }
+
+          wsRef.current.onerror = (error) => {
+            console.error('WebSocket error:', error)
+            if (wsRef.current) {
+              wsRef.current.close()
+              wsRef.current = null
+            }
+          }
+        } catch (error) {
+          console.error('Failed to establish WebSocket connection:', error)
           setTimeout(connectWebSocket, 5000)
         }
-
-        ws.current.onerror = (error) => {
-          console.error('WebSocket error:', error)
-          ws.current?.close()
-        }
-      } catch (error) {
-        console.error('Failed to establish WebSocket connection:', error)
-        setTimeout(connectWebSocket, 5000)
       }
     }
 
     connectWebSocket()
 
     return () => {
-      if (ws.current) {
-        ws.current.close()
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
       }
     }
   }, [])

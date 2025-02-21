@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -67,6 +67,7 @@ export default function RelationshipIntegration() {
   const [mutualAid, setMutualAid] = useState<MutualAidInteraction[]>([]);
   const [reputationUpdates, setReputationUpdates] = useState<ReputationUpdate[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     // Load initial data
@@ -84,32 +85,31 @@ export default function RelationshipIntegration() {
         setReputationUpdates(data.reputationUpdates);
         
         // Set up WebSocket connection for real-time updates
-        const ws = new WebSocket('ws://localhost:8088/ws');
-        
-        ws.onmessage = (event) => {
-          const update = JSON.parse(event.data);
-          switch (update.type) {
-            case 'contribution':
-              setContributions(prev => [...prev, update.data]);
-              break;
-            case 'mutualAid':
-              setMutualAid(prev => [...prev, update.data]);
-              break;
-            case 'relationship':
-              setRelationships(prev => 
-                prev.map(r => 
-                  r.memberOne === update.data.memberOne ? update.data : r
-                )
-              );
-              break;
-            case 'reputationUpdate':
-              setReputationUpdates(prev => [...prev, update.data]);
-              break;
-          }
-        };
-
-        return () => ws.close();
-
+        if (!wsRef.current) {
+          wsRef.current = new WebSocket('ws://localhost:8088/ws');
+          
+          wsRef.current.onmessage = (event) => {
+            const update = JSON.parse(event.data);
+            switch (update.type) {
+              case 'contribution':
+                setContributions(prev => [...prev, update.data]);
+                break;
+              case 'mutualAid':
+                setMutualAid(prev => [...prev, update.data]);
+                break;
+              case 'relationship':
+                setRelationships(prev => 
+                  prev.map(r => 
+                    r.memberOne === update.data.memberOne ? update.data : r
+                  )
+                );
+                break;
+              case 'reputationUpdate':
+                setReputationUpdates(prev => [...prev, update.data]);
+                break;
+            }
+          };
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load relationships');
       } finally {
@@ -118,6 +118,14 @@ export default function RelationshipIntegration() {
     };
 
     loadData();
+
+    // Cleanup function
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
   }, []);
 
   if (loading) {
