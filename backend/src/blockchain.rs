@@ -78,4 +78,9 @@ impl Blockchain {
             Err("Consensus not reached".to_string())
         }
     }
+
+    pub fn validate_contribution(&self, contribution: &Contribution) -> Result<bool, String> {
+        // Placeholder logic for contribution validation
+        Ok(true)
+    }
 }
