@@ -1,5 +1,5 @@
 use sqlx::PgPool;
-use crate::database::models::{Proposal, Vote};
+use crate::database::models::{Proposal, Vote, Contribution};
 
 pub async fn create_proposal(pool: &PgPool, proposal: &Proposal) -> Result<i64, sqlx::Error> {
     let row = sqlx::query!(
@@ -63,4 +63,36 @@ pub async fn query_shared_resources(pool: &PgPool, resource_type: &str, owner: O
 
     let resources = query.fetch_all(pool).await?;
     Ok(resources)
+}
+
+pub async fn store_contribution(pool: &PgPool, contribution: &Contribution) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        INSERT INTO contributions (did, score, timestamp)
+        VALUES ($1, $2, $3)
+        RETURNING id
+        "#,
+        contribution.did,
+        contribution.score,
+        contribution.timestamp
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(row.id)
+}
+
+pub async fn retrieve_contributions(pool: &PgPool, did: &str) -> Result<Vec<Contribution>, sqlx::Error> {
+    let contributions = sqlx::query_as!(
+        Contribution,
+        r#"
+        SELECT id, did, score, timestamp FROM contributions
+        WHERE did = $1
+        "#,
+        did
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(contributions)
 }

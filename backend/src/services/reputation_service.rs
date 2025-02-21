@@ -2,6 +2,7 @@ use crate::database::db::Database;
 use crate::models::Reputation;
 use std::sync::Arc;
 use dashmap::DashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct ReputationCache {
     cache: DashMap<String, i32>,
@@ -34,13 +35,15 @@ impl ReputationCache {
 pub struct ReputationService {
     db: Arc<Database>,
     cache: ReputationCache,
+    decay_rate: f64,
 }
 
 impl ReputationService {
-    pub fn new(db: Arc<Database>, max_cache_size: usize) -> Self {
+    pub fn new(db: Arc<Database>, max_cache_size: usize, decay_rate: f64) -> Self {
         Self {
             db,
             cache: ReputationCache::new(max_cache_size),
+            decay_rate,
         }
     }
 
@@ -97,5 +100,49 @@ impl ReputationService {
         }
 
         Ok(())
+    }
+
+    pub async fn apply_decay(&self, did: &str) -> Result<(), sqlx::Error> {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as f64;
+        let contributions = sqlx::query_as!(
+            Contribution,
+            r#"
+            SELECT score, timestamp FROM contributions WHERE did = $1
+            "#,
+            did
+        )
+        .fetch_all(&*self.db.pool)
+        .await?;
+
+        for contribution in contributions {
+            let age = now - contribution.timestamp;
+            let decayed_score = (contribution.score as f64 * (-self.decay_rate * age).exp()) as i64;
+            sqlx::query!(
+                r#"
+                UPDATE contributions SET score = $1 WHERE did = $2 AND timestamp = $3
+                "#,
+                decayed_score,
+                did,
+                contribution.timestamp
+            )
+            .execute(&*self.db.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+}
+
+pub struct Contribution {
+    pub score: i64,
+    pub timestamp: f64,
+}
+
+impl Contribution {
+    pub fn new(score: i64) -> Self {
+        Self {
+            score,
+            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as f64,
+        }
     }
 }
