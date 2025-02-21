@@ -14,6 +14,7 @@ use dilithium::verify as dilithium_verify;
 use falcon::keypair as falcon_keypair;
 use falcon::sign as falcon_sign;
 use falcon::verify as falcon_verify;
+use bls_signatures::{PrivateKey as BlsPrivateKey, PublicKey as BlsPublicKey, Signature as BlsSignature, Serialize as BlsSerialize, AggregatePublicKey, AggregateSignature};
 
 #[derive(Debug, Error)]
 pub enum DIDError {
@@ -35,6 +36,7 @@ pub enum Algorithm {
     Kyber,
     Dilithium,
     Falcon,
+    BLS,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,6 +85,11 @@ impl DID {
                 let (public_key, private_key) = falcon_keypair();
                 (private_key, public_key)
             },
+            Algorithm::BLS => {
+                let private_key = BlsPrivateKey::generate(&mut thread_rng());
+                let public_key = BlsPublicKey::from(&private_key);
+                (private_key.as_bytes().to_vec(), public_key.as_bytes().to_vec())
+            },
         };
 
         DID {
@@ -117,6 +124,11 @@ impl DID {
             },
             Algorithm::Falcon => {
                 Ok(falcon_sign(&self.secret_key, message))
+            },
+            Algorithm::BLS => {
+                let private_key = BlsPrivateKey::from_bytes(&self.secret_key).map_err(|_| DIDError::InvalidKey)?;
+                let signature = private_key.sign(message);
+                Ok(signature.as_bytes().to_vec())
             },
             _ => Err(DIDError::InvalidKey),
         }
@@ -154,6 +166,11 @@ impl DID {
             },
             Algorithm::Falcon => {
                 Ok(falcon_verify(&self.public_key, message, signature))
+            },
+            Algorithm::BLS => {
+                let public_key = BlsPublicKey::from_bytes(&self.public_key).map_err(|_| DIDError::InvalidKey)?;
+                let signature = BlsSignature::from_bytes(signature).map_err(|_| DIDError::SignatureVerification)?;
+                Ok(public_key.verify(message, &signature))
             },
             _ => Err(DIDError::InvalidKey),
         }
@@ -195,6 +212,11 @@ impl DID {
             Algorithm::Falcon => {
                 let (public_key, private_key) = falcon_keypair();
                 (private_key, public_key)
+            },
+            Algorithm::BLS => {
+                let private_key = BlsPrivateKey::generate(&mut thread_rng());
+                let public_key = BlsPublicKey::from(&private_key);
+                (private_key.as_bytes().to_vec(), public_key.as_bytes().to_vec())
             },
         };
 
@@ -240,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_algorithm_support() {
-        for alg in &[Algorithm::Secp256k1, Algorithm::RSA, Algorithm::ECDSA, Algorithm::Kyber, Algorithm::Dilithium, Algorithm::Falcon] {
+        for alg in &[Algorithm::Secp256k1, Algorithm::RSA, Algorithm::ECDSA, Algorithm::Kyber, Algorithm::Dilithium, Algorithm::Falcon, Algorithm::BLS] {
             let did = DID::new("did:example:123".to_string(), alg.clone());
             let message = b"test message";
             let signature = did.sign_message(message).unwrap();
@@ -305,6 +327,14 @@ mod tests {
     #[test]
     fn test_falcon_signing() {
         let did = DID::new("did:example:123".to_string(), Algorithm::Falcon);
+        let message = b"test message";
+        let signature = did.sign_message(message).unwrap();
+        assert!(did.verify_signature(message, &signature).unwrap());
+    }
+
+    #[test]
+    fn test_bls_signing() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::BLS);
         let message = b"test message";
         let signature = did.sign_message(message).unwrap();
         assert!(did.verify_signature(message, &signature).unwrap());
