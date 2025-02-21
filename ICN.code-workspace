@@ -1,7 +1,28 @@
 {
-	"folders": [
-		{
-			"path": "."
-		}
-	]
+  "folders": [
+    { "path": "backend" },
+    { "path": "frontend" },
+    { "path": "contracts" },
+    {
+      "path": "crates/core"
+    },
+    {
+      "path": "crates/consensus"
+    },
+    {
+      "path": "crates/networking"
+    },
+    {
+      "path": "crates/storage"
+    },
+    {
+      "path": "crates/runtime"
+    },
+    {
+      "path": "crates/resources"
+    },
+    {
+      "path": "crates/finance"
+    }
+  ]
 }

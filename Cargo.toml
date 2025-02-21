@@ -1,16 +1,15 @@
 [workspace]
 members = [
-    "backend",
-    "crates/icn-core",
-    "crates/icn-consensus",
-    "crates/icn-crypto",
-    "crates/icn-dsl",
-    "crates/icn-federation",
-    "crates/icn-p2p",
-    "crates/icn-resource",
-    "crates/icn-runtime",
-    "crates/icn-storage",
-    "crates/icn-types"
+  "backend",
+  "frontend",
+  "contracts",
+  "crates/core",
+  "crates/consensus",
+  "crates/networking",
+  "crates/storage",
+  "crates/runtime",
+  "crates/resources",
+  "crates/finance"
 ]
 
 [workspace.dependencies]
