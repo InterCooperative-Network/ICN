@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress'
 import { AlertCircle, ChevronRight, Users, TrendingUp } from 'lucide-react'
 import { Dialog, DialogOverlay, DialogContent } from '@reach/dialog'
 import '@reach/dialog/styles.css'
+import { FixedSizeList as List } from 'react-window'
 
 type Proposal = {
   id: string
@@ -42,6 +43,15 @@ type WebSocketMessage = {
   data: Proposal | ReputationUpdate
 }
 
+const ProposalRow = ({ index, style, data }) => {
+  const proposal = data[index]
+  return (
+    <div style={style}>
+      <ProposalCard proposal={proposal} />
+    </div>
+  )
+}
+
 const GovernanceDashboard = () => {
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [votingStats, setVotingStats] = useState<VotingStats>({
@@ -58,6 +68,10 @@ const GovernanceDashboard = () => {
   const [formErrors, setFormErrors] = useState({ title: '', description: '' })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
+  const listRef = useRef(null)
+  const getListHeight = useCallback(() => {
+    return Math.min(window.innerHeight * 0.6, proposals.length * 200)
+  }, [proposals.length])
 
   useEffect(() => {
     // Mock data - replace with actual API calls
@@ -426,11 +440,16 @@ const GovernanceDashboard = () => {
             </TabsList>
 
             <TabsContent value="active" className="space-y-4">
-              {proposals
-                .filter(p => p.status === 'active')
-                .map(proposal => (
-                  <ProposalCard key={proposal.id} proposal={proposal} />
-                ))}
+              <List
+                ref={listRef}
+                height={getListHeight()}
+                itemCount={proposals.filter(p => p.status === 'active').length}
+                itemSize={200}
+                width="100%"
+                itemData={proposals.filter(p => p.status === 'active')}
+              >
+                {ProposalRow}
+              </List>
             </TabsContent>
 
             <TabsContent value="passed" className="space-y-4">

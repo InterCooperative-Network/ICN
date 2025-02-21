@@ -1,9 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { AlertCircle, Users, Activity, BarChart3 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { FixedSizeList as List } from 'react-window';
+
+const ResourceRow = ({ index, style, data }) => {
+  const resource = data[index];
+  return (
+    <div style={style}>
+      <div className="flex justify-between text-sm mb-2">
+        <span>{resource.name}</span>
+        <span>{resource.utilization}%</span>
+      </div>
+      <Progress value={resource.utilization} className="h-2" />
+    </div>
+  );
+};
 
 const CommunityDashboard = () => {
   const [metrics, setMetrics] = useState({
@@ -41,6 +55,16 @@ const CommunityDashboard = () => {
 
     setMetrics(mockData);
     setLoading(false);
+  }, []);
+
+  const resourceAllocation = [
+    { name: 'Computing Resources', utilization: 75 },
+    { name: 'Storage Resources', utilization: 60 },
+    { name: 'Network Resources', utilization: 85 }
+  ];
+
+  const getListHeight = useCallback(() => {
+    return Math.min(window.innerHeight * 0.4, 400);
   }, []);
 
   return (
@@ -125,29 +149,15 @@ const CommunityDashboard = () => {
           <CardTitle>Resource Allocation</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span>Computing Resources</span>
-                <span>75%</span>
-              </div>
-              <Progress value={75} className="h-2" />
-            </div>
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span>Storage Resources</span>
-                <span>60%</span>
-              </div>
-              <Progress value={60} className="h-2" />
-            </div>
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span>Network Resources</span>
-                <span>85%</span>
-              </div>
-              <Progress value={85} className="h-2" />
-            </div>
-          </div>
+          <List
+            height={getListHeight()}
+            itemCount={resourceAllocation.length}
+            itemSize={60}
+            width="100%"
+            itemData={resourceAllocation}
+          >
+            {ResourceRow}
+          </List>
         </CardContent>
       </Card>
 
