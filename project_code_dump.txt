@@ -1,4 +1,4 @@
-Project Code Dump - Generated Fri 21 Feb 2025 12:12:33 AM UTC
+Project Code Dump - Generated Fri 21 Feb 2025 12:26:43 AM UTC
 ======================================
 
 LLM Context Information
@@ -220,8 +220,8 @@ pub mod main;
 
 ===================
 File: ./backend/src/main.rs
-Size: 12391 bytes
-Modified: 2025-02-21 00:12:17.844168900 +0000
+Size: 10967 bytes
+Modified: 2025-02-21 00:21:02.143504400 +0000
 Dependencies:
 mod config;
 mod core;
@@ -340,7 +340,11 @@ async fn main() -> Result<(), AppError> {
     let db_pool = PgPool::connect(&config.database_url)
         .await
         .map_err(AppError::DatabaseError)?;
-
+    
+    // Instantiate GovernanceService using the db_pool
+    use crate::services::governance_service::GovernanceService;
+    let governance_service = Arc::new(Mutex::new(GovernanceService::new(db_pool.clone())));
+    
     // Initialize WebSocket clients using DashMap
     let websocket_clients: WebSocketClients = Arc::new(DashMap::new());
 
@@ -384,27 +388,34 @@ async fn main() -> Result<(), AppError> {
             let websocket_clients = websocket_clients.clone();
             ws.on_upgrade(move |socket| handle_websocket(socket, websocket_clients))
         });
-
-    // Set up Warp server
+    
+    // Update create_proposal route to use GovernanceService's handler
     let create_proposal = warp::path!("api" / "v1" / "governance" / "proposals")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |proposal: Proposal| {
-            let notification_manager = notification_manager.clone();
-            let websocket_clients = websocket_clients.clone();
+            let ns = notification_manager.clone();
+            let wc = websocket_clients.clone();
+            let gs = governance_service.clone();
             async move {
-                handle_create_proposal(proposal, notification_manager, websocket_clients, db_pool.clone()).await
+                let mut service = gs.lock().await;
+                service.handle_create_proposal(proposal, ns, wc).await
             }
         });
-
+    
+    // Update vote_on_proposal route to use GovernanceService's handler
     let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |proposal_id: String, vote: Vote| {
-            let notification_manager = notification_manager.clone();
-            let websocket_clients = websocket_clients.clone();
+            let ns = notification_manager.clone();
+            let wc = websocket_clients.clone();
+            let gs = governance_service.clone();
             async move {
-                handle_vote_on_proposal(proposal_id, vote, notification_manager, websocket_clients, db_pool.clone()).await
+                // Set the proposal_id in vote if not matching
+                let vote = Vote { proposal_id, ..vote };
+                let mut service = gs.lock().await;
+                service.handle_vote_on_proposal(vote, ns, wc).await
             }
         });
 
@@ -459,40 +470,6 @@ async fn main() -> Result<(), AppError> {
 
     info!("Backend application stopped.");
     Ok(())
-}
-
-async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: WebSocketClients, db_pool: PgPool) -> Result<impl warp::Reply, warp::Rejection> {
-    // Store proposal in the database
-    let db = Database::new(db_pool).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
-    db.create_proposal(&proposal).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
-
-    // Logic to handle proposal creation
-    let subject = format!("New Proposal Created: {}", proposal.title);
-    let body = format!("A new proposal has been created by {}. Description: {}", proposal.created_by, proposal.description);
-    notification_manager.send_notification(&subject, &body).await;
-
-    // Broadcast proposal update via WebSocket
-    let message = warp::ws::Message::text(serde_json::to_string(&proposal).unwrap());
-    broadcast_message(&message, websocket_clients).await;
-
-    Ok(warp::reply::json(&proposal))
-}
-
-async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: WebSocketClients, db_pool: PgPool) -> Result<impl warp::Reply, warp::Rejection> {
-    // Store vote in the database
-    let db = Database::new(db_pool).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
-    db.record_vote(&vote).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
-
-    // Logic to handle voting on a proposal
-    let subject = format!("New Vote on Proposal: {}", proposal_id);
-    let body = format!("A new vote has been cast by {}. Approve: {}", vote.voter, vote.approve);
-    notification_manager.send_notification(&subject, &body).await;
-
-    // Broadcast vote update via WebSocket
-    let message = warp::ws::Message::text(serde_json::to_string(&vote).unwrap());
-    broadcast_message(&message, websocket_clients).await;
-
-    Ok(warp::reply::json(&vote))
 }
 
 async fn handle_federation_operation(operation: FederationOperation, notification_manager: NotificationManager) -> Result<impl warp::Reply, warp::Rejection> {
@@ -1045,8 +1022,8 @@ pub mod main;
 
 ===================
 File: ./backend/src/main.rs
-Size: 12391 bytes
-Modified: 2025-02-21 00:12:17.844168900 +0000
+Size: 10967 bytes
+Modified: 2025-02-21 00:21:02.143504400 +0000
 Dependencies:
 mod config;
 mod core;
@@ -1165,7 +1142,11 @@ async fn main() -> Result<(), AppError> {
     let db_pool = PgPool::connect(&config.database_url)
         .await
         .map_err(AppError::DatabaseError)?;
-
+    
+    // Instantiate GovernanceService using the db_pool
+    use crate::services::governance_service::GovernanceService;
+    let governance_service = Arc::new(Mutex::new(GovernanceService::new(db_pool.clone())));
+    
     // Initialize WebSocket clients using DashMap
     let websocket_clients: WebSocketClients = Arc::new(DashMap::new());
 
@@ -1209,27 +1190,34 @@ async fn main() -> Result<(), AppError> {
             let websocket_clients = websocket_clients.clone();
             ws.on_upgrade(move |socket| handle_websocket(socket, websocket_clients))
         });
-
-    // Set up Warp server
+    
+    // Update create_proposal route to use GovernanceService's handler
     let create_proposal = warp::path!("api" / "v1" / "governance" / "proposals")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |proposal: Proposal| {
-            let notification_manager = notification_manager.clone();
-            let websocket_clients = websocket_clients.clone();
+            let ns = notification_manager.clone();
+            let wc = websocket_clients.clone();
+            let gs = governance_service.clone();
             async move {
-                handle_create_proposal(proposal, notification_manager, websocket_clients, db_pool.clone()).await
+                let mut service = gs.lock().await;
+                service.handle_create_proposal(proposal, ns, wc).await
             }
         });
-
+    
+    // Update vote_on_proposal route to use GovernanceService's handler
     let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |proposal_id: String, vote: Vote| {
-            let notification_manager = notification_manager.clone();
-            let websocket_clients = websocket_clients.clone();
+            let ns = notification_manager.clone();
+            let wc = websocket_clients.clone();
+            let gs = governance_service.clone();
             async move {
-                handle_vote_on_proposal(proposal_id, vote, notification_manager, websocket_clients, db_pool.clone()).await
+                // Set the proposal_id in vote if not matching
+                let vote = Vote { proposal_id, ..vote };
+                let mut service = gs.lock().await;
+                service.handle_vote_on_proposal(vote, ns, wc).await
             }
         });
 
@@ -1284,40 +1272,6 @@ async fn main() -> Result<(), AppError> {
 
     info!("Backend application stopped.");
     Ok(())
-}
-
-async fn handle_create_proposal(proposal: Proposal, notification_manager: NotificationManager, websocket_clients: WebSocketClients, db_pool: PgPool) -> Result<impl warp::Reply, warp::Rejection> {
-    // Store proposal in the database
-    let db = Database::new(db_pool).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
-    db.create_proposal(&proposal).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
-
-    // Logic to handle proposal creation
-    let subject = format!("New Proposal Created: {}", proposal.title);
-    let body = format!("A new proposal has been created by {}. Description: {}", proposal.created_by, proposal.description);
-    notification_manager.send_notification(&subject, &body).await;
-
-    // Broadcast proposal update via WebSocket
-    let message = warp::ws::Message::text(serde_json::to_string(&proposal).unwrap());
-    broadcast_message(&message, websocket_clients).await;
-
-    Ok(warp::reply::json(&proposal))
-}
-
-async fn handle_vote_on_proposal(proposal_id: String, vote: Vote, notification_manager: NotificationManager, websocket_clients: WebSocketClients, db_pool: PgPool) -> Result<impl warp::Reply, warp::Rejection> {
-    // Store vote in the database
-    let db = Database::new(db_pool).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
-    db.record_vote(&vote).await.map_err(|e| warp::reject::custom(AppError::DatabaseError(e)))?;
-
-    // Logic to handle voting on a proposal
-    let subject = format!("New Vote on Proposal: {}", proposal_id);
-    let body = format!("A new vote has been cast by {}. Approve: {}", vote.voter, vote.approve);
-    notification_manager.send_notification(&subject, &body).await;
-
-    // Broadcast vote update via WebSocket
-    let message = warp::ws::Message::text(serde_json::to_string(&vote).unwrap());
-    broadcast_message(&message, websocket_clients).await;
-
-    Ok(warp::reply::json(&vote))
 }
 
 async fn handle_federation_operation(operation: FederationOperation, notification_manager: NotificationManager) -> Result<impl warp::Reply, warp::Rejection> {
