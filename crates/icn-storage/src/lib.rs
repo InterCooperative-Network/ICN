@@ -3,6 +3,7 @@ use tokio::sync::Mutex;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
 use icn_types::Block;
+use std::time::Duration;
 
 /// Errors that can occur in storage operations
 #[derive(Error, Debug)]
@@ -42,13 +43,15 @@ pub trait StorageBackend: Send + Sync {
 /// Manages persistent storage for the system
 pub struct StorageManager {
     backend: Arc<Mutex<Box<dyn StorageBackend>>>,
+    cache: Arc<StorageCache>,
 }
 
 impl StorageManager {
     /// Create a new storage manager with the given backend
-    pub fn new(backend: Box<dyn StorageBackend>) -> Self {
+    pub fn new(backend: Box<dyn StorageBackend>, cache_size: usize, cache_ttl: Duration) -> Self {
         Self {
             backend: Arc::new(Mutex::new(backend)),
+            cache: Arc::new(StorageCache::new(cache_size, cache_ttl)),
         }
     }
     
@@ -57,14 +60,30 @@ impl StorageManager {
         let serialized = serde_json::to_vec(value)
             .map_err(|e| StorageError::SerializationError(e.to_string()))?;
             
+        // Update backend
         let backend = self.backend.lock().await;
-        backend.set(key, &serialized).await
+        backend.set(key, &serialized).await?;
+        
+        // Update cache
+        self.cache.set(key.to_string(), serialized);
+        
+        Ok(())
     }
     
     /// Retrieve and deserialize a value
     pub async fn retrieve<T: for<'de> Deserialize<'de>>(&self, key: &str) -> StorageResult<T> {
+        // Try cache first
+        if let Some(cached_data) = self.cache.get(key) {
+            return serde_json::from_slice(&cached_data)
+                .map_err(|e| StorageError::SerializationError(e.to_string()));
+        }
+
+        // Fall back to backend
         let backend = self.backend.lock().await;
         let data = backend.get(key).await?;
+        
+        // Update cache
+        self.cache.set(key.to_string(), data.clone());
         
         serde_json::from_slice(&data)
             .map_err(|e| StorageError::SerializationError(e.to_string()))
