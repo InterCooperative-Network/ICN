@@ -15,6 +15,7 @@ use falcon::keypair as falcon_keypair;
 use falcon::sign as falcon_sign;
 use falcon::verify as falcon_verify;
 use bls_signatures::{PrivateKey as BlsPrivateKey, PublicKey as BlsPublicKey, Signature as BlsSignature, Serialize as BlsSerialize, AggregatePublicKey, AggregateSignature};
+use crate::key_manager::{KeyManager, KeyManagerError, KeyStatus};
 
 #[derive(Debug, Error)]
 pub enum DIDError {
@@ -177,52 +178,23 @@ impl DID {
     }
 
     pub fn rotate_key(&mut self) -> Result<(), DIDError> {
-        let (new_secret_key, new_public_key) = match self.algorithm {
-            Algorithm::Secp256k1 => {
-                let secp = Secp256k1::new();
-                let secret = SecretKey::new(&mut thread_rng());
-                let public = PublicKey::from_secret_key(&secp, &secret);
-                (secret.to_bytes().to_vec(), public.serialize().to_vec())
-            },
-            Algorithm::RSA => {
-                let private_key = RSAPrivateKey::new(&mut thread_rng(), 2048)
-                    .expect("failed to generate RSA key");
-                let public_key = private_key.to_public_key();
-                (
-                    private_key.to_pkcs1().expect("failed to encode private key"),
-                    public_key.to_pkcs1().expect("failed to encode public key")
-                )
-            },
-            Algorithm::ECDSA => {
-                let signing_key = SigningKey::random(&mut thread_rng());
-                let verifying_key = VerifyingKey::from(&signing_key);
-                (
-                    signing_key.to_bytes().to_vec(),
-                    verifying_key.to_bytes().to_vec()
-                )
-            },
-            Algorithm::Kyber => {
-                let (public_key, private_key) = kyber_keypair();
-                (private_key, public_key)
-            },
-            Algorithm::Dilithium => {
-                let (public_key, private_key) = dilithium_keypair();
-                (private_key, public_key)
-            },
-            Algorithm::Falcon => {
-                let (public_key, private_key) = falcon_keypair();
-                (private_key, public_key)
-            },
-            Algorithm::BLS => {
-                let private_key = BlsPrivateKey::generate(&mut thread_rng());
-                let public_key = BlsPublicKey::from(&private_key);
-                (private_key.as_bytes().to_vec(), public_key.as_bytes().to_vec())
-            },
-        };
+        let key_manager = KeyManager::new();
+        match key_manager.rotate_key(&self.id) {
+            Ok(new_public_key) => {
+                self.public_key = new_public_key;
+                Ok(())
+            }
+            Err(KeyManagerError::RotationFailed) => Err(DIDError::KeyRotation),
+            Err(_) => Err(DIDError::InvalidKey),
+        }
+    }
 
-        self.secret_key = new_secret_key;
-        self.public_key = new_public_key;
-        Ok(())
+    pub fn revoke_key(&mut self) -> Result<(), DIDError> {
+        let key_manager = KeyManager::new();
+        match key_manager.revoke_key(&self.id) {
+            Ok(()) => Ok(()),
+            Err(_) => Err(DIDError::KeyRotation),
+        }
     }
 }
 

@@ -931,28 +931,23 @@ async fn test_federation_member_status_updates() {
 
 #[tokio::test]
 async fn test_key_rotation_and_revocation() {
-    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
-
-    // Register a DID
-    {
-        let mut identity = identity_system.lock().unwrap();
-        identity.register_did(
-            DID::new("did:icn:test".to_string(), Algorithm::Secp256k1),
-            vec!["transfer".to_string()],
-        );
-    }
-
-    // Rotate the key
-    {
-        let mut identity = identity_system.lock().unwrap();
-        assert!(identity.rotate_key("did:icn:test").is_ok());
-    }
-
-    // Revoke the key
-    {
-        let mut identity = identity_system.lock().unwrap();
-        assert!(identity.revoke_key("did:icn:test").is_ok());
-    }
+    let mut did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+    
+    // Test key rotation
+    let original_key = did.public_key.clone();
+    assert!(did.rotate_key().is_ok());
+    assert_ne!(original_key, did.public_key);
+    
+    // Verify the rotated key works
+    let message = b"test message";
+    let signature = did.sign_message(message).expect("Failed to sign with rotated key");
+    assert!(did.verify_signature(message, &signature).expect("Failed to verify with rotated key"));
+    
+    // Test key revocation
+    assert!(did.revoke_key().is_ok());
+    
+    // Attempt to rotate a revoked key should fail
+    assert!(did.rotate_key().is_err());
 }
 
 // Tests for BLS threshold signatures
