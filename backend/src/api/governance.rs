@@ -20,6 +20,13 @@ struct VoteRequest {
     zk_snark_proof: String, // Added zk-SNARK proof field
 }
 
+#[derive(Debug, Deserialize)]
+struct RecallVoteRequest {
+    target_member: String,
+    voter: String,
+    approve: bool,
+}
+
 pub fn governance_routes(
     governance_service: Arc<Mutex<GovernanceService>>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -35,13 +42,7 @@ pub fn governance_routes(
         .and(with_governance_service(governance_service.clone()))
         .and_then(vote_on_proposal_handler);
 
-    let submit_zk_snark_proof = warp::path!("api" / "v1" / "governance" / "zk_snark_proof")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_governance_service(governance_service.clone()))
-        .and_then(submit_zk_snark_proof_handler);
-
-    create_proposal.or(vote_on_proposal).or(submit_zk_snark_proof)
+n
 }
 
 fn with_governance_service(
@@ -86,18 +87,7 @@ async fn vote_on_proposal_handler(
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-struct ZkSnarkProofRequest {
-    proof: String,
-}
 
-async fn submit_zk_snark_proof_handler(
-    request: ZkSnarkProofRequest,
-    governance_service: Arc<Mutex<GovernanceService>>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let mut service = governance_service.lock().await;
-    match service.submit_zk_snark_proof(request.proof).await {
-        Ok(_) => Ok(warp::reply::json(&"zk-SNARK proof submitted")),
         Err(e) => Err(warp::reject::custom(e)),
     }
 }

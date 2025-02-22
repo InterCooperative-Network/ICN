@@ -996,3 +996,140 @@ async fn test_tendermint_consensus_integration() {
     // Test stopping the Tendermint consensus engine
     assert!(tendermint_consensus.stop().await.is_ok());
 }
+
+// Critical Path Integration Tests
+#[tokio::test]
+async fn test_critical_path_proposal_lifecycle() {
+    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+    let mut proposal_history = ProposalHistory::new();
+
+    // 1. Create proposal
+    let proposal = Proposal::new(
+        "did:icn:proposer".to_string(),
+        ProposalType::ResourceAllocation {
+            resource: "cpu".to_string(),
+            amount: 100,
+        },
+    );
+    proposal_history.add_proposal(proposal.clone());
+
+    // 2. Multiple members vote
+    for i in 1..=3 {
+        let voter = format!("did:icn:voter{}", i);
+        {
+            let mut identity = identity_system.lock().unwrap();
+            identity.register_did(
+                DID::new(voter.clone(), Algorithm::Secp256k1),
+                vec!["vote".to_string()],
+            );
+        }
+        {
+            let mut reputation = reputation_system.lock().unwrap();
+            reputation.increase_reputation(&voter, 50);
+        }
+        proposal_history.vote(voter, proposal.id.clone(), true);
+    }
+
+    // 3. Check proposal status
+    let final_proposal = proposal_history.get_proposal(proposal.id).unwrap();
+    assert_eq!(final_proposal.votes_for, 3);
+    assert!(final_proposal.is_approved());
+}
+
+#[tokio::test]
+async fn test_critical_path_federation_lifecycle() {
+    let federation_operation = FederationOperation::InitiateFederation {
+        federation_type: FederationType::Cooperative,
+        partner_id: "did:icn:partner".to_string(),
+        terms: FederationTerms {
+            minimum_reputation: 50,
+            resource_sharing_policies: "Equal distribution".to_string(),
+            governance_rules: "Majority vote".to_string(),
+            duration: "2025-12-31T23:59:59Z".to_string(),
+        },
+    };
+
+    // 1. Create federation
+    let federation_id = handle_federation_operation(federation_operation).await.unwrap();
+
+    // 2. Join federation
+    let join_operation = FederationOperation::JoinFederation {
+        federation_id: federation_id.clone(),
+        commitment: vec!["Adhere to terms".to_string()],
+    };
+    assert!(handle_federation_operation(join_operation).await.is_ok());
+
+    // 3. Share resources
+    let share_operation = FederationOperation::ShareResources {
+        federation_id: federation_id.clone(),
+        resource_type: "cpu".to_string(),
+        amount: 50,
+        recipient_id: "did:icn:recipient".to_string(),
+    };
+    assert!(handle_federation_operation(share_operation).await.is_ok());
+
+    // 4. Leave federation
+    let leave_operation = FederationOperation::LeaveFederation {
+        federation_id,
+        reason: "Test complete".to_string(),
+    };
+    assert!(handle_federation_operation(leave_operation).await.is_ok());
+}
+
+// Failure Scenario E2E Tests
+#[tokio::test]
+async fn test_node_disconnect_during_vote() {
+    let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+    let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+    let mut proposal_history = ProposalHistory::new();
+
+    // Setup proposal and initial vote
+    let proposal = Proposal::new(
+        "did:icn:proposer".to_string(),
+        ProposalType::ResourceAllocation { resource: "cpu".to_string(), amount: 100 },
+    );
+    proposal_history.add_proposal(proposal.clone());
+
+    // Simulate node disconnect by dropping connection
+    drop(proposal_history.network_connection);
+
+    // Attempt to vote while disconnected
+    let vote_result = proposal_history.vote("did:icn:voter1".to_string(), proposal.id.clone(), true);
+    assert!(vote_result.is_err());
+
+    // Simulate node reconnection
+    proposal_history.reconnect().await;
+
+    // Verify vote can be processed after reconnection
+    let vote_result = proposal_history.vote("did:icn:voter1".to_string(), proposal.id.clone(), true);
+    assert!(vote_result.is_ok());
+}
+
+#[tokio::test]
+async fn test_conflicting_resource_allocations() {
+    let federation = Federation::new(
+        "test_federation".to_string(),
+        FederationType::Cooperative,
+        FederationTerms::default(),
+        "did:icn:admin".to_string(),
+    );
+
+    // Submit two conflicting resource allocation proposals
+    let proposal1 = Proposal::new(
+        "did:icn:proposer1".to_string(),
+        ProposalType::ResourceAllocation { resource: "cpu".to_string(), amount: 80 },
+    );
+    let proposal2 = Proposal::new(
+        "did:icn:proposer2".to_string(),
+        ProposalType::ResourceAllocation { resource: "cpu".to_string(), amount: 70 },
+    );
+
+    federation.submit_proposal(proposal1.clone()).await.unwrap();
+    federation.submit_proposal(proposal2.clone()).await.unwrap();
+
+    // Verify conflict detection and resolution
+    let conflicts = federation.detect_resource_conflicts().await;
+    assert!(!conflicts.is_empty());
+    assert!(federation.resolve_conflicts(conflicts).await.is_ok());
+}

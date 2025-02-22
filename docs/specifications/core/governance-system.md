@@ -194,9 +194,60 @@ As cooperatives grow or federate with others, the governance system must adapt t
 - **Federated Governance**: Federations of cooperatives establish a higher-level governance structure to manage inter-cooperative affairs.
 - **Scalable Voting Mechanisms**: Voting mechanisms are designed to scale with the size of the cooperative, ensuring that all members have a voice in decision-making.
 
-## 7. Federation Governance Rules
+## 8. Decision-Making Tiers
 
-### 7.1 Rule Types
+### 8.1 Routine Decisions
+Tasks that can be handled by designated roles/circles without full membership vote:
+- Resource allocations under X threshold 
+- Technical implementation details
+- Day-to-day operations
+
+### 8.2 Major Decisions 
+Require full membership vote:
+- Policy changes
+- Resource allocations above X threshold
+- Federation agreements/changes
+- Membership changes
+
+### 8.3 Thresholds
+- **Resource Allocation**: <100 units → Resource Circle, >100 units → Full Vote
+- **Technical Changes**: <1 week effort → Tech Circle, >1 week → Full Vote
+- **Financial Impact**: <$1000 → Finance Circle, >$1000 → Full Vote
+
+## 9. Anti-Oppression Mechanisms
+
+### 9.1 Reputation Balancing
+- Maximum reputation gap of 3x between members
+- Automatic decay of 10% per month for reputations >2x average
+- Bonus reputation points for historically marginalized groups
+- Reputation rewards for supporting newer members
+
+### 9.2 Time Equity
+- Meeting times rotated to accommodate different schedules
+- Asynchronous voting periods minimum 1 week
+- Multiple participation methods (online/offline)
+- Time-banking system to credit various forms of contribution
+
+## 10. Federation Voting Models
+
+### 10.1 Equal Weight Model
+- Each cooperative gets one vote regardless of size
+- Suitable for fundamental policy decisions
+- Protects minority cooperative interests
+
+### 10.2 Proportional Weight Model
+- Voting power based on member count or resource contribution
+- Weight capped at 20% total voting power per cooperative
+- Used for resource allocation decisions
+
+### 10.3 Hybrid Model
+- Combines equal and proportional weights
+- Equal weight for governance/policy
+- Proportional for resource/operational decisions
+
+## 11. Federation Governance Rules
+
+### 11.1 Rule Types
 Federation governance rules include:
 - Minimum required votes for proposals
 - Approval threshold percentage
@@ -204,7 +255,7 @@ Federation governance rules include:
 - Allowed proposal types
 - Veto rights for specific roles
 
-### 7.2 Rule Enforcement
+### 11.2 Rule Enforcement
 The system enforces governance rules by:
 - Validating proposals against allowed types
 - Checking voter eligibility and reputation requirements
@@ -212,9 +263,9 @@ The system enforces governance rules by:
 - Processing veto rights
 - Computing final proposal outcomes based on thresholds
 
-## 8. User-Friendly Tools for Proposal Creation and Voting
+## 12. User-Friendly Tools for Proposal Creation and Voting
 
-### 8.1 Proposal Creation Modal
+### 12.1 Proposal Creation Modal
 To facilitate the creation of proposals, a user-friendly modal is provided within the governance dashboard. This modal includes input fields for the proposal title, description, and other relevant details. The modal also implements form validation to ensure that all required fields are filled out correctly before submission.
 
 #### Modal Features
@@ -222,7 +273,7 @@ To facilitate the creation of proposals, a user-friendly modal is provided withi
 - **Form Validation**: Ensures all required fields are filled out correctly.
 - **Submit Button**: Triggers an API call to create a new proposal.
 
-### 8.2 Voting Buttons
+### 12.2 Voting Buttons
 Each active proposal displayed on the governance dashboard includes buttons for casting votes (approve/reject) directly from the dashboard. This allows members to participate in the voting process without navigating away from the dashboard.
 
 #### Voting Button Features
@@ -230,7 +281,7 @@ Each active proposal displayed on the governance dashboard includes buttons for 
 - **Reject Button**: Casts a vote against the proposal.
 - **Real-Time Updates**: Displays real-time updates for proposal statuses and voting results.
 
-### 8.3 Accessibility
+### 12.3 Accessibility
 The proposal creation modal and voting buttons are designed to be accessible, following best practices for semantic HTML elements, ARIA roles, and properties.
 
 #### Accessibility Features
