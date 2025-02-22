@@ -70,4 +70,27 @@ impl GovernanceEngine {
     pub async fn delete_identity(&self, identity: &str) -> Result<(), String> {
         self.identity_manager.delete_identity(identity).await
     }
+
+    pub async fn submit_proposal(&self, title: &str, description: &str, created_by: &str, ends_at: &str) -> Result<i64, String> {
+        let proposal = Proposal {
+            id: 0, // Placeholder, will be set by the database
+            title: title.to_string(),
+            description: description.to_string(),
+            created_by: created_by.to_string(),
+            ends_at: chrono::NaiveDateTime::parse_from_str(ends_at, "%Y-%m-%d %H:%M:%S").map_err(|e| e.to_string())?,
+            created_at: chrono::Utc::now().naive_utc(),
+        };
+
+        self.create_proposal(proposal).await.map_err(|e| e.to_string())
+    }
+
+    pub async fn vote(&self, proposal_id: i64, voter: &str, approve: bool) -> Result<(), String> {
+        let vote = Vote {
+            proposal_id,
+            voter: voter.to_string(),
+            approve,
+        };
+
+        self.record_vote(vote).await.map_err(|e| e.to_string())
+    }
 }
