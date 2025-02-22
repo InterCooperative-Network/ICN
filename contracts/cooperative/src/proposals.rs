@@ -1,11 +1,15 @@
 use std::collections::HashMap;
-use icn_zkp::{ProofVerifier, RollupBatch, ZKProof};
+use icn_zkp::{ProofVerifier, RollupBatch, ZKProof, VerificationKey};
+use ethers::prelude::*;
 
 pub struct ProposalContract {
     proposals: HashMap<String, Proposal>,
     vote_batches: Vec<RollupBatch>,
     min_quorum: u32,
     verifier: ProofVerifier,
+    verification_key: VerificationKey,
+    contract_address: Address,
+    client: Provider<Http>,
 }
 
 pub struct Proposal {
@@ -33,95 +37,94 @@ enum ProposalStatus {
 }
 
 impl ProposalContract {
-    pub fn new(min_quorum: u32) -> Self {
+    pub fn new(min_quorum: u32, verification_key: VerificationKey, contract_address: Address) -> Self {
         Self {
             proposals: HashMap::new(),
             vote_batches: Vec::new(),
             min_quorum,
             verifier: ProofVerifier::new(),
+            verification_key,
+            contract_address,
+            client: Provider::<Http>::try_from(
+                "http://localhost:8545"
+            ).expect("could not instantiate HTTP Provider"),
         }
     }
 
-    pub fn submit_vote_batch(&mut self, batch: RollupBatch) -> Result<(), &'static str> {
-        // Verify ZK proof for vote batch
+    pub async fn submit_vote_batch(&mut self, batch: RollupBatch) -> Result<(), String> {
+        // First verify the ZK proof locally
         if !self.verifier.verify_proof(&batch.proof) {
-            return Err("Invalid vote batch proof");
-        }
-        
-        self.vote_batches.push(batch);
-        Ok(())
-    }
-
-    pub fn execute_proposal(&mut self, proposal_id: &str) -> Result<bool, &'static str> {
-        let proposal = self.proposals.get_mut(proposal_id)
-            .ok_or("Proposal not found")?;
-
-        if proposal.status != ProposalStatus::Active {
-            return Err("Proposal not active");
+            return Err("Invalid vote batch proof".to_string());
         }
 
-        // Process any pending vote batches
-        self.process_vote_batches(proposal_id)?;
+        // Create contract call to submit batch
+        let data = ethers::abi::encode(&[
+            Token::Bytes(batch.rollup_root.to_vec()),
+            Token::Bytes(batch.proof.to_vec())
+        ]);
 
-        // Check if voting period has ended
-        let current_time = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let tx = TransactionRequest::new()
+            .to(self.contract_address)
+            .data(data)
+            .into();
 
-        if current_time < proposal.voting_ends_at {
-            return Err("Voting period still active");
-        }
+        // Submit transaction
+        match self.client.send_transaction(tx, None).await {
+            Ok(tx_hash) => {
+                // Wait for confirmation
+                let receipt = self.client.get_transaction_receipt(tx_hash)
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .ok_or("Transaction not found")?;
 
-        // Tally final votes
-        let approved = self.tally_votes(proposal);
-        proposal.status = if approved {
-            ProposalStatus::Approved
-        } else {
-            ProposalStatus::Rejected
-        };
-
-        Ok(approved)
-    }
-
-    fn process_vote_batches(&mut self, proposal_id: &str) -> Result<(), &'static str> {
-        let proposal = self.proposals.get_mut(proposal_id)
-            .ok_or("Proposal not found")?;
-
-        for batch in self.vote_batches.drain(..) {
-            // Verify batch belongs to this proposal
-            if batch.proposal_id != proposal_id {
-                continue;
-            }
-
-            // Update vote counts from batch
-            for vote in batch.votes {
-                if !proposal.votes.contains_key(&vote.voter) {
-                    proposal.vote_count.total += 1;
-                    if vote.approve {
-                        proposal.vote_count.approve += 1;
-                    } else {
-                        proposal.vote_count.reject += 1;
-                    }
-                    proposal.votes.insert(vote.voter, vote.approve);
+                if receipt.status.unwrap() == U64::from(1) {
+                    self.vote_batches.push(batch);
+                    Ok(())
+                } else {
+                    Err("Transaction failed".to_string())
                 }
-            }
-
-            // Update rollup root
-            proposal.rollup_root = Some(batch.rollup_root);
+            },
+            Err(e) => Err(e.to_string())
         }
-
-        Ok(())
     }
 
-    fn tally_votes(&self, proposal: &Proposal) -> bool {
-        // Check quorum
-        if proposal.vote_count.total < self.min_quorum {
-            return false;
-        }
+    pub async fn execute_proposal(&mut self, proposal_id: &str) -> Result<bool, String> {
+        // Create call to execute proposal on-chain
+        let data = ethers::abi::encode(&[Token::String(proposal_id.to_string())]);
 
-        // Calculate approval percentage
-        let approval_percentage = (proposal.vote_count.approve as f64 / proposal.vote_count.total as f64) * 100.0;
-        approval_percentage >= 66.67 // 2/3 majority required
+        let tx = TransactionRequest::new()
+            .to(self.contract_address)
+            .data(data)
+            .into();
+
+        match self.client.send_transaction(tx, None).await {
+            Ok(tx_hash) => {
+                let receipt = self.client.get_transaction_receipt(tx_hash)
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .ok_or("Transaction not found")?;
+
+                // Parse result from logs
+                if let Some(logs) = receipt.logs.get(0) {
+                    let topics = logs.topics.clone();
+                    if topics.len() >= 2 {
+                        let approved = topics[1] == H256::from([1u8; 32]);
+                        
+                        // Update local state
+                        if let Some(proposal) = self.proposals.get_mut(proposal_id) {
+                            proposal.status = if approved {
+                                ProposalStatus::Approved
+                            } else {
+                                ProposalStatus::Rejected
+                            };
+                        }
+                        
+                        return Ok(approved);
+                    }
+                }
+                Err("Could not parse result".to_string())
+            },
+            Err(e) => Err(e.to_string())
+        }
     }
 }
