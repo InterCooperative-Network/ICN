@@ -90,6 +90,13 @@ impl Transaction {
             ),
             Transaction::Governance(tx) => match tx {
                 GovernanceTransaction::SubmitProposal(proposal) => {
+                    // Check DID verification status before allowing governance actions
+                    let did_registry = DidRegistry::new();
+                    if let Some(did_doc) = did_registry.get_did(&proposal.initiator_did) {
+                        if !did_doc.is_verified {
+                            return Err(AuthError("DID not verified for governance actions".into()));
+                        }
+                    }
                     Self::verify_did_signature(
                         &proposal.initiator_did,
                         &proposal.signature,
