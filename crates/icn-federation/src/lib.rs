@@ -18,6 +18,7 @@ pub struct Federation {
     pub proposals: Vec<FederationProposal>, // Add proposals field
     pub created_at: u64,
     pub status: FederationStatus,
+    pub disputes: HashMap<String, FederationDispute>, // Add disputes field
 }
 
 impl Federation {
@@ -212,6 +213,84 @@ impl Federation {
         
         coop_members as f64 / total_members as f64
     }
+
+    pub fn initiate_dissolution(&mut self, initiator: String, reason: String) -> Result<DissolutionProtocol, FederationError> {
+        let protocol = DissolutionProtocol {
+            federation_id: self.id.clone(),
+            initiated_by: initiator,
+            reason: DissolutionReason::Voluntary,
+            status: DissolutionStatus::Initiated,
+            asset_distribution: HashMap::new(),
+            debt_settlements: Vec::new(),
+            member_reassignments: Vec::new(),
+            dispute_period_ends: SystemTime::now() + Duration::from_secs(7 * 24 * 60 * 60), // 7 days
+        };
+
+        self.status = FederationStatus::DisputePeriod;
+        Ok(protocol)
+    }
+
+    pub fn submit_dissolution_dispute(&mut self, dispute: FederationDispute) -> Result<(), FederationError> {
+        if self.status != FederationStatus::DisputePeriod {
+            return Err(FederationError::InvalidStatusTransition);
+        }
+
+        if !self.members.contains_key(&dispute.initiator) {
+            return Err(FederationError::UnauthorizedAction);
+        }
+
+        self.disputes.insert(dispute.id.clone(), dispute);
+        self.status = FederationStatus::DisputeResolution;
+        Ok(())
+    }
+
+    pub fn vote_on_dispute(&mut self, dispute_id: &str, voter: String, support: bool) -> Result<(), FederationError> {
+        let dispute = self.disputes.get_mut(dispute_id)
+            .ok_or(FederationError::DisputeNotFound)?;
+
+        if !self.members.contains_key(&voter) {
+            return Err(FederationError::UnauthorizedAction);
+        }
+
+        dispute.supporting_votes.insert(voter, support);
+
+        // Check if we have enough votes to resolve the dispute
+        let total_votes = dispute.supporting_votes.len();
+        let supporting_votes = dispute.supporting_votes.values().filter(|&&v| v).count();
+        let required_votes = (self.members.len() * 2) / 3; // 2/3 majority
+
+        if total_votes >= required_votes {
+            if supporting_votes > total_votes / 2 {
+                dispute.status = DisputeStatus::Resolved;
+                self.status = FederationStatus::Active;
+            } else {
+                dispute.status = DisputeStatus::Rejected;
+                self.status = FederationStatus::Dissolved;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn resolve_dispute(&mut self, dispute_id: &str, resolution: DisputeResolution) -> Result<(), FederationError> {
+        let dispute = self.disputes.get_mut(dispute_id)
+            .ok_or(FederationError::DisputeNotFound)?;
+
+        dispute.resolution = Some(resolution);
+        dispute.status = DisputeStatus::Resolved;
+
+        // If all disputes are resolved, proceed with dissolution
+        if self.disputes.values().all(|d| d.status == DisputeStatus::Resolved || d.status == DisputeStatus::Rejected) {
+            let any_upheld = self.disputes.values().any(|d| d.status == DisputeStatus::Resolved);
+            self.status = if any_upheld {
+                FederationStatus::Active
+            } else {
+                FederationStatus::Dissolved
+            };
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -283,6 +362,7 @@ impl FederationManager {
             proposals: Vec::new(),
             created_at: chrono::Utc::now().timestamp() as u64,
             status: FederationStatus::Active,
+            disputes: HashMap::new(),
         };
 
         let mut federations = self.federations.write().await;
@@ -394,6 +474,8 @@ pub enum FederationStatus {
     Active,
     Suspended,
     Dissolved,
+    DisputePeriod,
+    DisputeResolution,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -425,6 +507,34 @@ pub struct Vote {
     pub approve: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationDispute {
+    pub id: String,
+    pub federation_id: String,
+    pub initiator: String,
+    pub reason: String,
+    pub evidence: Option<String>,
+    pub supporting_votes: HashMap<String, bool>,
+    pub created_at: u64,
+    pub status: DisputeStatus,
+    pub resolution: Option<DisputeResolution>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisputeResolution {
+    pub decision: String,
+    pub rationale: String,
+    pub resolved_at: u64,
+    pub resolver: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DisputeStatus {
+    Pending,
+    Resolved,
+    Rejected,
+}
+
 #[derive(Debug)]
 pub enum FederationError {
     FederationNotFound,
@@ -439,4 +549,6 @@ pub enum FederationError {
     VotingPeriodEnded,
     ProposalNotFound,
     InsufficientReputation(String),
+    DisputeNotFound,
+    DisputeAlreadyExists,
 }
