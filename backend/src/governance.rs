@@ -4,6 +4,7 @@ use std::sync::Arc;
 use log::{info, error};
 use crate::db::Database;
 use crate::identity::IdentityManager;
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 pub struct GovernanceEngine {
     db: Arc<Database>,
@@ -26,6 +27,11 @@ impl GovernanceEngine {
     }
 
     pub async fn record_vote(&self, vote: Vote) -> Result<(), sqlx::Error> {
+        if let Some(proof) = &vote.zk_snark_proof {
+            if !verify_proof(proof) {
+                return Err(sqlx::Error::Protocol("Invalid zk-SNARK proof".to_string()));
+            }
+        }
         self.db.record_vote(&vote).await.map_err(|e| {
             error!("Error recording vote: {}", e);
             e

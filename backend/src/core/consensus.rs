@@ -4,6 +4,7 @@ use tendermint::lite::{self, TrustedState, ValidatorSet};
 use tendermint::rpc::Client;
 use tokio::sync::Mutex;
 use std::sync::Arc;
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 #[async_trait]
 pub trait ConsensusEngine {
@@ -49,6 +50,13 @@ impl ProofOfCooperation {
     pub async fn reputation_based_access(&self, did: &str, min_reputation: i64) -> Result<bool, String> {
         let reputation = self.reputation_manager.get_reputation(did, "consensus").await?;
         Ok(reputation >= min_reputation)
+    }
+
+    pub async fn verify_zk_snark_proof(&self, proof: &str) -> Result<bool, String> {
+        if !verify_proof(proof) {
+            return Err("Invalid zk-SNARK proof".to_string());
+        }
+        Ok(true)
     }
 }
 

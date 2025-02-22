@@ -8,6 +8,7 @@ use icn_consensus::ConsensusEngine;
 use tendermint::rpc::Client;
 use tendermint::lite::TrustedState;
 use crate::core::consensus::TendermintConsensus;
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 pub struct Core {
     _storage_manager: Arc<StorageManager>,
@@ -100,6 +101,16 @@ impl Core {
         self._telemetry_manager.log("Handling mutual credit transaction...");
         // Placeholder logic for mutual credit transaction
         self._telemetry_manager.log("Mutual credit transaction completed.");
+        Ok(())
+    }
+
+    pub async fn handle_mutual_credit_transaction_with_proof(&self, sender: &str, receiver: &str, amount: f64, proof: &str) -> Result<(), String> {
+        self._telemetry_manager.log("Handling mutual credit transaction with zk-SNARK proof...");
+        if !verify_proof(proof) {
+            return Err("Invalid zk-SNARK proof".to_string());
+        }
+        // Placeholder logic for mutual credit transaction
+        self._telemetry_manager.log("Mutual credit transaction with zk-SNARK proof completed.");
         Ok(())
     }
 }

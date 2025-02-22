@@ -1,6 +1,7 @@
 use dashmap::DashMap;
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 pub struct ReputationCache {
     cache: DashMap<String, i32>,
@@ -85,6 +86,13 @@ impl ReputationManager {
 
     pub async fn add_contribution(&mut self, did: &str, contribution: Contribution) {
         self.contributions.entry(did.to_string()).or_insert_with(Vec::new).push(contribution);
+    }
+
+    pub async fn verify_zk_snark_proof(&self, proof: &str) -> Result<bool, String> {
+        if !verify_proof(proof) {
+            return Err("Invalid zk-SNARK proof".to_string());
+        }
+        Ok(true)
     }
 }
 
