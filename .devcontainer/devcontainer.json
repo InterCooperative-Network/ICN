@@ -12,6 +12,8 @@
     ],
     "postCreateCommand": "cargo build --release",
     "tasks": {
-      "build": "cargo build"
+      "build": "cargo build",
+      "test": "cargo test && cd frontend && npm test",
+      "launch": "cd backend && cargo run --bin icn-backend; cd ../frontend && npm start"
     }
 }

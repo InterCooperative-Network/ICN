@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use crate::database::db::Database;
+use crate::identity::identity_system::IdentitySystem;
 
 #[async_trait]
 pub trait IdentityService: Send + Sync {
@@ -12,11 +13,12 @@ pub trait IdentityService: Send + Sync {
 
 pub struct IdentityServiceImpl {
     db: Arc<Database>,
+    identity_system: Arc<IdentitySystem>,
 }
 
 impl IdentityServiceImpl {
-    pub fn new(db: Arc<Database>) -> Self {
-        Self { db }
+    pub fn new(db: Arc<Database>, identity_system: Arc<IdentitySystem>) -> Self {
+        Self { db, identity_system }
     }
 }
 
@@ -31,12 +33,10 @@ impl IdentityService for IdentityServiceImpl {
     }
 
     async fn rotate_key(&self, identity: &str) -> Result<(), String> {
-        // Implement key rotation logic here
-        Ok(())
+        self.identity_system.rotate_key(identity).map_err(|e| e.to_string())
     }
 
     async fn revoke_key(&self, identity: &str) -> Result<(), String> {
-        // Implement key revocation logic here
-        Ok(())
+        self.identity_system.revoke_key(identity).map_err(|e| e.to_string())
     }
 }

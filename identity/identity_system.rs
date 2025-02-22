@@ -18,6 +18,7 @@ pub struct IdentitySystem {
     last_activity: HashMap<String, SystemTime>,
     key_versions: HashMap<String, u32>,
     federation_roles: HashMap<String, HashMap<String, Vec<String>>>, // Federation-specific roles
+    revoked_keys: HashMap<String, Vec<Vec<u8>>>, // Store revoked keys
 }
 
 impl IdentitySystem {
@@ -30,6 +31,7 @@ impl IdentitySystem {
             last_activity: HashMap::new(),
             key_versions: HashMap::new(),
             federation_roles: HashMap::new(),
+            revoked_keys: HashMap::new(),
         }
     }
 
@@ -180,6 +182,16 @@ impl IdentitySystem {
             if let Some(version) = self.key_versions.get_mut(did) {
                 *version += 1;
             }
+            Ok(())
+        } else {
+            Err(DIDError::KeyRotation)
+        }
+    }
+
+    pub fn revoke_key(&mut self, did: &str) -> Result<(), DIDError> {
+        if let Some((public_key, _)) = self.public_keys.get(did) {
+            self.revoked_keys.entry(did.to_string()).or_default().push(public_key.clone());
+            self.public_keys.remove(did);
             Ok(())
         } else {
             Err(DIDError::KeyRotation)
@@ -367,5 +379,18 @@ mod tests {
 
         let signature = identity_system.generate_bls_threshold_signature(message, private_keys).unwrap();
         assert!(identity_system.verify_bls_threshold_signature(message, &signature, public_keys).unwrap());
+    }
+
+    #[test]
+    fn test_revoke_key() {
+        let mut identity_system = IdentitySystem::new();
+        let secp = Secp256k1::new();
+        let (secret_key, public_key) = secp.generate_keypair(&mut rand::thread_rng());
+        let did = "did:example:secp256k1".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 10, public_key.serialize().to_vec(), Algorithm::Secp256k1);
+
+        assert!(identity_system.revoke_key(&did).is_ok());
+        assert!(identity_system.public_keys.get(&did).is_none());
+        assert!(identity_system.revoked_keys.get(&did).is_some());
     }
 }
