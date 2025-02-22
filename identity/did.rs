@@ -16,6 +16,10 @@ use falcon::sign as falcon_sign;
 use falcon::verify as falcon_verify;
 use bls_signatures::{PrivateKey as BlsPrivateKey, PublicKey as BlsPublicKey, Signature as BlsSignature, Serialize as BlsSerialize, AggregatePublicKey, AggregateSignature};
 use crate::key_manager::{KeyManager, KeyManagerError, KeyStatus};
+use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use bls12_381::Bls12;
+use ff::PrimeField;
+use pairing::Engine;
 
 #[derive(Debug, Error)]
 pub enum DIDError {
@@ -46,6 +50,23 @@ pub struct DID {
     secret_key: Vec<u8>,
     public_key: Vec<u8>,
     algorithm: Algorithm,
+    pub is_verified: bool,
+    pub verification_proof: Option<VerificationProof>,
+    pub last_verification: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerificationProof {
+    pub proof_type: ProofType,
+    pub proof_data: Vec<u8>,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ProofType {
+    ZkSnark,
+    RepurationThreshold,
+    HumanityCheck,
 }
 
 impl DID {
@@ -98,6 +119,9 @@ impl DID {
             secret_key,
             public_key,
             algorithm,
+            is_verified: false,
+            verification_proof: None,
+            last_verification: None,
         }
     }
 
@@ -196,6 +220,104 @@ impl DID {
             Err(_) => Err(DIDError::KeyRotation),
         }
     }
+
+    pub fn verify_sybil_resistance(&mut self, proof: VerificationProof) -> Result<bool, DIDError> {
+        match proof.proof_type {
+            ProofType::ZkSnark => {
+                // Verify zk-SNARK proof
+                let verified = verify_snark_proof(&proof.proof_data)?;
+                if verified {
+                    self.is_verified = true;
+                    self.verification_proof = Some(proof);
+                    self.last_verification = Some(std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs());
+                }
+                Ok(verified)
+            },
+            ProofType::RepurationThreshold => {
+                // Verify reputation meets minimum threshold
+                let verified = verify_reputation_threshold(&self.id, &proof.proof_data)?;
+                if verified {
+                    self.is_verified = true;
+                    self.verification_proof = Some(proof);
+                    self.last_verification = Some(std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs());
+                }
+                Ok(verified)
+            },
+            ProofType::HumanityCheck => {
+                // Verify human proof (e.g. captcha)
+                let verified = verify_humanity_proof(&proof.proof_data)?;
+                if verified {
+                    self.is_verified = true;
+                    self.verification_proof = Some(proof);
+                    self.last_verification = Some(std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs());
+                }
+                Ok(verified) 
+            }
+        }
+    }
+
+    pub fn requires_verification(&self) -> bool {
+        // Check if verification has expired (1 week)
+        if let Some(last_verification) = self.last_verification {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            if now - last_verification > 7 * 24 * 60 * 60 {
+                return true;
+            }
+        }
+        !self.is_verified
+    }
+}
+
+fn verify_snark_proof(proof_data: &[u8]) -> Result<bool, DIDError> {
+    // Implementation of zk-SNARK verification
+    let circuit = ReputationCircuit {
+        // Initialize circuit parameters
+    };
+
+    let pvk = prepare_verifying_key(&VERIFYING_KEY);
+    let proof = Proof::read(proof_data).map_err(|_| DIDError::InvalidKey)?;
+    
+    Ok(verify_proof(&pvk, &proof, &[]))
+}
+
+fn verify_reputation_threshold(did: &str, proof_data: &[u8]) -> Result<bool, DIDError> {
+    // Verify reputation meets minimum threshold
+    let min_reputation = 100;
+    let current_reputation = get_reputation_score(did)?;
+    Ok(current_reputation >= min_reputation)
+}
+
+fn verify_humanity_proof(proof_data: &[u8]) -> Result<bool, DIDError> {
+    // Verify human verification proof
+    // This could integrate with external CAPTCHA or other human verification services
+    Ok(true) // Placeholder implementation
+}
+
+// Circuit implementation for zk-SNARK proof
+struct ReputationCircuit {
+    // Circuit parameters
+}
+
+impl Circuit<Bls12> for ReputationCircuit {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(
+        self,
+        cs: &mut CS
+    ) -> Result<(), SynthesisError> {
+        // Implement constraint system for reputation verification
+        Ok(())
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -224,6 +346,9 @@ impl From<&SerializableDID> for DID {
             secret_key: serializable_did.secret_key.clone(),
             public_key: serializable_did.public_key.clone(),
             algorithm: serializable_did.algorithm.clone(),
+            is_verified: false,
+            verification_proof: None,
+            last_verification: None,
         }
     }
 }
