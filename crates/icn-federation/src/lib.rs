@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use icn_types::{Block, Transaction};
+use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Federation {
@@ -172,6 +173,45 @@ impl Federation {
 
         Ok(proposal.status.clone())
     }
+
+    pub fn calculate_asset_distribution(&self) -> HashMap<String, AssetAllocation> {
+        let mut distributions = HashMap::new();
+        // Implement fair asset distribution calculation
+        distributions
+    }
+
+    pub fn settle_outstanding_debts(&self) -> Vec<DebtSettlement> {
+        let mut settlements = Vec::new();
+        // Implement debt settlement calculation
+        settlements
+    }
+
+    pub fn reassign_members(&self) -> Vec<MemberReassignment> {
+        let mut reassignments = Vec::new();
+        // Implement member reassignment logic
+        reassignments
+    }
+
+    pub fn calculate_vote_weight(&self, cooperative_id: &str, proposal: &FederationProposal) -> f64 {
+        let voting_model = match proposal.proposal_type {
+            ProposalType::GovernanceChange(_) | ProposalType::PolicyUpdate(_) => 
+                &self.terms.governance_rules.governance_voting_model,
+            ProposalType::ResourceAllocation(_) =>
+                &self.terms.governance_rules.resource_voting_model,
+            _ => &self.terms.governance_rules.default_voting_model,
+        };
+
+        voting_model.calculate_voting_power(self, cooperative_id)
+    }
+
+    pub fn get_cooperative_weight(&self, cooperative_id: &str) -> f64 {
+        let total_members: u32 = self.members.values().map(|m| m.member_count).sum();
+        let coop_members = self.members.get(cooperative_id)
+            .map(|m| m.member_count)
+            .unwrap_or(0);
+        
+        coop_members as f64 / total_members as f64
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -286,6 +326,12 @@ impl FederationManager {
 pub trait ResourceManager: Send + Sync {
     async fn allocate_resources(&self, allocation: ResourceAllocation) -> Result<(), String>;
     async fn release_resources(&self, resource_type: &str, amount: u64) -> Result<(), String>;
+}
+
+pub trait FederationDissolution {
+    fn initiate_dissolution(&mut self, initiator: &str, reason: DissolutionReason) -> Result<DissolutionProtocol, Error>;
+    fn process_dissolution(&mut self, protocol: &DissolutionProtocol) -> Result<DissolutionStatus, Error>;
+    fn cancel_dissolution(&mut self, protocol_id: &str) -> Result<(), Error>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
