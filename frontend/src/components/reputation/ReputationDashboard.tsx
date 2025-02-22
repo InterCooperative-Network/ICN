@@ -4,6 +4,8 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { HeatMapGrid } from 'react-grid-heatmap';
+import { Loader2 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface ReputationData {
   timestamp: number;
@@ -12,6 +14,11 @@ interface ReputationData {
   technicalContribution: number;
   communityEngagement: number;
   total: number;
+  trend?: 'up' | 'down' | 'stable';
+  milestones?: string[];
+  performanceIndex?: number;
+  ranking?: number;
+  totalParticipants?: number;
 }
 
 interface Contribution {
@@ -27,23 +34,105 @@ const ReputationDashboard = () => {
   const [activityHeatmap, setActivityHeatmap] = useState<number[][]>([]);
   const [keyContributions, setKeyContributions] = useState<Contribution[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState('month');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showMilestones, setShowMilestones] = useState(false);
 
   useEffect(() => {
-    // Mock data - replace with actual API calls
-    const mockReputationData = generateMockReputationData();
-    const mockHeatmap = generateMockHeatmapData();
-    const mockContributions = generateMockContributions();
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Mock data - replace with actual API calls
+        const mockReputationData = generateMockReputationData();
+        const mockHeatmap = generateMockHeatmapData();
+        const mockContributions = generateMockContributions();
 
-    setReputationHistory(mockReputationData);
-    setActivityHeatmap(mockHeatmap);
-    setKeyContributions(mockContributions);
+        setReputationHistory(mockReputationData);
+        setActivityHeatmap(mockHeatmap);
+        setKeyContributions(mockContributions);
+      } catch (err) {
+        setError('Failed to load reputation data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
   }, [selectedPeriod]);
+
+  const calculatePerformanceMetrics = (data: ReputationData[]) => {
+    const latestData = data[data.length - 1];
+    latestData.performanceIndex = Math.round((latestData.total / 1000) * 100);
+    latestData.ranking = Math.floor(Math.random() * 100) + 1; // Mock ranking
+    latestData.totalParticipants = 500; // Mock total participants
+    latestData.milestones = [
+      'First Proposal',
+      'Resource Contribution',
+      'Federation Member',
+      'Active Voter'
+    ];
+    return data;
+  };
 
   const getContributionColor = (impact: number) => {
     if (impact >= 8) return 'text-green-600';
     if (impact >= 5) return 'text-blue-600';
     return 'text-gray-600';
   };
+
+  const getReputationLevel = (total: number) => {
+    if (total >= 800) return { label: 'Elite', color: 'bg-purple-500' };
+    if (total >= 500) return { label: 'Expert', color: 'bg-blue-500' };
+    if (total >= 200) return { label: 'Advanced', color: 'bg-green-500' };
+    return { label: 'Beginner', color: 'bg-gray-500' };
+  };
+
+  const renderPerformanceCard = () => (
+    <Card className="col-span-1">
+      <CardHeader>
+        <CardTitle>Performance Overview</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {reputationHistory.length > 0 && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span>Performance Index</span>
+              <span className="font-bold">{reputationHistory[reputationHistory.length - 1].performanceIndex}%</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span>Ranking</span>
+              <span className="font-bold">#{reputationHistory[reputationHistory.length - 1].ranking}/{reputationHistory[reputationHistory.length - 1].totalParticipants}</span>
+            </div>
+            <div className="mt-4">
+              <h4 className="font-medium mb-2">Milestones</h4>
+              <div className="flex flex-wrap gap-2">
+                {reputationHistory[reputationHistory.length - 1].milestones?.map((milestone, index) => (
+                  <Badge key={index} variant="secondary">{milestone}</Badge>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    );
+  }
 
   return (
     <div className="container mx-auto p-4 space-y-6">
@@ -62,10 +151,18 @@ const ReputationDashboard = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {renderPerformanceCard()}
+        <Card className="col-span-2">
           <CardHeader>
             <CardTitle>Reputation Over Time</CardTitle>
+            {reputationHistory.length > 0 && (
+              <Badge 
+                className={`${getReputationLevel(reputationHistory[reputationHistory.length - 1].total).color} text-white`}
+              >
+                {getReputationLevel(reputationHistory[reputationHistory.length - 1].total).label}
+              </Badge>
+            )}
           </CardHeader>
           <CardContent>
             <div className="h-80">
@@ -75,7 +172,22 @@ const ReputationDashboard = () => {
                   <XAxis dataKey="timestamp" tickFormatter={(value) => new Date(value).toLocaleDateString()} />
                   <YAxis />
                   <Tooltip 
-                    labelFormatter={(value) => new Date(value).toLocaleDateString()}
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div className="bg-white p-4 rounded-lg shadow-lg border">
+                            <p className="font-bold">{new Date(label).toLocaleDateString()}</p>
+                            {payload.map((entry) => (
+                              <div key={entry.name} className="flex justify-between gap-4">
+                                <span style={{ color: entry.color }}>{entry.name}:</span>
+                                <span className="font-medium">{entry.value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
                   />
                   <Legend />
                   <Area type="monotone" dataKey="governance" stackId="1" stroke="#8884d8" fill="#8884d8" />
@@ -87,7 +199,9 @@ const ReputationDashboard = () => {
             </div>
           </CardContent>
         </Card>
+      </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Activity Heatmap</CardTitle>
@@ -160,7 +274,7 @@ function generateMockReputationData(): ReputationData[] {
       total: Math.floor(200 + Math.random() * 100)
     });
   }
-  return data;
+  return calculatePerformanceMetrics(data);
 }
 
 function generateMockHeatmapData(): number[][] {
