@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -99,3 +99,53 @@ jobs:
     - name: Run Responsiveness Tests
       run: npm run test:responsiveness
       working-directory: frontend
+
+    - name: Run E2E Tests
+      run: cargo test --test integration_test --features e2e --verbose
+      env:
+        TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+        
+    - name: Setup k6
+      uses: grafana/k6-action@v0.3.0
+      
+    - name: Run Load Tests
+      run: k6 run tests/load_test.js
+      
+    - name: Run Federation Tests
+      run: cargo test --test federation_test --verbose
+      
+    - name: Performance Regression Check
+      run: |
+        cargo bench
+        cargo bench --bench federation_bench
+        cargo bench --bench consensus_bench
+
+  deploy-staging:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Deploy to Staging
+        run: |
+          echo "Deploying to staging environment"
+          # Add deployment steps
+          
+      - name: Run Staging Integration Tests
+        run: |
+          cargo test --test integration_test --features staging
+          k6 run tests/load_test.js
+
+  deploy-production:
+    needs: deploy-staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://production.example.com
+    steps:
+      - name: Deploy to Production
+        run: |
+          echo "Deploying to production"
+          # Add production deployment steps
