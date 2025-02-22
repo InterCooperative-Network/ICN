@@ -1,4 +1,4 @@
-Project Code Dump - Generated Fri 21 Feb 2025 12:45:59 AM UTC
+Project Code Dump - Generated Sat 22 Feb 2025 03:28:04 AM UTC
 ======================================
 
 LLM Context Information
@@ -45,6 +45,7 @@ Project Tree:
 │       ├── identity.rs
 │       ├── lib.rs
 │       ├── main.rs
+│       ├── middleware
 │       ├── models.rs
 │       ├── networking
 │       ├── networking.rs
@@ -57,9 +58,16 @@ Project Tree:
 ├── config
 │   └── feature-flags.json
 ├── contracts
+│   ├── Cargo.toml
 │   └── cooperative
 │       └── src
 ├── crates
+│   ├── consensus
+│   │   └── Cargo.toml
+│   ├── core
+│   │   └── Cargo.toml
+│   ├── finance
+│   │   └── src
 │   ├── icn-consensus
 │   │   ├── Cargo.toml
 │   │   ├── README.md
@@ -74,6 +82,9 @@ Project Tree:
 │   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-federation
+│   │   ├── Cargo.toml
+│   │   └── src
+│   ├── icn-governance
 │   │   └── src
 │   ├── icn-mutual-credit
 │   │   └── src
@@ -88,9 +99,18 @@ Project Tree:
 │   ├── icn-storage
 │   │   ├── Cargo.toml
 │   │   └── src
-│   └── icn-types
-│       ├── Cargo.toml
-│       └── src
+│   ├── icn-types
+│   │   ├── Cargo.toml
+│   │   └── src
+│   ├── identity
+│   ├── networking
+│   │   └── Cargo.toml
+│   ├── resources
+│   │   └── Cargo.toml
+│   ├── runtime
+│   │   └── Cargo.toml
+│   └── storage
+│       └── Cargo.toml
 ├── create_docs_dump.sh
 ├── docker
 │   ├── backend.Dockerfile
@@ -99,6 +119,7 @@ Project Tree:
 │   └── frontend.Dockerfile
 ├── DSL_ICN.txt
 ├── frontend
+│   ├── Cargo.toml
 │   ├── package.json
 │   ├── postcss.config.js
 │   ├── src
@@ -106,6 +127,7 @@ Project Tree:
 │   │   └── styles
 │   ├── tailwind.config.js
 │   └── tsconfig.json
+├── fsprovider-sample
 ├── generate_code_dump.sh
 ├── grammar
 │   ├── coop_lang.pest
@@ -121,6 +143,7 @@ Project Tree:
 ├── identity
 │   ├── did.rs
 │   ├── identity_system.rs
+│   ├── key_manager.rs
 │   └── mod.rs
 ├── improved-setup.sh
 ├── inventory_nodes.sh
@@ -129,6 +152,9 @@ Project Tree:
 ├── project_code_dump.txt
 ├── project_docs_dump.txt
 ├── README.md
+├── reputation
+│   ├── errors.rs
+│   └── reputation_manager.rs
 ├── scripts
 │   ├── backend
 │   │   ├── Cargo.toml
@@ -153,6 +179,8 @@ Project Tree:
 │   │   └── vm.rs
 │   ├── feature-flags
 │   ├── governance
+│   │   ├── mod.rs
+│   │   └── rollback.rs
 │   └── parser.rs
 ├── start_docs_server.sh
 └── tools
@@ -169,8 +197,8 @@ Project Tree:
 
 ===================
 File: ./backend/Cargo.toml
-Size: 316 bytes
-Modified: 2025-02-21 00:12:17.638854100 +0000
+Size: 478 bytes
+Modified: 2025-02-22 01:12:53.285021400 +0000
 
 ===================
 ```toml
@@ -185,6 +213,10 @@ warp = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 sqlx = { version = "0.7", features = ["postgres", "runtime-tokio"] }
 icn-federation = { path = "../crates/icn-federation" }
+tower = { version = "0.4", features = ["limit"] }
+tower-http = { version = "0.4", features = ["limit"] }
+bls-signatures = "0.8"
+didcomm-rs = "0.1"
 ```
 
 ===================
@@ -220,19 +252,21 @@ pub mod main;
 
 ===================
 File: ./backend/src/main.rs
-Size: 10967 bytes
-Modified: 2025-02-21 00:21:02.143504400 +0000
+Size: 11224 bytes
+Modified: 2025-02-21 01:12:45.445193600 +0000
 Dependencies:
 mod config;
 mod core;
 mod db;
 mod federation;
+mod middleware;
 mod notification;
 mod reputation;
 mod websocket;
 use async_trait::async_trait;
 use crate::config::Config;
 use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
+use crate::db::create_pool;
 use crate::db::Database;
 use crate::federation::{FederationOperation, FederationTerms, FederationType};
 use crate::notification::NotificationManager;
@@ -243,6 +277,7 @@ use dashmap::DashMap;
 use env_logger;
 use futures_util::StreamExt;
 use log::{info, error};
+use middleware::rate_limit::with_rate_limit;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -263,6 +298,7 @@ mod federation;
 mod notification;
 mod reputation;
 mod websocket;
+mod middleware;
 
 use crate::config::Config;
 use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
@@ -287,6 +323,8 @@ use async_trait::async_trait;
 use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError};
 use warp::http::Method;
 use warp::cors::Cors;
+use crate::db::create_pool;
+use middleware::rate_limit::with_rate_limit;
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -336,20 +374,19 @@ async fn main() -> Result<(), AppError> {
     let config: Config = config::load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
     config.validate()?;
     
-    // Set up database connection pool
-    let db_pool = PgPool::connect(&config.database_url)
+    // Create a single database pool
+    let db_pool = create_pool()
         .await
         .map_err(AppError::DatabaseError)?;
+    let db_pool = Arc::new(db_pool);
     
-    // Instantiate GovernanceService using the db_pool
-    use crate::services::governance_service::GovernanceService;
+    // Share the pool with all services
+    let storage_backend = DatabaseStorageBackend::new(db_pool.clone());
+    let storage_manager = StorageManager::new(Box::new(storage_backend));
     let governance_service = Arc::new(Mutex::new(GovernanceService::new(db_pool.clone())));
     
-    // Initialize WebSocket clients using DashMap
+    // Initialize other components with shared pool
     let websocket_clients: WebSocketClients = Arc::new(DashMap::new());
-
-    // Initialize components
-    let storage_manager = StorageManager::new(Box::new(DatabaseStorageBackend::new(db_pool.clone())));
     let network_manager = NetworkManager::new();
     let runtime_manager = RuntimeManager::new();
     let telemetry_manager = TelemetryManager::new(PrometheusMetrics, Logger, TracingSystem);
@@ -389,45 +426,53 @@ async fn main() -> Result<(), AppError> {
             ws.on_upgrade(move |socket| handle_websocket(socket, websocket_clients))
         });
     
-    // Update create_proposal route to use GovernanceService's handler
-    let create_proposal = warp::path!("api" / "v1" / "governance" / "proposals")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |proposal: Proposal| {
-            let ns = notification_manager.clone();
-            let wc = websocket_clients.clone();
-            let gs = governance_service.clone();
-            async move {
-                let mut service = gs.lock().await;
-                service.handle_create_proposal(proposal, ns, wc).await
-            }
-        });
-    
-    // Update vote_on_proposal route to use GovernanceService's handler
-    let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |proposal_id: String, vote: Vote| {
-            let ns = notification_manager.clone();
-            let wc = websocket_clients.clone();
-            let gs = governance_service.clone();
-            async move {
-                // Set the proposal_id in vote if not matching
-                let vote = Vote { proposal_id, ..vote };
-                let mut service = gs.lock().await;
-                service.handle_vote_on_proposal(vote, ns, wc).await
-            }
-        });
+    // Apply rate limits to routes
+    let create_proposal = with_rate_limit(
+        warp::path!("api" / "v1" / "governance" / "proposals")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and_then(move |proposal: Proposal| {
+                let ns = notification_manager.clone();
+                let wc = websocket_clients.clone();
+                let gs = governance_service.clone();
+                async move {
+                    let mut service = gs.lock().await;
+                    service.handle_create_proposal(proposal, ns, wc).await
+                }
+            }),
+        10 // 10 requests per second
+    );
 
-    let federation_routes = warp::path("api/v1/federation")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
+    let vote_on_proposal = with_rate_limit(
+        warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and_then(move |proposal_id: String, vote: Vote| {
+                let ns = notification_manager.clone();
+                let wc = websocket_clients.clone();
+                let gs = governance_service.clone();
+                async move {
+                    // Set the proposal_id in vote if not matching
+                    let vote = Vote { proposal_id, ..vote };
+                    let mut service = gs.lock().await;
+                    service.handle_vote_on_proposal(vote, ns, wc).await
+                }
+            }),
+        20 // 20 requests per second
+    );
+
+    let federation_routes = with_rate_limit(
+        warp::path("api/v1/federation")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and_then(move |operation: FederationOperation| {
+                let notification_manager = notification_manager.clone();
+                async move {
+                    handle_federation_operation(operation, notification_manager).await
+                }
+            }),
+        5 // 5 requests per second
+    );
 
     let query_shared_resources = warp::path!("api" / "v1" / "resources" / "query")
         .and(warp::get())
@@ -653,8 +698,8 @@ Modified: 2025-02-19 00:47:20.971282200 +0000
 
 ===================
 File: ./backend/src/api/federation.rs
-Size: 2556 bytes
-Modified: 2025-02-21 00:12:17.654853100 +0000
+Size: 2631 bytes
+Modified: 2025-02-22 03:25:41.741634200 +0000
 Dependencies:
 use icn_federation::{FederationService, FederationOperation};
 use serde::{Deserialize, Serialize};
@@ -743,8 +788,8 @@ async fn join_federation_handler(
 
 ===================
 File: ./backend/src/api/governance.rs
-Size: 2546 bytes
-Modified: 2025-02-21 00:12:17.665854800 +0000
+Size: 3594 bytes
+Modified: 2025-02-22 03:25:41.741634200 +0000
 Dependencies:
 use crate::services::governance_service::{GovernanceService, Proposal, Vote};
 use serde::{Deserialize, Serialize};
@@ -773,6 +818,7 @@ struct VoteRequest {
     proposal_id: String,
     voter: String,
     approve: bool,
+    zk_snark_proof: String, // Added zk-SNARK proof field
 }
 
 pub fn governance_routes(
@@ -790,7 +836,13 @@ pub fn governance_routes(
         .and(with_governance_service(governance_service.clone()))
         .and_then(vote_on_proposal_handler);
 
-    create_proposal.or(vote_on_proposal)
+    let submit_zk_snark_proof = warp::path!("api" / "v1" / "governance" / "zk_snark_proof")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_governance_service(governance_service.clone()))
+        .and_then(submit_zk_snark_proof_handler);
+
+    create_proposal.or(vote_on_proposal).or(submit_zk_snark_proof)
 }
 
 fn with_governance_service(
@@ -825,6 +877,7 @@ async fn vote_on_proposal_handler(
         proposal_id: request.proposal_id,
         voter: request.voter,
         approve: request.approve,
+        zk_snark_proof: request.zk_snark_proof, // Added zk-SNARK proof field
     };
 
     let mut service = governance_service.lock().await;
@@ -833,12 +886,28 @@ async fn vote_on_proposal_handler(
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ZkSnarkProofRequest {
+    proof: String,
+}
+
+async fn submit_zk_snark_proof_handler(
+    request: ZkSnarkProofRequest,
+    governance_service: Arc<Mutex<GovernanceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = governance_service.lock().await;
+    match service.submit_zk_snark_proof(request.proof).await {
+        Ok(_) => Ok(warp::reply::json(&"zk-SNARK proof submitted")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
 ```
 
 ===================
 File: ./backend/src/api/identity.rs
-Size: 1686 bytes
-Modified: 2025-02-21 00:12:17.677853300 +0000
+Size: 2920 bytes
+Modified: 2025-02-22 01:12:53.304105000 +0000
 Dependencies:
 use crate::services::identity_service::{IdentityService, IdentityServiceImpl};
 use std::sync::Arc;
@@ -864,7 +933,17 @@ pub fn identity_routes(
         .and(with_identity_service(identity_service.clone()))
         .and_then(handle_get_identity);
 
-    create_identity.or(get_identity)
+    let rotate_key = warp::path!("api" / "v1" / "identity" / "rotate_key" / String)
+        .and(warp::post())
+        .and(with_identity_service(identity_service.clone()))
+        .and_then(handle_rotate_key);
+
+    let revoke_key = warp::path!("api" / "v1" / "identity" / "revoke_key" / String)
+        .and(warp::post())
+        .and(with_identity_service(identity_service.clone()))
+        .and_then(handle_revoke_key);
+
+    create_identity.or(get_identity).or(rotate_key).or(revoke_key)
 }
 
 fn with_identity_service(
@@ -892,20 +971,45 @@ async fn handle_get_identity(
     })?;
     Ok(warp::reply::json(&data))
 }
+
+async fn handle_rotate_key(
+    identity: String,
+    identity_service: Arc<dyn IdentityService>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    identity_service.rotate_key(&identity).await.map_err(|e| {
+        warp::reject::custom(warp::reject::custom(e))
+    })?;
+    Ok(warp::reply::with_status("Key rotated", warp::http::StatusCode::OK))
+}
+
+async fn handle_revoke_key(
+    identity: String,
+    identity_service: Arc<dyn IdentityService>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    identity_service.revoke_key(&identity).await.map_err(|e| {
+        warp::reject::custom(warp::reject::custom(e))
+    })?;
+    Ok(warp::reply::with_status("Key revoked", warp::http::StatusCode::OK))
+}
 ```
 
 ===================
 File: ./backend/src/api/reputation.rs
-Size: 909 bytes
-Modified: 2025-02-21 00:12:17.688851100 +0000
+Size: 1874 bytes
+Modified: 2025-02-22 03:25:41.742630800 +0000
 Dependencies:
-use crate::services::reputation_service::{get_reputation, adjust_reputation};
+use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution};
 use warp::Filter;
 
 ===================
 ```rs
 use warp::Filter;
-use crate::services::reputation_service::{get_reputation, adjust_reputation};
+use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution};
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ZkSnarkProofRequest {
+    proof: String,
+}
 
 pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path("api")
@@ -925,8 +1029,27 @@ pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = wa
                                 .and(warp::body::json())
                                 .and_then(adjust_reputation)
                         )
+                        .or(
+                            warp::path("verify")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(verify_contribution)
+                        )
+                        .or(
+                            warp::path("zk_snark_proof")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(submit_zk_snark_proof_handler)
+                        )
                 )
         )
+}
+
+async fn submit_zk_snark_proof_handler(
+    request: ZkSnarkProofRequest,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // Placeholder logic for zk-SNARK proof submission
+    Ok(warp::reply::json(&"zk-SNARK proof submitted"))
 }
 ```
 
@@ -1022,19 +1145,21 @@ pub mod main;
 
 ===================
 File: ./backend/src/main.rs
-Size: 10967 bytes
-Modified: 2025-02-21 00:21:02.143504400 +0000
+Size: 11224 bytes
+Modified: 2025-02-21 01:12:45.445193600 +0000
 Dependencies:
 mod config;
 mod core;
 mod db;
 mod federation;
+mod middleware;
 mod notification;
 mod reputation;
 mod websocket;
 use async_trait::async_trait;
 use crate::config::Config;
 use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
+use crate::db::create_pool;
 use crate::db::Database;
 use crate::federation::{FederationOperation, FederationTerms, FederationType};
 use crate::notification::NotificationManager;
@@ -1045,6 +1170,7 @@ use dashmap::DashMap;
 use env_logger;
 use futures_util::StreamExt;
 use log::{info, error};
+use middleware::rate_limit::with_rate_limit;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -1065,6 +1191,7 @@ mod federation;
 mod notification;
 mod reputation;
 mod websocket;
+mod middleware;
 
 use crate::config::Config;
 use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
@@ -1089,6 +1216,8 @@ use async_trait::async_trait;
 use crate::storage::{StorageManager, StorageBackend, StorageResult, StorageError};
 use warp::http::Method;
 use warp::cors::Cors;
+use crate::db::create_pool;
+use middleware::rate_limit::with_rate_limit;
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -1138,20 +1267,19 @@ async fn main() -> Result<(), AppError> {
     let config: Config = config::load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
     config.validate()?;
     
-    // Set up database connection pool
-    let db_pool = PgPool::connect(&config.database_url)
+    // Create a single database pool
+    let db_pool = create_pool()
         .await
         .map_err(AppError::DatabaseError)?;
+    let db_pool = Arc::new(db_pool);
     
-    // Instantiate GovernanceService using the db_pool
-    use crate::services::governance_service::GovernanceService;
+    // Share the pool with all services
+    let storage_backend = DatabaseStorageBackend::new(db_pool.clone());
+    let storage_manager = StorageManager::new(Box::new(storage_backend));
     let governance_service = Arc::new(Mutex::new(GovernanceService::new(db_pool.clone())));
     
-    // Initialize WebSocket clients using DashMap
+    // Initialize other components with shared pool
     let websocket_clients: WebSocketClients = Arc::new(DashMap::new());
-
-    // Initialize components
-    let storage_manager = StorageManager::new(Box::new(DatabaseStorageBackend::new(db_pool.clone())));
     let network_manager = NetworkManager::new();
     let runtime_manager = RuntimeManager::new();
     let telemetry_manager = TelemetryManager::new(PrometheusMetrics, Logger, TracingSystem);
@@ -1191,45 +1319,53 @@ async fn main() -> Result<(), AppError> {
             ws.on_upgrade(move |socket| handle_websocket(socket, websocket_clients))
         });
     
-    // Update create_proposal route to use GovernanceService's handler
-    let create_proposal = warp::path!("api" / "v1" / "governance" / "proposals")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |proposal: Proposal| {
-            let ns = notification_manager.clone();
-            let wc = websocket_clients.clone();
-            let gs = governance_service.clone();
-            async move {
-                let mut service = gs.lock().await;
-                service.handle_create_proposal(proposal, ns, wc).await
-            }
-        });
-    
-    // Update vote_on_proposal route to use GovernanceService's handler
-    let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |proposal_id: String, vote: Vote| {
-            let ns = notification_manager.clone();
-            let wc = websocket_clients.clone();
-            let gs = governance_service.clone();
-            async move {
-                // Set the proposal_id in vote if not matching
-                let vote = Vote { proposal_id, ..vote };
-                let mut service = gs.lock().await;
-                service.handle_vote_on_proposal(vote, ns, wc).await
-            }
-        });
+    // Apply rate limits to routes
+    let create_proposal = with_rate_limit(
+        warp::path!("api" / "v1" / "governance" / "proposals")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and_then(move |proposal: Proposal| {
+                let ns = notification_manager.clone();
+                let wc = websocket_clients.clone();
+                let gs = governance_service.clone();
+                async move {
+                    let mut service = gs.lock().await;
+                    service.handle_create_proposal(proposal, ns, wc).await
+                }
+            }),
+        10 // 10 requests per second
+    );
 
-    let federation_routes = warp::path("api/v1/federation")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
+    let vote_on_proposal = with_rate_limit(
+        warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and_then(move |proposal_id: String, vote: Vote| {
+                let ns = notification_manager.clone();
+                let wc = websocket_clients.clone();
+                let gs = governance_service.clone();
+                async move {
+                    // Set the proposal_id in vote if not matching
+                    let vote = Vote { proposal_id, ..vote };
+                    let mut service = gs.lock().await;
+                    service.handle_vote_on_proposal(vote, ns, wc).await
+                }
+            }),
+        20 // 20 requests per second
+    );
+
+    let federation_routes = with_rate_limit(
+        warp::path("api/v1/federation")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and_then(move |operation: FederationOperation| {
+                let notification_manager = notification_manager.clone();
+                async move {
+                    handle_federation_operation(operation, notification_manager).await
+                }
+            }),
+        5 // 5 requests per second
+    );
 
     let query_shared_resources = warp::path!("api" / "v1" / "resources" / "query")
         .and(warp::get())
@@ -1395,8 +1531,8 @@ impl StorageBackend for DatabaseStorageBackend {
 
 ===================
 File: ./crates/icn-consensus/src/lib.rs
-Size: 11843 bytes
-Modified: 2025-02-19 06:23:14.795626300 +0000
+Size: 15006 bytes
+Modified: 2025-02-22 03:25:41.749636300 +0000
 Dependencies:
 use async_trait::async_trait;
 use bit_set::BitSet;
@@ -1410,6 +1546,7 @@ use thiserror::Error;
 use tokio::task;
 use tokio::time::sleep;
 use trie_rs::Trie;
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 ===================
 ```rs
@@ -1431,6 +1568,7 @@ use bit_set::BitSet;
 use trie_rs::Trie;
 use thiserror::Error;
 use federation::{Federation, FederationError};
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 #[derive(Error, Debug)]
 pub enum ConsensusError {
@@ -1660,6 +1798,85 @@ impl ProofOfCooperation {
 
         Ok(federation_id)
     }
+
+    pub async fn adjust_validator_set(&mut self) -> Result<(), ConsensusError> {
+        // Get current validator counts for BFT calculation
+        let current_size = self.participants.len();
+        let min_validators = (current_size / 3) * 3 + 1; // 3f + 1 where f is max faulty
+
+        // Remove validators that fell below minimum reputation
+        let mut to_remove = Vec::new();
+        for participant in self.participants.iter() {
+            if !self.reputation_manager.is_eligible(participant, 50, "consensus") {
+                to_remove.push(participant.clone());
+            }
+        }
+
+        // Remove disqualified validators if we maintain BFT requirements
+        if (current_size - to_remove.len()) >= min_validators {
+            for participant in to_remove {
+                if let Some(pos) = self.participants.iter().position(|x| x == &participant) {
+                    self.participants.remove(pos);
+                }
+            }
+        }
+
+        // Add new validators that meet higher reputation threshold
+        let new_validators = self.select_validators(80).await?;
+        
+        // Add new validators while maintaining max size limit
+        let max_validators = 100; // Example maximum validator set size
+        for validator in new_validators {
+            if self.participants.len() >= max_validators {
+                break;
+            }
+            if !self.participants.contains(&validator) {
+                self.participants.push_back(validator);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn start_validator_rotation(&mut self) {
+        tokio::spawn(async move {
+            let rotation_interval = Duration::from_secs(3600); // 1 hour
+            loop {
+                sleep(rotation_interval).await;
+                if let Err(e) = self.adjust_validator_set().await {
+                    error!("Failed to adjust validator set: {}", e);
+                }
+            }
+        });
+    }
+
+    pub async fn verify_zk_snark_proof(&self, proof: &str) -> Result<bool, String> {
+        if !verify_proof(proof) {
+            return Err("Invalid zk-SNARK proof".to_string());
+        }
+        Ok(true)
+    }
+
+    pub fn apply_anti_monopoly_reputation_decay(&self, reputation: i64, dominance: f64, total: f64, alpha: f64) -> i64 {
+        (reputation as f64 * (1.0 - dominance / total).powf(alpha)) as i64
+    }
+
+    pub fn quadratic_vote_weight(&self, reputation_points: i64) -> f64 {
+        (reputation_points as f64).sqrt()
+    }
+
+    pub fn randomized_delegation(&self, participants: Vec<String>, num_delegates: usize) -> Vec<String> {
+        use rand::seq::SliceRandom;
+        let mut rng = rand::thread_rng();
+        let mut delegates = participants.clone();
+        delegates.shuffle(&mut rng);
+        delegates.truncate(num_delegates);
+        delegates
+    }
+
+    pub fn dynamic_contribution_valuation(&self, value: i64, repeated: i64, lambda: f64) -> i64 {
+        (value as f64 * (-lambda * repeated as f64).exp()) as i64
+    }
 }
 
 #[async_trait]
@@ -1756,8 +1973,8 @@ enum FederationType {
 
 ===================
 File: ./crates/icn-core/src/lib.rs
-Size: 8914 bytes
-Modified: 2025-02-19 21:25:52.327008500 +0000
+Size: 9507 bytes
+Modified: 2025-02-22 03:25:41.749636300 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_consensus::ProofOfCooperation;
@@ -1765,6 +1982,7 @@ use icn_types::{Block, Transaction, FederationType, FederationTerms, FederationO
 use log::{info, error};
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 ===================
 ```rs
@@ -1774,6 +1992,7 @@ use icn_types::{Block, Transaction, FederationType, FederationTerms, FederationO
 use icn_consensus::ProofOfCooperation;
 use tokio::time::{sleep, Duration};
 use log::{info, error};
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 pub struct Core {
     consensus: Arc<dyn ConsensusEngine>,
@@ -1940,6 +2159,16 @@ impl Core {
         // Load into VM
         self.runtime.load_bytecode(&bytecode).await?;
         
+        Ok(())
+    }
+
+    pub async fn handle_mutual_credit_transaction_with_proof(&self, sender: &str, receiver: &str, amount: f64, proof: &str) -> Result<(), String> {
+        self.telemetry.log("Handling mutual credit transaction with zk-SNARK proof...");
+        if !verify_proof(proof) {
+            return Err("Invalid zk-SNARK proof".to_string());
+        }
+        // Placeholder logic for mutual credit transaction
+        self.telemetry.log("Mutual credit transaction with zk-SNARK proof completed.");
         Ok(())
     }
 }
@@ -2392,8 +2621,8 @@ fn compile_state_validation(bytecode: &mut Vec<u8>, validation: &StateValidation
 
 ===================
 File: ./crates/icn-federation/src/lib.rs
-Size: 11401 bytes
-Modified: 2025-02-19 03:36:31.441583200 +0000
+Size: 11767 bytes
+Modified: 2025-02-22 03:25:41.751637700 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_types::{Block, Transaction};
@@ -2773,9 +3002,81 @@ pub enum FederationError {
 ```
 
 ===================
+File: ./crates/icn-governance/src/lib.rs
+Size: 1538 bytes
+Modified: 2025-02-22 03:25:41.751637700 +0000
+Dependencies:
+use chrono::{DateTime, Utc};
+use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
+use thiserror::Error;
+
+===================
+```rs
+use thiserror::Error;
+use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Utc};
+use std::collections::HashMap;
+
+#[derive(Error, Debug)]
+pub enum GovernanceError {
+    #[error("Proposal not found")]
+    ProposalNotFound,
+    #[error("Invalid rollback - proposal is not in pending state")]
+    InvalidRollback,
+    #[error("Dispute already exists")]
+    DisputeExists,
+    #[error("Insufficient reputation to dispute")]
+    InsufficientReputation,
+    #[error("Invalid dispute resolution")]
+    InvalidResolution,
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Proposal {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub proposer: String,
+    pub status: ProposalStatus,
+    pub created_at: DateTime<Utc>,
+    pub votes: HashMap<String, Vote>,
+    pub disputes: Vec<Dispute>,
+    pub execution_history: Vec<ExecutionEvent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ProposalStatus {
+    Pending,
+    Active,
+    Approved,
+    Rejected,
+    Disputed,
+    RolledBack,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Vote {
+    pub voter: String,
+    pub approve: bool,
+    pub reputation: i64,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Dispute {
+    pub id: String,
+    pub proposal_id: String,
+    pub disputer: String,
+    pub reason: String,
+    pub evidence: String,```
+
+===================
 File: ./crates/icn-mutual-credit/src/lib.rs
 Size: 2371 bytes
-Modified: 2025-02-21 00:12:18.003726000 +0000
+Modified: 2025-02-22 01:50:09.718197800 +0000
 Dependencies:
 use chrono::Utc;
 use serde::{Serialize, Deserialize};
@@ -3239,13 +3540,14 @@ impl ContractExecution {
 
 ===================
 File: ./crates/icn-storage/src/lib.rs
-Size: 3686 bytes
-Modified: 2025-01-16 22:02:57.927141600 +0000
+Size: 4340 bytes
+Modified: 2025-02-21 01:05:58.895528700 +0000
 Dependencies:
 mod tests {
 use icn_types::Block;
 use serde::{Serialize, Deserialize};
 use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::Mutex;
 
@@ -3256,6 +3558,7 @@ use tokio::sync::Mutex;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
 use icn_types::Block;
+use std::time::Duration;
 
 /// Errors that can occur in storage operations
 #[derive(Error, Debug)]
@@ -3295,13 +3598,15 @@ pub trait StorageBackend: Send + Sync {
 /// Manages persistent storage for the system
 pub struct StorageManager {
     backend: Arc<Mutex<Box<dyn StorageBackend>>>,
+    cache: Arc<StorageCache>,
 }
 
 impl StorageManager {
     /// Create a new storage manager with the given backend
-    pub fn new(backend: Box<dyn StorageBackend>) -> Self {
+    pub fn new(backend: Box<dyn StorageBackend>, cache_size: usize, cache_ttl: Duration) -> Self {
         Self {
             backend: Arc::new(Mutex::new(backend)),
+            cache: Arc::new(StorageCache::new(cache_size, cache_ttl)),
         }
     }
     
@@ -3310,14 +3615,30 @@ impl StorageManager {
         let serialized = serde_json::to_vec(value)
             .map_err(|e| StorageError::SerializationError(e.to_string()))?;
             
+        // Update backend
         let backend = self.backend.lock().await;
-        backend.set(key, &serialized).await
+        backend.set(key, &serialized).await?;
+        
+        // Update cache
+        self.cache.set(key.to_string(), serialized);
+        
+        Ok(())
     }
     
     /// Retrieve and deserialize a value
     pub async fn retrieve<T: for<'de> Deserialize<'de>>(&self, key: &str) -> StorageResult<T> {
+        // Try cache first
+        if let Some(cached_data) = self.cache.get(key) {
+            return serde_json::from_slice(&cached_data)
+                .map_err(|e| StorageError::SerializationError(e.to_string()));
+        }
+
+        // Fall back to backend
         let backend = self.backend.lock().await;
         let data = backend.get(key).await?;
+        
+        // Update cache
+        self.cache.set(key.to_string(), data.clone());
         
         serde_json::from_slice(&data)
             .map_err(|e| StorageError::SerializationError(e.to_string()))
@@ -3379,8 +3700,8 @@ mod tests {
 
 ===================
 File: ./crates/icn-types/src/lib.rs
-Size: 22917 bytes
-Modified: 2025-02-21 00:41:22.682757300 +0000
+Size: 23544 bytes
+Modified: 2025-02-21 01:05:05.402617800 +0000
 Dependencies:
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
@@ -3808,6 +4129,22 @@ impl Block {
 
         self.add_signature(validator_did, signature, 1.0).await?;
         Ok(())
+    }
+
+    pub fn update_validator_metadata(&mut self, validator: String, reputation: i64) {
+        let validator_meta = BlockSignature {
+            validator_did: validator,
+            signature: String::new(),
+            timestamp: Utc::now(),
+            voting_power: reputation as f64,
+        };
+        self.signatures.push(validator_meta);
+        
+        // Update validator count and total voting power
+        self.metadata.validator_count = self.signatures.len() as u32;
+        self.metadata.total_voting_power = self.signatures.iter()
+            .map(|s| s.voting_power)
+            .sum();
     }
 }
 
