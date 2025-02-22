@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sat 22 Feb 2025 02:30:02 AM UTC
+Project Code Dump - Generated Sat 22 Feb 2025 03:52:10 PM UTC
 ======================================
 
 LLM Context Information
@@ -715,8 +715,8 @@ Modified: 2025-02-19 00:47:20.971282200 +0000
 
 ===================
 File: ./backend/src/api/federation.rs
-Size: 5968 bytes
-Modified: 2025-02-22 01:34:39.158092200 +0000
+Size: 7886 bytes
+Modified: 2025-02-22 15:51:12.381313100 +0000
 Dependencies:
 use icn_federation::{FederationService, FederationOperation};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
@@ -745,6 +745,21 @@ struct InitiateFederationRequest {
 struct JoinFederationRequest {
     federation_id: String,
     commitment: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SubmitProposalRequest {
+    title: String,
+    description: String,
+    created_by: String,
+    ends_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct VoteRequest {
+    proposal_id: String,
+    voter: String,
+    approve: bool,
 }
 
 pub fn federation_routes(
@@ -788,6 +803,18 @@ pub fn federation_routes(
         .and(with_federation_service(federation_service.clone()))
         .and_then(get_debt_settlements_handler);
 
+    let submit_proposal = warp::path!("api" / "v1" / "federation" / "proposals" / "submit")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(submit_proposal_handler);
+
+    let vote = warp::path!("api" / "v1" / "federation" / "proposals" / "vote")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(vote_handler);
+
     initiate_federation
         .or(join_federation)
         .or(initiate_federation_dissolution)
@@ -795,6 +822,8 @@ pub fn federation_routes(
         .or(cancel_federation_dissolution)
         .or(get_asset_distribution)
         .or(get_debt_settlements)
+        .or(submit_proposal)
+        .or(vote)
 }
 
 fn with_federation_service(
@@ -881,12 +910,34 @@ async fn get_debt_settlements_handler(
     let settlements = service.settle_outstanding_debts(&federation_id).await?;
     Ok(warp::reply::json(&settlements))
 }
+
+async fn submit_proposal_handler(
+    request: SubmitProposalRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.submit_proposal(request.title, request.description, request.created_by, request.ends_at).await {
+        Ok(proposal_id) => Ok(warp::reply::json(&proposal_id)),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn vote_handler(
+    request: VoteRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.vote(request.proposal_id, request.voter, request.approve).await {
+        Ok(_) => Ok(warp::reply::json(&"Vote recorded")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
 ```
 
 ===================
 File: ./backend/src/api/governance.rs
-Size: 4076 bytes
-Modified: 2025-02-22 01:46:06.133659300 +0000
+Size: 2919 bytes
+Modified: 2025-02-22 03:55:53.720706300 +0000
 Dependencies:
 use crate::services::governance_service::{GovernanceService, Proposal, Vote};
 use serde::{Deserialize, Serialize};
@@ -915,6 +966,7 @@ struct VoteRequest {
     proposal_id: String,
     voter: String,
     approve: bool,
+    zk_snark_proof: String, // Added zk-SNARK proof field
 }
 
 #[derive(Debug, Deserialize)]
@@ -939,21 +991,7 @@ pub fn governance_routes(
         .and(with_governance_service(governance_service.clone()))
         .and_then(vote_on_proposal_handler);
 
-    let recall_vote = warp::path!("api" / "v1" / "governance" / "recall")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_governance_service(governance_service.clone()))
-        .and_then(recall_vote_handler);
-
-    let check_expiring = warp::path!("api" / "v1" / "governance" / "proposals" / String / "expiring")
-        .and(warp::get())
-        .and(with_governance_service(governance_service.clone()))
-        .and_then(check_proposal_expiring_handler);
-
-    create_proposal
-        .or(vote_on_proposal)
-        .or(recall_vote)
-        .or(check_expiring)
+n
 }
 
 fn with_governance_service(
@@ -988,6 +1026,7 @@ async fn vote_on_proposal_handler(
         proposal_id: request.proposal_id,
         voter: request.voter,
         approve: request.approve,
+        zk_snark_proof: request.zk_snark_proof, // Added zk-SNARK proof field
     };
 
     let mut service = governance_service.lock().await;
@@ -997,24 +1036,7 @@ async fn vote_on_proposal_handler(
     }
 }
 
-async fn recall_vote_handler(
-    request: RecallVoteRequest,
-    governance_service: Arc<Mutex<GovernanceService>>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let mut service = governance_service.lock().await;
-    match service.process_recall_vote(&request.voter, &request.target_member, request.approve).await {
-        Ok(_) => Ok(warp::reply::json(&"Recall vote recorded")),
-        Err(e) => Err(warp::reject::custom(e)),
-    }
-}
 
-async fn check_proposal_expiring_handler(
-    proposal_id: String,
-    governance_service: Arc<Mutex<GovernanceService>>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let service = governance_service.lock().await;
-    match service.check_proposal_expiration(&proposal_id).await {
-        Ok(is_expiring) => Ok(warp::reply::json(&is_expiring)),
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
@@ -1111,8 +1133,8 @@ async fn handle_revoke_key(
 
 ===================
 File: ./backend/src/api/reputation.rs
-Size: 1235 bytes
-Modified: 2025-02-22 01:12:53.322526200 +0000
+Size: 1874 bytes
+Modified: 2025-02-22 03:55:53.721703000 +0000
 Dependencies:
 use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution};
 use warp::Filter;
@@ -1121,6 +1143,11 @@ use warp::Filter;
 ```rs
 use warp::Filter;
 use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution};
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ZkSnarkProofRequest {
+    proof: String,
+}
 
 pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path("api")
@@ -1146,8 +1173,21 @@ pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = wa
                                 .and(warp::body::json())
                                 .and_then(verify_contribution)
                         )
+                        .or(
+                            warp::path("zk_snark_proof")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(submit_zk_snark_proof_handler)
+                        )
                 )
         )
+}
+
+async fn submit_zk_snark_proof_handler(
+    request: ZkSnarkProofRequest,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // Placeholder logic for zk-SNARK proof submission
+    Ok(warp::reply::json(&"zk-SNARK proof submitted"))
 }
 ```
 
@@ -1629,8 +1669,8 @@ impl StorageBackend for DatabaseStorageBackend {
 
 ===================
 File: ./crates/icn-consensus/src/lib.rs
-Size: 13857 bytes
-Modified: 2025-02-21 01:05:05.411981900 +0000
+Size: 15006 bytes
+Modified: 2025-02-22 03:55:53.744710400 +0000
 Dependencies:
 use async_trait::async_trait;
 use bit_set::BitSet;
@@ -1644,6 +1684,7 @@ use thiserror::Error;
 use tokio::task;
 use tokio::time::sleep;
 use trie_rs::Trie;
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 ===================
 ```rs
@@ -1665,6 +1706,7 @@ use bit_set::BitSet;
 use trie_rs::Trie;
 use thiserror::Error;
 use federation::{Federation, FederationError};
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 #[derive(Error, Debug)]
 pub enum ConsensusError {
@@ -1945,6 +1987,34 @@ impl ProofOfCooperation {
             }
         });
     }
+
+    pub async fn verify_zk_snark_proof(&self, proof: &str) -> Result<bool, String> {
+        if !verify_proof(proof) {
+            return Err("Invalid zk-SNARK proof".to_string());
+        }
+        Ok(true)
+    }
+
+    pub fn apply_anti_monopoly_reputation_decay(&self, reputation: i64, dominance: f64, total: f64, alpha: f64) -> i64 {
+        (reputation as f64 * (1.0 - dominance / total).powf(alpha)) as i64
+    }
+
+    pub fn quadratic_vote_weight(&self, reputation_points: i64) -> f64 {
+        (reputation_points as f64).sqrt()
+    }
+
+    pub fn randomized_delegation(&self, participants: Vec<String>, num_delegates: usize) -> Vec<String> {
+        use rand::seq::SliceRandom;
+        let mut rng = rand::thread_rng();
+        let mut delegates = participants.clone();
+        delegates.shuffle(&mut rng);
+        delegates.truncate(num_delegates);
+        delegates
+    }
+
+    pub fn dynamic_contribution_valuation(&self, value: i64, repeated: i64, lambda: f64) -> i64 {
+        (value as f64 * (-lambda * repeated as f64).exp()) as i64
+    }
 }
 
 #[async_trait]
@@ -2041,8 +2111,8 @@ enum FederationType {
 
 ===================
 File: ./crates/icn-core/src/lib.rs
-Size: 8914 bytes
-Modified: 2025-02-19 21:25:52.327008500 +0000
+Size: 9507 bytes
+Modified: 2025-02-22 03:55:53.744710400 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_consensus::ProofOfCooperation;
@@ -2050,6 +2120,7 @@ use icn_types::{Block, Transaction, FederationType, FederationTerms, FederationO
 use log::{info, error};
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 ===================
 ```rs
@@ -2059,6 +2130,7 @@ use icn_types::{Block, Transaction, FederationType, FederationTerms, FederationO
 use icn_consensus::ProofOfCooperation;
 use tokio::time::{sleep, Duration};
 use log::{info, error};
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 pub struct Core {
     consensus: Arc<dyn ConsensusEngine>,
@@ -2225,6 +2297,16 @@ impl Core {
         // Load into VM
         self.runtime.load_bytecode(&bytecode).await?;
         
+        Ok(())
+    }
+
+    pub async fn handle_mutual_credit_transaction_with_proof(&self, sender: &str, receiver: &str, amount: f64, proof: &str) -> Result<(), String> {
+        self.telemetry.log("Handling mutual credit transaction with zk-SNARK proof...");
+        if !verify_proof(proof) {
+            return Err("Invalid zk-SNARK proof".to_string());
+        }
+        // Placeholder logic for mutual credit transaction
+        self.telemetry.log("Mutual credit transaction with zk-SNARK proof completed.");
         Ok(())
     }
 }
@@ -2677,8 +2759,8 @@ fn compile_state_validation(bytecode: &mut Vec<u8>, validation: &StateValidation
 
 ===================
 File: ./crates/icn-federation/src/lib.rs
-Size: 13348 bytes
-Modified: 2025-02-22 02:20:02.175883200 +0000
+Size: 14638 bytes
+Modified: 2025-02-22 15:51:12.426319800 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
@@ -3012,6 +3094,36 @@ impl FederationManager {
         // Add commitment verification logic here
         true // Placeholder
     }
+
+    pub async fn submit_proposal(
+        &self,
+        federation_id: &str,
+        proposal: FederationProposal,
+    ) -> Result<(), FederationError> {
+        let mut federations = self.federations.write().await;
+
+        if let Some(federation) = federations.get_mut(federation_id) {
+            federation.submit_proposal(proposal)?;
+            Ok(())
+        } else {
+            Err(FederationError::FederationNotFound)
+        }
+    }
+
+    pub async fn vote(
+        &self,
+        federation_id: &str,
+        vote: Vote,
+    ) -> Result<(), FederationError> {
+        let mut federations = self.federations.write().await;
+
+        if let Some(federation) = federations.get_mut(federation_id) {
+            federation.vote(vote)?;
+            Ok(())
+        } else {
+            Err(FederationError::FederationNotFound)
+        }
+    }
 }
 
 #[async_trait]
@@ -3106,8 +3218,8 @@ pub enum FederationError {
 
 ===================
 File: ./crates/icn-governance/src/lib.rs
-Size: 4414 bytes
-Modified: 2025-02-22 02:20:02.175883200 +0000
+Size: 7016 bytes
+Modified: 2025-02-22 03:55:53.752710300 +0000
 Dependencies:
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
@@ -3148,6 +3260,12 @@ pub struct Proposal {
     pub votes: HashMap<String, Vote>,
     pub disputes: Vec<Dispute>,
     pub execution_history: Vec<ExecutionEvent>,
+    pub phase: ProposalPhase,
+    pub required_signers: Vec<String>,
+    pub collected_signatures: Vec<String>,
+    pub state: ProposalState,
+    pub dispute_resolution: Option<DisputeResolution>,
+    pub timeout_timestamp: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -3158,6 +3276,15 @@ pub enum ProposalStatus {
     Rejected,
     Disputed,
     RolledBack,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ProposalPhase {
+    Submission,
+    Deliberation { ends_at: DateTime<Utc> },
+    Voting { ends_at: DateTime<Utc> },
+    Execution,
+    Reconsideration { reason: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3175,6 +3302,15 @@ pub struct Dispute {
     pub disputer: String,
     pub reason: String,
     pub evidence: String,
+    pub arbitrator_did: Option<String>,
+    pub resolution: Option<Resolution>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Resolution {
+    pub decision: DecisionType,
+    pub rationale: String,
+    pub signatures: Vec<String>, // Requires 75% of arbitrators
 }
 
 #[derive(Debug)]
@@ -3286,6 +3422,57 @@ impl ReputationManager {
     }
     
     // ...existing code...
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ProposalState {
+    Draft,
+    UnderReview,
+    Voting,
+    DisputeResolution,
+    Finalized,
+    TimedOut,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisputeResolution {
+    pub initiator: String,
+    pub reason: String, 
+    pub mediators: Vec<String>,
+    pub resolution: Option<String>,
+    pub votes: HashMap<String, bool>,
+    pub evidence: Vec<EvidenceItem>,
+}
+
+impl Proposal {
+    pub fn transition_state(&mut self, new_state: ProposalState) -> Result<(), String> {
+        match (&self.state, &new_state) {
+            (ProposalState::Draft, ProposalState::UnderReview) => Ok(()),
+            (ProposalState::UnderReview, ProposalState::Voting) => Ok(()),
+            (ProposalState::Voting, ProposalState::DisputeResolution) => Ok(()),
+            (ProposalState::DisputeResolution, ProposalState::Finalized) => Ok(()),
+            _ => Err("Invalid state transition".to_string())
+        }
+        self.state = new_state;
+        Ok(())
+    }
+    
+    pub fn initiate_dispute(&mut self, initiator: String, reason: String) -> Result<(), String> {
+        if self.state != ProposalState::Voting {
+            return Err("Can only initiate dispute during voting phase".to_string());
+        }
+        
+        self.dispute_resolution = Some(DisputeResolution {
+            initiator,
+            reason,
+            mediators: vec![],
+            resolution: None,
+            votes: HashMap::new(),
+            evidence: vec![],
+        });
+        
+        self.transition_state(ProposalState::DisputeResolution)
+    }
 }```
 
 ===================
