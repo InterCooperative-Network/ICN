@@ -1133,3 +1133,234 @@ async fn test_conflicting_resource_allocations() {
     assert!(!conflicts.is_empty());
     assert!(federation.resolve_conflicts(conflicts).await.is_ok());
 }
+
+// Comprehensive E2E Tests for Federation Routes
+
+#[tokio::test]
+async fn test_federation_routes() {
+    let client = Client::new();
+
+    // Test Initiate Federation
+    let resp = client.post("http://localhost:8081/api/v1/federation/initiate")
+        .json(&json!({
+            "federation_type": "Cooperative",
+            "partner_id": "did:icn:partner",
+            "terms": "Equal distribution"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Test Join Federation
+    let resp = client.post("http://localhost:8081/api/v1/federation/join")
+        .json(&json!({
+            "federation_id": "federation123",
+            "commitment": "Adhere to terms"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Test Initiate Federation Dissolution
+    let resp = client.post("http://localhost:8081/api/v1/federation/federation123/dissolve")
+        .json(&json!({
+            "initiator_id": "did:icn:initiator",
+            "reason": "No longer needed"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Test Get Dissolution Status
+    let resp = client.get("http://localhost:8081/api/v1/federation/federation123/dissolution/status")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Test Cancel Federation Dissolution
+    let resp = client.post("http://localhost:8081/api/v1/federation/federation123/dissolution/cancel")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Test Get Asset Distribution
+    let resp = client.get("http://localhost:8081/api/v1/federation/federation123/dissolution/assets")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Test Get Debt Settlements
+    let resp = client.get("http://localhost:8081/api/v1/federation/federation123/dissolution/debts")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Test Submit Proposal
+    let resp = client.post("http://localhost:8081/api/v1/federation/proposals/submit")
+        .json(&json!({
+            "title": "New Proposal",
+            "description": "Proposal Description",
+            "created_by": "did:icn:creator",
+            "ends_at": "2024-12-31T23:59:59Z"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Test Vote
+    let resp = client.post("http://localhost:8081/api/v1/federation/proposals/vote")
+        .json(&json!({
+            "proposal_id": "proposal123",
+            "voter": "did:icn:voter",
+            "approve": true
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+}
+
+// Comprehensive E2E Tests for Governance Routes
+
+#[tokio::test]
+async fn test_governance_routes() {
+    let client = Client::new();
+
+    // Test Create Proposal
+    let resp = client.post("http://localhost:8081/api/v1/governance/proposals")
+        .json(&json!({
+            "title": "Test Proposal",
+            "description": "Test Description",
+            "created_by": "did:icn:test",
+            "ends_at": "2024-12-31T23:59:59Z"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Test Vote on Proposal
+    let resp = client.post("http://localhost:8081/api/v1/governance/proposals/proposal123/vote")
+        .json(&json!({
+            "voter": "did:icn:voter",
+            "approve": true,
+            "zk_snark_proof": "proof123"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+}
+
+// Comprehensive E2E Tests for Identity Routes
+
+#[tokio::test]
+async fn test_identity_routes() {
+    let client = Client::new();
+
+    // Test Create Identity
+    let resp = client.post("http://localhost:8081/api/v1/identity/create")
+        .json(&json!({
+            "identity": "did:icn:test"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 201);
+
+    // Test Get Identity
+    let resp = client.get("http://localhost:8081/api/v1/identity/get/did:icn:test")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Test Rotate Key
+    let resp = client.post("http://localhost:8081/api/v1/identity/rotate_key/did:icn:test")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Test Revoke Key
+    let resp = client.post("http://localhost:8081/api/v1/identity/revoke_key/did:icn:test")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+}
+
+// Comprehensive E2E Tests for Reputation Routes
+
+#[tokio::test]
+async fn test_reputation_routes() {
+    let client = Client::new();
+
+    // Test Get Reputation
+    let resp = client.get("http://localhost:8081/api/v1/reputation/get?did=did:icn:test")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Test Adjust Reputation
+    let resp = client.post("http://localhost:8081/api/v1/reputation/adjust")
+        .json(&json!({
+            "did": "did:icn:test",
+            "category": "governance",
+            "adjustment": 10,
+            "zk_snark_proof": "proof123"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Test Verify Contribution
+    let resp = client.post("http://localhost:8081/api/v1/reputation/verify")
+        .json(&json!({
+            "did": "did:icn:test",
+            "contribution": "contribution123",
+            "zk_snark_proof": "proof123"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Test Submit zk-SNARK Proof
+    let resp = client.post("http://localhost:8081/api/v1/reputation/zk_snark_proof")
+        .json(&json!({
+            "proof": "proof123"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+}
+
+// Comprehensive E2E Tests for Resource Routes
+
+#[tokio::test]
+async fn test_resource_routes() {
+    let client = Client::new();
+
+    // Test Query Shared Resources
+    let resp = client.get("http://localhost:8081/api/v1/resources/query")
+        .json(&json!({
+            "resource_type": "cpu",
+            "owner": "did:icn:owner"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+}
