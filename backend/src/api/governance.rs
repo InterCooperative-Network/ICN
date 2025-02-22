@@ -19,6 +19,13 @@ struct VoteRequest {
     approve: bool,
 }
 
+#[derive(Debug, Deserialize)]
+struct RecallVoteRequest {
+    target_member: String,
+    voter: String,
+    approve: bool,
+}
+
 pub fn governance_routes(
     governance_service: Arc<Mutex<GovernanceService>>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -34,7 +41,21 @@ pub fn governance_routes(
         .and(with_governance_service(governance_service.clone()))
         .and_then(vote_on_proposal_handler);
 
-    create_proposal.or(vote_on_proposal)
+    let recall_vote = warp::path!("api" / "v1" / "governance" / "recall")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_governance_service(governance_service.clone()))
+        .and_then(recall_vote_handler);
+
+    let check_expiring = warp::path!("api" / "v1" / "governance" / "proposals" / String / "expiring")
+        .and(warp::get())
+        .and(with_governance_service(governance_service.clone()))
+        .and_then(check_proposal_expiring_handler);
+
+    create_proposal
+        .or(vote_on_proposal)
+        .or(recall_vote)
+        .or(check_expiring)
 }
 
 fn with_governance_service(
@@ -74,6 +95,28 @@ async fn vote_on_proposal_handler(
     let mut service = governance_service.lock().await;
     match service.record_vote(vote).await {
         Ok(_) => Ok(warp::reply::json(&"Vote recorded")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn recall_vote_handler(
+    request: RecallVoteRequest,
+    governance_service: Arc<Mutex<GovernanceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = governance_service.lock().await;
+    match service.process_recall_vote(&request.voter, &request.target_member, request.approve).await {
+        Ok(_) => Ok(warp::reply::json(&"Recall vote recorded")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn check_proposal_expiring_handler(
+    proposal_id: String,
+    governance_service: Arc<Mutex<GovernanceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let service = governance_service.lock().await;
+    match service.check_proposal_expiration(&proposal_id).await {
+        Ok(is_expiring) => Ok(warp::reply::json(&is_expiring)),
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
