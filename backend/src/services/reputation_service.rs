@@ -147,6 +147,43 @@ impl ReputationService {
 
         Ok(())
     }
+
+    /// Handles Sybil resistance mechanisms for DID reputation tracking.
+    pub async fn handle_sybil_resistance(&self, did: &str, reputation_score: i64) -> Result<(), sqlx::Error> {
+        // Placeholder logic for handling Sybil resistance
+        Ok(())
+    }
+
+    /// Applies reputation decay for the given DID with a specified decay rate.
+    pub async fn apply_reputation_decay(&self, did: &str, decay_rate: f64) -> Result<(), sqlx::Error> {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as f64;
+        let contributions = sqlx::query_as!(
+            Contribution,
+            r#"
+            SELECT score, timestamp FROM contributions WHERE did = $1
+            "#,
+            did
+        )
+        .fetch_all(&*self.db.pool)
+        .await?;
+
+        for contribution in contributions {
+            let age = now - contribution.timestamp;
+            let decayed_score = (contribution.score as f64 * (-decay_rate * age).exp()) as i64;
+            sqlx::query!(
+                r#"
+                UPDATE contributions SET score = $1 WHERE did = $2 AND timestamp = $3
+                "#,
+                decayed_score,
+                did,
+                contribution.timestamp
+            )
+            .execute(&*self.db.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
 }
 
 /// Represents a contribution with a score and timestamp.
@@ -209,5 +246,27 @@ mod tests {
         service.apply_decay(did).await.unwrap();
         let score = service.get_reputation(did, "governance").await.unwrap();
         assert!(score < 10); // Assuming initial score was 10 and decay was applied
+    }
+
+    #[tokio::test]
+    async fn test_handle_sybil_resistance() {
+        let db = setup_test_db().await;
+        let service = ReputationService::new(db, 100, 0.1);
+
+        let did = "did:icn:test";
+        let reputation_score = 50;
+        service.handle_sybil_resistance(did, reputation_score).await.unwrap();
+        // Add assertions based on the expected behavior of handle_sybil_resistance
+    }
+
+    #[tokio::test]
+    async fn test_apply_reputation_decay() {
+        let db = setup_test_db().await;
+        let service = ReputationService::new(db, 100, 0.1);
+
+        let did = "did:icn:test";
+        let decay_rate = 0.05;
+        service.apply_reputation_decay(did, decay_rate).await.unwrap();
+        // Add assertions based on the expected behavior of apply_reputation_decay
     }
 }

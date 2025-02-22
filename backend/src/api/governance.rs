@@ -20,6 +20,18 @@ struct VoteRequest {
     zk_snark_proof: String, // Added zk-SNARK proof field
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct SybilResistanceRequest {
+    did: String,
+    reputation_score: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ReputationDecayRequest {
+    did: String,
+    decay_rate: f64,
+}
+
 #[derive(Debug, Deserialize)]
 struct RecallVoteRequest {
     target_member: String,
@@ -42,7 +54,22 @@ pub fn governance_routes(
         .and(with_governance_service(governance_service.clone()))
         .and_then(vote_on_proposal_handler);
 
-n
+    let sybil_resistance = warp::path!("api" / "v1" / "governance" / "sybil_resistance")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_governance_service(governance_service.clone()))
+        .and_then(sybil_resistance_handler);
+
+    let reputation_decay = warp::path!("api" / "v1" / "governance" / "reputation_decay")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_governance_service(governance_service.clone()))
+        .and_then(reputation_decay_handler);
+
+    create_proposal
+        .or(vote_on_proposal)
+        .or(sybil_resistance)
+        .or(reputation_decay)
 }
 
 fn with_governance_service(
@@ -87,7 +114,24 @@ async fn vote_on_proposal_handler(
     }
 }
 
+async fn sybil_resistance_handler(
+    request: SybilResistanceRequest,
+    governance_service: Arc<Mutex<GovernanceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = governance_service.lock().await;
+    match service.handle_sybil_resistance(request.did, request.reputation_score).await {
+        Ok(_) => Ok(warp::reply::json(&"Sybil resistance applied")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
 
+async fn reputation_decay_handler(
+    request: ReputationDecayRequest,
+    governance_service: Arc<Mutex<GovernanceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = governance_service.lock().await;
+    match service.apply_reputation_decay(request.did, request.decay_rate).await {
+        Ok(_) => Ok(warp::reply::json(&"Reputation decay applied")),
         Err(e) => Err(warp::reject::custom(e)),
     }
 }

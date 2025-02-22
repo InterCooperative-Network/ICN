@@ -33,6 +33,18 @@ struct VoteRequest {
     approve: bool,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct SybilResistanceRequest {
+    did: String,
+    reputation_score: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ReputationDecayRequest {
+    did: String,
+    decay_rate: f64,
+}
+
 pub fn federation_routes(
     federation_service: Arc<Mutex<FederationService>>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -86,6 +98,18 @@ pub fn federation_routes(
         .and(with_federation_service(federation_service.clone()))
         .and_then(vote_handler);
 
+    let sybil_resistance = warp::path!("api" / "v1" / "federation" / "sybil_resistance")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(sybil_resistance_handler);
+
+    let reputation_decay = warp::path!("api" / "v1" / "federation" / "reputation_decay")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(reputation_decay_handler);
+
     initiate_federation
         .or(join_federation)
         .or(initiate_federation_dissolution)
@@ -95,6 +119,8 @@ pub fn federation_routes(
         .or(get_debt_settlements)
         .or(submit_proposal)
         .or(vote)
+        .or(sybil_resistance)
+        .or(reputation_decay)
 }
 
 fn with_federation_service(
@@ -200,6 +226,28 @@ async fn vote_handler(
     let mut service = federation_service.lock().await;
     match service.vote(request.proposal_id, request.voter, request.approve).await {
         Ok(_) => Ok(warp::reply::json(&"Vote recorded")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn sybil_resistance_handler(
+    request: SybilResistanceRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.handle_sybil_resistance(request.did, request.reputation_score).await {
+        Ok(_) => Ok(warp::reply::json(&"Sybil resistance applied")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn reputation_decay_handler(
+    request: ReputationDecayRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.apply_reputation_decay(request.did, request.decay_rate).await {
+        Ok(_) => Ok(warp::reply::json(&"Reputation decay applied")),
         Err(e) => Err(warp::reject::custom(e)),
     }
 }

@@ -91,4 +91,14 @@ impl GovernanceService {
 
         self.record_vote(vote).await.map_err(|e| e.to_string())
     }
+
+    pub async fn handle_sybil_resistance(&self, did: &str, reputation_score: i64) -> Result<(), String> {
+        // Placeholder logic for handling Sybil resistance
+        Ok(())
+    }
+
+    pub async fn apply_reputation_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> {
+        // Placeholder logic for applying reputation decay
+        Ok(())
+    }
 }

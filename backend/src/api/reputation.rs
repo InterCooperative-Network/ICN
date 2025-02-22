@@ -1,9 +1,21 @@
 use warp::Filter;
-use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution};
+use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution, handle_sybil_resistance, apply_reputation_decay};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ZkSnarkProofRequest {
     proof: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SybilResistanceRequest {
+    did: String,
+    reputation_score: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ReputationDecayRequest {
+    did: String,
+    decay_rate: f64,
 }
 
 pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -35,6 +47,18 @@ pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = wa
                                 .and(warp::post())
                                 .and(warp::body::json())
                                 .and_then(submit_zk_snark_proof_handler)
+                        )
+                        .or(
+                            warp::path("sybil_resistance")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(handle_sybil_resistance)
+                        )
+                        .or(
+                            warp::path("reputation_decay")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(apply_reputation_decay)
                         )
                 )
         )
