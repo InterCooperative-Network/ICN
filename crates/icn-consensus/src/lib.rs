@@ -16,6 +16,7 @@ use bit_set::BitSet;
 use trie_rs::Trie;
 use thiserror::Error;
 use federation::{Federation, FederationError};
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 #[derive(Error, Debug)]
 pub enum ConsensusError {
@@ -295,6 +296,34 @@ impl ProofOfCooperation {
                 }
             }
         });
+    }
+
+    pub async fn verify_zk_snark_proof(&self, proof: &str) -> Result<bool, String> {
+        if !verify_proof(proof) {
+            return Err("Invalid zk-SNARK proof".to_string());
+        }
+        Ok(true)
+    }
+
+    pub fn apply_anti_monopoly_reputation_decay(&self, reputation: i64, dominance: f64, total: f64, alpha: f64) -> i64 {
+        (reputation as f64 * (1.0 - dominance / total).powf(alpha)) as i64
+    }
+
+    pub fn quadratic_vote_weight(&self, reputation_points: i64) -> f64 {
+        (reputation_points as f64).sqrt()
+    }
+
+    pub fn randomized_delegation(&self, participants: Vec<String>, num_delegates: usize) -> Vec<String> {
+        use rand::seq::SliceRandom;
+        let mut rng = rand::thread_rng();
+        let mut delegates = participants.clone();
+        delegates.shuffle(&mut rng);
+        delegates.truncate(num_delegates);
+        delegates
+    }
+
+    pub fn dynamic_contribution_valuation(&self, value: i64, repeated: i64, lambda: f64) -> i64 {
+        (value as f64 * (-lambda * repeated as f64).exp()) as i64
     }
 }
 

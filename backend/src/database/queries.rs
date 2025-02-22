@@ -68,13 +68,14 @@ pub async fn query_shared_resources(pool: &PgPool, resource_type: &str, owner: O
 pub async fn store_contribution(pool: &PgPool, contribution: &Contribution) -> Result<i64, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        INSERT INTO contributions (did, score, timestamp)
-        VALUES ($1, $2, $3)
+        INSERT INTO contributions (did, score, timestamp, zk_snark_proof)
+        VALUES ($1, $2, $3, $4)
         RETURNING id
         "#,
         contribution.did,
         contribution.score,
-        contribution.timestamp
+        contribution.timestamp,
+        contribution.zk_snark_proof
     )
     .fetch_one(pool)
     .await?;
@@ -86,7 +87,7 @@ pub async fn retrieve_contributions(pool: &PgPool, did: &str) -> Result<Vec<Cont
     let contributions = sqlx::query_as!(
         Contribution,
         r#"
-        SELECT id, did, score, timestamp FROM contributions
+        SELECT id, did, score, timestamp, zk_snark_proof FROM contributions
         WHERE did = $1
         "#,
         did

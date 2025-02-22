@@ -4,6 +4,7 @@ use icn_types::{Block, Transaction, FederationType, FederationTerms, FederationO
 use icn_consensus::ProofOfCooperation;
 use tokio::time::{sleep, Duration};
 use log::{info, error};
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 pub struct Core {
     consensus: Arc<dyn ConsensusEngine>,
@@ -170,6 +171,16 @@ impl Core {
         // Load into VM
         self.runtime.load_bytecode(&bytecode).await?;
         
+        Ok(())
+    }
+
+    pub async fn handle_mutual_credit_transaction_with_proof(&self, sender: &str, receiver: &str, amount: f64, proof: &str) -> Result<(), String> {
+        self.telemetry.log("Handling mutual credit transaction with zk-SNARK proof...");
+        if !verify_proof(proof) {
+            return Err("Invalid zk-SNARK proof".to_string());
+        }
+        // Placeholder logic for mutual credit transaction
+        self.telemetry.log("Mutual credit transaction with zk-SNARK proof completed.");
         Ok(())
     }
 }
