@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sat 22 Feb 2025 03:52:10 PM UTC
+Project Code Dump - Generated Sat 22 Feb 2025 09:52:55 PM UTC
 ======================================
 
 LLM Context Information
@@ -159,6 +159,7 @@ Project Tree:
 ├── inventory_nodes.sh
 ├── messaging
 │   └── server.rs
+├── poc-zk-snarks-overview.md
 ├── project_code_dump.txt
 ├── project_docs_dump.txt
 ├── README.md
@@ -715,8 +716,8 @@ Modified: 2025-02-19 00:47:20.971282200 +0000
 
 ===================
 File: ./backend/src/api/federation.rs
-Size: 7886 bytes
-Modified: 2025-02-22 15:51:12.381313100 +0000
+Size: 9635 bytes
+Modified: 2025-02-22 21:47:25.508154900 +0000
 Dependencies:
 use icn_federation::{FederationService, FederationOperation};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
@@ -760,6 +761,18 @@ struct VoteRequest {
     proposal_id: String,
     voter: String,
     approve: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SybilResistanceRequest {
+    did: String,
+    reputation_score: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ReputationDecayRequest {
+    did: String,
+    decay_rate: f64,
 }
 
 pub fn federation_routes(
@@ -815,6 +828,18 @@ pub fn federation_routes(
         .and(with_federation_service(federation_service.clone()))
         .and_then(vote_handler);
 
+    let sybil_resistance = warp::path!("api" / "v1" / "federation" / "sybil_resistance")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(sybil_resistance_handler);
+
+    let reputation_decay = warp::path!("api" / "v1" / "federation" / "reputation_decay")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(reputation_decay_handler);
+
     initiate_federation
         .or(join_federation)
         .or(initiate_federation_dissolution)
@@ -824,6 +849,8 @@ pub fn federation_routes(
         .or(get_debt_settlements)
         .or(submit_proposal)
         .or(vote)
+        .or(sybil_resistance)
+        .or(reputation_decay)
 }
 
 fn with_federation_service(
@@ -932,12 +959,34 @@ async fn vote_handler(
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
+
+async fn sybil_resistance_handler(
+    request: SybilResistanceRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.handle_sybil_resistance(request.did, request.reputation_score).await {
+        Ok(_) => Ok(warp::reply::json(&"Sybil resistance applied")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn reputation_decay_handler(
+    request: ReputationDecayRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.apply_reputation_decay(request.did, request.decay_rate).await {
+        Ok(_) => Ok(warp::reply::json(&"Reputation decay applied")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
 ```
 
 ===================
 File: ./backend/src/api/governance.rs
-Size: 2919 bytes
-Modified: 2025-02-22 03:55:53.720706300 +0000
+Size: 4654 bytes
+Modified: 2025-02-22 21:47:25.517295900 +0000
 Dependencies:
 use crate::services::governance_service::{GovernanceService, Proposal, Vote};
 use serde::{Deserialize, Serialize};
@@ -969,6 +1018,18 @@ struct VoteRequest {
     zk_snark_proof: String, // Added zk-SNARK proof field
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct SybilResistanceRequest {
+    did: String,
+    reputation_score: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ReputationDecayRequest {
+    did: String,
+    decay_rate: f64,
+}
+
 #[derive(Debug, Deserialize)]
 struct RecallVoteRequest {
     target_member: String,
@@ -991,7 +1052,22 @@ pub fn governance_routes(
         .and(with_governance_service(governance_service.clone()))
         .and_then(vote_on_proposal_handler);
 
-n
+    let sybil_resistance = warp::path!("api" / "v1" / "governance" / "sybil_resistance")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_governance_service(governance_service.clone()))
+        .and_then(sybil_resistance_handler);
+
+    let reputation_decay = warp::path!("api" / "v1" / "governance" / "reputation_decay")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_governance_service(governance_service.clone()))
+        .and_then(reputation_decay_handler);
+
+    create_proposal
+        .or(vote_on_proposal)
+        .or(sybil_resistance)
+        .or(reputation_decay)
 }
 
 fn with_governance_service(
@@ -1036,7 +1112,24 @@ async fn vote_on_proposal_handler(
     }
 }
 
+async fn sybil_resistance_handler(
+    request: SybilResistanceRequest,
+    governance_service: Arc<Mutex<GovernanceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = governance_service.lock().await;
+    match service.handle_sybil_resistance(request.did, request.reputation_score).await {
+        Ok(_) => Ok(warp::reply::json(&"Sybil resistance applied")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
 
+async fn reputation_decay_handler(
+    request: ReputationDecayRequest,
+    governance_service: Arc<Mutex<GovernanceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = governance_service.lock().await;
+    match service.apply_reputation_decay(request.did, request.decay_rate).await {
+        Ok(_) => Ok(warp::reply::json(&"Reputation decay applied")),
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
@@ -1133,20 +1226,32 @@ async fn handle_revoke_key(
 
 ===================
 File: ./backend/src/api/reputation.rs
-Size: 1874 bytes
-Modified: 2025-02-22 03:55:53.721703000 +0000
+Size: 2758 bytes
+Modified: 2025-02-22 21:47:25.530111800 +0000
 Dependencies:
-use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution};
+use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution, handle_sybil_resistance, apply_reputation_decay};
 use warp::Filter;
 
 ===================
 ```rs
 use warp::Filter;
-use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution};
+use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution, handle_sybil_resistance, apply_reputation_decay};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ZkSnarkProofRequest {
     proof: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SybilResistanceRequest {
+    did: String,
+    reputation_score: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ReputationDecayRequest {
+    did: String,
+    decay_rate: f64,
 }
 
 pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -1178,6 +1283,18 @@ pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = wa
                                 .and(warp::post())
                                 .and(warp::body::json())
                                 .and_then(submit_zk_snark_proof_handler)
+                        )
+                        .or(
+                            warp::path("sybil_resistance")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(handle_sybil_resistance)
+                        )
+                        .or(
+                            warp::path("reputation_decay")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(apply_reputation_decay)
                         )
                 )
         )

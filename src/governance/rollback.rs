@@ -1,4 +1,13 @@
 use std::time::{Duration, SystemTime};
+use std::collections::HashMap;
+
+#[derive(Debug, Clone)]
+pub enum DisputeStatus {
+    Pending,
+    UnderReview,
+    Resolved,
+    Rejected,
+}
 
 #[derive(Debug, Clone)]
 pub struct DisputeInfo {
@@ -6,6 +15,8 @@ pub struct DisputeInfo {
     pub reason: String,
     pub timestamp: SystemTime,
     pub evidence: Option<String>,
+    pub status: DisputeStatus,
+    pub votes: HashMap<String, bool>,
 }
 
 #[derive(Debug)]

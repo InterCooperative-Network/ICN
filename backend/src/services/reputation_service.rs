@@ -4,6 +4,7 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
+use std::time::{SystemTime, Duration, UNIX_EPOCH};
 
 /// A cache for storing reputation scores.
 pub struct ReputationCache {
@@ -42,6 +43,26 @@ pub struct ReputationService {
     db: Arc<Database>,
     cache: ReputationCache,
     decay_rate: f64,
+}
+
+pub struct ReputationConfig {
+    base_decay_rate: f64,
+    min_decay_rate: f64,
+    max_decay_rate: f64,
+    grace_period_days: u64,
+    reputation_half_life: f64,
+}
+
+impl Default for ReputationConfig {
+    fn default() -> Self {
+        Self {
+            base_decay_rate: 0.1,
+            min_decay_rate: 0.02, // Minimum 2% decay for long-standing members
+            max_decay_rate: 0.2,  // Maximum 20% decay for new/inactive members
+            grace_period_days: 30, // 30 day grace period
+            reputation_half_life: 365.0, // 1 year half-life for reputation weight
+        }
+    }
 }
 
 impl ReputationService {
@@ -181,6 +202,86 @@ impl ReputationService {
             .execute(&*self.db.pool)
             .await?;
         }
+
+        Ok(())
+    }
+
+    pub async fn apply_adaptive_decay(&self, did: &str) -> Result<(), sqlx::Error> {
+        let config = ReputationConfig::default();
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+
+        // Get member history
+        let history = sqlx::query!(
+            r#"
+            SELECT 
+                join_date,
+                last_contribution,
+                total_contributions,
+                current_reputation
+            FROM member_history 
+            WHERE did = $1
+            "#,
+            did
+        )
+        .fetch_one(&*self.db.pool)
+        .await?;
+
+        // Calculate member tenure in days
+        let tenure_days = (now.as_secs() - history.join_date) / 86400;
+        
+        // Check grace period
+        let days_since_contribution = (now.as_secs() - history.last_contribution) / 86400;
+        if days_since_contribution <= config.grace_period_days {
+            return Ok(()); // No decay during grace period
+        }
+
+        // Calculate adaptive decay rate based on tenure and contribution history
+        let tenure_factor = (-tenure_days as f64 / config.reputation_half_life).exp();
+        let contribution_factor = (history.total_contributions as f64).sqrt() / 10.0;
+        
+        let adaptive_rate = config.base_decay_rate * 
+            (1.0 - tenure_factor) * 
+            (1.0 - contribution_factor)
+            .clamp(config.min_decay_rate, config.max_decay_rate);
+
+        // Apply the decay
+        let new_reputation = (history.current_reputation as f64 * 
+            (1.0 - adaptive_rate)).round() as i64;
+
+        sqlx::query!(
+            r#"
+            UPDATE member_history 
+            SET current_reputation = $1
+            WHERE did = $2
+            "#,
+            new_reputation,
+            did
+        )
+        .execute(&*self.db.pool)
+        .await?;
+
+        // Update cache
+        self.cache.set(did, new_reputation as i32);
+
+        Ok(())
+    }
+
+    pub async fn record_contribution(&self, did: &str) -> Result<(), sqlx::Error> {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        
+        sqlx::query!(
+            r#"
+            UPDATE member_history 
+            SET 
+                last_contribution = $1,
+                total_contributions = total_contributions + 1
+            WHERE did = $2
+            "#,
+            now as i64,
+            did
+        )
+        .execute(&*self.db.pool)
+        .await?;
 
         Ok(())
     }

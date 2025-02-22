@@ -45,6 +45,19 @@ struct ReputationDecayRequest {
     decay_rate: f64,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct SubmitDisputeRequest {
+    federation_id: String,
+    reason: String,
+    evidence: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct DisputeVoteRequest {
+    dispute_id: String,
+    support: bool,
+}
+
 pub fn federation_routes(
     federation_service: Arc<Mutex<FederationService>>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -110,6 +123,18 @@ pub fn federation_routes(
         .and(with_federation_service(federation_service.clone()))
         .and_then(reputation_decay_handler);
 
+    let submit_dissolution_dispute = warp::path!("api" / "v1" / "federation" / String / "dissolution" / "dispute")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(submit_dissolution_dispute_handler);
+
+    let vote_on_dispute = warp::path!("api" / "v1" / "federation" / "disputes" / String / "vote")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(vote_on_dispute_handler);
+
     initiate_federation
         .or(join_federation)
         .or(initiate_federation_dissolution)
@@ -121,6 +146,8 @@ pub fn federation_routes(
         .or(vote)
         .or(sybil_resistance)
         .or(reputation_decay)
+        .or(submit_dissolution_dispute)
+        .or(vote_on_dispute)
 }
 
 fn with_federation_service(
@@ -248,6 +275,30 @@ async fn reputation_decay_handler(
     let mut service = federation_service.lock().await;
     match service.apply_reputation_decay(request.did, request.decay_rate).await {
         Ok(_) => Ok(warp::reply::json(&"Reputation decay applied")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn submit_dissolution_dispute_handler(
+    federation_id: String,
+    request: SubmitDisputeRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.submit_dissolution_dispute(&federation_id, request.reason, request.evidence).await {
+        Ok(_) => Ok(warp::reply::json(&"Dispute submitted successfully")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn vote_on_dispute_handler(
+    dispute_id: String,
+    request: DisputeVoteRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.vote_on_dispute(&dispute_id, request.support).await {
+        Ok(_) => Ok(warp::reply::json(&"Vote recorded successfully")),
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
