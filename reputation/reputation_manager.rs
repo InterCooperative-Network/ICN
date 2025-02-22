@@ -2,19 +2,30 @@ use chrono::{DateTime, Utc};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo::{kosaraju_scc, connected_components};
 use std::collections::{HashMap, HashSet};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ReputationEvent {
     from_did: String,
     to_did: String,
     score: f64,
     timestamp: DateTime<Utc>,
     action_type: String,
+    pub category: ReputationCategory,
+    pub weight: f64,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone)]
+pub enum ReputationCategory {
+    Governance,
+    ResourceSharing,
+    DisputeResolution,
+    TechnicalContribution,
+    CommunityEngagement,
 }
 
 pub struct ReputationManager {
-    // ...existing code...
     interaction_graph: DiGraph<String, f64>,
     node_indices: HashMap<String, NodeIndex>,
     last_update: HashMap<String, DateTime<Utc>>,
@@ -26,7 +37,6 @@ pub struct ReputationManager {
 impl ReputationManager {
     pub fn new() -> Self {
         Self {
-            // ...existing code...
             interaction_graph: DiGraph::new(),
             node_indices: HashMap::new(),
             last_update: HashMap::new(),
@@ -169,6 +179,33 @@ impl ReputationManager {
             1.0
         }
     }
+
+    pub fn calculate_reputation(&self, did: &str, category: Option<ReputationCategory>) -> f64 {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let events = match category {
+            Some(cat) => self.get_events_by_category(did, cat),
+            None => self.get_all_events(did),
+        };
+
+        events.iter()
+            .map(|event| {
+                let age = now - event.timestamp;
+                let decay = self.calculate_decay(age);
+                event.weight * decay 
+            })
+            .sum()
+    }
+
+    fn calculate_decay(&self, age: u64) -> f64 {
+        // Dynamic decay rate based on activity level
+        let base_decay = 0.1;
+        let activity_modifier = self.get_activity_modifier();
+        (1.0 - base_decay * activity_modifier).powf((age as f64) / (30.0 * 24.0 * 60.0 * 60.0))
+    }
 }
 
 #[cfg(test)]
@@ -187,6 +224,9 @@ mod tests {
                 score: 1.0,
                 timestamp: Utc::now(),
                 action_type: "endorse".to_string(),
+                category: ReputationCategory::Governance,
+                weight: 1.0,
+                timestamp: Utc::now().timestamp() as u64,
             },
             ReputationEvent {
                 from_did: "did:2".to_string(),
@@ -194,6 +234,9 @@ mod tests {
                 score: 1.0,
                 timestamp: Utc::now(),
                 action_type: "endorse".to_string(),
+                category: ReputationCategory::Governance,
+                weight: 1.0,
+                timestamp: Utc::now().timestamp() as u64,
             },
             ReputationEvent {
                 from_did: "did:3".to_string(),
@@ -201,6 +244,9 @@ mod tests {
                 score: 1.0,
                 timestamp: Utc::now(),
                 action_type: "endorse".to_string(),
+                category: ReputationCategory::Governance,
+                weight: 1.0,
+                timestamp: Utc::now().timestamp() as u64,
             },
         ];
 
@@ -221,6 +267,9 @@ mod tests {
             score: 1.0,
             timestamp: Utc::now() - chrono::Duration::days(10),
             action_type: "endorse".to_string(),
+            category: ReputationCategory::Governance,
+            weight: 1.0,
+            timestamp: (Utc::now() - chrono::Duration::days(10)).timestamp() as u64,
         };
 
         manager.update_reputation(event).unwrap();

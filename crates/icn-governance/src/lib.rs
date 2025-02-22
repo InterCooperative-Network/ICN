@@ -30,6 +30,12 @@ pub struct Proposal {
     pub votes: HashMap<String, Vote>,
     pub disputes: Vec<Dispute>,
     pub execution_history: Vec<ExecutionEvent>,
+    pub phase: ProposalPhase,
+    pub required_signers: Vec<String>,
+    pub collected_signatures: Vec<String>,
+    pub state: ProposalState,
+    pub dispute_resolution: Option<DisputeResolution>,
+    pub timeout_timestamp: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -40,6 +46,15 @@ pub enum ProposalStatus {
     Rejected,
     Disputed,
     RolledBack,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ProposalPhase {
+    Submission,
+    Deliberation { ends_at: DateTime<Utc> },
+    Voting { ends_at: DateTime<Utc> },
+    Execution,
+    Reconsideration { reason: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,6 +72,15 @@ pub struct Dispute {
     pub disputer: String,
     pub reason: String,
     pub evidence: String,
+    pub arbitrator_did: Option<String>,
+    pub resolution: Option<Resolution>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Resolution {
+    pub decision: DecisionType,
+    pub rationale: String,
+    pub signatures: Vec<String>, // Requires 75% of arbitrators
 }
 
 #[derive(Debug)]
@@ -168,4 +192,55 @@ impl ReputationManager {
     }
     
     // ...existing code...
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ProposalState {
+    Draft,
+    UnderReview,
+    Voting,
+    DisputeResolution,
+    Finalized,
+    TimedOut,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisputeResolution {
+    pub initiator: String,
+    pub reason: String, 
+    pub mediators: Vec<String>,
+    pub resolution: Option<String>,
+    pub votes: HashMap<String, bool>,
+    pub evidence: Vec<EvidenceItem>,
+}
+
+impl Proposal {
+    pub fn transition_state(&mut self, new_state: ProposalState) -> Result<(), String> {
+        match (&self.state, &new_state) {
+            (ProposalState::Draft, ProposalState::UnderReview) => Ok(()),
+            (ProposalState::UnderReview, ProposalState::Voting) => Ok(()),
+            (ProposalState::Voting, ProposalState::DisputeResolution) => Ok(()),
+            (ProposalState::DisputeResolution, ProposalState::Finalized) => Ok(()),
+            _ => Err("Invalid state transition".to_string())
+        }
+        self.state = new_state;
+        Ok(())
+    }
+    
+    pub fn initiate_dispute(&mut self, initiator: String, reason: String) -> Result<(), String> {
+        if self.state != ProposalState::Voting {
+            return Err("Can only initiate dispute during voting phase".to_string());
+        }
+        
+        self.dispute_resolution = Some(DisputeResolution {
+            initiator,
+            reason,
+            mediators: vec![],
+            resolution: None,
+            votes: HashMap::new(),
+            evidence: vec![],
+        });
+        
+        self.transition_state(ProposalState::DisputeResolution)
+    }
 }
