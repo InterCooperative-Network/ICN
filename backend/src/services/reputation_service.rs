@@ -3,6 +3,7 @@ use crate::models::Reputation;
 use std::sync::Arc;
 use dashmap::DashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 pub struct ReputationCache {
     cache: DashMap<String, i32>,
@@ -67,7 +68,13 @@ impl ReputationService {
         Ok(reputation.score)
     }
 
-    pub async fn adjust_reputation(&self, did: &str, category: &str, adjustment: i64) -> Result<(), sqlx::Error> {
+    pub async fn adjust_reputation(&self, did: &str, category: &str, adjustment: i64, zk_snark_proof: Option<&str>) -> Result<(), sqlx::Error> {
+        if let Some(proof) = zk_snark_proof {
+            if !verify_proof(proof) {
+                return Err(sqlx::Error::Protocol("Invalid zk-SNARK proof".to_string()));
+            }
+        }
+
         sqlx::query!(
             r#"
             INSERT INTO reputations (did, category, score)

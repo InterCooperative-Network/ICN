@@ -23,4 +23,5 @@ pub struct Contribution {
     pub did: String,
     pub score: i64,
     pub timestamp: f64,
+    pub zk_snark_proof: Option<String>, // Added zk-SNARK proof field
 }

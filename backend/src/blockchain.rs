@@ -5,6 +5,7 @@ use tendermint::lite::TrustedState;
 use tendermint::rpc::Client;
 use tokio::sync::Mutex;
 use std::sync::Arc;
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 pub struct Blockchain {
     pub blocks: Vec<Block>,
@@ -55,6 +56,11 @@ impl Blockchain {
 
     pub fn validate_transaction(&self, transaction: &Transaction) -> Result<bool, String> {
         // Placeholder logic for transaction validation
+        if let Some(proof) = &transaction.zk_snark_proof {
+            if !verify_proof(proof) {
+                return Err("Invalid zk-SNARK proof".to_string());
+            }
+        }
         Ok(true)
     }
 

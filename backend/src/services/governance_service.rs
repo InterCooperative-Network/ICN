@@ -2,6 +2,7 @@ use crate::database::queries::{create_proposal_in_db, record_vote_in_db};
 use crate::database::models::{Proposal, Vote};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 pub struct GovernanceService {
     db: Arc<Mutex<dyn Database>>,
@@ -18,6 +19,11 @@ impl GovernanceService {
     }
 
     pub async fn record_vote(&self, vote: Vote) -> Result<(), sqlx::Error> {
+        if let Some(proof) = &vote.zk_snark_proof {
+            if !verify_proof(proof) {
+                return Err(sqlx::Error::Protocol("Invalid zk-SNARK proof".to_string()));
+            }
+        }
         let db = self.db.lock().await;
         record_vote_in_db(&*db, &vote).await
     }
