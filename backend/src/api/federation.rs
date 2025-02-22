@@ -18,6 +18,21 @@ struct JoinFederationRequest {
     commitment: String,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct SubmitProposalRequest {
+    title: String,
+    description: String,
+    created_by: String,
+    ends_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct VoteRequest {
+    proposal_id: String,
+    voter: String,
+    approve: bool,
+}
+
 pub fn federation_routes(
     federation_service: Arc<Mutex<FederationService>>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -59,6 +74,18 @@ pub fn federation_routes(
         .and(with_federation_service(federation_service.clone()))
         .and_then(get_debt_settlements_handler);
 
+    let submit_proposal = warp::path!("api" / "v1" / "federation" / "proposals" / "submit")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(submit_proposal_handler);
+
+    let vote = warp::path!("api" / "v1" / "federation" / "proposals" / "vote")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(vote_handler);
+
     initiate_federation
         .or(join_federation)
         .or(initiate_federation_dissolution)
@@ -66,6 +93,8 @@ pub fn federation_routes(
         .or(cancel_federation_dissolution)
         .or(get_asset_distribution)
         .or(get_debt_settlements)
+        .or(submit_proposal)
+        .or(vote)
 }
 
 fn with_federation_service(
@@ -151,4 +180,26 @@ async fn get_debt_settlements_handler(
     let service = federation_service.lock().await;
     let settlements = service.settle_outstanding_debts(&federation_id).await?;
     Ok(warp::reply::json(&settlements))
+}
+
+async fn submit_proposal_handler(
+    request: SubmitProposalRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.submit_proposal(request.title, request.description, request.created_by, request.ends_at).await {
+        Ok(proposal_id) => Ok(warp::reply::json(&proposal_id)),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn vote_handler(
+    request: VoteRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.vote(request.proposal_id, request.voter, request.approve).await {
+        Ok(_) => Ok(warp::reply::json(&"Vote recorded")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
 }

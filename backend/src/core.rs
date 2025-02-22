@@ -113,6 +113,20 @@ impl Core {
         self._telemetry_manager.log("Mutual credit transaction with zk-SNARK proof completed.");
         Ok(())
     }
+
+    pub async fn submit_proposal(&self, title: &str, description: &str, created_by: &str, ends_at: &str) -> Result<i64, String> {
+        self._telemetry_manager.log("Submitting proposal...");
+        // Placeholder logic for submitting a proposal
+        self._telemetry_manager.log("Proposal submitted.");
+        Ok(1) // Placeholder proposal ID
+    }
+
+    pub async fn vote(&self, proposal_id: i64, voter: &str, approve: bool) -> Result<(), String> {
+        self._telemetry_manager.log("Voting on proposal...");
+        // Placeholder logic for voting on a proposal
+        self._telemetry_manager.log("Vote recorded.");
+        Ok(())
+    }
 }
 
 #[async_trait]
