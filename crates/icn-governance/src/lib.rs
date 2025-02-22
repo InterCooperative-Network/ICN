@@ -57,3 +57,53 @@ pub struct Dispute {
     pub disputer: String,
     pub reason: String,
     pub evidence: String,
+}
+
+#[derive(Debug)]
+pub struct DissolutionProtocol {
+    federation_id: String,
+    initiated_by: String,
+    reason: DissolutionReason,
+    status: DissolutionStatus,
+    asset_distribution: HashMap<String, AssetAllocation>,
+    debt_settlements: Vec<DebtSettlement>,
+    member_reassignments: Vec<MemberReassignment>,
+}
+
+#[derive(Debug)]
+pub enum DissolutionReason {
+    Voluntary,
+    InactivityThreshold,
+    GovernanceViolation,
+    EconomicNonviability,
+}
+
+#[derive(Debug)]
+pub enum DissolutionStatus {
+    Initiated,
+    InProgress,
+    Completed,
+    Cancelled,
+}
+
+#[derive(Debug)]
+pub struct AssetAllocation {
+    asset_id: String,
+    recipient_id: String,
+    allocation_share: f64,
+}
+
+#[derive(Debug)]
+pub struct DebtSettlement {
+    creditor_id: String,
+    debtor_id: String,
+    amount: f64,
+    due_date: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug)]
+pub struct MemberReassignment {
+    member_id: String,
+    new_federation_id: Option<String>,
+    transition_period: chrono::Duration,
+}
