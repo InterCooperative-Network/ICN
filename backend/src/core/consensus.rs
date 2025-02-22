@@ -18,6 +18,8 @@ pub trait ConsensusEngine {
     async fn propose_block(&self, block: tendermint::block::Block) -> Result<(), String>;
     async fn vote_on_block(&self, block: tendermint::block::Block, vote: bool) -> Result<(), String>;
     async fn finalize_block(&self, block: tendermint::block::Block) -> Result<(), String>;
+    async fn submit_proposal(&self, title: &str, description: &str, created_by: &str, ends_at: &str) -> Result<i64, String>;
+    async fn vote(&self, proposal_id: i64, voter: &str, approve: bool) -> Result<(), String>;
 }
 
 pub struct ProofOfCooperation {
@@ -123,6 +125,16 @@ impl ConsensusEngine for TendermintConsensus {
 
     async fn finalize_block(&self, block: tendermint::block::Block) -> Result<(), String> {
         // Placeholder logic for finalizing a block
+        Ok(())
+    }
+
+    async fn submit_proposal(&self, title: &str, description: &str, created_by: &str, ends_at: &str) -> Result<i64, String> {
+        // Placeholder logic for submitting a proposal
+        Ok(1) // Placeholder proposal ID
+    }
+
+    async fn vote(&self, proposal_id: i64, voter: &str, approve: bool) -> Result<(), String> {
+        // Placeholder logic for voting on a proposal
         Ok(())
     }
 }

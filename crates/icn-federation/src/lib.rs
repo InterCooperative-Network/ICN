@@ -320,6 +320,36 @@ impl FederationManager {
         // Add commitment verification logic here
         true // Placeholder
     }
+
+    pub async fn submit_proposal(
+        &self,
+        federation_id: &str,
+        proposal: FederationProposal,
+    ) -> Result<(), FederationError> {
+        let mut federations = self.federations.write().await;
+
+        if let Some(federation) = federations.get_mut(federation_id) {
+            federation.submit_proposal(proposal)?;
+            Ok(())
+        } else {
+            Err(FederationError::FederationNotFound)
+        }
+    }
+
+    pub async fn vote(
+        &self,
+        federation_id: &str,
+        vote: Vote,
+    ) -> Result<(), FederationError> {
+        let mut federations = self.federations.write().await;
+
+        if let Some(federation) = federations.get_mut(federation_id) {
+            federation.vote(vote)?;
+            Ok(())
+        } else {
+            Err(FederationError::FederationNotFound)
+        }
+    }
 }
 
 #[async_trait]

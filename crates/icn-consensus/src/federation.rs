@@ -20,6 +20,8 @@ pub struct Federation {
     pub members: HashMap<String, MemberStatus>,
     pub created_at: u64,
     pub status: FederationStatus,
+    pub proposals: HashMap<i64, Proposal>,
+    pub votes: HashMap<i64, Vec<Vote>>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -35,6 +37,23 @@ pub enum FederationStatus {
     Active,
     Suspended,
     Dissolved,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Proposal {
+    pub id: i64,
+    pub title: String,
+    pub description: String,
+    pub created_by: String,
+    pub ends_at: u64,
+    pub created_at: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Vote {
+    pub proposal_id: i64,
+    pub voter: String,
+    pub approve: bool,
 }
 
 impl Federation {
@@ -54,6 +73,8 @@ impl Federation {
             members,
             created_at: chrono::Utc::now().timestamp() as u64,
             status: FederationStatus::Forming,
+            proposals: HashMap::new(),
+            votes: HashMap::new(),
         }
     }
 
@@ -68,6 +89,33 @@ impl Federation {
             ));
         }
         self.members.insert(member_id, MemberStatus::Pending);
+        Ok(())
+    }
+
+    pub fn submit_proposal(&mut self, title: String, description: String, created_by: String, ends_at: u64) -> Result<i64, FederationError> {
+        let proposal_id = self.proposals.len() as i64 + 1;
+        let proposal = Proposal {
+            id: proposal_id,
+            title,
+            description,
+            created_by,
+            ends_at,
+            created_at: chrono::Utc::now().timestamp() as u64,
+        };
+        self.proposals.insert(proposal_id, proposal);
+        Ok(proposal_id)
+    }
+
+    pub fn vote(&mut self, proposal_id: i64, voter: String, approve: bool) -> Result<(), FederationError> {
+        if !self.proposals.contains_key(&proposal_id) {
+            return Err(FederationError::InvalidConfiguration("Proposal not found".to_string()));
+        }
+        let vote = Vote {
+            proposal_id,
+            voter,
+            approve,
+        };
+        self.votes.entry(proposal_id).or_insert_with(Vec::new).push(vote);
         Ok(())
     }
 }
