@@ -107,3 +107,65 @@ pub struct MemberReassignment {
     new_federation_id: Option<String>,
     transition_period: chrono::Duration,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecisionThresholds {
+    pub resource_allocation_threshold: u64,
+    pub technical_effort_threshold: u32, // in days
+    pub financial_impact_threshold: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReputationControls {
+    pub max_gap_multiplier: f64,
+    pub decay_threshold_multiplier: f64,
+    pub monthly_decay_rate: f64,
+    pub equity_bonus_groups: HashMap<String, f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VotingModel {
+    Equal,
+    Proportional { cap_percentage: u8 },
+    Hybrid {
+        governance_model: Box<VotingModel>,
+        resource_model: Box<VotingModel>,
+    },
+}
+
+impl VotingModel {
+    pub fn calculate_voting_power(&self, federation: &Federation, cooperative_id: &str) -> f64 {
+        match self {
+            VotingModel::Equal => 1.0,
+            VotingModel::Proportional { cap_percentage } => {
+                let power = federation.get_cooperative_weight(cooperative_id);
+                power.min(*cap_percentage as f64 / 100.0)
+            },
+            VotingModel::Hybrid { governance_model, resource_model } => {
+                // Use different models based on proposal type
+                // ...existing code...
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReputationManager {
+    pub controls: ReputationControls,
+    reputation_scores: HashMap<String, f64>,
+    last_decay_check: DateTime<Utc>,
+}
+
+impl ReputationManager {
+    pub fn apply_anti_oppression_mechanisms(&mut self) {
+        let avg_reputation = self.calculate_average_reputation();
+        
+        for score in self.reputation_scores.values_mut() {
+            if *score > avg_reputation * self.controls.decay_threshold_multiplier {
+                *score *= 1.0 - self.controls.monthly_decay_rate;
+            }
+        }
+    }
+    
+    // ...existing code...
+}

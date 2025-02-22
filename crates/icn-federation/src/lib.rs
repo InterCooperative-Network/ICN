@@ -191,6 +191,27 @@ impl Federation {
         // Implement member reassignment logic
         reassignments
     }
+
+    pub fn calculate_vote_weight(&self, cooperative_id: &str, proposal: &FederationProposal) -> f64 {
+        let voting_model = match proposal.proposal_type {
+            ProposalType::GovernanceChange(_) | ProposalType::PolicyUpdate(_) => 
+                &self.terms.governance_rules.governance_voting_model,
+            ProposalType::ResourceAllocation(_) =>
+                &self.terms.governance_rules.resource_voting_model,
+            _ => &self.terms.governance_rules.default_voting_model,
+        };
+
+        voting_model.calculate_voting_power(self, cooperative_id)
+    }
+
+    pub fn get_cooperative_weight(&self, cooperative_id: &str) -> f64 {
+        let total_members: u32 = self.members.values().map(|m| m.member_count).sum();
+        let coop_members = self.members.get(cooperative_id)
+            .map(|m| m.member_count)
+            .unwrap_or(0);
+        
+        coop_members as f64 / total_members as f64
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
