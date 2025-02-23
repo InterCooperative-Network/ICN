@@ -1,5 +1,5 @@
 use sqlx::PgPool;
-use crate::database::models::{Proposal, Vote, Contribution};
+use crate::database::models::{Proposal, Vote, Contribution, Federation, Resource};
 
 pub async fn create_proposal(pool: &PgPool, proposal: &Proposal) -> Result<i64, sqlx::Error> {
     let row = sqlx::query!(
@@ -131,4 +131,95 @@ pub async fn store_vote(pool: &PgPool, vote: &Vote) -> Result<(), sqlx::Error> {
     .await?;
 
     Ok(())
+}
+
+pub async fn create_federation(pool: &PgPool, federation: &Federation) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        INSERT INTO federations (name, description, created_at)
+        VALUES ($1, $2, $3)
+        RETURNING id
+        "#,
+        federation.name,
+        federation.description,
+        federation.created_at
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(row.id)
+}
+
+pub async fn update_federation_status(pool: &PgPool, federation_id: i64, status: &str) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE federations
+        SET status = $1
+        WHERE id = $2
+        "#,
+        status,
+        federation_id
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn dissolve_federation(pool: &PgPool, federation_id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        DELETE FROM federations
+        WHERE id = $1
+        "#,
+        federation_id
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn get_federation_status(pool: &PgPool, federation_id: i64) -> Result<String, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        SELECT status FROM federations
+        WHERE id = $1
+        "#,
+        federation_id
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(row.status)
+}
+
+pub async fn get_federation_assets(pool: &PgPool, federation_id: i64) -> Result<Vec<Resource>, sqlx::Error> {
+    let resources = sqlx::query_as!(
+        Resource,
+        r#"
+        SELECT * FROM resources
+        WHERE federation_id = $1
+        "#,
+        federation_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(resources)
+}
+
+pub async fn get_federation_debts(pool: &PgPool, federation_id: i64) -> Result<Vec<Resource>, sqlx::Error> {
+    let resources = sqlx::query_as!(
+        Resource,
+        r#"
+        SELECT * FROM resources
+        WHERE federation_id = $1 AND type = 'debt'
+        "#,
+        federation_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(resources)
 }

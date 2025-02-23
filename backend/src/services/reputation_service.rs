@@ -370,4 +370,24 @@ mod tests {
         service.apply_reputation_decay(did, decay_rate).await.unwrap();
         // Add assertions based on the expected behavior of apply_reputation_decay
     }
+
+    #[tokio::test]
+    async fn test_apply_adaptive_decay() {
+        let db = setup_test_db().await;
+        let service = ReputationService::new(db, 100, 0.1);
+
+        let did = "did:icn:test";
+        service.apply_adaptive_decay(did).await.unwrap();
+        // Add assertions based on the expected behavior of apply_adaptive_decay
+    }
+
+    #[tokio::test]
+    async fn test_record_contribution() {
+        let db = setup_test_db().await;
+        let service = ReputationService::new(db, 100, 0.1);
+
+        let did = "did:icn:test";
+        service.record_contribution(did).await.unwrap();
+        // Add assertions based on the expected behavior of record_contribution
+    }
 }

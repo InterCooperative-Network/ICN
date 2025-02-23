@@ -24,3 +24,45 @@ impl VirtualMachine {
         Ok(vec![]) // Placeholder
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::runtime::Runtime;
+
+    #[test]
+    fn test_execute_smart_contract() {
+        let rt = Runtime::new().unwrap();
+        let vm = VirtualMachine::new();
+
+        rt.block_on(async {
+            let result = vm.execute_smart_contract("test_contract", b"test_input").await;
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), b"");
+        });
+    }
+
+    #[test]
+    fn test_deploy_smart_contract() {
+        let rt = Runtime::new().unwrap();
+        let vm = VirtualMachine::new();
+
+        rt.block_on(async {
+            let result = vm.deploy_smart_contract("test_contract").await;
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), "contract_address");
+        });
+    }
+
+    #[test]
+    fn test_query_smart_contract() {
+        let rt = Runtime::new().unwrap();
+        let vm = VirtualMachine::new();
+
+        rt.block_on(async {
+            let result = vm.query_smart_contract("test_contract_address", b"test_query").await;
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), b"");
+        });
+    }
+}

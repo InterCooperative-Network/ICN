@@ -160,3 +160,66 @@ impl ConsensusEngine for TendermintConsensus {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::reputation::ReputationManager;
+    use tokio::sync::Mutex;
+    use std::sync::Arc;
+    use tendermint::lite::TrustedState;
+    use tendermint::rpc::Client;
+
+    #[tokio::test]
+    async fn test_propose_block() {
+        let client = Client::new("http://localhost:26657").unwrap();
+        let trusted_state = TrustedState::default();
+        let consensus = TendermintConsensus::new(client, trusted_state);
+
+        let block = tendermint::block::Block::default();
+        let result = consensus.propose_block(block).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_vote_on_block() {
+        let client = Client::new("http://localhost:26657").unwrap();
+        let trusted_state = TrustedState::default();
+        let consensus = TendermintConsensus::new(client, trusted_state);
+
+        let block = tendermint::block::Block::default();
+        let result = consensus.vote_on_block(block, true).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_finalize_block() {
+        let client = Client::new("http://localhost:26657").unwrap();
+        let trusted_state = TrustedState::default();
+        let consensus = TendermintConsensus::new(client, trusted_state);
+
+        let block = tendermint::block::Block::default();
+        let result = consensus.finalize_block(block).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_submit_proposal() {
+        let client = Client::new("http://localhost:26657").unwrap();
+        let trusted_state = TrustedState::default();
+        let consensus = TendermintConsensus::new(client, trusted_state);
+
+        let result = consensus.submit_proposal("Test Proposal", "This is a test proposal", "did:icn:test", "2024-12-31T23:59:59Z").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_vote_on_proposal() {
+        let client = Client::new("http://localhost:26657").unwrap();
+        let trusted_state = TrustedState::default();
+        let consensus = TendermintConsensus::new(client, trusted_state);
+
+        let result = consensus.vote(1, "did:icn:test", true).await;
+        assert!(result.is_ok());
+    }
+}
