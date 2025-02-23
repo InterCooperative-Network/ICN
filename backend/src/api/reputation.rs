@@ -96,3 +96,57 @@ async fn handle_sybil_resistance_handler(
     // Placeholder logic for handling sybil resistance
     Ok(warp::reply::json(&"Sybil resistance handled"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::Filter;
+    use crate::services::reputation_service::{ReputationService, ReputationServiceImpl};
+    use std::sync::Arc;
+    use warp::http::StatusCode;
+
+    #[tokio::test]
+    async fn test_submit_zk_snark_proof() {
+        let reputation_service = Arc::new(ReputationServiceImpl::new(Arc::new(Database::new())));
+        let api = reputation_routes();
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/reputation/zk_snark_proof")
+            .json(&ZkSnarkProofRequest { proof: "test_proof".to_string() })
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_apply_reputation_decay() {
+        let reputation_service = Arc::new(ReputationServiceImpl::new(Arc::new(Database::new())));
+        let api = reputation_routes();
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/reputation/reputation_decay")
+            .json(&ReputationDecayRequest { did: "did:icn:test".to_string(), decay_rate: 0.1 })
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_handle_sybil_resistance() {
+        let reputation_service = Arc::new(ReputationServiceImpl::new(Arc::new(Database::new())));
+        let api = reputation_routes();
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/reputation/sybil_resistance")
+            .json(&SybilResistanceRequest { did: "did:icn:test".to_string(), reputation_score: 50 })
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+}

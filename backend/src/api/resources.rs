@@ -143,3 +143,95 @@ async fn allocate_resource_shares_handler(
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::Filter;
+    use crate::services::resource_service::ResourceService;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    use warp::http::StatusCode;
+
+    #[tokio::test]
+    async fn test_query_shared_resources() {
+        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+        let api = resource_routes(resource_service);
+
+        let request = QuerySharedResourcesRequest {
+            resource_type: "test_type".to_string(),
+            owner: Some("test_owner".to_string()),
+        };
+
+        let resp = warp::test::request()
+            .method("GET")
+            .path("/api/v1/resources/query")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_share_resource() {
+        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+        let api = resource_routes(resource_service);
+
+        let request = ResourceSharingRequest {
+            resource_id: "test_resource".to_string(),
+            recipient_id: "test_recipient".to_string(),
+            amount: 10,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/resources/share")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_transfer_resource() {
+        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+        let api = resource_routes(resource_service);
+
+        let request = TransferResourceRequest {
+            resource_id: "test_resource".to_string(),
+            recipient_id: "test_recipient".to_string(),
+            amount: 10,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/resources/transfer")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_allocate_resource_shares() {
+        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+        let api = resource_routes(resource_service);
+
+        let request = AllocateResourceSharesRequest {
+            resource_id: "test_resource".to_string(),
+            shares: 10,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/resources/allocate")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+}

@@ -390,4 +390,80 @@ mod tests {
         service.record_contribution(did).await.unwrap();
         // Add assertions based on the expected behavior of record_contribution
     }
+
+    #[tokio::test]
+    async fn test_integration_get_reputation() {
+        let db = setup_test_db().await;
+        let service = ReputationService::new(db, 100, 0.1);
+
+        let did = "did:icn:test";
+        let category = "governance";
+        let score = service.get_reputation(did, category).await.unwrap();
+        assert_eq!(score, 0); // Assuming initial score is 0
+    }
+
+    #[tokio::test]
+    async fn test_integration_adjust_reputation() {
+        let db = setup_test_db().await;
+        let service = ReputationService::new(db, 100, 0.1);
+
+        let did = "did:icn:test";
+        let category = "governance";
+        service.adjust_reputation(did, category, 10, None).await.unwrap();
+        let score = service.get_reputation(did, category).await.unwrap();
+        assert_eq!(score, 10);
+    }
+
+    #[tokio::test]
+    async fn test_integration_apply_decay() {
+        let db = setup_test_db().await;
+        let service = ReputationService::new(db, 100, 0.1);
+
+        let did = "did:icn:test";
+        service.apply_decay(did).await.unwrap();
+        let score = service.get_reputation(did, "governance").await.unwrap();
+        assert!(score < 10); // Assuming initial score was 10 and decay was applied
+    }
+
+    #[tokio::test]
+    async fn test_integration_handle_sybil_resistance() {
+        let db = setup_test_db().await;
+        let service = ReputationService::new(db, 100, 0.1);
+
+        let did = "did:icn:test";
+        let reputation_score = 50;
+        service.handle_sybil_resistance(did, reputation_score).await.unwrap();
+        // Add assertions based on the expected behavior of handle_sybil_resistance
+    }
+
+    #[tokio::test]
+    async fn test_integration_apply_reputation_decay() {
+        let db = setup_test_db().await;
+        let service = ReputationService::new(db, 100, 0.1);
+
+        let did = "did:icn:test";
+        let decay_rate = 0.05;
+        service.apply_reputation_decay(did, decay_rate).await.unwrap();
+        // Add assertions based on the expected behavior of apply_reputation_decay
+    }
+
+    #[tokio::test]
+    async fn test_integration_apply_adaptive_decay() {
+        let db = setup_test_db().await;
+        let service = ReputationService::new(db, 100, 0.1);
+
+        let did = "did:icn:test";
+        service.apply_adaptive_decay(did).await.unwrap();
+        // Add assertions based on the expected behavior of apply_adaptive_decay
+    }
+
+    #[tokio::test]
+    async fn test_integration_record_contribution() {
+        let db = setup_test_db().await;
+        let service = ReputationService::new(db, 100, 0.1);
+
+        let did = "did:icn:test";
+        service.record_contribution(did).await.unwrap();
+        // Add assertions based on the expected behavior of record_contribution
+    }
 }
