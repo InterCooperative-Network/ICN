@@ -347,3 +347,7 @@ impl StorageBackend for DatabaseStorageBackend {
         Ok(result.exists.unwrap_or(false))
     }
 }
+
+fn main() {
+    println!("ICN backend is running!");
+}
