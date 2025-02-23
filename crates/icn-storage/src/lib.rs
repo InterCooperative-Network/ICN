@@ -4,6 +4,8 @@ use serde::{Serialize, Deserialize};
 use thiserror::Error;
 use icn_types::Block;
 use std::time::Duration;
+use ipfs_api_backend_actix::{IpfsClient, TryFromUri};
+use futures::TryStreamExt;
 
 /// Errors that can occur in storage operations
 #[derive(Error, Debug)]
@@ -19,6 +21,9 @@ pub enum StorageError {
     
     #[error("Invalid data: {0}")]
     InvalidData(String),
+    
+    #[error("IPFS error: {0}")]
+    IpfsError(String),
 }
 
 /// Represents the result of storage operations
@@ -44,14 +49,16 @@ pub trait StorageBackend: Send + Sync {
 pub struct StorageManager {
     backend: Arc<Mutex<Box<dyn StorageBackend>>>,
     cache: Arc<StorageCache>,
+    ipfs_client: IpfsClient,
 }
 
 impl StorageManager {
     /// Create a new storage manager with the given backend
-    pub fn new(backend: Box<dyn StorageBackend>, cache_size: usize, cache_ttl: Duration) -> Self {
+    pub fn new(backend: Box<dyn StorageBackend>, cache_size: usize, cache_ttl: Duration, ipfs_url: &str) -> Self {
         Self {
             backend: Arc::new(Mutex::new(backend)),
             cache: Arc::new(StorageCache::new(cache_size, cache_ttl)),
+            ipfs_client: IpfsClient::from_str(ipfs_url).expect("Invalid IPFS URL"),
         }
     }
     
@@ -99,6 +106,20 @@ impl StorageManager {
     pub async fn has_key(&self, key: &str) -> StorageResult<bool> {
         let backend = self.backend.lock().await;
         backend.exists(key).await
+    }
+
+    /// Store data using IPFS
+    pub async fn store_ipfs(&self, data: &[u8]) -> StorageResult<String> {
+        let result = self.ipfs_client.add(data).await
+            .map_err(|e| StorageError::IpfsError(e.to_string()))?;
+        Ok(result.hash)
+    }
+
+    /// Retrieve data from IPFS
+    pub async fn retrieve_ipfs(&self, hash: &str) -> StorageResult<Vec<u8>> {
+        let data = self.ipfs_client.cat(hash).map_ok(|chunk| chunk.to_vec()).try_concat().await
+            .map_err(|e| StorageError::IpfsError(e.to_string()))?;
+        Ok(data)
     }
 }
 

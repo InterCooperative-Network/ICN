@@ -7,6 +7,7 @@ use icn_types::{Block, Transaction};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
 use icn_zkp::RollupBatch;
 use thiserror::Error;
+use icn_networking::p2p::{P2PManager, FederationEvent}; // Import P2PManager and FederationEvent
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Federation {
@@ -23,6 +24,7 @@ pub struct Federation {
     pub disputes: HashMap<String, FederationDispute>, // Add disputes field
     pub cross_federation_disputes: HashMap<String, Vec<FederationDispute>>,
     pub audit_log: Vec<AuditEntry>,
+    pub p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager field
 }
 
 impl Federation {
@@ -297,7 +299,7 @@ impl Federation {
             self.status = if any_upheld {
                 FederationStatus::Active
             } else {
-                FederationStatus::Dissolved
+                FederationStatus::Dissolved;
             };
         }
 
@@ -362,6 +364,16 @@ impl Federation {
         self.contract.submit_rollup(rollup)?;
         
         Ok(())
+    }
+
+    pub async fn publish_event(&self, event: FederationEvent) -> Result<(), FederationError> {
+        let mut p2p = self.p2p_manager.lock().await;
+        p2p.publish(event).await.map_err(|e| FederationError::EventPublishError(e.to_string()))
+    }
+
+    pub async fn subscribe_to_events(&self) -> Result<(), FederationError> {
+        let mut p2p = self.p2p_manager.lock().await;
+        p2p.subscribe().await.map_err(|e| FederationError::EventSubscribeError(e.to_string()))
     }
 }
 
@@ -437,6 +449,7 @@ impl FederationManager {
             disputes: HashMap::new(),
             cross_federation_disputes: HashMap::new(),
             audit_log: Vec::new(),
+            p2p_manager: Arc::new(Mutex::new(P2PManager::new())), // Initialize p2p_manager
         };
 
         let mut federations = self.federations.write().await;
@@ -655,6 +668,12 @@ pub enum FederationError {
     
     #[error("Consensus error: {0}")]
     ConsensusError(#[from] ConsensusError),
+    
+    #[error("Event publish error: {0}")]
+    EventPublishError(String),
+    
+    #[error("Event subscribe error: {0}")]
+    EventSubscribeError(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
