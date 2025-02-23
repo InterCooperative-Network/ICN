@@ -23,3 +23,36 @@ impl DistributedWebSocketManager {
         let _ = self.redis.publish("ws_events", serde_json::to_string(&message).unwrap());
     }
 }
+
+pub struct WebSocketEvent {
+    pub event_type: String,
+    pub payload: String,
+}
+
+impl WebSocketEvent {
+    pub fn new(event_type: &str, payload: &str) -> Self {
+        Self {
+            event_type: event_type.to_string(),
+            payload: payload.to_string(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::broadcast;
+
+    #[tokio::test]
+    async fn test_broadcast_message() {
+        let manager = DistributedWebSocketManager::new("redis://127.0.0.1/");
+        let (tx, mut rx) = broadcast::channel(1000);
+
+        let event = WebSocketEvent::new("test_event", "test_payload");
+        manager.broadcast_message(event.clone()).await;
+
+        let received_event = rx.recv().await.unwrap();
+        assert_eq!(received_event.event_type, event.event_type);
+        assert_eq!(received_event.payload, event.payload);
+    }
+}
