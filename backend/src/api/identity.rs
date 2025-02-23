@@ -1,6 +1,8 @@
 use warp::Filter;
 use crate::services::identity_service::{IdentityService, IdentityServiceImpl};
 use std::sync::Arc;
+use icn_core::verifiable_credentials::{VerifiableCredential, Proof}; // Import VerifiableCredential and Proof
+use icn_zkp::zk_snark; // Import zk-SNARK
 
 pub fn identity_routes(
     identity_service: Arc<dyn IdentityService>,
@@ -42,7 +44,26 @@ async fn handle_create_identity(
     identity_service.create_identity(&identity).await.map_err(|e| {
         warp::reject::custom(warp::reject::custom(e))
     })?;
-    Ok(warp::reply::with_status("Identity created", warp::http::StatusCode::CREATED))
+
+    // Generate verifiable credential
+    let credential = VerifiableCredential {
+        credential_type: "IdentityCredential".to_string(),
+        issuer_did: "did:icn:issuer".to_string(),
+        subject_did: identity.clone(),
+        issuance_date: chrono::Utc::now().to_rfc3339(),
+        expiration_date: None,
+        credential_status: None,
+        credential_schema: None,
+        proof: Proof {
+            type_: "Ed25519Signature2018".to_string(),
+            created: chrono::Utc::now().to_rfc3339(),
+            proof_purpose: "assertionMethod".to_string(),
+            verification_method: "did:icn:issuer#keys-1".to_string(),
+            jws: "example-jws".to_string(),
+        },
+    };
+
+    Ok(warp::reply::json(&credential))
 }
 
 async fn handle_get_identity(
@@ -52,7 +73,11 @@ async fn handle_get_identity(
     let data = identity_service.get_identity(&identity).await.map_err(|e| {
         warp::reject::custom(warp::reject::custom(e))
     })?;
-    Ok(warp::reply::json(&data))
+
+    // Generate zk-SNARK proof for identity validation
+    let proof = zk_snark::generate_proof(&data);
+
+    Ok(warp::reply::json(&proof))
 }
 
 async fn handle_rotate_key(

@@ -7,6 +7,7 @@ mod reputation;
 mod websocket;
 mod middleware;
 mod api;
+mod networking; // Add networking module
 
 use crate::config::Config;
 use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
@@ -33,6 +34,7 @@ use warp::http::Method;
 use warp::cors::Cors;
 use crate::db::create_pool;
 use middleware::rate_limit::with_rate_limit;
+use networking::p2p::{P2PManager, FederationEvent, GovernanceEvent, IdentityEvent, ReputationEvent}; // Import P2PManager and events
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -125,6 +127,9 @@ async fn main() -> Result<(), AppError> {
         error!("Failed to start core system: {}", e);
         return Err(AppError::ConfigError(e));
     }
+
+    // Initialize P2PManager
+    let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
 
     // Set up WebSocket server
     let websocket_route = warp::path("ws")

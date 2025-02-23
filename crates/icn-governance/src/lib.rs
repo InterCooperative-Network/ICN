@@ -36,6 +36,7 @@ pub struct Proposal {
     pub state: ProposalState,
     pub dispute_resolution: Option<DisputeResolution>,
     pub timeout_timestamp: u64,
+    pub zk_snark_proof: Option<String>, // Added zk-SNARK proof field
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -243,6 +244,25 @@ impl Proposal {
         
         self.transition_state(ProposalState::DisputeResolution)
     }
+
+    pub async fn execute_proposal(&self) -> bool {
+        if let Some(proof) = &self.zk_snark_proof {
+            if verify_proof(proof) {
+                execute_approved_action();
+                return true;
+            }
+        }
+        false
+    }
+}
+
+fn verify_proof(proof: &str) -> bool {
+    // Implement zk-SNARK proof verification logic
+    true
+}
+
+fn execute_approved_action() {
+    // Implement the action to be executed upon proposal approval
 }
 
 #[cfg(test)]
