@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sat 22 Feb 2025 09:52:55 PM UTC
+Project Code Dump - Generated Sat 22 Feb 2025 11:27:38 PM UTC
 ======================================
 
 LLM Context Information
@@ -118,6 +118,7 @@ Project Tree:
 │   ├── docker-compose.yml
 │   └── frontend.Dockerfile
 ├── DSL_ICN.txt
+├── fraudDetection.ts
 ├── frontend
 │   ├── Cargo.toml
 │   ├── package.json
@@ -166,6 +167,7 @@ Project Tree:
 ├── reputation
 │   ├── errors.rs
 │   └── reputation_manager.rs
+├── resourceAllocation.ts
 ├── scripts
 │   ├── backend
 │   │   ├── Cargo.toml
@@ -701,6 +703,53 @@ main
 ```
 
 ===================
+File: ./contracts/cooperative/src/lib.rs
+Size: 956 bytes
+Modified: 2025-02-22 22:59:26.982766600 +0000
+Dependencies:
+mod proposals;
+use ethers::prelude::*;
+use icn_zkp::{RollupBatch, VerificationKey};
+use proposals::{ProposalContract, Proposal};
+
+===================
+```rs
+mod proposals;
+
+use proposals::{ProposalContract, Proposal};
+use icn_zkp::{RollupBatch, VerificationKey};
+use ethers::prelude::*;
+
+pub struct CooperativeContract {
+    proposal_contract: ProposalContract,
+    contract_address: Address,
+    // ...existing code...
+}
+
+impl CooperativeContract {
+    pub fn new(contract_address: Address, verification_key: VerificationKey) -> Self {
+        Self {
+            proposal_contract: ProposalContract::new(
+                3,
+                verification_key,
+                contract_address
+            ),
+            contract_address,
+            // ...existing code...
+        }
+    }
+
+    pub async fn submit_vote_batch(&mut self, batch: RollupBatch) -> Result<(), String> {
+        self.proposal_contract.submit_vote_batch(batch).await
+    }
+
+    pub async fn execute_proposal(&mut self, proposal_id: &str) -> Result<bool, String> {
+        self.proposal_contract.execute_proposal(proposal_id).await
+    }
+}
+```
+
+===================
 File: ./.devcontainer/docker-compose.yml
 Size: 973 bytes
 Modified: 2025-02-19 00:47:20.891182900 +0000
@@ -716,8 +765,8 @@ Modified: 2025-02-19 00:47:20.971282200 +0000
 
 ===================
 File: ./backend/src/api/federation.rs
-Size: 9635 bytes
-Modified: 2025-02-22 21:47:25.508154900 +0000
+Size: 11538 bytes
+Modified: 2025-02-22 22:32:18.989139900 +0000
 Dependencies:
 use icn_federation::{FederationService, FederationOperation};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
@@ -773,6 +822,19 @@ struct SybilResistanceRequest {
 struct ReputationDecayRequest {
     did: String,
     decay_rate: f64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SubmitDisputeRequest {
+    federation_id: String,
+    reason: String,
+    evidence: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct DisputeVoteRequest {
+    dispute_id: String,
+    support: bool,
 }
 
 pub fn federation_routes(
@@ -840,6 +902,18 @@ pub fn federation_routes(
         .and(with_federation_service(federation_service.clone()))
         .and_then(reputation_decay_handler);
 
+    let submit_dissolution_dispute = warp::path!("api" / "v1" / "federation" / String / "dissolution" / "dispute")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(submit_dissolution_dispute_handler);
+
+    let vote_on_dispute = warp::path!("api" / "v1" / "federation" / "disputes" / String / "vote")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(vote_on_dispute_handler);
+
     initiate_federation
         .or(join_federation)
         .or(initiate_federation_dissolution)
@@ -851,6 +925,8 @@ pub fn federation_routes(
         .or(vote)
         .or(sybil_resistance)
         .or(reputation_decay)
+        .or(submit_dissolution_dispute)
+        .or(vote_on_dispute)
 }
 
 fn with_federation_service(
@@ -978,6 +1054,30 @@ async fn reputation_decay_handler(
     let mut service = federation_service.lock().await;
     match service.apply_reputation_decay(request.did, request.decay_rate).await {
         Ok(_) => Ok(warp::reply::json(&"Reputation decay applied")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn submit_dissolution_dispute_handler(
+    federation_id: String,
+    request: SubmitDisputeRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.submit_dissolution_dispute(&federation_id, request.reason, request.evidence).await {
+        Ok(_) => Ok(warp::reply::json(&"Dispute submitted successfully")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn vote_on_dispute_handler(
+    dispute_id: String,
+    request: DisputeVoteRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.vote_on_dispute(&dispute_id, request.support).await {
+        Ok(_) => Ok(warp::reply::json(&"Vote recorded successfully")),
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
@@ -1780,6 +1880,53 @@ impl StorageBackend for DatabaseStorageBackend {
         .await
         .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         Ok(result.exists.unwrap_or(false))
+    }
+}
+```
+
+===================
+File: ./contracts/cooperative/src/lib.rs
+Size: 956 bytes
+Modified: 2025-02-22 22:59:26.982766600 +0000
+Dependencies:
+mod proposals;
+use ethers::prelude::*;
+use icn_zkp::{RollupBatch, VerificationKey};
+use proposals::{ProposalContract, Proposal};
+
+===================
+```rs
+mod proposals;
+
+use proposals::{ProposalContract, Proposal};
+use icn_zkp::{RollupBatch, VerificationKey};
+use ethers::prelude::*;
+
+pub struct CooperativeContract {
+    proposal_contract: ProposalContract,
+    contract_address: Address,
+    // ...existing code...
+}
+
+impl CooperativeContract {
+    pub fn new(contract_address: Address, verification_key: VerificationKey) -> Self {
+        Self {
+            proposal_contract: ProposalContract::new(
+                3,
+                verification_key,
+                contract_address
+            ),
+            contract_address,
+            // ...existing code...
+        }
+    }
+
+    pub async fn submit_vote_batch(&mut self, batch: RollupBatch) -> Result<(), String> {
+        self.proposal_contract.submit_vote_batch(batch).await
+    }
+
+    pub async fn execute_proposal(&mut self, proposal_id: &str) -> Result<bool, String> {
+        self.proposal_contract.execute_proposal(proposal_id).await
     }
 }
 ```
@@ -2876,12 +3023,13 @@ fn compile_state_validation(bytecode: &mut Vec<u8>, validation: &StateValidation
 
 ===================
 File: ./crates/icn-federation/src/lib.rs
-Size: 14638 bytes
-Modified: 2025-02-22 15:51:12.426319800 +0000
+Size: 18958 bytes
+Modified: 2025-02-22 22:35:06.245613000 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
 use icn_types::{Block, Transaction};
+use icn_zkp::RollupBatch;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -2896,6 +3044,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use icn_types::{Block, Transaction};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
+use icn_zkp::RollupBatch;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Federation {
@@ -2909,6 +3058,7 @@ pub struct Federation {
     pub proposals: Vec<FederationProposal>, // Add proposals field
     pub created_at: u64,
     pub status: FederationStatus,
+    pub disputes: HashMap<String, FederationDispute>, // Add disputes field
 }
 
 impl Federation {
@@ -3048,19 +3198,27 @@ impl Federation {
             .find(|p| p.id == proposal_id)
             .ok_or(FederationError::ProposalNotFound)?;
 
-        let total_votes = proposal.votes.len() as u32;
-        if total_votes < self.terms.governance_rules.min_votes_required {
-            return Ok(ProposalStatus::Rejected);
-        }
+        // Create vote batch for on-chain processing
+        let batch = RollupBatch {
+            proposal_id: proposal_id.to_string(),
+            votes: proposal.votes.iter()
+                .map(|(voter, approve)| Vote { voter: voter.clone(), approve: *approve })
+                .collect(),
+            rollup_root: [0u8; 32], // Computed by ZK prover
+            proof: Vec::new(), // Generated by ZK prover
+        };
 
-        let approval_votes = proposal.votes.values().filter(|&v| *v).count() as u32;
-        let approval_percentage = (approval_votes * 100) / total_votes;
+        // Submit batch to chain
+        self.contract.submit_vote_batch(batch)?;
 
-        if approval_percentage >= self.terms.governance_rules.approval_threshold_percent {
-            proposal.status = ProposalStatus::Approved;
+        // Execute proposal on-chain
+        let approved = self.contract.execute_proposal(proposal_id)?;
+        
+        proposal.status = if approved {
+            ProposalStatus::Approved
         } else {
-            proposal.status = ProposalStatus::Rejected;
-        }
+            ProposalStatus::Rejected
+        };
 
         Ok(proposal.status.clone())
     }
@@ -3102,6 +3260,84 @@ impl Federation {
             .unwrap_or(0);
         
         coop_members as f64 / total_members as f64
+    }
+
+    pub fn initiate_dissolution(&mut self, initiator: String, reason: String) -> Result<DissolutionProtocol, FederationError> {
+        let protocol = DissolutionProtocol {
+            federation_id: self.id.clone(),
+            initiated_by: initiator,
+            reason: DissolutionReason::Voluntary,
+            status: DissolutionStatus::Initiated,
+            asset_distribution: HashMap::new(),
+            debt_settlements: Vec::new(),
+            member_reassignments: Vec::new(),
+            dispute_period_ends: SystemTime::now() + Duration::from_secs(7 * 24 * 60 * 60), // 7 days
+        };
+
+        self.status = FederationStatus::DisputePeriod;
+        Ok(protocol)
+    }
+
+    pub fn submit_dissolution_dispute(&mut self, dispute: FederationDispute) -> Result<(), FederationError> {
+        if self.status != FederationStatus::DisputePeriod {
+            return Err(FederationError::InvalidStatusTransition);
+        }
+
+        if !self.members.contains_key(&dispute.initiator) {
+            return Err(FederationError::UnauthorizedAction);
+        }
+
+        self.disputes.insert(dispute.id.clone(), dispute);
+        self.status = FederationStatus::DisputeResolution;
+        Ok(())
+    }
+
+    pub fn vote_on_dispute(&mut self, dispute_id: &str, voter: String, support: bool) -> Result<(), FederationError> {
+        let dispute = self.disputes.get_mut(dispute_id)
+            .ok_or(FederationError::DisputeNotFound)?;
+
+        if !self.members.contains_key(&voter) {
+            return Err(FederationError::UnauthorizedAction);
+        }
+
+        dispute.supporting_votes.insert(voter, support);
+
+        // Check if we have enough votes to resolve the dispute
+        let total_votes = dispute.supporting_votes.len();
+        let supporting_votes = dispute.supporting_votes.values().filter(|&&v| v).count();
+        let required_votes = (self.members.len() * 2) / 3; // 2/3 majority
+
+        if total_votes >= required_votes {
+            if supporting_votes > total_votes / 2 {
+                dispute.status = DisputeStatus::Resolved;
+                self.status = FederationStatus::Active;
+            } else {
+                dispute.status = DisputeStatus::Rejected;
+                self.status = FederationStatus::Dissolved;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn resolve_dispute(&mut self, dispute_id: &str, resolution: DisputeResolution) -> Result<(), FederationError> {
+        let dispute = self.disputes.get_mut(dispute_id)
+            .ok_or(FederationError::DisputeNotFound)?;
+
+        dispute.resolution = Some(resolution);
+        dispute.status = DisputeStatus::Resolved;
+
+        // If all disputes are resolved, proceed with dissolution
+        if self.disputes.values().all(|d| d.status == DisputeStatus::Resolved || d.status == DisputeStatus::Rejected) {
+            let any_upheld = self.disputes.values().any(|d| d.status == DisputeStatus::Resolved);
+            self.status = if any_upheld {
+                FederationStatus::Active
+            } else {
+                FederationStatus::Dissolved
+            };
+        }
+
+        Ok(())
     }
 }
 
@@ -3174,6 +3410,7 @@ impl FederationManager {
             proposals: Vec::new(),
             created_at: chrono::Utc::now().timestamp() as u64,
             status: FederationStatus::Active,
+            disputes: HashMap::new(),
         };
 
         let mut federations = self.federations.write().await;
@@ -3285,6 +3522,8 @@ pub enum FederationStatus {
     Active,
     Suspended,
     Dissolved,
+    DisputePeriod,
+    DisputeResolution,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3316,6 +3555,34 @@ pub struct Vote {
     pub approve: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationDispute {
+    pub id: String,
+    pub federation_id: String,
+    pub initiator: String,
+    pub reason: String,
+    pub evidence: Option<String>,
+    pub supporting_votes: HashMap<String, bool>,
+    pub created_at: u64,
+    pub status: DisputeStatus,
+    pub resolution: Option<DisputeResolution>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisputeResolution {
+    pub decision: String,
+    pub rationale: String,
+    pub resolved_at: u64,
+    pub resolver: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DisputeStatus {
+    Pending,
+    Resolved,
+    Rejected,
+}
+
 #[derive(Debug)]
 pub enum FederationError {
     FederationNotFound,
@@ -3330,6 +3597,8 @@ pub enum FederationError {
     VotingPeriodEnded,
     ProposalNotFound,
     InsufficientReputation(String),
+    DisputeNotFound,
+    DisputeAlreadyExists,
 }
 ```
 
