@@ -162,4 +162,21 @@ mod tests {
         let result = storage_service.delete_off_chain("test_key").await;
         assert!(result.is_ok());
     }
+
+    #[tokio::test]
+    async fn test_exists() {
+        let pool = setup_test_db().await;
+        let storage_service = StorageService::new(pool);
+
+        let key = "test_key";
+        let value = b"test_value";
+
+        storage_service.store_off_chain(key, value).await.unwrap();
+        let exists = storage_service.exists(key).await.unwrap();
+        assert!(exists);
+
+        storage_service.delete_off_chain(key).await.unwrap();
+        let exists = storage_service.exists(key).await.unwrap();
+        assert!(!exists);
+    }
 }
