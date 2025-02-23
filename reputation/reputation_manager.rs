@@ -14,6 +14,10 @@ pub struct ReputationEvent {
     pub category: ReputationCategory,
     pub weight: f64,
     pub timestamp: u64,
+    federation_id: Option<String>, 
+    cross_federation_id: Option<String>, 
+    event_type: ReputationEventType, 
+    audit_proof: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone)]
@@ -23,6 +27,14 @@ pub enum ReputationCategory {
     DisputeResolution,
     TechnicalContribution,
     CommunityEngagement,
+}
+
+pub enum ReputationEventType {
+    Contribution,
+    Governance,
+    CrossFederationAction,
+    DisputeResolution,
+    ResourceSharing,
 }
 
 pub struct ReputationManager {
@@ -206,6 +218,15 @@ impl ReputationManager {
         let activity_modifier = self.get_activity_modifier();
         (1.0 - base_decay * activity_modifier).powf((age as f64) / (30.0 * 24.0 * 60.0 * 60.0))
     }
+
+    pub async fn verify_cross_federation_action(&self, event: &ReputationEvent) -> Result<bool, ReputationError> {
+        // Verify action is valid across both federations
+        if let (Some(fed1), Some(fed2)) = (&event.federation_id, &event.cross_federation_id) {
+            self.verify_federation_pair(fed1, fed2).await?;
+            self.check_sybil_resistance(event).await?;
+        }
+        Ok(true)
+    }
 }
 
 #[cfg(test)]
@@ -227,6 +248,10 @@ mod tests {
                 category: ReputationCategory::Governance,
                 weight: 1.0,
                 timestamp: Utc::now().timestamp() as u64,
+                federation_id: None,
+                cross_federation_id: None,
+                event_type: ReputationEventType::Governance,
+                audit_proof: None,
             },
             ReputationEvent {
                 from_did: "did:2".to_string(),
@@ -237,6 +262,10 @@ mod tests {
                 category: ReputationCategory::Governance,
                 weight: 1.0,
                 timestamp: Utc::now().timestamp() as u64,
+                federation_id: None,
+                cross_federation_id: None,
+                event_type: ReputationEventType::Governance,
+                audit_proof: None,
             },
             ReputationEvent {
                 from_did: "did:3".to_string(),
@@ -247,6 +276,10 @@ mod tests {
                 category: ReputationCategory::Governance,
                 weight: 1.0,
                 timestamp: Utc::now().timestamp() as u64,
+                federation_id: None,
+                cross_federation_id: None,
+                event_type: ReputationEventType::Governance,
+                audit_proof: None,
             },
         ];
 
@@ -270,6 +303,10 @@ mod tests {
             category: ReputationCategory::Governance,
             weight: 1.0,
             timestamp: (Utc::now() - chrono::Duration::days(10)).timestamp() as u64,
+            federation_id: None,
+            cross_federation_id: None,
+            event_type: ReputationEventType::Governance,
+            audit_proof: None,
         };
 
         manager.update_reputation(event).unwrap();

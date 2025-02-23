@@ -21,6 +21,8 @@ pub struct Federation {
     pub created_at: u64,
     pub status: FederationStatus,
     pub disputes: HashMap<String, FederationDispute>, // Add disputes field
+    pub cross_federation_disputes: HashMap<String, Vec<FederationDispute>>,
+    pub audit_log: Vec<AuditEntry>,
 }
 
 impl Federation {
@@ -301,6 +303,30 @@ impl Federation {
 
         Ok(())
     }
+
+    pub async fn initiate_cross_federation_dispute(
+        &mut self,
+        target_federation: &str,
+        dispute: FederationDispute
+    ) -> Result<(), FederationError> {
+        // Verify both federations exist and have sufficient reputation
+        self.verify_cross_federation_eligibility(target_federation).await?;
+        
+        let disputes = self.cross_federation_disputes
+            .entry(target_federation.to_string())
+            .or_insert_with(Vec::new);
+        
+        disputes.push(dispute);
+        
+        // Log dispute for audit
+        self.audit_log.push(AuditEntry {
+            action: "cross_federation_dispute".into(),
+            target_federation: Some(target_federation.to_string()),
+            timestamp: chrono::Utc::now(),
+        });
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -373,6 +399,8 @@ impl FederationManager {
             created_at: chrono::Utc::now().timestamp() as u64,
             status: FederationStatus::Active,
             disputes: HashMap::new(),
+            cross_federation_disputes: HashMap::new(),
+            audit_log: Vec::new(),
         };
 
         let mut federations = self.federations.write().await;
@@ -591,4 +619,11 @@ pub enum FederationError {
     
     #[error("Consensus error: {0}")]
     ConsensusError(#[from] ConsensusError),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditEntry {
+    pub action: String,
+    pub target_federation: Option<String>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
 }
