@@ -327,6 +327,42 @@ impl Federation {
 
         Ok(())
     }
+
+    pub async fn submit_cross_federation_proposal(
+        &mut self,
+        target_federation: &str,
+        proposal: CrossFederationProposal
+    ) -> Result<(), FederationError> {
+        // Verify both federations meet minimum reputation requirements
+        self.verify_cross_federation_eligibility(target_federation).await?;
+        
+        // Create batch for cross-federation proposals
+        let mut batch = ProposalBatch::new();
+        batch.add_proposal(proposal.clone());
+        
+        // Submit to cross-federation coordinator
+        self.coordinator.submit_batch(batch).await?;
+        
+        // Record proposal for local tracking
+        self.cross_federation_proposals.insert(proposal.id.clone(), proposal);
+        
+        Ok(())
+    }
+
+    pub fn batch_process_proposals(&mut self, proposals: Vec<FederationProposal>) -> Result<(), FederationError> {
+        let mut batch = ProposalBatch::new();
+        
+        for proposal in proposals {
+            self.validate_proposal(&proposal)?;
+            batch.add_proposal(proposal);
+        }
+        
+        // Process batch through ZK rollup
+        let rollup = self.create_proposal_rollup(batch);
+        self.contract.submit_rollup(rollup)?;
+        
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -626,4 +662,23 @@ pub struct AuditEntry {
     pub action: String,
     pub target_federation: Option<String>,
     pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrossFederationProposal {
+    pub id: String,
+    pub source_federation: String,
+    pub target_federation: String,
+    pub proposal_type: CrossFederationProposalType,
+    pub terms: CrossFederationTerms,
+    pub votes: HashMap<String, bool>,
+    pub status: ProposalStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CrossFederationProposalType {
+    Merge,
+    Alliance,
+    ResourceSharing,
+    DisputeResolution,
 }
