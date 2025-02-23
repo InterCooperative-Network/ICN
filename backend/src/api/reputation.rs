@@ -60,6 +60,18 @@ pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = wa
                                 .and(warp::body::json())
                                 .and_then(apply_reputation_decay)
                         )
+                        .or(
+                            warp::path("apply_reputation_decay")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(apply_reputation_decay_handler)
+                        )
+                        .or(
+                            warp::path("handle_sybil_resistance")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(handle_sybil_resistance_handler)
+                        )
                 )
         )
 }
@@ -69,4 +81,18 @@ async fn submit_zk_snark_proof_handler(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     // Placeholder logic for zk-SNARK proof submission
     Ok(warp::reply::json(&"zk-SNARK proof submitted"))
+}
+
+async fn apply_reputation_decay_handler(
+    request: ReputationDecayRequest,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // Placeholder logic for applying reputation decay
+    Ok(warp::reply::json(&"Reputation decay applied"))
+}
+
+async fn handle_sybil_resistance_handler(
+    request: SybilResistanceRequest,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // Placeholder logic for handling sybil resistance
+    Ok(warp::reply::json(&"Sybil resistance handled"))
 }

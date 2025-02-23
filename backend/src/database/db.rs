@@ -126,6 +126,41 @@ impl Database {
             .await?;
         Ok(())
     }
+
+    pub async fn apply_reputation_decay(&self, did: &str, decay_rate: f64) -> Result<(), sqlx::Error> {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as f64;
+        let contributions = sqlx::query_as!(
+            Contribution,
+            r#"
+            SELECT score, timestamp FROM contributions WHERE did = $1
+            "#,
+            did
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        for contribution in contributions {
+            let age = now - contribution.timestamp;
+            let decayed_score = (contribution.score as f64 * (-decay_rate * age).exp()) as i64;
+            sqlx::query!(
+                r#"
+                UPDATE contributions SET score = $1 WHERE did = $2 AND timestamp = $3
+                "#,
+                decayed_score,
+                did,
+                contribution.timestamp
+            )
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn handle_sybil_resistance(&self, did: &str, reputation_score: i64) -> Result<(), sqlx::Error> {
+        // Placeholder logic for handling Sybil resistance
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -206,6 +241,30 @@ mod tests {
 
         let migration = "CREATE TABLE test_table (id SERIAL PRIMARY KEY)";
         let result = db.run_migration(migration).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_apply_reputation_decay() {
+        let pool = setup_test_db().await;
+        let db = Database { pool };
+
+        let did = "did:icn:test";
+        let decay_rate = 0.05;
+
+        let result = db.apply_reputation_decay(did, decay_rate).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_sybil_resistance() {
+        let pool = setup_test_db().await;
+        let db = Database { pool };
+
+        let did = "did:icn:test";
+        let reputation_score = 50;
+
+        let result = db.handle_sybil_resistance(did, reputation_score).await;
         assert!(result.is_ok());
     }
 }
