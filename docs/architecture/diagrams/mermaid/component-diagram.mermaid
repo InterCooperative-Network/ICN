@@ -1,47 +1,45 @@
 %% Mermaid diagram placeholder
 
 graph TD
-    A[Cooperative Applications Layer] --> B[API/SDK Integration Layer]
-    B --> C[Decentralized Identity Management]
-    C --> D[Federated Ledger Layer]
-    D --> E[State Machine & On-Chain Storage]
-    E --> F[Off-Chain Storage & Data Vaults]
+    A[User Interface Layer] --> B[API Integration Layer]
+    B --> C[Core Services Layer] 
+    C --> D[Federation Layer]
+    D --> E[Consensus Layer]
+    E --> F[Storage Layer]
 
-    subgraph Cooperative Applications Layer
-        A1[Governance Tools]
-        A2[Secure Messaging]
-        A3[Resource Sharing Platforms]
+    subgraph User Interface Layer
+        A1[Web Dashboard]
+        A2[CLI Tools]
+        A3[Mobile Views]
     end
 
-    subgraph API/SDK Integration Layer
-        B1[REST/gRPC/GraphQL Endpoints]
-        B2[Developer Tooling]
-        B3[Identity Wallets]
+    subgraph API Integration Layer
+        B1[REST Endpoints]
+        B2[WebSocket Server]
+        B3[Rate Limiter]
     end
 
-    subgraph Decentralized Identity Management
-        C1[W3C DIDs]
-        C2[Verifiable Credentials]
-        C3[Zero-Knowledge Proofs]
-        C4[Aries Integration]
+    subgraph Core Services Layer
+        C1[Identity Service]
+        C2[Reputation Service]
+        C3[Governance Service]
+        C4[Resource Service]
     end
 
-    subgraph Federated Ledger Layer
-        D1[BFT Consensus Engine]
-        D2[Validator Nodes]
-        D3[Multi-Sig Governance]
-        D4[Cooperative Transaction Types]
+    subgraph Federation Layer
+        D1[Federation Manager]
+        D2[Dispute Resolution]
+        D3[Asset Distribution]
     end
 
-    subgraph State Machine & On-Chain Storage
-        E1[DID Registry]
-        E2[Reputation Logs]
-        E3[Transaction Histories]
-        E4[Revocation Records]
+    subgraph Consensus Layer
+        E1[ProofOfCooperation]
+        E2[Validator Set]
+        E3[zk-SNARK Verifier]
     end
 
-    subgraph Off-Chain Storage & Data Vaults
-        F1[Encrypted Personal Data]
-        F2[IPFS/File Storage]
-        F3[Extended ZKP Artifacts]
+    subgraph Storage Layer
+        F1[On-chain Storage]
+        F2[IPFS Gateway]
+        F3[PostgreSQL]
     end

@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 use icn_types::{Block, Transaction};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
 use icn_zkp::RollupBatch;
+use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Federation {
@@ -25,7 +26,7 @@ pub struct Federation {
 impl Federation {
     pub fn add_member(&mut self, did: String, role: MemberRole) -> Result<(), FederationError> {
         if self.members.contains_key(&did) {
-            return Err(FederationError::AlreadyMember);
+            return Err(FederationError::AlreadyMember(did));
         }
 
         // Verify member meets minimum reputation requirements
@@ -41,7 +42,7 @@ impl Federation {
 
     pub fn remove_member(&mut self, did: &str) -> Result<(), FederationError> {
         if !self.members.contains_key(did) {
-            return Err(FederationError::MemberNotFound);
+            return Err(FederationError::MemberNotFound(did.to_string()));
         }
 
         self.members.remove(did);
@@ -57,7 +58,7 @@ impl Federation {
             *member_status = status;
             Ok(())
         } else {
-            Err(FederationError::MemberNotFound)
+            Err(FederationError::MemberNotFound(did.to_string()))
         }
     }
 
@@ -94,7 +95,7 @@ impl Federation {
         // Get proposal
         let proposal = self.proposals.iter_mut()
             .find(|p| p.id == vote.proposal_id)
-            .ok_or(FederationError::ProposalNotFound)?;
+            .ok_or(FederationError::ProposalNotFound(vote.proposal_id.clone()))?;
 
         // Record vote
         proposal.votes.insert(vote.voter, vote.approve);
@@ -111,7 +112,7 @@ impl Federation {
     pub fn validate_proposal(&self, proposal: &FederationProposal) -> Result<(), FederationError> {
         // Check if proposal type is allowed
         if !self.terms.governance_rules.allowed_proposal_types.contains(&proposal.proposal_type.to_string()) {
-            return Err(FederationError::InvalidProposalType);
+            return Err(FederationError::InvalidProposalType(proposal.proposal_type.to_string()));
         }
 
         // Validate proposer has sufficient reputation
@@ -127,18 +128,18 @@ impl Federation {
     pub fn validate_vote(&self, vote: &Vote) -> Result<(), FederationError> {
         // Check if voter is a member
         if !self.members.contains_key(&vote.voter) {
-            return Err(FederationError::UnauthorizedAction);
+            return Err(FederationError::UnauthorizedAction { action: "vote".to_string(), did: vote.voter.clone() });
         }
 
         // Check if proposal exists
         let proposal = self.proposals.iter()
             .find(|p| p.id == vote.proposal_id)
-            .ok_or(FederationError::ProposalNotFound)?;
+            .ok_or(FederationError::ProposalNotFound(vote.proposal_id.clone()))?;
 
         // Check if voting period is still open
         let now = chrono::Utc::now().timestamp() as u64;
         if now > proposal.voting_ends_at {
-            return Err(FederationError::VotingPeriodEnded);
+            return Err(FederationError::VotingPeriodEnded(vote.proposal_id.clone()));
         }
 
         // Check for veto rights
@@ -157,7 +158,7 @@ impl Federation {
     pub fn finalize_proposal(&mut self, proposal_id: &str) -> Result<ProposalStatus, FederationError> {
         let proposal = self.proposals.iter_mut()
             .find(|p| p.id == proposal_id)
-            .ok_or(FederationError::ProposalNotFound)?;
+            .ok_or(FederationError::ProposalNotFound(proposal_id.to_string()))?;
 
         // Create vote batch for on-chain processing
         let batch = RollupBatch {
@@ -241,11 +242,11 @@ impl Federation {
 
     pub fn submit_dissolution_dispute(&mut self, dispute: FederationDispute) -> Result<(), FederationError> {
         if self.status != FederationStatus::DisputePeriod {
-            return Err(FederationError::InvalidStatusTransition);
+            return Err(FederationError::InvalidStatusTransition { from: "DisputePeriod".to_string(), to: self.status.to_string() });
         }
 
         if !self.members.contains_key(&dispute.initiator) {
-            return Err(FederationError::UnauthorizedAction);
+            return Err(FederationError::UnauthorizedAction { action: "submit_dissolution_dispute".to_string(), did: dispute.initiator.clone() });
         }
 
         self.disputes.insert(dispute.id.clone(), dispute);
@@ -255,10 +256,10 @@ impl Federation {
 
     pub fn vote_on_dispute(&mut self, dispute_id: &str, voter: String, support: bool) -> Result<(), FederationError> {
         let dispute = self.disputes.get_mut(dispute_id)
-            .ok_or(FederationError::DisputeNotFound)?;
+            .ok_or(FederationError::DisputeNotFound(dispute_id.to_string()))?;
 
         if !self.members.contains_key(&voter) {
-            return Err(FederationError::UnauthorizedAction);
+            return Err(FederationError::UnauthorizedAction { action: "vote_on_dispute".to_string(), did: voter.clone() });
         }
 
         dispute.supporting_votes.insert(voter, support);
@@ -283,7 +284,7 @@ impl Federation {
 
     pub fn resolve_dispute(&mut self, dispute_id: &str, resolution: DisputeResolution) -> Result<(), FederationError> {
         let dispute = self.disputes.get_mut(dispute_id)
-            .ok_or(FederationError::DisputeNotFound)?;
+            .ok_or(FederationError::DisputeNotFound(dispute_id.to_string()))?;
 
         dispute.resolution = Some(resolution);
         dispute.status = DisputeStatus::Resolved;
@@ -390,18 +391,18 @@ impl FederationManager {
         
         if let Some(federation) = federations.get_mut(federation_id) {
             if federation.members.contains_key(member_did) {
-                return Err(FederationError::AlreadyMember);
+                return Err(FederationError::AlreadyMember(member_did.to_string()));
             }
 
             // Verify commitments against federation terms
             if !self.verify_commitments(&federation.terms, &commitment).await {
-                return Err(FederationError::InvalidCommitment);
+                return Err(FederationError::InvalidCommitment(member_did.to_string()));
             }
 
             federation.members.insert(member_did.to_string(), MemberStatus::Active);
             Ok(())
         } else {
-            Err(FederationError::FederationNotFound)
+            Err(FederationError::FederationNotFound(federation_id.to_string()))
         }
     }
 
@@ -421,7 +422,7 @@ impl FederationManager {
             federation.submit_proposal(proposal)?;
             Ok(())
         } else {
-            Err(FederationError::FederationNotFound)
+            Err(FederationError::FederationNotFound(federation_id.to_string()))
         }
     }
 
@@ -436,7 +437,7 @@ impl FederationManager {
             federation.vote(vote)?;
             Ok(())
         } else {
-            Err(FederationError::FederationNotFound)
+            Err(FederationError::FederationNotFound(federation_id.to_string()))
         }
     }
 }
@@ -544,20 +545,50 @@ pub enum DisputeStatus {
     Rejected,
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum FederationError {
-    FederationNotFound,
-    AlreadyMember,
-    InvalidCommitment,
-    InsufficientResources,
-    UnauthorizedAction,
-    MemberNotFound,
-    InvalidStatusTransition,
-    InsufficientPermissions,
-    InvalidProposalType,
-    VotingPeriodEnded,
-    ProposalNotFound,
+    #[error("Federation not found: {0}")]
+    FederationNotFound(String),
+    
+    #[error("Already a member: {0}")]
+    AlreadyMember(String),
+    
+    #[error("Invalid commitment: {0}")]
+    InvalidCommitment(String),
+    
+    #[error("Insufficient resources: {resource_type}")]
+    InsufficientResources { resource_type: String },
+    
+    #[error("Unauthorized action: {action} by {did}")]
+    UnauthorizedAction { action: String, did: String },
+    
+    #[error("Member not found: {0}")]
+    MemberNotFound(String),
+    
+    #[error("Invalid status transition from {from} to {to}")]
+    InvalidStatusTransition { from: String, to: String },
+    
+    #[error("Insufficient permissions: {0}")]
+    InsufficientPermissions(String),
+    
+    #[error("Invalid proposal type: {0}")] 
+    InvalidProposalType(String),
+    
+    #[error("Voting period ended for proposal {0}")]
+    VotingPeriodEnded(String),
+    
+    #[error("Proposal not found: {0}")]
+    ProposalNotFound(String),
+    
+    #[error("Insufficient reputation: {0}")]
     InsufficientReputation(String),
-    DisputeNotFound,
-    DisputeAlreadyExists,
+    
+    #[error("Dispute not found: {0}")]
+    DisputeNotFound(String),
+    
+    #[error("Storage error: {0}")]
+    StorageError(#[from] StorageError),
+    
+    #[error("Consensus error: {0}")]
+    ConsensusError(#[from] ConsensusError),
 }
