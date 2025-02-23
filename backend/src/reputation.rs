@@ -30,6 +30,41 @@ impl ReputationManager {
             *value = (*value as f64 * (1.0 - decay_rate)).round() as i64;
         }
     }
+
+    pub fn apply_reputation_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as f64;
+        let contributions = sqlx::query_as!(
+            Contribution,
+            r#"
+            SELECT score, timestamp FROM contributions WHERE did = $1
+            "#,
+            did
+        )
+        .fetch_all(&*self.db.pool)
+        .await?;
+
+        for contribution in contributions {
+            let age = now - contribution.timestamp;
+            let decayed_score = (contribution.score as f64 * (-decay_rate * age).exp()) as i64;
+            sqlx::query!(
+                r#"
+                UPDATE contributions SET score = $1 WHERE did = $2 AND timestamp = $3
+                "#,
+                decayed_score,
+                did,
+                contribution.timestamp
+            )
+            .execute(&*self.db.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    pub fn handle_sybil_resistance(&self, did: &str, reputation_score: i64) -> Result<(), String> {
+        // Placeholder logic for handling Sybil resistance
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -55,6 +90,21 @@ mod tests {
         manager.adjust_reputation("did:example:123", 100);
         manager.apply_decay(0.1);
         assert_eq!(manager.get_reputation("did:example:123"), 90);
+    }
+
+    #[test]
+    fn test_apply_reputation_decay() {
+        let manager = ReputationManager::new();
+        manager.adjust_reputation("did:example:123", 100);
+        manager.apply_reputation_decay("did:example:123", 0.1).unwrap();
+        assert_eq!(manager.get_reputation("did:example:123"), 90);
+    }
+
+    #[test]
+    fn test_handle_sybil_resistance() {
+        let manager = ReputationManager::new();
+        manager.handle_sybil_resistance("did:example:123", 50).unwrap();
+        // Add assertions based on the expected behavior of handle_sybil_resistance
     }
 }
 

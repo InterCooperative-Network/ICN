@@ -223,3 +223,38 @@ pub async fn get_federation_debts(pool: &PgPool, federation_id: i64) -> Result<V
 
     Ok(resources)
 }
+
+pub async fn apply_reputation_decay(pool: &PgPool, did: &str, decay_rate: f64) -> Result<(), sqlx::Error> {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as f64;
+    let contributions = sqlx::query_as!(
+        Contribution,
+        r#"
+        SELECT score, timestamp FROM contributions WHERE did = $1
+        "#,
+        did
+    )
+    .fetch_all(pool)
+    .await?;
+
+    for contribution in contributions {
+        let age = now - contribution.timestamp;
+        let decayed_score = (contribution.score as f64 * (-decay_rate * age).exp()) as i64;
+        sqlx::query!(
+            r#"
+            UPDATE contributions SET score = $1 WHERE did = $2 AND timestamp = $3
+            "#,
+            decayed_score,
+            did,
+            contribution.timestamp
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+pub async fn handle_sybil_resistance(pool: &PgPool, did: &str, reputation_score: i64) -> Result<(), sqlx::Error> {
+    // Placeholder logic for handling Sybil resistance
+    Ok(())
+}

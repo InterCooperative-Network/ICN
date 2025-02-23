@@ -109,4 +109,18 @@ impl GovernanceEngine {
         })?;
         Ok(status.status)
     }
+
+    pub async fn apply_reputation_decay(&self, did: &str, decay_rate: f64) -> Result<(), sqlx::Error> {
+        self.db.apply_reputation_decay(did, decay_rate).await.map_err(|e| {
+            error!("Error applying reputation decay: {}", e);
+            e
+        })
+    }
+
+    pub async fn handle_sybil_resistance(&self, did: &str, reputation_score: i64) -> Result<(), sqlx::Error> {
+        self.db.handle_sybil_resistance(did, reputation_score).await.map_err(|e| {
+            error!("Error handling sybil resistance: {}", e);
+            e
+        })
+    }
 }
