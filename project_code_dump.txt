@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sun 23 Feb 2025 12:05:51 AM UTC
+Project Code Dump - Generated Sun 23 Feb 2025 04:05:34 PM UTC
 ======================================
 
 LLM Context Information
@@ -218,8 +218,8 @@ Project Tree:
 
 ===================
 File: ./backend/Cargo.toml
-Size: 478 bytes
-Modified: 2025-02-22 01:12:53.285021400 +0000
+Size: 498 bytes
+Modified: 2025-02-23 15:18:22.022523900 +0000
 
 ===================
 ```toml
@@ -232,6 +232,7 @@ edition = "2018"
 tokio = { version = "1.30", features = ["full"] }
 warp = "0.3"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 sqlx = { version = "0.7", features = ["postgres", "runtime-tokio"] }
 icn-federation = { path = "../crates/icn-federation" }
 tower = { version = "0.4", features = ["limit"] }
@@ -257,8 +258,8 @@ edition = "2021"
 
 ===================
 File: ./backend/src/lib.rs
-Size: 97 bytes
-Modified: 2025-02-21 00:12:17.835165200 +0000
+Size: 188 bytes
+Modified: 2025-02-23 15:18:22.103032000 +0000
 Dependencies:
 
 ===================
@@ -269,13 +270,19 @@ pub mod database;
 pub mod networking;
 pub mod core;
 pub mod main;
+
+pub mod federation;
+pub mod governance;
+pub mod resources;
+pub mod reputation;
 ```
 
 ===================
 File: ./backend/src/main.rs
-Size: 11224 bytes
-Modified: 2025-02-21 01:12:45.445193600 +0000
+Size: 11577 bytes
+Modified: 2025-02-23 15:18:22.109032200 +0000
 Dependencies:
+mod api;
 mod config;
 mod core;
 mod db;
@@ -320,6 +327,7 @@ mod notification;
 mod reputation;
 mod websocket;
 mod middleware;
+mod api;
 
 use crate::config::Config;
 use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
@@ -766,8 +774,8 @@ Modified: 2025-02-19 00:47:20.971282200 +0000
 
 ===================
 File: ./backend/src/api/federation.rs
-Size: 11538 bytes
-Modified: 2025-02-22 22:32:18.989139900 +0000
+Size: 14316 bytes
+Modified: 2025-02-23 15:36:12.757195900 +0000
 Dependencies:
 use icn_federation::{FederationService, FederationOperation};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
@@ -836,6 +844,19 @@ struct SubmitDisputeRequest {
 struct DisputeVoteRequest {
     dispute_id: String,
     support: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct TransferResourceRequest {
+    resource_id: String,
+    recipient_id: String,
+    amount: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct AllocateResourceSharesRequest {
+    resource_id: String,
+    shares: u64,
 }
 
 pub fn federation_routes(
@@ -915,6 +936,24 @@ pub fn federation_routes(
         .and(with_federation_service(federation_service.clone()))
         .and_then(vote_on_dispute_handler);
 
+    let federation_lifecycle = warp::path!("api" / "v1" / "federation" / "lifecycle")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(federation_lifecycle_handler);
+
+    let transfer_resource = warp::path!("api" / "v1" / "federation" / "resources" / "transfer")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(transfer_resource_handler);
+
+    let allocate_resource_shares = warp::path!("api" / "v1" / "federation" / "resources" / "allocate")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(allocate_resource_shares_handler);
+
     initiate_federation
         .or(join_federation)
         .or(initiate_federation_dissolution)
@@ -928,6 +967,9 @@ pub fn federation_routes(
         .or(reputation_decay)
         .or(submit_dissolution_dispute)
         .or(vote_on_dispute)
+        .or(federation_lifecycle)
+        .or(transfer_resource)
+        .or(allocate_resource_shares)
 }
 
 fn with_federation_service(
@@ -1082,12 +1124,50 @@ async fn vote_on_dispute_handler(
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
+
+async fn federation_lifecycle_handler(
+    request: FederationLifecycleRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let operation = FederationOperation::Lifecycle {
+        federation_id: request.federation_id,
+        action: request.action,
+    };
+
+    let mut service = federation_service.lock().await;
+    match service.handle_operation(operation).await {
+        Ok(_) => Ok(warp::reply::json(&"Federation lifecycle operation completed")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn transfer_resource_handler(
+    request: TransferResourceRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.transfer_resource(request.resource_id, request.recipient_id, request.amount).await {
+        Ok(_) => Ok(warp::reply::json(&"Resource transferred successfully")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn allocate_resource_shares_handler(
+    request: AllocateResourceSharesRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.allocate_resource_shares(request.resource_id, request.shares).await {
+        Ok(_) => Ok(warp::reply::json(&"Resource shares allocated successfully")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
 ```
 
 ===================
 File: ./backend/src/api/governance.rs
-Size: 4654 bytes
-Modified: 2025-02-22 21:47:25.517295900 +0000
+Size: 7137 bytes
+Modified: 2025-02-23 15:36:12.766199200 +0000
 Dependencies:
 use crate::services::governance_service::{GovernanceService, Proposal, Vote};
 use serde::{Deserialize, Serialize};
@@ -1165,10 +1245,30 @@ pub fn governance_routes(
         .and(with_governance_service(governance_service.clone()))
         .and_then(reputation_decay_handler);
 
+    let proposal_status = warp::path!("api" / "v1" / "governance" / "proposals" / String / "status")
+        .and(warp::get())
+        .and(with_governance_service(governance_service.clone()))
+        .and_then(proposal_status_handler);
+
+    let submit_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / "submit")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_governance_service(governance_service.clone()))
+        .and_then(submit_proposal_handler);
+
+    let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / "vote")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_governance_service(governance_service.clone()))
+        .and_then(vote_on_proposal_handler);
+
     create_proposal
         .or(vote_on_proposal)
         .or(sybil_resistance)
         .or(reputation_decay)
+        .or(proposal_status)
+        .or(submit_proposal)
+        .or(vote_on_proposal)
 }
 
 fn with_governance_service(
@@ -1234,13 +1334,61 @@ async fn reputation_decay_handler(
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
+
+async fn proposal_status_handler(
+    proposal_id: String,
+    governance_service: Arc<Mutex<GovernanceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let service = governance_service.lock().await;
+    match service.get_proposal_status(&proposal_id).await {
+        Ok(status) => Ok(warp::reply::json(&status)),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn submit_proposal_handler(
+    request: CreateProposalRequest,
+    governance_service: Arc<Mutex<GovernanceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let proposal = Proposal {
+        title: request.title,
+        description: request.description,
+        created_by: request.created_by,
+        ends_at: request.ends_at,
+    };
+
+    let mut service = governance_service.lock().await;
+    match service.create_proposal(proposal).await {
+        Ok(proposal_id) => Ok(warp::reply::json(&proposal_id)),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn vote_on_proposal_handler(
+    request: VoteRequest,
+    governance_service: Arc<Mutex<GovernanceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let vote = Vote {
+        proposal_id: request.proposal_id,
+        voter: request.voter,
+        approve: request.approve,
+        zk_snark_proof: request.zk_snark_proof, // Added zk-SNARK proof field
+    };
+
+    let mut service = governance_service.lock().await;
+    match service.record_vote(vote).await {
+        Ok(_) => Ok(warp::reply::json(&"Vote recorded")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
 ```
 
 ===================
 File: ./backend/src/api/identity.rs
-Size: 2920 bytes
-Modified: 2025-02-22 01:12:53.304105000 +0000
+Size: 4936 bytes
+Modified: 2025-02-23 16:04:45.903024300 +0000
 Dependencies:
+mod tests {
 use crate::services::identity_service::{IdentityService, IdentityServiceImpl};
 use std::sync::Arc;
 use warp::Filter;
@@ -1323,13 +1471,80 @@ async fn handle_revoke_key(
     })?;
     Ok(warp::reply::with_status("Key revoked", warp::http::StatusCode::OK))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::Filter;
+    use crate::services::identity_service::IdentityServiceImpl;
+    use std::sync::Arc;
+    use warp::http::StatusCode;
+
+    #[tokio::test]
+    async fn test_create_identity() {
+        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
+        let api = identity_routes(identity_service);
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/identity/create")
+            .json(&"did:icn:test")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn test_get_identity() {
+        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
+        let api = identity_routes(identity_service);
+
+        let resp = warp::test::request()
+            .method("GET")
+            .path("/api/v1/identity/get/did:icn:test")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_rotate_key() {
+        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
+        let api = identity_routes(identity_service);
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/identity/rotate_key/did:icn:test")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_revoke_key() {
+        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
+        let api = identity_routes(identity_service);
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/identity/revoke_key/did:icn:test")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+}
 ```
 
 ===================
 File: ./backend/src/api/reputation.rs
-Size: 2758 bytes
-Modified: 2025-02-22 21:47:25.530111800 +0000
+Size: 5705 bytes
+Modified: 2025-02-23 16:04:45.909023800 +0000
 Dependencies:
+mod tests {
 use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution, handle_sybil_resistance, apply_reputation_decay};
 use warp::Filter;
 
@@ -1397,6 +1612,18 @@ pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = wa
                                 .and(warp::body::json())
                                 .and_then(apply_reputation_decay)
                         )
+                        .or(
+                            warp::path("apply_reputation_decay")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(apply_reputation_decay_handler)
+                        )
+                        .or(
+                            warp::path("handle_sybil_resistance")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(handle_sybil_resistance_handler)
+                        )
                 )
         )
 }
@@ -1407,13 +1634,82 @@ async fn submit_zk_snark_proof_handler(
     // Placeholder logic for zk-SNARK proof submission
     Ok(warp::reply::json(&"zk-SNARK proof submitted"))
 }
+
+async fn apply_reputation_decay_handler(
+    request: ReputationDecayRequest,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // Placeholder logic for applying reputation decay
+    Ok(warp::reply::json(&"Reputation decay applied"))
+}
+
+async fn handle_sybil_resistance_handler(
+    request: SybilResistanceRequest,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // Placeholder logic for handling sybil resistance
+    Ok(warp::reply::json(&"Sybil resistance handled"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::Filter;
+    use crate::services::reputation_service::{ReputationService, ReputationServiceImpl};
+    use std::sync::Arc;
+    use warp::http::StatusCode;
+
+    #[tokio::test]
+    async fn test_submit_zk_snark_proof() {
+        let reputation_service = Arc::new(ReputationServiceImpl::new(Arc::new(Database::new())));
+        let api = reputation_routes();
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/reputation/zk_snark_proof")
+            .json(&ZkSnarkProofRequest { proof: "test_proof".to_string() })
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_apply_reputation_decay() {
+        let reputation_service = Arc::new(ReputationServiceImpl::new(Arc::new(Database::new())));
+        let api = reputation_routes();
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/reputation/reputation_decay")
+            .json(&ReputationDecayRequest { did: "did:icn:test".to_string(), decay_rate: 0.1 })
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_handle_sybil_resistance() {
+        let reputation_service = Arc::new(ReputationServiceImpl::new(Arc::new(Database::new())));
+        let api = reputation_routes();
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/reputation/sybil_resistance")
+            .json(&SybilResistanceRequest { did: "did:icn:test".to_string(), reputation_score: 50 })
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+}
 ```
 
 ===================
 File: ./backend/src/api/resources.rs
-Size: 2100 bytes
-Modified: 2025-02-21 00:12:21.812455800 +0000
+Size: 7995 bytes
+Modified: 2025-02-23 16:04:45.915022200 +0000
 Dependencies:
+mod tests {
 use crate::services::resource_service::{ResourceService, ResourceQuery};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -1434,6 +1730,32 @@ struct QuerySharedResourcesRequest {
     owner: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct ResourceSharingRequest {
+    resource_id: String,
+    recipient_id: String,
+    amount: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ResourceSharingResponse {
+    success: bool,
+    message: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct TransferResourceRequest {
+    resource_id: String,
+    recipient_id: String,
+    amount: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct AllocateResourceSharesRequest {
+    resource_id: String,
+    shares: u64,
+}
+
 pub fn resource_routes(
     resource_service: Arc<Mutex<ResourceService>>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -1443,7 +1765,28 @@ pub fn resource_routes(
         .and(with_resource_service(resource_service.clone()))
         .and_then(query_shared_resources_handler);
 
+    let share_resource = warp::path!("api" / "v1" / "resources" / "share")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_resource_service(resource_service.clone()))
+        .and_then(share_resource_handler);
+
+    let transfer_resource = warp::path!("api" / "v1" / "resources" / "transfer")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_resource_service(resource_service.clone()))
+        .and_then(transfer_resource_handler);
+
+    let allocate_resource_shares = warp::path!("api" / "v1" / "resources" / "allocate")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_resource_service(resource_service.clone()))
+        .and_then(allocate_resource_shares_handler);
+
     query_shared_resources
+        .or(share_resource)
+        .or(transfer_resource)
+        .or(allocate_resource_shares)
 }
 
 fn with_resource_service(
@@ -1481,12 +1824,143 @@ async fn query_shared_resources_handler(
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
+
+async fn share_resource_handler(
+    request: ResourceSharingRequest,
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = resource_service.lock().await;
+    match service.share_resource(request.resource_id, request.recipient_id, request.amount).await {
+        Ok(_) => Ok(warp::reply::json(&ResourceSharingResponse {
+            success: true,
+            message: "Resource shared successfully".to_string(),
+        })),
+        Err(e) => Ok(warp::reply::json(&ResourceSharingResponse {
+            success: false,
+            message: format!("Failed to share resource: {}", e),
+        })),
+    }
+}
+
+async fn transfer_resource_handler(
+    request: TransferResourceRequest,
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = resource_service.lock().await;
+    match service.transfer_resource(request.resource_id, request.recipient_id, request.amount).await {
+        Ok(_) => Ok(warp::reply::json(&"Resource transferred successfully")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn allocate_resource_shares_handler(
+    request: AllocateResourceSharesRequest,
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = resource_service.lock().await;
+    match service.allocate_resource_shares(request.resource_id, request.shares).await {
+        Ok(_) => Ok(warp::reply::json(&"Resource shares allocated successfully")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::Filter;
+    use crate::services::resource_service::ResourceService;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    use warp::http::StatusCode;
+
+    #[tokio::test]
+    async fn test_query_shared_resources() {
+        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+        let api = resource_routes(resource_service);
+
+        let request = QuerySharedResourcesRequest {
+            resource_type: "test_type".to_string(),
+            owner: Some("test_owner".to_string()),
+        };
+
+        let resp = warp::test::request()
+            .method("GET")
+            .path("/api/v1/resources/query")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_share_resource() {
+        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+        let api = resource_routes(resource_service);
+
+        let request = ResourceSharingRequest {
+            resource_id: "test_resource".to_string(),
+            recipient_id: "test_recipient".to_string(),
+            amount: 10,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/resources/share")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_transfer_resource() {
+        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+        let api = resource_routes(resource_service);
+
+        let request = TransferResourceRequest {
+            resource_id: "test_resource".to_string(),
+            recipient_id: "test_recipient".to_string(),
+            amount: 10,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/resources/transfer")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_allocate_resource_shares() {
+        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+        let api = resource_routes(resource_service);
+
+        let request = AllocateResourceSharesRequest {
+            resource_id: "test_resource".to_string(),
+            shares: 10,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/resources/allocate")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+}
 ```
 
 ===================
 File: ./backend/src/lib.rs
-Size: 97 bytes
-Modified: 2025-02-21 00:12:17.835165200 +0000
+Size: 188 bytes
+Modified: 2025-02-23 15:18:22.103032000 +0000
 Dependencies:
 
 ===================
@@ -1497,13 +1971,19 @@ pub mod database;
 pub mod networking;
 pub mod core;
 pub mod main;
+
+pub mod federation;
+pub mod governance;
+pub mod resources;
+pub mod reputation;
 ```
 
 ===================
 File: ./backend/src/main.rs
-Size: 11224 bytes
-Modified: 2025-02-21 01:12:45.445193600 +0000
+Size: 11577 bytes
+Modified: 2025-02-23 15:18:22.109032200 +0000
 Dependencies:
+mod api;
 mod config;
 mod core;
 mod db;
@@ -1548,6 +2028,7 @@ mod notification;
 mod reputation;
 mod websocket;
 mod middleware;
+mod api;
 
 use crate::config::Config;
 use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};

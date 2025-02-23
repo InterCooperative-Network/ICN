@@ -1,4 +1,4 @@
-Project Docs Dump - Generated Sun 23 Feb 2025 12:06:57 AM UTC
+Project Docs Dump - Generated Sun 23 Feb 2025 04:05:32 PM UTC
 ======================================
 
 Docs Tree:
@@ -8,20 +8,26 @@ Docs Tree:
 │   └── index.md
 ├── api.md
 ├── architecture
-│   └── diagrams
-│       ├── images
-│       │   └── component-diagram.png
-│       └── mermaid
-│           └── component-diagram.mermaid
+│   ├── diagrams
+│   │   ├── images
+│   │   │   └── component-diagram.png
+│   │   └── mermaid
+│   │       └── component-diagram.mermaid
+│   └── overview.md
+├── deployment
+│   └── production.md
 ├── development
 │   ├── guides
 │   │   ├── contributing.md
 │   │   ├── documentation-standards.md
+│   │   ├── frontend-integration.md
+│   │   ├── testing.md
 │   │   └── test-strategy.md
 │   ├── plans
 │   │   ├── ci_cd-pipeline.md
 │   │   ├── development-roadmap.md
 │   │   └── testing-roadmap.md
+│   ├── roadmap.md
 │   └── setup
 │       └── development-setup-guide.md
 ├── federation_protocol.md
@@ -62,7 +68,7 @@ Docs Tree:
         ├── onboarding-guide.md
         └── resource-management.md
 
-16 directories, 41 files
+17 directories, 46 files
 
 
 ===================
@@ -535,6 +541,167 @@ graph TD
 
 
 ===================
+File: ./docs/architecture/overview.md
+===================
+# System Architecture Overview
+
+## Core Components
+
+### Backend (Rust)
+- Federation Management (`icn-federation`)
+- Governance System (`icn-governance`)
+- Resource Sharing (`icn-resources`)
+- Core Types (`icn-types`)
+
+### Frontend (React/TypeScript)
+- SPA Architecture
+- DID-based Authentication
+- Accessibility-First Design
+
+## Key Design Decisions
+
+### Separation of Concerns
+- Modular crate structure for maintainability
+- Clear API boundaries between components
+- Typed interfaces using shared models
+
+### Security & Authentication
+- DID-based identity management
+- Zero-knowledge proofs for sensitive operations
+- Role-based access control
+
+### Data Flow
+```mermaid
+graph TD
+    A[Frontend] -->|HTTP/REST| B[Warp Server]
+    B -->|SQL| C[PostgreSQL]
+    B -->|Federation Ops| D[Federation Module]
+    B -->|Governance| E[Governance Module]
+    D -->|Shared Types| F[ICN Types]
+    E -->|Shared Types| F
+```
+
+## Current Challenges & Mitigations
+
+1. **Complexity Management**
+   - Strict modularization
+   - Comprehensive testing strategy
+   - Clear documentation standards
+
+2. **Integration Points**
+   - Strong typing across boundaries
+   - Integration test suite
+   - Clear error handling patterns
+
+3. **Governance Scalability**
+   - Unified proposal/voting system
+   - Automated validation
+   - Clear audit trails
+
+## Implementation Details
+
+### Federation Module
+```rust
+pub struct Federation {
+    id: FederationId,
+    members: Vec<Member>,
+    governance_config: GovernanceConfig,
+    resources: ResourcePool,
+}
+
+impl Federation {
+    pub async fn new(config: FederationConfig) -> Result<Self, FederationError>;
+    pub async fn add_member(&mut self, member: Member) -> Result<(), MembershipError>;
+    pub async fn remove_member(&mut self, member_id: MemberId) -> Result<(), GovernanceError>;
+}
+```
+
+### Governance Module
+```rust
+pub struct Proposal {
+    id: ProposalId,
+    federation_id: FederationId,
+    proposer: MemberId,
+    action: GovernanceAction,
+    status: ProposalStatus,
+    votes: Vec<Vote>,
+}
+
+pub enum GovernanceAction {
+    AddMember(Member),
+    RemoveMember(MemberId),
+    UpdateConfig(GovernanceConfig),
+    AllocateResource(ResourceAllocation),
+}
+```
+
+
+===================
+File: ./docs/deployment/production.md
+===================
+# Production Deployment Guide
+
+## Prerequisites
+- Docker v20.10+
+- PostgreSQL 14+
+- Redis 6+
+- Kubernetes 1.24+
+
+## Configuration
+
+### Environment Variables
+```toml
+DATABASE_URL=postgres://user:pass@localhost:5432/icn
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=<secure-secret>
+LOG_LEVEL=info
+```
+
+### Kubernetes Deployment
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: icn-backend
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+      - name: icn-backend
+        image: icn/backend:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: icn-secrets
+              key: database-url
+```
+
+## Monitoring & Logging
+
+### Prometheus Metrics
+- HTTP request latency
+- Database connection pool stats
+- Federation operation counters
+- Governance proposal metrics
+
+### Log Structure
+```json
+{
+  "timestamp": "2024-01-20T10:00:00Z",
+  "level": "info",
+  "target": "icn_federation",
+  "message": "Federation created",
+  "federation_id": "fed_123",
+  "member_count": 1
+}
+```
+
+
+===================
 File: ./docs/development/guides/contributing.md
 ===================
 ---
@@ -936,6 +1103,95 @@ Use tools like `markdownlint` to check for common formatting issues in Markdown 
 
 
 ===================
+File: ./docs/development/guides/frontend-integration.md
+===================
+# Frontend Integration Guide
+
+## Key Integration Points
+
+### Authentication Flow
+```typescript
+interface AuthenticationFlow {
+  initiateDIDAuth(): Promise<AuthResponse>;
+  verifyCredentials(proof: ZKProof): Promise<boolean>;
+  establishSession(did: string): Promise<Session>;
+}
+```
+
+### Federation Operations
+```typescript
+interface FederationOperations {
+  createFederation(params: FederationParams): Promise<Federation>;
+  joinFederation(fedId: string, proof: MembershipProof): Promise<void>;
+  proposeMember(fedId: string, candidateId: string): Promise<Proposal>;
+}
+```
+
+## Error Handling
+
+### API Error Structure
+```typescript
+interface ApiError {
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+}
+```
+
+### Response Handling Pattern
+```typescript
+try {
+  const result = await api.federation.create(params);
+  // Handle success
+} catch (error) {
+  if (error instanceof ApiError) {
+    // Handle known error types
+  }
+  // Handle unexpected errors
+}
+```
+
+## State Management
+
+### Store Structure
+```typescript
+interface ICNStore {
+  federation: {
+    current: Federation | null;
+    members: Member[];
+    proposals: Proposal[];
+  };
+  auth: {
+    session: Session | null;
+    credentials: Credentials | null;
+  };
+  ui: {
+    loading: boolean;
+    errors: ApiError[];
+  };
+}
+```
+
+### Action Handlers
+```typescript
+class FederationActions {
+  @action
+  async createFederation(params: FederationParams) {
+    this.store.ui.loading = true;
+    try {
+      const federation = await this.api.federation.create(params);
+      runInAction(() => {
+        this.store.federation.current = federation;
+      });
+    } finally {
+      this.store.ui.loading = false;
+    }
+  }
+}
+```
+
+
+===================
 File: ./docs/development/guides/test-strategy.md
 ===================
 ---
@@ -1118,6 +1374,55 @@ To ensure the CI/CD pipeline is correctly configured, follow these steps:
 - **Cypress Documentation**: [Cypress Docs](https://docs.cypress.io/)
 - **k6 Load Testing**: [k6 Docs](https://k6.io/docs/)
 - **Codecov Documentation**: [Codecov Docs](https://docs.codecov.io/)
+
+
+===================
+File: ./docs/development/guides/testing.md
+===================
+# Testing Strategy
+
+## Integration Testing
+
+### Core Flows
+```rust
+// Example test structure
+#[tokio::test]
+async fn test_federation_lifecycle() {
+    // Setup test environment
+    let test_db = TestDb::new().await;
+    let test_server = TestServer::new(test_db.clone());
+
+    // Test federation creation
+    let fed = test_server.create_federation(...).await?;
+    
+    // Test member joining
+    let member = test_server.join_federation(fed.id, ...).await?;
+    
+    // Test proposal creation and voting
+    let proposal = test_server.create_proposal(...).await?;
+    
+    // Test federation dissolution
+    test_server.dissolve_federation(fed.id, ...).await?;
+}
+```
+
+### Key Test Scenarios
+1. Federation Lifecycle
+2. Governance Processes
+3. Resource Sharing
+4. Identity Management
+
+## Integration Points
+
+### Frontend ↔️ Backend
+- API contract testing
+- Type consistency validation
+- Error handling verification
+
+### Backend ↔️ Database
+- Transaction integrity
+- Concurrent access patterns
+- Data migration testing
 
 
 ===================
@@ -1616,6 +1921,47 @@ The ICN Testing Roadmap provides a structured plan for expanding and improving t
 - **GitHub Actions Documentation**: [GitHub Actions Docs](https://docs.github.com/en/actions)
 - **OWASP ZAP**: [OWASP ZAP Docs](https://www.zaproxy.org/docs/)
 
+
+
+===================
+File: ./docs/development/roadmap.md
+===================
+# Development Roadmap
+
+## Phase 1: Core Infrastructure
+
+### Current Focus
+- [ ] Integration test suite implementation
+- [ ] Federation creation wizard
+- [ ] Basic governance flows
+
+### Next Steps
+1. **Testing Infrastructure**
+   - End-to-end test framework
+   - Integration test patterns
+   - Automated CI/CD pipeline
+
+2. **User Experience**
+   - Federation creation wizard
+   - Proposal dashboard
+   - Accessibility improvements
+
+3. **Documentation**
+   - Real-world usage examples
+   - Deployment guides
+   - API documentation
+
+## Phase 2: Advanced Features
+
+### Planned Features
+- Zero-knowledge proof implementation
+- Advanced governance mechanisms
+- Resource sharing protocols
+
+### Technical Debt
+- Performance optimization
+- Security auditing
+- Documentation maintenance
 
 
 ===================

@@ -244,3 +244,42 @@ impl Proposal {
         self.transition_state(ProposalState::DisputeResolution)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[tokio::test]
+    async fn test_reputation_decay() {
+        let gov = GovernanceService::new(db_pool).await;
+        
+        // Test normal decay
+        let result = gov.apply_decay("did:icn:test", 0.1).await;
+        assert!(result.is_ok());
+        
+        // Test maximum decay limit
+        let result = gov.apply_decay("did:icn:test", 0.9).await;
+        assert!(result.is_err());
+        
+        // Test decay exemption
+        let result = gov.apply_decay("did:icn:exempt", 0.1).await;
+        assert!(result.is_ok());
+        assert_eq!(gov.get_reputation("did:icn:exempt").await.unwrap(), 100);
+    }
+
+    #[tokio::test]
+    async fn test_voting_edge_cases() {
+        let gov = GovernanceService::new(db_pool).await;
+
+        // Test vote after period ends
+        let proposal = gov.create_proposal("Test", "Description", "did:icn:test", 0).await.unwrap();
+        let result = gov.vote(&proposal.id, "did:icn:voter", true).await;
+        assert!(matches!(result, Err(GovernanceError::VotingPeriodEnded(_))));
+
+        // Test double voting
+        let proposal = gov.create_proposal("Test", "Description", "did:icn:test", 3600).await.unwrap();
+        gov.vote(&proposal.id, "did:icn:voter", true).await.unwrap();
+        let result = gov.vote(&proposal.id, "did:icn:voter", false).await;
+        assert!(matches!(result, Err(GovernanceError::AlreadyVoted(_))));
+    }
+}
