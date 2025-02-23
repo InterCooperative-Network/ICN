@@ -23,6 +23,19 @@ struct ResourceSharingResponse {
     message: String,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct TransferResourceRequest {
+    resource_id: String,
+    recipient_id: String,
+    amount: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct AllocateResourceSharesRequest {
+    resource_id: String,
+    shares: u64,
+}
+
 pub fn resource_routes(
     resource_service: Arc<Mutex<ResourceService>>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -38,7 +51,22 @@ pub fn resource_routes(
         .and(with_resource_service(resource_service.clone()))
         .and_then(share_resource_handler);
 
-    query_shared_resources.or(share_resource)
+    let transfer_resource = warp::path!("api" / "v1" / "resources" / "transfer")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_resource_service(resource_service.clone()))
+        .and_then(transfer_resource_handler);
+
+    let allocate_resource_shares = warp::path!("api" / "v1" / "resources" / "allocate")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_resource_service(resource_service.clone()))
+        .and_then(allocate_resource_shares_handler);
+
+    query_shared_resources
+        .or(share_resource)
+        .or(transfer_resource)
+        .or(allocate_resource_shares)
 }
 
 fn with_resource_service(
@@ -91,5 +119,27 @@ async fn share_resource_handler(
             success: false,
             message: format!("Failed to share resource: {}", e),
         })),
+    }
+}
+
+async fn transfer_resource_handler(
+    request: TransferResourceRequest,
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = resource_service.lock().await;
+    match service.transfer_resource(request.resource_id, request.recipient_id, request.amount).await {
+        Ok(_) => Ok(warp::reply::json(&"Resource transferred successfully")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn allocate_resource_shares_handler(
+    request: AllocateResourceSharesRequest,
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = resource_service.lock().await;
+    match service.allocate_resource_shares(request.resource_id, request.shares).await {
+        Ok(_) => Ok(warp::reply::json(&"Resource shares allocated successfully")),
+        Err(e) => Err(warp::reject::custom(e)),
     }
 }
