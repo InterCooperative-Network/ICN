@@ -23,10 +23,23 @@ impl AdaptiveRateLimiter {
         }
     }
 
-    async fn get_rate_limit(&self, did: &str) -> u32 {
+    async fn calculate_limit_multiplier(&self, did: &str) -> f64 {
         let reputation = self.reputation_manager.get_reputation(did, "api").await;
-        let rep_multiplier = (reputation as f64 / 100.0).min(1.0).max(0.1);
-        let limit = (self.base_limit as f64 * rep_multiplier) as u32;
+        let base_multiplier = (reputation as f64 / 100.0).min(1.0).max(0.1);
+        
+        // Additional multipliers based on federation status
+        let federation_multiplier = if self.is_federation_admin(did).await {
+            2.0
+        } else {
+            1.0
+        };
+
+        base_multiplier * federation_multiplier
+    }
+
+    async fn get_rate_limit(&self, did: &str) -> u32 {
+        let multiplier = self.calculate_limit_multiplier(did).await;
+        let limit = (self.base_limit as f64 * multiplier) as u32;
         limit.clamp(self.min_limit, self.max_limit)
     }
 

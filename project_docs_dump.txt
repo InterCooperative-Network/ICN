@@ -1,4 +1,4 @@
-Project Docs Dump - Generated Sun 23 Feb 2025 04:05:32 PM UTC
+Project Docs Dump - Generated Sun 23 Feb 2025 04:16:26 PM UTC
 ======================================
 
 Docs Tree:
@@ -494,49 +494,47 @@ File: ./docs/architecture/diagrams/mermaid/component-diagram.mermaid
 %% Mermaid diagram placeholder
 
 graph TD
-    A[Cooperative Applications Layer] --> B[API/SDK Integration Layer]
-    B --> C[Decentralized Identity Management]
-    C --> D[Federated Ledger Layer]
-    D --> E[State Machine & On-Chain Storage]
-    E --> F[Off-Chain Storage & Data Vaults]
+    A[User Interface Layer] --> B[API Integration Layer]
+    B --> C[Core Services Layer] 
+    C --> D[Federation Layer]
+    D --> E[Consensus Layer]
+    E --> F[Storage Layer]
 
-    subgraph Cooperative Applications Layer
-        A1[Governance Tools]
-        A2[Secure Messaging]
-        A3[Resource Sharing Platforms]
+    subgraph User Interface Layer
+        A1[Web Dashboard]
+        A2[CLI Tools]
+        A3[Mobile Views]
     end
 
-    subgraph API/SDK Integration Layer
-        B1[REST/gRPC/GraphQL Endpoints]
-        B2[Developer Tooling]
-        B3[Identity Wallets]
+    subgraph API Integration Layer
+        B1[REST Endpoints]
+        B2[WebSocket Server]
+        B3[Rate Limiter]
     end
 
-    subgraph Decentralized Identity Management
-        C1[W3C DIDs]
-        C2[Verifiable Credentials]
-        C3[Zero-Knowledge Proofs]
-        C4[Aries Integration]
+    subgraph Core Services Layer
+        C1[Identity Service]
+        C2[Reputation Service]
+        C3[Governance Service]
+        C4[Resource Service]
     end
 
-    subgraph Federated Ledger Layer
-        D1[BFT Consensus Engine]
-        D2[Validator Nodes]
-        D3[Multi-Sig Governance]
-        D4[Cooperative Transaction Types]
+    subgraph Federation Layer
+        D1[Federation Manager]
+        D2[Dispute Resolution]
+        D3[Asset Distribution]
     end
 
-    subgraph State Machine & On-Chain Storage
-        E1[DID Registry]
-        E2[Reputation Logs]
-        E3[Transaction Histories]
-        E4[Revocation Records]
+    subgraph Consensus Layer
+        E1[ProofOfCooperation]
+        E2[Validator Set]
+        E3[zk-SNARK Verifier]
     end
 
-    subgraph Off-Chain Storage & Data Vaults
-        F1[Encrypted Personal Data]
-        F2[IPFS/File Storage]
-        F3[Extended ZKP Artifacts]
+    subgraph Storage Layer
+        F1[On-chain Storage]
+        F2[IPFS Gateway]
+        F3[PostgreSQL]
     end
 
 
@@ -641,16 +639,54 @@ File: ./docs/deployment/production.md
 ===================
 # Production Deployment Guide
 
+## Overview
+This guide covers deploying ICN on major cloud providers and self-hosted Kubernetes clusters.
+
 ## Prerequisites
 - Docker v20.10+
-- PostgreSQL 14+
+- PostgreSQL 14+ 
 - Redis 6+
 - Kubernetes 1.24+
+- Helm 3+
 
-## Configuration
+## Cloud Deployment Options
+
+### AWS EKS Deployment
+1. Create EKS cluster:
+```bash
+eksctl create cluster --name icn-prod --region us-east-1
+```
+
+2. Configure storage:
+```bash
+kubectl apply -f k8s/aws/storage-class.yaml
+```
+
+3. Deploy database:
+```bash
+helm install icn-db bitnami/postgresql -f k8s/values-aws.yaml
+```
+
+### Self-Hosted Deployment
+1. Set up k3s:
+```bash
+curl -sfL https://get.k3s.io | sh -
+```
+
+2. Deploy monitoring:
+```bash
+helm install monitoring prometheus-community/kube-prometheus-stack
+```
+
+3. Configure ingress:
+```bash
+kubectl apply -f k8s/ingress.yaml
+```
+
+## Application Configuration
 
 ### Environment Variables
-```toml
+```yaml
 DATABASE_URL=postgres://user:pass@localhost:5432/icn
 REDIS_URL=redis://localhost:6379
 JWT_SECRET=<secure-secret>
@@ -680,25 +716,65 @@ spec:
               key: database-url
 ```
 
+### Security Considerations
+- Enable network policies
+- Configure TLS certificates
+- Set up WAF rules
+- Implement pod security policies
+
 ## Monitoring & Logging
 
 ### Prometheus Metrics
-- HTTP request latency
-- Database connection pool stats
-- Federation operation counters
-- Governance proposal metrics
-
-### Log Structure
-```json
-{
-  "timestamp": "2024-01-20T10:00:00Z",
-  "level": "info",
-  "target": "icn_federation",
-  "message": "Federation created",
-  "federation_id": "fed_123",
-  "member_count": 1
-}
+Configure custom metrics in `config/prometheus/rules.yaml`:
+```yaml
+groups:
+- name: icn.rules
+  rules:
+  - record: federation_operations_total
+    expr: sum(rate(federation_operations_counter[5m])) by (operation)
 ```
+
+### Grafana Dashboards
+Import the following dashboards:
+- Federation Operations (ID: 12345)
+- Governance Metrics (ID: 12346)
+- Resource Usage (ID: 12347)
+
+### Log Aggregation
+Configure Fluentd to ship logs to your preferred destination:
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-config
+data:
+  fluent.conf: |
+    # Add logging configuration
+```
+
+## Scaling Considerations
+- Enable horizontal pod autoscaling
+- Configure resource limits
+- Set up database connection pooling
+- Implement caching strategies
+
+## Backup & Recovery
+1. Database backups
+2. Configuration backups
+3. Disaster recovery procedures
+4. Data retention policies
+
+## Security Hardening
+1. Network policies
+2. Pod security
+3. Secret management
+4. Access control
+
+## Performance Tuning
+1. Resource allocation
+2. Cache optimization
+3. Database indexing
+4. Load balancing
 
 
 ===================
