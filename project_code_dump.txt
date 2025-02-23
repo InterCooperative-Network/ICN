@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sat 22 Feb 2025 11:27:38 PM UTC
+Project Code Dump - Generated Sun 23 Feb 2025 12:05:51 AM UTC
 ======================================
 
 LLM Context Information
@@ -52,7 +52,8 @@ Project Tree:
 │       ├── reputation.rs
 │       ├── services
 │       ├── storage.rs
-│       └── vm.rs
+│       ├── vm.rs
+│       └── websocket
 ├── Cargo.lock
 ├── Cargo.toml
 ├── config
