@@ -58,6 +58,19 @@ struct DisputeVoteRequest {
     support: bool,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct TransferResourceRequest {
+    resource_id: String,
+    recipient_id: String,
+    amount: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct AllocateResourceSharesRequest {
+    resource_id: String,
+    shares: u64,
+}
+
 pub fn federation_routes(
     federation_service: Arc<Mutex<FederationService>>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -141,6 +154,18 @@ pub fn federation_routes(
         .and(with_federation_service(federation_service.clone()))
         .and_then(federation_lifecycle_handler);
 
+    let transfer_resource = warp::path!("api" / "v1" / "federation" / "resources" / "transfer")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(transfer_resource_handler);
+
+    let allocate_resource_shares = warp::path!("api" / "v1" / "federation" / "resources" / "allocate")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(allocate_resource_shares_handler);
+
     initiate_federation
         .or(join_federation)
         .or(initiate_federation_dissolution)
@@ -155,6 +180,8 @@ pub fn federation_routes(
         .or(submit_dissolution_dispute)
         .or(vote_on_dispute)
         .or(federation_lifecycle)
+        .or(transfer_resource)
+        .or(allocate_resource_shares)
 }
 
 fn with_federation_service(
@@ -322,6 +349,28 @@ async fn federation_lifecycle_handler(
     let mut service = federation_service.lock().await;
     match service.handle_operation(operation).await {
         Ok(_) => Ok(warp::reply::json(&"Federation lifecycle operation completed")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn transfer_resource_handler(
+    request: TransferResourceRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.transfer_resource(request.resource_id, request.recipient_id, request.amount).await {
+        Ok(_) => Ok(warp::reply::json(&"Resource transferred successfully")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn allocate_resource_shares_handler(
+    request: AllocateResourceSharesRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = federation_service.lock().await;
+    match service.allocate_resource_shares(request.resource_id, request.shares).await {
+        Ok(_) => Ok(warp::reply::json(&"Resource shares allocated successfully")),
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
