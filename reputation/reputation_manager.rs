@@ -3,6 +3,7 @@ use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo::{kosaraju_scc, connected_components};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use crossbeam_channel::Sender;
 
 #[derive(Debug, Clone)]
 pub struct ReputationEvent {
@@ -226,6 +227,42 @@ impl ReputationManager {
             self.check_sybil_resistance(event).await?;
         }
         Ok(true)
+    }
+
+    pub fn adjust_federation_reputation(&mut self, federation_id: &str, change: f64) -> Result<(), ReputationError> {
+        let current_score = self.federation_scores.entry(federation_id.to_string()).or_insert(0.0);
+        *current_score += change;
+        
+        // Dynamic sybil threshold adjustment based on federation activity
+        self.sybil_threshold = self.calculate_dynamic_threshold(federation_id);
+        Ok(())
+    }
+
+    fn calculate_dynamic_threshold(&self, federation_id: &str) -> f64 {
+        let base_threshold = 0.8;
+        let activity_factor = self.get_federation_activity_score(federation_id);
+        let network_health = self.calculate_network_health();
+        
+        base_threshold * activity_factor * network_health
+    }
+
+    fn detect_federation_collusion(&self, federation_id: &str) -> bool {
+        let suspicious_patterns = self.analyze_cross_federation_patterns(federation_id);
+        let rapid_growth = self.check_federation_growth_rate(federation_id);
+        let voting_patterns = self.analyze_voting_patterns(federation_id);
+        
+        suspicious_patterns || rapid_growth || voting_patterns.is_suspicious
+    }
+
+    pub fn process_cross_federation_action(&mut self, from_fed: &str, to_fed: &str, action: &str) -> Result<(), ReputationError> {
+        if self.detect_federation_collusion(from_fed) {
+            self.adjust_federation_reputation(from_fed, -0.5)?;
+            return Err(ReputationError::CollusionDetected);
+        }
+        
+        // Process legitimate cross-federation action
+        self.record_cross_federation_interaction(from_fed, to_fed, action);
+        Ok(())
     }
 }
 
