@@ -127,4 +127,12 @@ impl ProposalContract {
             Err(e) => Err(e.to_string())
         }
     }
+
+    pub fn handle_zk_snark_proof_verification(&self, proof: &ZKProof) -> Result<bool, String> {
+        if self.verifier.verify_proof(proof) {
+            Ok(true)
+        } else {
+            Err("Invalid zk-SNARK proof".to_string())
+        }
+    }
 }

@@ -1,5 +1,8 @@
 use warp::Filter;
 use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution, handle_sybil_resistance, apply_reputation_decay};
+use icn_networking::p2p::{P2PManager, ReputationEvent}; // Import P2PManager and ReputationEvent
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ZkSnarkProofRequest {
@@ -18,7 +21,9 @@ struct ReputationDecayRequest {
     decay_rate: f64,
 }
 
-pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+pub fn reputation_routes(
+    p2p_manager: Arc<Mutex<P2PManager>>, // Add P2PManager to reputation_routes
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path("api")
         .and(
             warp::path("v1")
@@ -46,6 +51,7 @@ pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = wa
                             warp::path("zk_snark_proof")
                                 .and(warp::post())
                                 .and(warp::body::json())
+                                .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
                                 .and_then(submit_zk_snark_proof_handler)
                         )
                         .or(
@@ -76,9 +82,23 @@ pub fn reputation_routes() -> impl Filter<Extract = impl warp::Reply, Error = wa
         )
 }
 
+fn with_p2p_manager(
+    p2p_manager: Arc<Mutex<P2PManager>>,
+) -> impl Filter<Extract = (Arc<Mutex<P2PManager>>,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || p2p_manager.clone())
+}
+
 async fn submit_zk_snark_proof_handler(
     request: ZkSnarkProofRequest,
+    p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Publish event
+    let event = ReputationEvent::ZkSnarkProofSubmitted {
+        proof: request.proof.clone(),
+    };
+    let mut p2p = p2p_manager.lock().await;
+    p2p.publish(event).await.unwrap();
+
     // Placeholder logic for zk-SNARK proof submission
     Ok(warp::reply::json(&"zk-SNARK proof submitted"))
 }
@@ -108,7 +128,8 @@ mod tests {
     #[tokio::test]
     async fn test_submit_zk_snark_proof() {
         let reputation_service = Arc::new(ReputationServiceImpl::new(Arc::new(Database::new())));
-        let api = reputation_routes();
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new())); // Add P2PManager instance
+        let api = reputation_routes(p2p_manager);
 
         let resp = warp::test::request()
             .method("POST")
