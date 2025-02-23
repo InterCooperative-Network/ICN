@@ -160,3 +160,113 @@ impl ConsensusEngine for Core {
         self.stop().await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use crate::storage::StorageManager;
+    use crate::networking::NetworkManager;
+    use crate::identity::IdentityManager;
+    use crate::reputation::ReputationManager;
+    use crate::core::consensus::TendermintConsensus;
+    use async_trait::async_trait;
+
+    struct MockTelemetryManager;
+
+    impl MockTelemetryManager {
+        fn log(&self, _message: &str) {
+            // Mock logging
+        }
+    }
+
+    struct MockRuntimeManager;
+
+    #[async_trait]
+    impl RuntimeManager for MockRuntimeManager {
+        async fn start(&self) -> Result<(), String> {
+            Ok(())
+        }
+
+        async fn stop(&self) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    struct MockConsensusEngine;
+
+    #[async_trait]
+    impl ConsensusEngine for MockConsensusEngine {
+        async fn start(&self) -> Result<(), String> {
+            Ok(())
+        }
+
+        async fn stop(&self) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_mutual_credit_transaction() {
+        let core = Core::new(
+            Arc::new(StorageManager::new()),
+            Arc::new(NetworkManager::new()),
+            Arc::new(MockRuntimeManager),
+            Arc::new(MockTelemetryManager),
+            Arc::new(IdentityManager::new()),
+            Arc::new(ReputationManager::new()),
+            Arc::new(MockConsensusEngine),
+        );
+
+        let result = core.handle_mutual_credit_transaction("sender", "receiver", 100.0).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_submit_proposal() {
+        let core = Core::new(
+            Arc::new(StorageManager::new()),
+            Arc::new(NetworkManager::new()),
+            Arc::new(MockRuntimeManager),
+            Arc::new(MockTelemetryManager),
+            Arc::new(IdentityManager::new()),
+            Arc::new(ReputationManager::new()),
+            Arc::new(MockConsensusEngine),
+        );
+
+        let result = core.submit_proposal("title", "description", "creator", "2025-12-31").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_vote() {
+        let core = Core::new(
+            Arc::new(StorageManager::new()),
+            Arc::new(NetworkManager::new()),
+            Arc::new(MockRuntimeManager),
+            Arc::new(MockTelemetryManager),
+            Arc::new(IdentityManager::new()),
+            Arc::new(ReputationManager::new()),
+            Arc::new(MockConsensusEngine),
+        );
+
+        let result = core.vote(1, "voter", true).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_manage_federation_lifecycle() {
+        let core = Core::new(
+            Arc::new(StorageManager::new()),
+            Arc::new(NetworkManager::new()),
+            Arc::new(MockRuntimeManager),
+            Arc::new(MockTelemetryManager),
+            Arc::new(IdentityManager::new()),
+            Arc::new(ReputationManager::new()),
+            Arc::new(MockConsensusEngine),
+        );
+
+        let result = core.manage_federation_lifecycle("federation_id", "action").await;
+        assert!(result.is_ok());
+    }
+}

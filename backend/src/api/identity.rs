@@ -74,3 +74,69 @@ async fn handle_revoke_key(
     })?;
     Ok(warp::reply::with_status("Key revoked", warp::http::StatusCode::OK))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::Filter;
+    use crate::services::identity_service::IdentityServiceImpl;
+    use std::sync::Arc;
+    use warp::http::StatusCode;
+
+    #[tokio::test]
+    async fn test_create_identity() {
+        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
+        let api = identity_routes(identity_service);
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/identity/create")
+            .json(&"did:icn:test")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn test_get_identity() {
+        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
+        let api = identity_routes(identity_service);
+
+        let resp = warp::test::request()
+            .method("GET")
+            .path("/api/v1/identity/get/did:icn:test")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_rotate_key() {
+        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
+        let api = identity_routes(identity_service);
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/identity/rotate_key/did:icn:test")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_revoke_key() {
+        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
+        let api = identity_routes(identity_service);
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/identity/revoke_key/did:icn:test")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+}
