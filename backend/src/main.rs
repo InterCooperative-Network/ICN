@@ -6,6 +6,7 @@ mod notification;
 mod reputation;
 mod websocket;
 mod middleware;
+mod api;
 
 use crate::config::Config;
 use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
