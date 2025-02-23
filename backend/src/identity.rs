@@ -46,3 +46,60 @@ impl IdentityManager {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::runtime::Runtime;
+
+    #[test]
+    fn test_create_identity() {
+        let rt = Runtime::new().unwrap();
+        let identity_manager = IdentityManager::new();
+
+        rt.block_on(async {
+            let result = identity_manager.create_identity("test_identity").await;
+            assert!(result.is_ok());
+        });
+    }
+
+    #[test]
+    fn test_get_identity() {
+        let rt = Runtime::new().unwrap();
+        let identity_manager = IdentityManager::new();
+
+        rt.block_on(async {
+            identity_manager.create_identity("test_identity").await.unwrap();
+            let result = identity_manager.get_identity("test_identity").await;
+            assert_eq!(result.unwrap(), "");
+        });
+    }
+
+    #[test]
+    fn test_update_identity() {
+        let rt = Runtime::new().unwrap();
+        let identity_manager = IdentityManager::new();
+
+        rt.block_on(async {
+            identity_manager.create_identity("test_identity").await.unwrap();
+            let result = identity_manager.update_identity("test_identity", "new_data").await;
+            assert!(result.is_ok());
+            let updated_identity = identity_manager.get_identity("test_identity").await.unwrap();
+            assert_eq!(updated_identity, "new_data");
+        });
+    }
+
+    #[test]
+    fn test_delete_identity() {
+        let rt = Runtime::new().unwrap();
+        let identity_manager = IdentityManager::new();
+
+        rt.block_on(async {
+            identity_manager.create_identity("test_identity").await.unwrap();
+            let result = identity_manager.delete_identity("test_identity").await;
+            assert!(result.is_ok());
+            let deleted_identity = identity_manager.get_identity("test_identity").await;
+            assert!(deleted_identity.is_err());
+        });
+    }
+}

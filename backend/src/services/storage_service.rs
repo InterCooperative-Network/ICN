@@ -11,6 +11,33 @@ impl StorageService {
     pub fn new(pool: Arc<PgPool>) -> Self {
         Self { pool }
     }
+
+    pub async fn store_on_chain(&self, key: &str, value: &[u8]) -> StorageResult<()> {
+        // Implement on-chain storage logic here
+        Ok(())
+    }
+
+    pub async fn retrieve_on_chain(&self, key: &str) -> StorageResult<Vec<u8>> {
+        // Implement on-chain retrieval logic here
+        Ok(vec![])
+    }
+
+    pub async fn delete_on_chain(&self, key: &str) -> StorageResult<()> {
+        // Implement on-chain deletion logic here
+        Ok(())
+    }
+
+    pub async fn store_off_chain(&self, key: &str, value: &[u8]) -> StorageResult<()> {
+        self.set(key, value).await
+    }
+
+    pub async fn retrieve_off_chain(&self, key: &str) -> StorageResult<Vec<u8>> {
+        self.get(key).await
+    }
+
+    pub async fn delete_off_chain(&self, key: &str) -> StorageResult<()> {
+        self.delete(key).await
+    }
 }
 
 #[async_trait]
@@ -64,5 +91,75 @@ impl StorageBackend for StorageService {
         .fetch_one(&*self.pool)
         .await?;
         Ok(result.exists.unwrap_or(false))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::PgPool;
+    use std::env;
+    use std::sync::Arc;
+
+    async fn setup_test_db() -> Arc<PgPool> {
+        let database_url = env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://icnuser:icnpass@db:5432/icndb_test".to_string());
+        Arc::new(PgPool::connect(&database_url).await.unwrap())
+    }
+
+    #[tokio::test]
+    async fn test_store_on_chain() {
+        let pool = setup_test_db().await;
+        let storage_service = StorageService::new(pool);
+
+        let result = storage_service.store_on_chain("test_key", b"test_value").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_retrieve_on_chain() {
+        let pool = setup_test_db().await;
+        let storage_service = StorageService::new(pool);
+
+        let result = storage_service.retrieve_on_chain("test_key").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), b"test_value");
+    }
+
+    #[tokio::test]
+    async fn test_delete_on_chain() {
+        let pool = setup_test_db().await;
+        let storage_service = StorageService::new(pool);
+
+        let result = storage_service.delete_on_chain("test_key").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_store_off_chain() {
+        let pool = setup_test_db().await;
+        let storage_service = StorageService::new(pool);
+
+        let result = storage_service.store_off_chain("test_key", b"test_value").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_retrieve_off_chain() {
+        let pool = setup_test_db().await;
+        let storage_service = StorageService::new(pool);
+
+        let result = storage_service.retrieve_off_chain("test_key").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), b"test_value");
+    }
+
+    #[tokio::test]
+    async fn test_delete_off_chain() {
+        let pool = setup_test_db().await;
+        let storage_service = StorageService::new(pool);
+
+        let result = storage_service.delete_off_chain("test_key").await;
+        assert!(result.is_ok());
     }
 }

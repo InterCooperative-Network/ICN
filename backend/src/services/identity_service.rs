@@ -40,3 +40,58 @@ impl IdentityService for IdentityServiceImpl {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::PgPool;
+    use std::env;
+
+    async fn setup_test_db() -> PgPool {
+        let database_url = env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://icnuser:icnpass@db:5432/icndb_test".to_string());
+        PgPool::connect(&database_url).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_create_identity() {
+        let pool = setup_test_db().await;
+        let db = Arc::new(Database { pool });
+        let service = IdentityServiceImpl::new(db);
+
+        let result = service.create_identity("did:icn:test").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_get_identity() {
+        let pool = setup_test_db().await;
+        let db = Arc::new(Database { pool });
+        let service = IdentityServiceImpl::new(db);
+
+        let _ = service.create_identity("did:icn:test").await;
+        let result = service.get_identity("did:icn:test").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "");
+    }
+
+    #[tokio::test]
+    async fn test_rotate_key() {
+        let pool = setup_test_db().await;
+        let db = Arc::new(Database { pool });
+        let service = IdentityServiceImpl::new(db);
+
+        let result = service.rotate_key("did:icn:test").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_revoke_key() {
+        let pool = setup_test_db().await;
+        let db = Arc::new(Database { pool });
+        let service = IdentityServiceImpl::new(db);
+
+        let result = service.revoke_key("did:icn:test").await;
+        assert!(result.is_ok());
+    }
+}

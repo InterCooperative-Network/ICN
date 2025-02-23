@@ -66,10 +66,16 @@ pub fn governance_routes(
         .and(with_governance_service(governance_service.clone()))
         .and_then(reputation_decay_handler);
 
+    let proposal_status = warp::path!("api" / "v1" / "governance" / "proposals" / String / "status")
+        .and(warp::get())
+        .and(with_governance_service(governance_service.clone()))
+        .and_then(proposal_status_handler);
+
     create_proposal
         .or(vote_on_proposal)
         .or(sybil_resistance)
         .or(reputation_decay)
+        .or(proposal_status)
 }
 
 fn with_governance_service(
@@ -132,6 +138,17 @@ async fn reputation_decay_handler(
     let mut service = governance_service.lock().await;
     match service.apply_reputation_decay(request.did, request.decay_rate).await {
         Ok(_) => Ok(warp::reply::json(&"Reputation decay applied")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn proposal_status_handler(
+    proposal_id: String,
+    governance_service: Arc<Mutex<GovernanceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let service = governance_service.lock().await;
+    match service.get_proposal_status(&proposal_id).await {
+        Ok(status) => Ok(warp::reply::json(&status)),
         Err(e) => Err(warp::reject::custom(e)),
     }
 }

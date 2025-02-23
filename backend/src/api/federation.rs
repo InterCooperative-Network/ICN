@@ -135,6 +135,12 @@ pub fn federation_routes(
         .and(with_federation_service(federation_service.clone()))
         .and_then(vote_on_dispute_handler);
 
+    let federation_lifecycle = warp::path!("api" / "v1" / "federation" / "lifecycle")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and_then(federation_lifecycle_handler);
+
     initiate_federation
         .or(join_federation)
         .or(initiate_federation_dissolution)
@@ -148,6 +154,7 @@ pub fn federation_routes(
         .or(reputation_decay)
         .or(submit_dissolution_dispute)
         .or(vote_on_dispute)
+        .or(federation_lifecycle)
 }
 
 fn with_federation_service(
@@ -299,6 +306,22 @@ async fn vote_on_dispute_handler(
     let mut service = federation_service.lock().await;
     match service.vote_on_dispute(&dispute_id, request.support).await {
         Ok(_) => Ok(warp::reply::json(&"Vote recorded successfully")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn federation_lifecycle_handler(
+    request: FederationLifecycleRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let operation = FederationOperation::Lifecycle {
+        federation_id: request.federation_id,
+        action: request.action,
+    };
+
+    let mut service = federation_service.lock().await;
+    match service.handle_operation(operation).await {
+        Ok(_) => Ok(warp::reply::json(&"Federation lifecycle operation completed")),
         Err(e) => Err(warp::reject::custom(e)),
     }
 }

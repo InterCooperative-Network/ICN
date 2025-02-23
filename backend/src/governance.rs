@@ -93,4 +93,20 @@ impl GovernanceEngine {
 
         self.record_vote(vote).await.map_err(|e| e.to_string())
     }
+
+    pub async fn get_proposal_status(&self, proposal_id: &str) -> Result<String, sqlx::Error> {
+        let status = sqlx::query!(
+            r#"
+            SELECT status FROM proposals WHERE id = $1
+            "#,
+            proposal_id
+        )
+        .fetch_one(&*self.db.db_pool)
+        .await
+        .map_err(|e| {
+            error!("Error getting proposal status: {}", e);
+            e
+        })?;
+        Ok(status.status)
+    }
 }
