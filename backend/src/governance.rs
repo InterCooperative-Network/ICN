@@ -124,3 +124,95 @@ impl GovernanceEngine {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Proposal, Vote};
+    use crate::db::Database;
+    use crate::identity::IdentityManager;
+    use sqlx::{PgPool, Executor};
+    use std::sync::Arc;
+    use chrono::NaiveDateTime;
+
+    async fn setup_test_db() -> Arc<Database> {
+        let pool = PgPool::connect("postgres://icnuser:icnpass@localhost/icndb").await.unwrap();
+        pool.execute("TRUNCATE TABLE proposals, votes").await.unwrap();
+        Arc::new(Database::new(pool))
+    }
+
+    #[tokio::test]
+    async fn test_create_proposal() {
+        let db = setup_test_db().await;
+        let identity_manager = Arc::new(IdentityManager::new(db.clone()));
+        let governance_engine = GovernanceEngine::new(db.clone(), identity_manager.clone());
+
+        let proposal = Proposal {
+            id: 1,
+            title: "Test Proposal".to_string(),
+            description: "This is a test proposal".to_string(),
+            created_by: "did:icn:test".to_string(),
+            ends_at: NaiveDateTime::from_timestamp(1_614_000_000, 0),
+            created_at: NaiveDateTime::from_timestamp(1_614_000_000, 0),
+        };
+
+        let result = governance_engine.create_proposal(proposal).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_record_vote() {
+        let db = setup_test_db().await;
+        let identity_manager = Arc::new(IdentityManager::new(db.clone()));
+        let governance_engine = GovernanceEngine::new(db.clone(), identity_manager.clone());
+
+        let vote = Vote {
+            proposal_id: 1,
+            voter: "did:icn:test".to_string(),
+            approve: true,
+        };
+
+        let result = governance_engine.record_vote(vote).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_list_proposals() {
+        let db = setup_test_db().await;
+        let identity_manager = Arc::new(IdentityManager::new(db.clone()));
+        let governance_engine = GovernanceEngine::new(db.clone(), identity_manager.clone());
+
+        let proposals = governance_engine.list_proposals().await;
+        assert!(proposals.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_get_proposal_status() {
+        let db = setup_test_db().await;
+        let identity_manager = Arc::new(IdentityManager::new(db.clone()));
+        let governance_engine = GovernanceEngine::new(db.clone(), identity_manager.clone());
+
+        let status = governance_engine.get_proposal_status("1").await;
+        assert!(status.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_apply_reputation_decay() {
+        let db = setup_test_db().await;
+        let identity_manager = Arc::new(IdentityManager::new(db.clone()));
+        let governance_engine = GovernanceEngine::new(db.clone(), identity_manager.clone());
+
+        let result = governance_engine.apply_reputation_decay("did:icn:test", 0.1).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_sybil_resistance() {
+        let db = setup_test_db().await;
+        let identity_manager = Arc::new(IdentityManager::new(db.clone()));
+        let governance_engine = GovernanceEngine::new(db.clone(), identity_manager.clone());
+
+        let result = governance_engine.handle_sybil_resistance("did:icn:test", 50).await;
+        assert!(result.is_ok());
+    }
+}
