@@ -89,3 +89,49 @@ pub enum GovernanceAction {
     AllocateResource(ResourceAllocation),
 }
 ```
+
+## Hierarchical Federation and Governance Models
+
+### Hierarchical Federation Model
+In the hierarchical federation model, smaller federations (e.g., regional co-ops) form local clusters that then federate upward into larger “umbrella” federations. This reduces excessive lateral communication across cooperatives and services.
+
+#### Benefits:
+- **Scalability:** Smaller federations handle local decisions, offloading the global layer.
+- **Clarity:** Clear separation of responsibilities between local and global governance.
+- **Performance:** Less broadcast overhead for proposals/voting, since only federated representatives escalate major decisions.
+
+### Hierarchical Governance Model
+In the hierarchical governance model, each smaller federation elects a representative to the next level, reducing the total number of governance messages across the entire network.
+
+#### Benefits:
+- **Scalability:** Smaller federations handle local decisions, offloading the global layer.
+- **Clarity:** Clear separation of responsibilities between local and global governance.
+- **Performance:** Less broadcast overhead for proposals/voting, since only federated representatives escalate major decisions.
+
+### Updated Data Flow
+```mermaid
+flowchart LR
+    subgraph "Microservice Layer"
+    A[Identity Svc]
+    B[Resource Svc]
+    C[Governance Svc]
+    D[Federation Svc]
+    E[Reputation Svc]
+    end
+    
+    subgraph "Distributed Storage & Broker"
+    DB[(PostgreSQL\nSharded or Clustered)]
+    MQ((Message Broker\nKafka/RabbitMQ))
+    IPFS[[IPFS/Filecoin]]
+    end
+
+    Gateway -->|API Calls| A & B & C & D & E
+    A & B & C & D & E -->|Events| MQ
+    A & B & C & D & E -->|Reads/Writes| DB
+    B & C -->|File references| IPFS
+```
+
+- **Gateway**: Serves as the single entry point for external clients.
+- **Microservices**: Each domain stands alone, exchanging messages via the **MQ** and persisting data to the **DB**.
+- **IPFS**: Stores large resource files or additional proposal data off-chain.
+- **Hierarchical Federations**: Externally, multiple federations connect at the **Federation Svc** for cross-federation coordination.
