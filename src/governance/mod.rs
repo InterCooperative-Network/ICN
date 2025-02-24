@@ -2,6 +2,8 @@ mod rollback;
 
 use rollback::{DisputeInfo, RollbackError, RollbackConfig};
 use std::collections::HashMap;
+use std::time::SystemTime;
+use crate::icn_types::Proposal;
 
 pub struct GovernanceService {
     // ...existing code...
@@ -29,6 +31,8 @@ impl GovernanceService {
             reason,
             timestamp: SystemTime::now(),
             evidence,
+            status: DisputeStatus::Pending,
+            votes: HashMap::new(),
         };
 
         self.disputes.insert(proposal_id.to_string(), dispute);
