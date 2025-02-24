@@ -5,6 +5,9 @@ use dashmap::DashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
 use std::time::{SystemTime, Duration, UNIX_EPOCH};
+use tokio::sync::mpsc::{self, Sender, Receiver};
+use tokio::task;
+use tokio::time::{self, Duration};
 
 /// A cache for storing reputation scores.
 pub struct ReputationCache {
@@ -43,6 +46,7 @@ pub struct ReputationService {
     db: Arc<Database>,
     cache: ReputationCache,
     decay_rate: f64,
+    event_sender: Sender<ReputationEvent>,
 }
 
 pub struct ReputationConfig {
@@ -68,11 +72,15 @@ impl Default for ReputationConfig {
 impl ReputationService {
     /// Creates a new ReputationService with the specified database, cache size, and decay rate.
     pub fn new(db: Arc<Database>, max_cache_size: usize, decay_rate: f64) -> Self {
-        Self {
+        let (event_sender, event_receiver) = mpsc::channel(100);
+        let service = ReputationService {
             db,
             cache: ReputationCache::new(max_cache_size),
             decay_rate,
-        }
+            event_sender,
+        };
+        service.start_event_listener(event_receiver);
+        service
     }
 
     /// Retrieves the reputation score for the given DID and category.
@@ -285,6 +293,35 @@ impl ReputationService {
 
         Ok(())
     }
+
+    pub async fn batch_reputation_updates(&self, events: Vec<ReputationEvent>) -> Result<(), sqlx::Error> {
+        for event in events {
+            self.emit_event(event);
+        }
+        Ok(())
+    }
+
+    pub fn emit_event(&self, event: ReputationEvent) {
+        let sender = self.event_sender.clone();
+        task::spawn(async move {
+            sender.send(event).await.unwrap();
+        });
+    }
+
+    fn start_event_listener(&self, mut event_receiver: Receiver<ReputationEvent>) {
+        task::spawn(async move {
+            while let Some(event) = event_receiver.recv().await {
+                match event {
+                    ReputationEvent::ReputationAdjusted { did, adjustment } => {
+                        // Handle reputation adjustment event
+                    }
+                    ReputationEvent::ReputationDecayApplied { did, decay_rate } => {
+                        // Handle reputation decay event
+                    }
+                }
+            }
+        });
+    }
 }
 
 /// Represents a contribution with a score and timestamp.
@@ -301,6 +338,11 @@ impl Contribution {
             timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as f64,
         }
     }
+}
+
+pub enum ReputationEvent {
+    ReputationAdjusted { did: String, adjustment: i64 },
+    ReputationDecayApplied { did: String, decay_rate: f64 },
 }
 
 #[cfg(test)]

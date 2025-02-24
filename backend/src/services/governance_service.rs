@@ -101,4 +101,9 @@ impl GovernanceService {
         // Placeholder logic for applying reputation decay
         Ok(())
     }
+
+    pub async fn handle_delegated_governance(&self, federation_id: &str, representative_id: &str) -> Result<(), String> {
+        // Placeholder logic for handling delegated governance
+        Ok(())
+    }
 }

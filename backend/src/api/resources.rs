@@ -36,6 +36,13 @@ struct AllocateResourceSharesRequest {
     shares: u64,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct CreateLocalClusterRequest {
+    cluster_name: String,
+    region: String,
+    members: Vec<String>,
+}
+
 pub fn resource_routes(
     resource_service: Arc<Mutex<ResourceService>>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -63,10 +70,17 @@ pub fn resource_routes(
         .and(with_resource_service(resource_service.clone()))
         .and_then(allocate_resource_shares_handler);
 
+    let create_local_cluster = warp::path!("api" / "v1" / "resources" / "local_cluster" / "create")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_resource_service(resource_service.clone()))
+        .and_then(create_local_cluster_handler);
+
     query_shared_resources
         .or(share_resource)
         .or(transfer_resource)
         .or(allocate_resource_shares)
+        .or(create_local_cluster)
 }
 
 fn with_resource_service(
@@ -140,6 +154,23 @@ async fn allocate_resource_shares_handler(
     let mut service = resource_service.lock().await;
     match service.allocate_resource_shares(request.resource_id, request.shares).await {
         Ok(_) => Ok(warp::reply::json(&"Resource shares allocated successfully")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn create_local_cluster_handler(
+    request: CreateLocalClusterRequest,
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let operation = ResourceOperation::CreateLocalCluster {
+        cluster_name: request.cluster_name,
+        region: request.region,
+        members: request.members,
+    };
+
+    let mut service = resource_service.lock().await;
+    match service.handle_operation(operation).await {
+        Ok(_) => Ok(warp::reply::json(&"Local cluster created")),
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
@@ -228,6 +259,27 @@ mod tests {
         let resp = warp::test::request()
             .method("POST")
             .path("/api/v1/resources/allocate")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_create_local_cluster() {
+        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+        let api = resource_routes(resource_service);
+
+        let request = CreateLocalClusterRequest {
+            cluster_name: "test_cluster".to_string(),
+            region: "test_region".to_string(),
+            members: vec!["member1".to_string(), "member2".to_string()],
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/resources/local_cluster/create")
             .json(&request)
             .reply(&api)
             .await;
