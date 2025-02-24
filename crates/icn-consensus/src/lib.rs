@@ -17,6 +17,7 @@ use trie_rs::Trie;
 use thiserror::Error;
 use federation::{Federation, FederationError};
 use serde::{Serialize, Deserialize};
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 #[derive(Error, Debug)]
 pub enum ConsensusError {

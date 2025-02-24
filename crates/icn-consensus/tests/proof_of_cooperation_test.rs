@@ -143,3 +143,54 @@ async fn test_reputation_categories_technical_contributions() {
     poc.vote("participant3".to_string(), false);
     assert_eq!(poc.finalize_block().await, Some(block));
 }
+
+#[tokio::test]
+async fn test_zk_snark_proof_verification() {
+    let reputation_manager = Arc::new(MockReputationManager);
+    let poc = ProofOfCooperation::new(reputation_manager);
+    let proof = "valid_proof";
+    assert!(poc.verify_zk_snark_proof(proof).await.unwrap());
+}
+
+#[tokio::test]
+async fn test_batch_verification_of_zk_snark_proofs() {
+    let reputation_manager = Arc::new(MockReputationManager);
+    let mut poc = ProofOfCooperation::new(reputation_manager);
+    let proof1 = "valid_proof1";
+    let proof2 = "valid_proof2";
+    poc.add_proof(proof1.to_string());
+    poc.add_proof(proof2.to_string());
+    assert!(poc.verify_all_proofs().await.unwrap());
+}
+
+#[tokio::test]
+async fn test_timeout_handling() {
+    let reputation_manager = Arc::new(MockReputationManager);
+    let mut poc = ProofOfCooperation::new(reputation_manager);
+    poc.handle_timeout().await;
+    // No assertion needed, just ensure it completes without error
+}
+
+#[tokio::test]
+async fn test_validator_timeout_handling() {
+    let reputation_manager = Arc::new(MockReputationManager);
+    let poc = ProofOfCooperation::new(reputation_manager);
+    poc.handle_validator_timeout("validator1").await;
+    // No assertion needed, just ensure it completes without error
+}
+
+#[tokio::test]
+async fn test_consensus_timeout_handling() {
+    let reputation_manager = Arc::new(MockReputationManager);
+    let poc = ProofOfCooperation::new(reputation_manager);
+    poc.handle_consensus_timeout().await;
+    // No assertion needed, just ensure it completes without error
+}
+
+#[tokio::test]
+async fn test_log_timeout_error() {
+    let reputation_manager = Arc::new(MockReputationManager);
+    let poc = ProofOfCooperation::new(reputation_manager);
+    poc.log_timeout_error("Timeout error occurred").await;
+    // No assertion needed, just ensure it completes without error
+}
