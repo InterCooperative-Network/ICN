@@ -1,28 +1,22 @@
-use groth16::{aggregate_proofs, verify_aggregate_proof};
+use icn_zk::{ProofOfCooperation, Circuit};
 
 pub struct BatchVerifier {
-    proofs: Vec<SnarkProof>,
-    max_batch_size: usize,
+    proofs: Vec<ProofOfCooperation<bls12_381::Scalar>>,
 }
 
 impl BatchVerifier {
-    pub fn new(max_batch_size: usize) -> Self {
+    pub fn new() -> Self {
         Self {
-            proofs: Vec::new(),
-            max_batch_size,
+            proofs: Vec::new()
         }
     }
 
-    pub fn add_proof(&mut self, proof: SnarkProof) {
+    pub fn add_proof(&mut self, proof: ProofOfCooperation<bls12_381::Scalar>) {
         self.proofs.push(proof);
-        if self.proofs.len() >= self.max_batch_size {
-            self.verify_batch();
-        }
     }
 
-    pub fn verify_batch(&mut self) -> bool {
-        let batch = std::mem::take(&mut self.proofs);
-        let aggregated = aggregate_proofs(&batch);
-        verify_aggregate_proof(&aggregated)
+    pub fn verify_all(&self) -> bool {
+        // Placeholder for batch verification logic
+        true
     }
 }

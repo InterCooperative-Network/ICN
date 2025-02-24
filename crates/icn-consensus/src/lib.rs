@@ -17,6 +17,7 @@ use trie_rs::Trie;
 use thiserror::Error;
 use federation::{Federation, FederationError};
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
+use serde::{Serialize, Deserialize};
 
 #[derive(Error, Debug)]
 pub enum ConsensusError {
@@ -416,4 +417,26 @@ enum FederationType {
     Cooperative,
     Community,
     Hybrid,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Vote {
+    pub proposal_id: String,
+    pub voter: String,
+    pub approve: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum VoteStatus {
+    Accepted,
+    Rejected,
+    Pending,
+}
+
+#[derive(Error, Debug)]
+pub enum GovernanceError {
+    #[error("Proposal not found")]
+    ProposalNotFound,
+    #[error("Not eligible to vote")]
+    NotEligibleToVote,
 }
