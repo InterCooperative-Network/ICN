@@ -26,34 +26,99 @@ pub trait ConsensusEngine {
 
 pub struct ProofOfCooperation {
     reputation_manager: ReputationManager,
+    current_round: u64,
+    participants: Vec<String>,
+    proposed_block: Option<tendermint::block::Block>,
+    votes: Vec<bool>,
+    timeout: std::time::Duration,
+    round_start_time: std::time::Instant,
 }
 
 impl ProofOfCooperation {
     pub fn new(reputation_manager: ReputationManager) -> Self {
-        Self { reputation_manager }
+        Self {
+            reputation_manager,
+            current_round: 0,
+            participants: Vec::new(),
+            proposed_block: None,
+            votes: Vec::new(),
+            timeout: std::time::Duration::from_secs(60),
+            round_start_time: std::time::Instant::now(),
+        }
     }
 
-    pub async fn verify_validator_set(&self) -> Result<bool, String> {
-        let total_validators = self.reputation_manager.count_eligible_validators(50, "consensus").await?;
-        let max_faulty = total_validators / 3;
-        
-        // Verify we maintain BFT properties
-        if total_validators < (3 * max_faulty + 1) {
-            return Ok(false);
-        }
-
-        // Verify validator diversity
-        let unique_organizations = self.reputation_manager.count_unique_organizations().await?;
-        if unique_organizations < (2 * max_faulty + 1) {
-            return Ok(false);
-        }
-
-        Ok(true)
+    pub fn start_round(&mut self) {
+        self.current_round += 1;
+        self.proposed_block = None;
+        self.votes.clear();
+        self.round_start_time = std::time::Instant::now();
     }
 
-    pub async fn reputation_based_access(&self, did: &str, min_reputation: i64) -> Result<bool, String> {
-        let reputation = self.reputation_manager.get_reputation(did, "consensus").await?;
-        Ok(reputation >= min_reputation)
+    pub fn propose_block(&mut self, block: tendermint::block::Block) {
+        self.proposed_block = Some(block);
+    }
+
+    pub fn vote(&mut self, participant: String, vote: bool) {
+        if self.is_eligible(&participant) {
+            self.participants.push(participant);
+            self.votes.push(vote);
+        }
+    }
+
+    pub async fn finalize_block(&mut self) -> Result<Option<tendermint::block::Block>, String> {
+        let (total_reputation, approval_reputation) = self.parallel_vote_counting().await?;
+
+        // BFT requirement: Need more than 2/3 of total reputation for finalization
+        let bft_threshold = (total_reputation as f64 * 2.0 / 3.0) as i64;
+
+        if approval_reputation > bft_threshold {
+            if let Some(block) = &self.proposed_block {
+                // Update block metadata before finalization
+                let mut final_block = block.clone();
+                let consensus_duration = self.round_start_time.elapsed().as_millis() as u64;
+                final_block.header.time = tendermint::time::Time::from_unix_timestamp(consensus_duration as i64, 0).unwrap();
+
+                // Clear round state
+                self.start_round();
+
+                Ok(Some(final_block))
+            } else {
+                Err("No proposed block".into())
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn handle_timeout(&self) {
+        // Placeholder logic for handling timeout
+    }
+
+    fn is_eligible(&self, participant: &str) -> bool {
+        self.reputation_manager.is_eligible(participant, 10, "consensus").unwrap_or(false)
+    }
+
+    pub async fn parallel_vote_counting(&self) -> Result<(i64, i64), String> {
+        let total_reputation: i64 = self.participants.iter().map(|p| self.reputation_manager.get_reputation(p, "consensus").unwrap_or(0)).sum();
+        let approval_reputation: i64 = self.participants.iter().zip(&self.votes).filter(|(_, &v)| v).map(|(p, _)| self.reputation_manager.get_reputation(p, "consensus").unwrap_or(0)).sum();
+        Ok((total_reputation, approval_reputation))
+    }
+
+    pub async fn select_validators(&mut self, min_reputation: i64) -> Result<Vec<String>, String> {
+        let mut validators = Vec::new();
+        for participant in &self.participants {
+            if self.reputation_manager.is_eligible(participant, min_reputation, "consensus").unwrap_or(false) {
+                validators.push(participant.clone());
+            }
+        }
+
+        // BFT requirement: Need at least 3f + 1 validators where f is max faulty nodes
+        let min_validators = (self.participants.len() / 3) * 3 + 1;
+        if validators.len() < min_validators {
+            return Err(format!("Insufficient validators: {} (need {})", validators.len(), min_validators));
+        }
+
+        Ok(validators)
     }
 
     pub async fn verify_zk_snark_proof(&self, proof: &str) -> Result<bool, String> {
@@ -71,6 +136,71 @@ impl ProofOfCooperation {
     pub async fn apply_reputation_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> { // Pf5c9
         // Placeholder logic for applying reputation decay
         Ok(())
+    }
+}
+
+#[async_trait]
+impl ConsensusEngine for ProofOfCooperation {
+    async fn start(&self) -> Result<(), String> {
+        // Placeholder logic for starting the consensus engine
+        Ok(())
+    }
+
+    async fn stop(&self) -> Result<(), String> {
+        // Placeholder logic for stopping the consensus engine
+        Ok(())
+    }
+
+    async fn get_reputation(&self, did: &str, category: &str) -> Result<i64, String> {
+        self.reputation_manager.get_reputation(did, category).await
+    }
+
+    async fn is_eligible(&self, did: &str, min_reputation: i64, category: &str) -> Result<bool, String> {
+        self.reputation_manager.is_eligible(did, min_reputation, category).await
+    }
+
+    async fn dynamic_adjustment(&self, did: &str, contribution: i64) -> Result<(), String> {
+        self.reputation_manager.adjust_reputation(did, contribution, "consensus").await
+    }
+
+    async fn apply_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> {
+        self.reputation_manager.apply_decay(did, decay_rate).await
+    }
+
+    async fn reputation_based_access(&self, did: &str, min_reputation: i64) -> Result<bool, String> {
+        self.reputation_based_access(did, min_reputation).await
+    }
+
+    async fn propose_block(&self, block: tendermint::block::Block) -> Result<(), String> {
+        self.propose_block(block);
+        Ok(())
+    }
+
+    async fn vote_on_block(&self, block: tendermint::block::Block, vote: bool) -> Result<(), String> {
+        self.vote(block.header.proposer_address.to_string(), vote);
+        Ok(())
+    }
+
+    async fn finalize_block(&self, block: tendermint::block::Block) -> Result<(), String> {
+        self.finalize_block().await.map(|_| ()).map_err(|e| e.to_string())
+    }
+
+    async fn submit_proposal(&self, title: &str, description: &str, created_by: &str, ends_at: &str) -> Result<i64, String> {
+        // Placeholder logic for submitting a proposal
+        Ok(1) // Placeholder proposal ID
+    }
+
+    async fn vote(&self, proposal_id: i64, voter: &str, approve: bool) -> Result<(), String> {
+        // Placeholder logic for voting on a proposal
+        Ok(())
+    }
+
+    async fn handle_sybil_resistance(&self, did: &str, reputation_score: i64) -> Result<(), String> { // Pfffb
+        self.handle_sybil_resistance(did, reputation_score).await
+    }
+
+    async fn apply_reputation_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> { // Pf5c9
+        self.apply_reputation_decay(did, decay_rate).await
     }
 }
 
