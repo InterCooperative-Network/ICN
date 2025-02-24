@@ -824,18 +824,41 @@ pub enum StorageError {
     
     #[error("IPFS error: {0}")]
     IpfsError(String),
+    #[error("Storage reference already exists")]
+    ReferenceAlreadyExists,
+    #[error("Storage reference not found")]
+    ReferenceNotFound,
 }
 
-/// Result type for storage operations
-pub type StorageResult<T> = Result<T, StorageError>;
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StorageReference {
+    pub id: String,
+    pub storage_type: StorageType,
+    pub location: String,
+    pub status: StorageStatus,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum StorageType {
+    Local,
+    Distributed,
+    Cloud,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum StorageStatus {
+    Available,
+    Unavailable,
+    Syncing,
+}
 
 #[async_trait]
 pub trait StorageBackend: Send + Sync {
     /// Store a value with the given key
-    async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()>;
+    async fn store(&self, data: &[u8]) -> Result<String, StorageError>;
     
     /// Retrieve a value by key
-    async fn get(&self, key: &str) -> StorageResult<Vec<u8>>;
+    async fn retrieve(&self, id: &str) -> Result<Vec<u8>, StorageError>;
     
     /// Delete a value by key
     async fn delete(&self, key: &str) -> StorageResult<()>;
@@ -843,6 +866,9 @@ pub trait StorageBackend: Send + Sync {
     /// Check if a key exists
     async fn exists(&self, key: &str) -> StorageResult<bool>;
 }
+
+/// Result type for storage operations
+pub type StorageResult<T> = Result<T, StorageError>;
 
 /// Storage configuration options
 #[derive(Debug, Clone, Serialize, Deserialize)]

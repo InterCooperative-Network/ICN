@@ -1,9 +1,34 @@
 use std::sync::Arc;
+use log::{info, error};
+use serde::{Serialize, Deserialize};
 use async_trait::async_trait;
-use icn_types::{Block, Transaction, FederationType, FederationTerms, FederationOperation};
+use icn_types::{Block, Transaction, FederationOperation};
+
+// Module declarations
+pub mod blockchain;
+pub mod core;
+pub mod db;
+pub mod identity;
+pub mod reputation;
+pub mod storage;
+pub mod vm;
+pub mod networking;
+pub mod models;
+pub mod telemetry;
+
+// Re-export main components
+pub use self::{
+    core::Core,
+    storage::{StorageManager, StorageInterface},
+    networking::{NetworkManager, NetworkInterface},
+    identity::{IdentityManager, IdentityInterface},
+    reputation::{ReputationManager, ReputationInterface},
+    telemetry::{TelemetryManager, PrometheusMetrics, Logger, TracingSystem},
+    models::*,
+};
+
 use icn_consensus::ProofOfCooperation;
 use tokio::time::{sleep, Duration};
-use log::{info, error};
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 pub struct Core {
@@ -186,89 +211,31 @@ impl Core {
 }
 
 #[async_trait]
-pub trait ConsensusEngine {
+pub trait ConsensusEngine: Send + Sync {
+    async fn start(&self) -> Result<(), String>;
+    async fn stop(&self) -> Result<(), String>;
     async fn get_reputation(&self, did: String, category: String) -> Result<i64, Box<dyn std::error::Error>>;
     async fn is_eligible(&self, did: String, min_reputation: i64, category: String) -> Result<bool, Box<dyn std::error::Error>>;
     async fn dynamic_adjustment(&self, did: String, contribution: i64) -> Result<(), Box<dyn std::error::Error>>;
-    async fn apply_decay(&self, did: String, decay_rate: f64) -> Result<(), Box<dyn std::error::Error>>;
-    async fn reputation_based_access(&self, did: String, min_reputation: i64) -> Result<bool, Box<dyn std::error::Error>>;
 }
 
-pub struct TelemetryManager {
-    metrics: PrometheusMetrics,
-    logger: Logger,
-    traces: TracingSystem,
-}
-
-impl TelemetryManager {
-    pub fn new(metrics: PrometheusMetrics, logger: Logger, traces: TracingSystem) -> Self {
-        TelemetryManager {
-            metrics,
-            logger,
-            traces,
-        }
-    }
-
-    pub fn log(&self, message: &str) {
-        self.logger.log(message);
-        self.traces.trace(message);
-    }
-
-    pub fn record_metric(&self, name: &str, value: f64) {
-        self.metrics.record(name, value);
-    }
-}
-
-pub struct PrometheusMetrics;
-
-impl PrometheusMetrics {
-    pub fn record(&self, name: &str, value: f64) {
-        // Record the metric
-    }
-}
-
-pub struct Logger;
-
-impl Logger {
-    pub fn log(&self, message: &str) {
-        // Log the message
-    }
-}
-
-pub struct TracingSystem;
-
-impl TracingSystem {
-    pub fn trace(&self, message: &str) {
-        // Trace the message
-    }
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Proposal {
-    id: String,
-    title: String,
-    description: String,
-    status: String,
-    votes_for: i64,
-    votes_against: i64,
-    created_by: String,
-    ends_at: String,
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub status: String,
+    pub votes_for: i64,
+    pub votes_against: i64,
+    pub created_by: String,
+    pub ends_at: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Vote {
-    proposal_id: String,
-    voter: String,
-    approve: bool,
+    pub proposal_id: String,
+    pub voter: String,
+    pub approve: bool,
 }
 
-pub mod blockchain;
-pub mod core;
-pub mod db;
-pub mod identity;
-pub mod reputation;
 pub mod governance;   // <-- new module export
-pub mod vm;
-pub mod networking;
-pub mod storage;
-pub mod models;
