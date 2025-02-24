@@ -17,7 +17,7 @@ futures = { workspace = true }
 tokio-stream = "0.1"
 icn-consensus = { path = "../icn-consensus", optional = true }
 icn-dsl = { path = "../icn-dsl", optional = true }
-zk-snarks = { version = "0.1", optional = true }
+icn-zk = { path = "../icn-zk", optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -26,4 +26,4 @@ tokio-test = "0.4"
 default = ["consensus", "dsl"]
 consensus = ["dep:icn-consensus"]
 dsl = ["dep:icn-dsl"]
-zk = ["dep:zk-snarks"]
+zk = ["dep:icn-zk"]
