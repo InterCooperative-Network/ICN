@@ -1,258 +1,105 @@
 # ICN API Reference
 
-## Federation Routes
+This documentation provides a comprehensive reference for the Inter-Cooperative Network (ICN) API. The API is organized into several core modules, each handling specific aspects of the cooperative network.
 
-### Initiate Federation
-**Endpoint:** `POST /api/v1/federation/initiate`
+## Core Types
 
-**Request Body:**
-```json
-{
-  "federation_type": "String",
-  "partner_id": "String",
-  "terms": "String"
-}
+The `icn-types` crate provides the fundamental types used across all ICN modules. These types ensure consistency and type safety throughout the system.
+
+```rust
+use icn_types::{FederationId, CooperativeId, MemberId, Proposal, Vote};
 ```
 
-**Response:**
-- `200 OK`: Federation initiated successfully
-- `400 Bad Request`: Invalid request data
+### Federation Types
 
-### Join Federation
-**Endpoint:** `POST /api/v1/federation/join`
+::: icn_types::FederationType
+    rendering:
+      show_source: true
+      heading_level: 3
 
-**Request Body:**
-```json
-{
-  "federation_id": "String",
-  "commitment": "String"
-}
-```
+::: icn_types::FederationTerms
+    rendering:
+      show_source: true
+      heading_level: 3
 
-**Response:**
-- `200 OK`: Joined federation successfully
-- `400 Bad Request`: Invalid request data
+::: icn_types::FederationOperation
+    rendering:
+      show_source: true
+      heading_level: 3
 
-### Initiate Federation Dissolution
-**Endpoint:** `POST /api/v1/federation/{federation_id}/dissolve`
+### Governance Types
 
-**Request Body:**
-```json
-{
-  "initiator_id": "String",
-  "reason": "String"
-}
-```
+::: icn_types::Proposal
+    rendering:
+      show_source: true
+      heading_level: 3
 
-**Response:**
-- `200 OK`: Federation dissolution initiated successfully
-- `400 Bad Request`: Invalid request data
+::: icn_types::ProposalStatus
+    rendering:
+      show_source: true
+      heading_level: 3
 
-### Get Dissolution Status
-**Endpoint:** `GET /api/v1/federation/{federation_id}/dissolution/status`
+::: icn_types::Vote
+    rendering:
+      show_source: true
+      heading_level: 3
 
-**Response:**
-- `200 OK`: Returns the dissolution status
-- `404 Not Found`: Federation not found
+### Identity & Reputation
 
-### Cancel Federation Dissolution
-**Endpoint:** `POST /api/v1/federation/{federation_id}/dissolution/cancel`
+::: icn_types::MemberId
+    rendering:
+      show_source: true
+      heading_level: 3
 
-**Response:**
-- `200 OK`: Federation dissolution cancelled successfully
-- `404 Not Found`: Federation not found
+::: icn_types::ReputationScore
+    rendering:
+      show_source: true
+      heading_level: 3
 
-### Get Asset Distribution
-**Endpoint:** `GET /api/v1/federation/{federation_id}/dissolution/assets`
+### Resource Management
 
-**Response:**
-- `200 OK`: Returns the asset distribution
-- `404 Not Found`: Federation not found
+::: icn_types::Resource
+    rendering:
+      show_source: true
+      heading_level: 3
 
-### Get Debt Settlements
-**Endpoint:** `GET /api/v1/federation/{federation_id}/dissolution/debts`
+::: icn_types::ResourceAvailability
+    rendering:
+      show_source: true
+      heading_level: 3
 
-**Response:**
-- `200 OK`: Returns the debt settlements
-- `404 Not Found`: Federation not found
+## Error Handling
 
-### Submit Proposal
-**Endpoint:** `POST /api/v1/federation/proposals/submit`
+The ICN system uses a consistent error handling approach across all modules:
 
-**Request Body:**
-```json
-{
-  "title": "String",
-  "description": "String",
-  "created_by": "String",
-  "ends_at": "String"
-}
-```
+::: icn_types::IcnError
+    rendering:
+      show_source: true
+      heading_level: 3
 
-**Response:**
-- `200 OK`: Proposal submitted successfully
-- `400 Bad Request`: Invalid request data
+## REST API Endpoints
 
-### Vote
-**Endpoint:** `POST /api/v1/federation/proposals/vote`
+The following sections detail the REST API endpoints available for interacting with the ICN system:
 
-**Request Body:**
-```json
-{
-  "proposal_id": "String",
-  "voter": "String",
-  "approve": "Boolean"
-}
-```
+- [Federation API](federation.md) - Federation management endpoints
+- [Governance API](governance.md) - Proposal and voting endpoints
+- [Identity API](identity.md) - Identity management endpoints
+- [Reputation API](reputation.md) - Reputation scoring endpoints
+- [Resource API](resources.md) - Resource sharing endpoints
 
-**Response:**
-- `200 OK`: Vote recorded successfully
-- `400 Bad Request`: Invalid request data
+## WebSocket Events
 
-## Governance Routes
+For real-time updates, the ICN system provides WebSocket endpoints:
 
-### Create Proposal
-**Endpoint:** `POST /api/v1/governance/proposals`
+- Federation events (membership changes, dissolutions)
+- Governance events (new proposals, votes)
+- Resource events (availability updates)
+- Reputation events (score changes)
 
-**Request Body:**
-```json
-{
-  "title": "String",
-  "description": "String",
-  "created_by": "String",
-  "ends_at": "String"
-}
-```
+## Authentication
 
-**Response:**
-- `200 OK`: Proposal created successfully
-- `400 Bad Request`: Invalid request data
+All API endpoints require authentication using DIDs (Decentralized Identifiers). See the [Authentication Guide](../guides/authentication.md) for details.
 
-### Vote on Proposal
-**Endpoint:** `POST /api/v1/governance/proposals/{proposal_id}/vote`
+## Rate Limiting
 
-**Request Body:**
-```json
-{
-  "voter": "String",
-  "approve": "Boolean",
-  "zk_snark_proof": "String"
-}
-```
-
-**Response:**
-- `200 OK`: Vote recorded successfully
-- `400 Bad Request`: Invalid request data
-
-## Identity Routes
-
-### Create Identity
-**Endpoint:** `POST /api/v1/identity/create`
-
-**Request Body:**
-```json
-{
-  "identity": "String"
-}
-```
-
-**Response:**
-- `201 Created`: Identity created successfully
-- `400 Bad Request`: Invalid request data
-
-### Get Identity
-**Endpoint:** `GET /api/v1/identity/get/{identity}`
-
-**Response:**
-- `200 OK`: Returns the identity data
-- `404 Not Found`: Identity not found
-
-### Rotate Key
-**Endpoint:** `POST /api/v1/identity/rotate_key/{identity}`
-
-**Response:**
-- `200 OK`: Key rotated successfully
-- `404 Not Found`: Identity not found
-
-### Revoke Key
-**Endpoint:** `POST /api/v1/identity/revoke_key/{identity}`
-
-**Response:**
-- `200 OK`: Key revoked successfully
-- `404 Not Found`: Identity not found
-
-## Reputation Routes
-
-### Get Reputation
-**Endpoint:** `GET /api/v1/reputation/get`
-
-**Request Parameters:**
-- `did`: Decentralized Identifier (DID) of the user
-
-**Response:**
-- `200 OK`: Returns the reputation score
-- `404 Not Found`: Reputation not found
-
-### Adjust Reputation
-**Endpoint:** `POST /api/v1/reputation/adjust`
-
-**Request Body:**
-```json
-{
-  "did": "String",
-  "category": "String",
-  "adjustment": "Integer",
-  "zk_snark_proof": "String"
-}
-```
-
-**Response:**
-- `200 OK`: Reputation adjusted successfully
-- `400 Bad Request`: Invalid request data
-
-### Verify Contribution
-**Endpoint:** `POST /api/v1/reputation/verify`
-
-**Request Body:**
-```json
-{
-  "did": "String",
-  "contribution": "String",
-  "zk_snark_proof": "String"
-}
-```
-
-**Response:**
-- `200 OK`: Contribution verified successfully
-- `400 Bad Request`: Invalid request data
-
-### Submit zk-SNARK Proof
-**Endpoint:** `POST /api/v1/reputation/zk_snark_proof`
-
-**Request Body:**
-```json
-{
-  "proof": "String"
-}
-```
-
-**Response:**
-- `200 OK`: zk-SNARK proof submitted successfully
-- `400 Bad Request`: Invalid request data
-
-## Resource Routes
-
-### Query Shared Resources
-**Endpoint:** `GET /api/v1/resources/query`
-
-**Request Body:**
-```json
-{
-  "resource_type": "String",
-  "owner": "String"
-}
-```
-
-**Response:**
-- `200 OK`: Returns the shared resources
-- `404 Not Found`: Resources not found
+API endpoints are rate-limited based on member reputation and cooperative status. See [Rate Limiting](../guides/rate-limiting.md) for details.

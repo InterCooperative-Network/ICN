@@ -1,11 +1,13 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use serde::{Serialize, Deserialize};
-use thiserror::Error;
-use icn_types::Block;
+use icn_types::{StorageError, StorageResult, StorageBackend, StorageConfig};
 use std::time::Duration;
 use ipfs_api_backend_actix::{IpfsClient, TryFromUri};
 use futures::TryStreamExt;
+
+mod cache;
+use cache::StorageCache;
 
 /// Errors that can occur in storage operations
 #[derive(Error, Debug)]
@@ -53,12 +55,15 @@ pub struct StorageManager {
 }
 
 impl StorageManager {
-    /// Create a new storage manager with the given backend
-    pub fn new(backend: Box<dyn StorageBackend>, cache_size: usize, cache_ttl: Duration, ipfs_url: &str) -> Self {
+    /// Create a new storage manager with the given backend and configuration
+    pub fn new(backend: Box<dyn StorageBackend>, config: StorageConfig) -> Self {
         Self {
             backend: Arc::new(Mutex::new(backend)),
-            cache: Arc::new(StorageCache::new(cache_size, cache_ttl)),
-            ipfs_client: IpfsClient::from_str(ipfs_url).expect("Invalid IPFS URL"),
+            cache: Arc::new(StorageCache::new(
+                config.cache_size,
+                Duration::from_secs(config.cache_ttl_seconds)
+            )),
+            ipfs_client: IpfsClient::from_str(&config.ipfs_url).expect("Invalid IPFS URL"),
         }
     }
     
@@ -158,7 +163,32 @@ mod tests {
     
     #[tokio::test]
     async fn test_basic_storage_operations() {
-        // Test implementation here
-        // Will add comprehensive tests as we develop
+        let config = StorageConfig {
+            backend_type: "mock".to_string(),
+            cache_size: 1000,
+            cache_ttl_seconds: 300,
+            ipfs_url: "http://localhost:5001".to_string(),
+            database_url: None,
+        };
+        
+        let storage = StorageManager::new(
+            Box::new(MockStorage { data: HashMap::new() }),
+            config
+        );
+
+        // Test store and retrieve
+        let key = "test_key";
+        let value = "test_value";
+        storage.store(key, &value).await.unwrap();
+        
+        let retrieved: String = storage.retrieve(key).await.unwrap();
+        assert_eq!(retrieved, value);
+        
+        // Test exists
+        assert!(storage.has_key(key).await.unwrap());
+        
+        // Test delete
+        storage.remove(key).await.unwrap();
+        assert!(!storage.has_key(key).await.unwrap());
     }
 }

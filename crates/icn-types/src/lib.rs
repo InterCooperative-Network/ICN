@@ -1,3 +1,9 @@
+//! Core types for the ICN (Inter-Cooperative Network) system
+//! 
+//! This crate provides the fundamental types used across all ICN modules.
+//! It serves as a central repository for shared data structures, ensuring
+//! consistency across the codebase.
+
 use std::time::SystemTime;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
@@ -685,4 +691,237 @@ pub enum FederationOperation {
         federation_id: String,
         new_terms: FederationTerms,
     },
+}
+
+/// Represents a unique identifier for a federation
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+pub struct FederationId(pub String);
+
+/// Represents a unique identifier for a cooperative
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+pub struct CooperativeId(pub String);
+
+/// Represents a member's identity within the system
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemberId {
+    pub did: String,
+    pub cooperative_id: CooperativeId,
+}
+
+/// Represents the status of a federation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationStatus {
+    Active,
+    Suspended,
+    Inactive,
+}
+
+/// Represents a governance proposal
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Proposal {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub proposer: MemberId,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub status: ProposalStatus,
+    pub votes: HashMap<MemberId, Vote>,
+}
+
+/// Represents the status of a proposal
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ProposalStatus {
+    Draft,
+    Active,
+    Passed,
+    Rejected,
+    Executed,
+}
+
+/// Represents a vote on a proposal
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Vote {
+    Yes,
+    No,
+    Abstain,
+}
+
+/// Represents a member's reputation score
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReputationScore {
+    pub member_id: MemberId,
+    pub score: f64,
+    pub last_updated: chrono::DateTime<chrono::Utc>,
+}
+
+/// Represents a resource in the system
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Resource {
+    pub id: String,
+    pub owner: CooperativeId,
+    pub resource_type: String,
+    pub metadata: HashMap<String, String>,
+    pub availability: ResourceAvailability,
+}
+
+/// Represents the availability status of a resource
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ResourceAvailability {
+    Available,
+    InUse,
+    Maintenance,
+    Offline,
+}
+
+/// Error types that can occur in ICN operations
+#[derive(Debug, thiserror::Error)]
+pub enum IcnError {
+    #[error("Authentication failed: {0}")]
+    AuthenticationError(String),
+    
+    #[error("Authorization failed: {0}")]
+    AuthorizationError(String),
+    
+    #[error("Resource not found: {0}")]
+    ResourceNotFound(String),
+    
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
+    
+    #[error("Network error: {0}")]
+    NetworkError(String),
+    
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+}
+
+/// Result type for ICN operations
+pub type IcnResult<T> = Result<T, IcnError>;
+
+/// Storage-related error types
+#[derive(Debug, thiserror::Error)]
+pub enum StorageError {
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+    
+    #[error("Item not found: {0}")]
+    NotFound(String),
+    
+    #[error("Invalid data: {0}")]
+    InvalidData(String),
+    
+    #[error("IPFS error: {0}")]
+    IpfsError(String),
+}
+
+/// Result type for storage operations
+pub type StorageResult<T> = Result<T, StorageError>;
+
+/// Storage backend trait defining the interface for different storage implementations
+#[async_trait::async_trait]
+pub trait StorageBackend: Send + Sync {
+    /// Store a value with the given key
+    async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()>;
+    
+    /// Retrieve a value by key
+    async fn get(&self, key: &str) -> StorageResult<Vec<u8>>;
+    
+    /// Delete a value by key
+    async fn delete(&self, key: &str) -> StorageResult<()>;
+    
+    /// Check if a key exists
+    async fn exists(&self, key: &str) -> StorageResult<bool>;
+}
+
+/// Storage configuration options
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorageConfig {
+    pub backend_type: String,
+    pub cache_size: usize,
+    pub cache_ttl_seconds: u64,
+    pub ipfs_url: String,
+    pub database_url: Option<String>,
+}
+
+/// Runtime-related error types
+#[derive(Debug, thiserror::Error)]
+pub enum RuntimeError {
+    #[error("Validation failed: {0}")]
+    ValidationFailed(String),
+    
+    #[error("Invalid state")]
+    InvalidState,
+    
+    #[error("Execution error: {0}")]
+    ExecutionError(String),
+    
+    #[error("DSL error: {0}")]
+    DslError(String),
+    
+    #[error("Contract error: {0}")]
+    ContractError(String),
+}
+
+/// Result type for runtime operations
+pub type RuntimeResult<T> = Result<T, RuntimeError>;
+
+/// Represents the execution context for runtime operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionContext {
+    pub transaction: Option<Transaction>,
+    pub block: Option<Block>,
+    pub state: HashMap<String, Vec<u8>>,
+    pub metadata: HashMap<String, String>,
+}
+
+/// Represents a validation check in the runtime
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Check {
+    pub condition: String,
+    pub action: String,
+}
+
+/// Represents state validation rules
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StateValidation {
+    pub current: Option<String>,
+    pub expected: Option<String>,
+    pub transitions: Vec<String>,
+}
+
+/// Represents a validation node in the DSL
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationNode {
+    pub pre_checks: Vec<Check>,
+    pub post_checks: Vec<Check>,
+    pub state_validation: Option<StateValidation>,
+}
+
+/// Represents a governance node in the DSL
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GovernanceNode {
+    pub rules: Vec<String>,
+    pub voting_config: HashMap<String, String>,
+    pub permissions: HashMap<String, Vec<String>>,
+}
+
+/// Represents a marketplace node in the DSL
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketplaceNode {
+    pub rules: Vec<String>,
+    pub pricing_model: String,
+    pub constraints: Vec<String>,
+}
+
+/// Runtime configuration options
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeConfig {
+    pub vm_type: String,
+    pub max_execution_time: u64,
+    pub max_memory: u64,
+    pub enable_debugging: bool,
+    pub log_level: String,
 }

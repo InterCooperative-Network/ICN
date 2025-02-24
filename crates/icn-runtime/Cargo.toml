@@ -2,6 +2,18 @@
 name = "icn-runtime"
 version = "0.1.0"
 edition = "2021"
+description = "Runtime implementation for the Inter-Cooperative Network"
 
 [dependencies]
-icn-types = { path = "../icn-types" }
+icn-types = { workspace = true }
+icn-dsl = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+async-trait = "0.1"
+futures = "0.3"
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+tracing-test = "0.2"

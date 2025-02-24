@@ -1,0 +1,38 @@
+[test]
+# Test environment configuration
+test_db_url = "postgres://test:test@localhost:5432/icn_test"
+test_redis_url = "redis://localhost:6379/1"
+
+[coverage]
+# Coverage configuration
+minimum_coverage = 80
+exclude_patterns = [
+    "tests/*",
+    "**/*.test.ts",
+    "**/__tests__/*"
+]
+
+[fuzzing]
+# Fuzzing configuration
+max_iterations = 10000
+timeout_secs = 300
+seed = 12345
+
+[load_testing]
+# Load testing configuration
+vus = 10  # Virtual users
+duration = "30s"
+target_url = "http://localhost:8080"
+
+[integration]
+# Integration test configuration
+federation_endpoint = "http://localhost:8081"
+governance_endpoint = "http://localhost:8082"
+reputation_endpoint = "http://localhost:8083"
+
+[reporting]
+# Test reporting configuration
+output_dir = "test-reports"
+junit_report = true
+html_report = true
+coverage_report = true 
