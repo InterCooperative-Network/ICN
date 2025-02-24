@@ -1,1 +1,1 @@
-// Delete this file entirely as we're using storage/mod.rs
+// Delete this file as we're using storage/mod.rs

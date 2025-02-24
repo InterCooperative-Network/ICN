@@ -5,16 +5,18 @@ use crate::{
     networking::NetworkInterface,
     identity::IdentityInterface,
     reputation::ReputationInterface,
+    vm::RuntimeInterface,
     telemetry::TelemetryManager,
-    models::{ResourceAllocationSystem, FederationManager},
+    models::{ResourceAllocationSystem, FederationManager, ResourceAllocation},
 };
-use icn_types::Transaction;
+use icn_types::{Block, Transaction, FederationOperation};
 
 pub struct Core {
     storage: Arc<dyn StorageInterface>,
     network: Arc<dyn NetworkInterface>,
     identity: Arc<dyn IdentityInterface>,
     reputation: Arc<dyn ReputationInterface>,
+    runtime: Arc<dyn RuntimeInterface>,
     telemetry: Arc<TelemetryManager>,
     federation_manager: Arc<FederationManager>,
     resource_system: Arc<ResourceAllocationSystem>,
@@ -26,16 +28,22 @@ impl Core {
         network: Arc<dyn NetworkInterface>,
         identity: Arc<dyn IdentityInterface>,
         reputation: Arc<dyn ReputationInterface>,
+        runtime: Arc<dyn RuntimeInterface>,
     ) -> Self {
         let resource_system = Arc::new(ResourceAllocationSystem::new());
         let federation_manager = Arc::new(FederationManager::new(resource_system.clone()));
-        let telemetry = Arc::new(TelemetryManager::new());
+        let telemetry = Arc::new(TelemetryManager::new(
+            PrometheusMetrics::new(),
+            Logger::new(),
+            TracingSystem::new()
+        ));
 
         Core {
             storage,
             network,
             identity,
             reputation,
+            runtime,
             telemetry,
             federation_manager,
             resource_system,

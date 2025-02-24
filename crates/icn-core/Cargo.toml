@@ -15,6 +15,15 @@ icn-types = { workspace = true }
 bincode = "1.3"
 futures = { workspace = true }
 tokio-stream = "0.1"
+icn-consensus = { path = "../icn-consensus", optional = true }
+icn-dsl = { path = "../icn-dsl", optional = true }
+zk-snarks = { version = "0.1", optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
+
+[features]
+default = ["consensus", "dsl"]
+consensus = ["dep:icn-consensus"]
+dsl = ["dep:icn-dsl"]
+zk = ["dep:zk-snarks"]
