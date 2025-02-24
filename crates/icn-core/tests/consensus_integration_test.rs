@@ -128,3 +128,22 @@ async fn test_proof_of_cooperation_reputation_threshold() {
     let mut poc = ProofOfCooperation::new(reputation_manager);
     assert!(poc.is_eligible("participant1", 10, "consensus").unwrap());
 }
+
+#[tokio::test]
+async fn test_proof_of_cooperation_verify_zk_snark_proof() {
+    let reputation_manager = Arc::new(MockReputationManager);
+    let poc = ProofOfCooperation::new(reputation_manager);
+    let proof = "valid_proof";
+    assert!(poc.verify_zk_snark_proof(proof).await.unwrap());
+}
+
+#[tokio::test]
+async fn test_proof_of_cooperation_batch_verification() {
+    let reputation_manager = Arc::new(MockReputationManager);
+    let mut poc = ProofOfCooperation::new(reputation_manager);
+    let proof1 = "valid_proof1";
+    let proof2 = "valid_proof2";
+    poc.add_proof(proof1.to_string());
+    poc.add_proof(proof2.to_string());
+    assert!(poc.verify_all_proofs().await.unwrap());
+}
