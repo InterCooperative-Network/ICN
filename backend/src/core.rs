@@ -18,6 +18,9 @@ pub struct Core {
     _identity_manager: Arc<IdentityManager>,
     _reputation_manager: Arc<ReputationManager>,
     _consensus_engine: Arc<dyn ConsensusEngine>,
+    _federation_service: Arc<FederationService>,
+    _governance_service: Arc<GovernanceService>,
+    _resource_service: Arc<ResourceService>,
 }
 
 pub struct TelemetryManager;
@@ -35,6 +38,9 @@ impl Core {
         identity_manager: Arc<IdentityManager>,
         reputation_manager: Arc<ReputationManager>,
         consensus_engine: Arc<dyn ConsensusEngine>,
+        federation_service: Arc<FederationService>,
+        governance_service: Arc<GovernanceService>,
+        resource_service: Arc<ResourceService>,
     ) -> Self {
         Core {
             _storage_manager: storage_manager,
@@ -44,6 +50,9 @@ impl Core {
             _identity_manager: identity_manager,
             _reputation_manager: reputation_manager,
             _consensus_engine: consensus_engine,
+            _federation_service: federation_service,
+            _governance_service: governance_service,
+            _resource_service: resource_service,
         }
     }
 
@@ -63,6 +72,15 @@ impl Core {
         }
         if let Err(e) = self._consensus_engine.start().await {
             return Err(format!("Failed to start consensus engine: {}", e));
+        }
+        if let Err(e) = self._federation_service.start().await {
+            return Err(format!("Failed to start federation service: {}", e));
+        }
+        if let Err(e) = self._governance_service.start().await {
+            return Err(format!("Failed to start governance service: {}", e));
+        }
+        if let Err(e) = self._resource_service.start().await {
+            return Err(format!("Failed to start resource service: {}", e));
         }
         self._telemetry_manager.log("Core started.");
         Ok(())
@@ -84,6 +102,15 @@ impl Core {
         }
         if let Err(e) = self._consensus_engine.stop().await {
             return Err(format!("Failed to stop consensus engine: {}", e));
+        }
+        if let Err(e) = self._federation_service.stop().await {
+            return Err(format!("Failed to stop federation service: {}", e));
+        }
+        if let Err(e) = self._governance_service.stop().await {
+            return Err(format!("Failed to stop governance service: {}", e));
+        }
+        if let Err(e) = self._resource_service.stop().await {
+            return Err(format!("Failed to stop resource service: {}", e));
         }
         self._telemetry_manager.log("Core stopped.");
         Ok(())
@@ -146,6 +173,20 @@ impl Core {
         self._telemetry_manager.log("Handling resource sharing...");
         // Placeholder logic for handling resource sharing
         self._telemetry_manager.log("Resource sharing handled.");
+        Ok(())
+    }
+
+    pub async fn create_local_cluster(&self, cluster_name: &str, region: &str, members: Vec<String>) -> Result<(), String> {
+        self._telemetry_manager.log("Creating local cluster...");
+        // Placeholder logic for creating a local cluster
+        self._telemetry_manager.log("Local cluster created.");
+        Ok(())
+    }
+
+    pub async fn handle_delegated_governance(&self, federation_id: &str, representative_id: &str) -> Result<(), String> {
+        self._telemetry_manager.log("Handling delegated governance...");
+        // Placeholder logic for handling delegated governance
+        self._telemetry_manager.log("Delegated governance handled.");
         Ok(())
     }
 }
@@ -216,6 +257,9 @@ mod tests {
             Arc::new(IdentityManager::new()),
             Arc::new(ReputationManager::new()),
             Arc::new(MockConsensusEngine),
+            Arc::new(FederationService::new()),
+            Arc::new(GovernanceService::new()),
+            Arc::new(ResourceService::new()),
         );
 
         let result = core.handle_mutual_credit_transaction("sender", "receiver", 100.0).await;
@@ -232,6 +276,9 @@ mod tests {
             Arc::new(IdentityManager::new()),
             Arc::new(ReputationManager::new()),
             Arc::new(MockConsensusEngine),
+            Arc::new(FederationService::new()),
+            Arc::new(GovernanceService::new()),
+            Arc::new(ResourceService::new()),
         );
 
         let result = core.submit_proposal("title", "description", "creator", "2025-12-31").await;
@@ -248,6 +295,9 @@ mod tests {
             Arc::new(IdentityManager::new()),
             Arc::new(ReputationManager::new()),
             Arc::new(MockConsensusEngine),
+            Arc::new(FederationService::new()),
+            Arc::new(GovernanceService::new()),
+            Arc::new(ResourceService::new()),
         );
 
         let result = core.vote(1, "voter", true).await;
@@ -264,9 +314,50 @@ mod tests {
             Arc::new(IdentityManager::new()),
             Arc::new(ReputationManager::new()),
             Arc::new(MockConsensusEngine),
+            Arc::new(FederationService::new()),
+            Arc::new(GovernanceService::new()),
+            Arc::new(ResourceService::new()),
         );
 
         let result = core.manage_federation_lifecycle("federation_id", "action").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_create_local_cluster() {
+        let core = Core::new(
+            Arc::new(StorageManager::new()),
+            Arc::new(NetworkManager::new()),
+            Arc::new(MockRuntimeManager),
+            Arc::new(MockTelemetryManager),
+            Arc::new(IdentityManager::new()),
+            Arc::new(ReputationManager::new()),
+            Arc::new(MockConsensusEngine),
+            Arc::new(FederationService::new()),
+            Arc::new(GovernanceService::new()),
+            Arc::new(ResourceService::new()),
+        );
+
+        let result = core.create_local_cluster("cluster_name", "region", vec!["member1".to_string(), "member2".to_string()]).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_delegated_governance() {
+        let core = Core::new(
+            Arc::new(StorageManager::new()),
+            Arc::new(NetworkManager::new()),
+            Arc::new(MockRuntimeManager),
+            Arc::new(MockTelemetryManager),
+            Arc::new(IdentityManager::new()),
+            Arc::new(ReputationManager::new()),
+            Arc::new(MockConsensusEngine),
+            Arc::new(FederationService::new()),
+            Arc::new(GovernanceService::new()),
+            Arc::new(ResourceService::new()),
+        );
+
+        let result = core.handle_delegated_governance("federation_id", "representative_id").await;
         assert!(result.is_ok());
     }
 }

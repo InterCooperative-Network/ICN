@@ -1,16 +1,24 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::mpsc::{self, Sender, Receiver};
+use tokio::task;
+use tokio::time::{self, Duration};
 
 pub struct ReputationManager {
     reputations: Mutex<HashMap<String, i64>>,
+    event_sender: Sender<ReputationEvent>,
 }
 
 impl ReputationManager {
     pub fn new() -> Self {
-        ReputationManager {
+        let (event_sender, event_receiver) = mpsc::channel(100);
+        let manager = ReputationManager {
             reputations: Mutex::new(HashMap::new()),
-        }
+            event_sender,
+        };
+        manager.start_event_listener(event_receiver);
+        manager
     }
 
     pub fn get_reputation(&self, did: &str) -> i64 {
@@ -65,6 +73,35 @@ impl ReputationManager {
         // Placeholder logic for handling Sybil resistance
         Ok(())
     }
+
+    pub fn emit_event(&self, event: ReputationEvent) {
+        let sender = self.event_sender.clone();
+        task::spawn(async move {
+            sender.send(event).await.unwrap();
+        });
+    }
+
+    fn start_event_listener(&self, mut event_receiver: Receiver<ReputationEvent>) {
+        task::spawn(async move {
+            while let Some(event) = event_receiver.recv().await {
+                match event {
+                    ReputationEvent::ReputationAdjusted { did, adjustment } => {
+                        // Handle reputation adjustment event
+                    }
+                    ReputationEvent::ReputationDecayApplied { did, decay_rate } => {
+                        // Handle reputation decay event
+                    }
+                }
+            }
+        });
+    }
+
+    pub async fn batch_reputation_updates(&self, events: Vec<ReputationEvent>) -> Result<(), String> {
+        for event in events {
+            self.emit_event(event);
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -106,6 +143,33 @@ mod tests {
         manager.handle_sybil_resistance("did:example:123", 50).unwrap();
         // Add assertions based on the expected behavior of handle_sybil_resistance
     }
+
+    #[test]
+    fn test_emit_event() {
+        let manager = ReputationManager::new();
+        manager.emit_event(ReputationEvent::ReputationAdjusted {
+            did: "did:example:123".to_string(),
+            adjustment: 10,
+        });
+        // Add assertions based on the expected behavior of emit_event
+    }
+
+    #[tokio::test]
+    async fn test_batch_reputation_updates() {
+        let manager = ReputationManager::new();
+        let events = vec![
+            ReputationEvent::ReputationAdjusted {
+                did: "did:example:123".to_string(),
+                adjustment: 10,
+            },
+            ReputationEvent::ReputationDecayApplied {
+                did: "did:example:123".to_string(),
+                decay_rate: 0.1,
+            },
+        ];
+        manager.batch_reputation_updates(events).await.unwrap();
+        // Add assertions based on the expected behavior of batch_reputation_updates
+    }
 }
 
 pub struct Contribution {
@@ -120,6 +184,11 @@ impl Contribution {
             timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as f64,
         }
     }
+}
+
+pub enum ReputationEvent {
+    ReputationAdjusted { did: String, adjustment: i64 },
+    ReputationDecayApplied { did: String, decay_rate: f64 },
 }
 
 #[cfg(test)]

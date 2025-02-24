@@ -159,6 +159,50 @@ Updates the terms of an existing federation.
 }
 ```
 
+### Create Local Cluster Federation
+
+Creates a new local cluster federation within a region.
+
+**Endpoint:** `POST /api/v1/federation/local_cluster/create`
+
+**Request Body:**
+```typescript
+{
+    cluster_name: string,
+    region: string,
+    members: string[]
+}
+```
+
+**Example Request:**
+```json
+{
+    "cluster_name": "North Region Cluster",
+    "region": "North",
+    "members": ["did:icn:coop:abc123", "did:icn:coop:xyz789"]
+}
+```
+
+**Response:**
+```typescript
+{
+    cluster_id: string,
+    status: FederationStatus,
+    created_at: string,
+    members: string[]
+}
+```
+
+**Example Response:**
+```json
+{
+    "cluster_id": "cluster:icn:456def",
+    "status": "Active",
+    "created_at": "2024-02-24T00:00:00Z",
+    "members": ["did:icn:coop:abc123", "did:icn:coop:xyz789"]
+}
+```
+
 ## WebSocket Events
 
 The Federation API provides real-time updates through WebSocket connections:
@@ -169,7 +213,7 @@ ws://api.icn.network/v1/federation/events
 
 // Event Types
 type FederationEvent = {
-    type: "JOIN" | "LEAVE" | "UPDATE" | "DISSOLVE",
+    type: "JOIN" | "LEAVE" | "UPDATE" | "DISSOLVE" | "CREATE_LOCAL_CLUSTER",
     federation_id: string,
     timestamp: string,
     details: any

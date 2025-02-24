@@ -1,5 +1,5 @@
 use warp::Filter;
-use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution, handle_sybil_resistance, apply_reputation_decay};
+use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution, handle_sybil_resistance, apply_reputation_decay, batch_reputation_updates};
 use icn_networking::p2p::{P2PManager, ReputationEvent}; // Import P2PManager and ReputationEvent
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -19,6 +19,11 @@ struct SybilResistanceRequest {
 struct ReputationDecayRequest {
     did: String,
     decay_rate: f64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct BatchReputationUpdateRequest {
+    events: Vec<ReputationEvent>,
 }
 
 pub fn reputation_routes(
@@ -78,6 +83,13 @@ pub fn reputation_routes(
                                 .and(warp::body::json())
                                 .and_then(handle_sybil_resistance_handler)
                         )
+                        .or(
+                            warp::path("batch_updates")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
+                                .and_then(batch_reputation_updates_handler)
+                        )
                 )
         )
 }
@@ -115,6 +127,20 @@ async fn handle_sybil_resistance_handler(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     // Placeholder logic for handling sybil resistance
     Ok(warp::reply::json(&"Sybil resistance handled"))
+}
+
+async fn batch_reputation_updates_handler(
+    request: BatchReputationUpdateRequest,
+    p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // Publish events
+    for event in &request.events {
+        let mut p2p = p2p_manager.lock().await;
+        p2p.publish(event.clone()).await.unwrap();
+    }
+
+    // Placeholder logic for batch reputation updates
+    Ok(warp::reply::json(&"Batch reputation updates applied"))
 }
 
 #[cfg(test)]
@@ -165,6 +191,27 @@ mod tests {
             .method("POST")
             .path("/api/v1/reputation/sybil_resistance")
             .json(&SybilResistanceRequest { did: "did:icn:test".to_string(), reputation_score: 50 })
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_batch_reputation_updates() {
+        let reputation_service = Arc::new(ReputationServiceImpl::new(Arc::new(Database::new())));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new())); // Add P2PManager instance
+        let api = reputation_routes(p2p_manager);
+
+        let events = vec![
+            ReputationEvent::ZkSnarkProofSubmitted { proof: "proof1".to_string() },
+            ReputationEvent::ZkSnarkProofSubmitted { proof: "proof2".to_string() },
+        ];
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/reputation/batch_updates")
+            .json(&BatchReputationUpdateRequest { events })
             .reply(&api)
             .await;
 
