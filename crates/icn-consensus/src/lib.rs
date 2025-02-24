@@ -132,8 +132,17 @@ impl ProofOfCooperation {
             let reputation_manager = self.reputation_manager.clone();
             let votes = self.votes.clone();
             let handle = task::spawn(async move {
-                let total_reputation: i64 = chunk.iter().map(|p| reputation_manager.get_reputation(p, "consensus")).sum();
-                let approval_reputation: i64 = chunk.iter().enumerate().filter(|(i, _)| votes.contains(*i)).map(|(_, p)| reputation_manager.get_reputation(p, "consensus")).sum();
+                let mut total_reputation = 0i64;
+                let mut approval_reputation = 0i64;
+                
+                for (i, p) in chunk.iter().enumerate() {
+                    let rep = reputation_manager.get_reputation(p, "consensus");
+                    total_reputation += rep;
+                    if votes.contains(i) {
+                        approval_reputation += rep;
+                    }
+                }
+                
                 Ok((total_reputation, approval_reputation))
             });
             handles.push(handle);

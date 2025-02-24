@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sun 23 Feb 2025 07:38:36 PM UTC
+Project Code Dump - Generated Mon 24 Feb 2025 10:18:57 AM UTC
 ======================================
 
 LLM Context Information
@@ -30,10 +30,12 @@ Project Tree:
 =============
 .
 ├── backend
-│   ├── Cargo.lock
+│   ├── benches
+│   │   └── governance_benchmarks.rs
 │   ├── Cargo.toml
 │   ├── migrations
-│   │   └── 20240218000000_initial.sql
+│   │   ├── 20240218000000_initial.sql
+│   │   └── test
 │   └── src
 │       ├── api
 │       ├── blockchain.rs
@@ -52,15 +54,18 @@ Project Tree:
 │       ├── reputation.rs
 │       ├── services
 │       ├── storage.rs
+│       ├── test_config.rs
+│       ├── test_macros.rs
+│       ├── test_utils.rs
 │       ├── vm.rs
 │       └── websocket
 ├── bridges
 │   └── cross_chain
 │       └── mod.rs
-├── Cargo.lock
 ├── Cargo.toml
 ├── config
-│   └── feature-flags.json
+│   ├── feature-flags.json
+│   └── log4rs.yaml
 ├── contracts
 │   ├── Cargo.toml
 │   └── cooperative
@@ -70,7 +75,8 @@ Project Tree:
 │   │   └── Cargo.toml
 │   ├── core
 │   │   └── Cargo.toml
-│   ├── finance
+│   ├── icn-common
+│   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-consensus
 │   │   ├── Cargo.toml
@@ -83,7 +89,6 @@ Project Tree:
 │   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-dsl
-│   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-federation
 │   │   ├── Cargo.toml
@@ -108,12 +113,9 @@ Project Tree:
 │   ├── icn-types
 │   │   ├── Cargo.toml
 │   │   └── src
-│   ├── identity
+│   ├── icn-zk
+│   │   └── src
 │   ├── networking
-│   │   └── Cargo.toml
-│   ├── resources
-│   │   └── Cargo.toml
-│   ├── runtime
 │   │   └── Cargo.toml
 │   └── storage
 │       └── Cargo.toml
@@ -123,6 +125,8 @@ Project Tree:
 │   ├── backend_new.Dockerfile
 │   ├── docker-compose.yml
 │   └── frontend.Dockerfile
+├── docker-compose.test.yml
+├── Dockerfile.test
 ├── DSL_ICN.txt
 ├── fraudDetection.ts
 ├── frontend
@@ -174,25 +178,30 @@ Project Tree:
 │   ├── errors.rs
 │   └── reputation_manager.rs
 ├── resourceAllocation.ts
+├── rust-toolchain.toml
 ├── scripts
 │   ├── backend
-│   │   ├── Cargo.toml
 │   │   └── src
-│   ├── contracts
-│   ├── crates
 │   ├── frontend
-│   │   ├── package-lock.json
-│   │   └── src
-│   └── setup.sh
+│   │   └── package-lock.json
+│   ├── run_tests.sh
+│   ├── setup.sh
+│   └── setup_test_env.sh
 ├── setup_and_run_script.sh
 ├── setup_docs.sh
 ├── setup_venv.sh
 ├── src
 │   ├── api
+│   │   ├── handlers.rs
+│   │   ├── mod.rs
+│   │   ├── routes.rs
 │   │   └── types.ts
 │   ├── attestation
+│   │   └── mod.rs
 │   ├── block.rs
 │   ├── cache.js
+│   ├── consensus
+│   │   └── mod.rs
 │   ├── dsl
 │   │   ├── governance.rs
 │   │   ├── grammar.pest
@@ -200,11 +209,12 @@ Project Tree:
 │   │   ├── parser.rs
 │   │   └── vm.rs
 │   ├── errors.js
-│   ├── feature-flags
 │   ├── governance
 │   │   ├── mod.rs
 │   │   └── rollback.rs
+│   ├── lib.rs
 │   ├── logger.js
+│   ├── main.rs
 │   ├── parser.rs
 │   └── security.js
 ├── start_docs_server.sh
@@ -223,8 +233,8 @@ Project Tree:
 
 ===================
 File: ./backend/Cargo.toml
-Size: 498 bytes
-Modified: 2025-02-23 15:18:22.022523900 +0000
+Size: 926 bytes
+Modified: 2025-02-24 09:46:42.577369689 +0000
 
 ===================
 ```toml
@@ -244,27 +254,31 @@ tower = { version = "0.4", features = ["limit"] }
 tower-http = { version = "0.4", features = ["limit"] }
 bls-signatures = "0.8"
 didcomm-rs = "0.1"
-```
 
-===================
-File: ./scripts/backend/Cargo.toml
-Size: 78 bytes
-Modified: 2025-02-18 07:59:01.136149500 +0000
+[dev-dependencies]
+criterion = { version = "0.5", features = ["async_tokio"] }
+quickcheck = "1.0"
+quickcheck_async = "0.1"
+quickcheck_macros = "1.0"
+tokio-test = "0.4"
+test-log = "0.2"
+env_logger = "0.10"
+pretty_assertions = "1.4"
+fake = { version = "2.8", features = ["derive"] }
+rstest = "0.18"
+mockall = "0.11"
+async-trait = "0.1"
+futures = "0.3"
 
-===================
-```toml
-[package]
-name = "backend"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
+[[bench]]
+name = "governance_benchmarks"
+harness = false
 ```
 
 ===================
 File: ./backend/src/lib.rs
-Size: 188 bytes
-Modified: 2025-02-23 15:18:22.103032000 +0000
+Size: 440 bytes
+Modified: 2025-02-24 09:46:42.581369689 +0000
 Dependencies:
 
 ===================
@@ -280,12 +294,27 @@ pub mod federation;
 pub mod governance;
 pub mod resources;
 pub mod reputation;
+
+#[cfg(test)]
+pub mod test_utils;
+#[cfg(test)]
+pub mod test_config;
+#[cfg(test)]
+pub mod test_macros;
+
+// Re-export test utilities for integration tests
+#[cfg(test)]
+pub use test_utils::*;
+#[cfg(test)]
+pub use test_config::*;
+#[cfg(test)]
+pub use test_macros::*;
 ```
 
 ===================
 File: ./backend/src/main.rs
 Size: 11909 bytes
-Modified: 2025-02-23 19:37:08.998234400 +0000
+Modified: 2025-02-24 09:46:42.581369689 +0000
 Dependencies:
 mod api;
 mod config;
@@ -684,7 +713,7 @@ fn main() {
 ===================
 File: ./scripts/backend/src/main.rs
 Size: 45 bytes
-Modified: 2025-02-18 07:59:01.140151200 +0000
+Modified: 2025-02-24 09:46:42.609369690 +0000
 Dependencies:
 
 ===================
@@ -697,7 +726,7 @@ fn main() {
 ===================
 File: ./frontend/package.json
 Size: 499 bytes
-Modified: 2025-02-19 06:23:14.811145100 +0000
+Modified: 2025-02-24 09:46:42.601369690 +0000
 
 ===================
 ```json
@@ -730,7 +759,7 @@ main
 ===================
 File: ./contracts/cooperative/src/lib.rs
 Size: 1327 bytes
-Modified: 2025-02-23 19:12:30.198318000 +0000
+Modified: 2025-02-24 09:46:42.581369689 +0000
 Dependencies:
 mod proposals;
 use ethers::prelude::*;
@@ -787,25 +816,895 @@ impl CooperativeContract {
 ===================
 File: ./.devcontainer/docker-compose.yml
 Size: 973 bytes
-Modified: 2025-02-19 00:47:20.891182900 +0000
+Modified: 2025-02-24 09:46:42.573369689 +0000
 
 ===================
 
 ===================
 File: ./docker/docker-compose.yml
 Size: 1347 bytes
-Modified: 2025-02-19 00:47:20.971282200 +0000
+Modified: 2025-02-24 09:46:42.593369689 +0000
 
 ===================
+
+===================
+File: ./contracts/cooperative/src/lib.rs
+Size: 1327 bytes
+Modified: 2025-02-24 09:46:42.581369689 +0000
+Dependencies:
+mod proposals;
+use ethers::prelude::*;
+use icn_zkp::{RollupBatch, VerificationKey};
+use proposals::{ProposalContract, Proposal};
+
+===================
+```rs
+mod proposals;
+
+use proposals::{ProposalContract, Proposal};
+use icn_zkp::{RollupBatch, VerificationKey};
+use ethers::prelude::*;
+
+pub struct CooperativeContract {
+    proposal_contract: ProposalContract,
+    contract_address: Address,
+    // ...existing code...
+}
+
+impl CooperativeContract {
+    pub fn new(contract_address: Address, verification_key: VerificationKey) -> Self {
+        Self {
+            proposal_contract: ProposalContract::new(
+                3,
+                verification_key,
+                contract_address
+            ),
+            contract_address,
+            // ...existing code...
+        }
+    }
+
+    pub async fn submit_vote_batch(&mut self, batch: RollupBatch) -> Result<(), String> {
+        self.proposal_contract.submit_vote_batch(batch).await
+    }
+
+    pub async fn execute_proposal(&mut self, proposal_id: &str) -> Result<bool, String> {
+        self.proposal_contract.execute_proposal(proposal_id).await
+    }
+
+    pub async fn submit_zk_snark_proof(&self, proof: Vec<u8>) -> Result<(), String> {
+        // Implement zk-SNARK proof submission logic
+        Ok(())
+    }
+
+    pub async fn verify_zk_snark_proof(&self, proof: Vec<u8>) -> Result<bool, String> {
+        // Implement zk-SNARK proof verification logic
+        Ok(true)
+    }
+}
+```
+
+===================
+File: ./icn-consensus/src/lib.rs
+Size: 1234 bytes
+Modified: 2025-02-24 09:46:42.605369690 +0000
+Dependencies:
+
+===================
+```rs
+// ...existing code...
+
+// Define the structure for cooperative governance rules
+struct GovernanceRules {
+    max_validators: usize,
+    min_stake: u64,
+    election_period: u64,
+    // ...other rules...
+}
+
+// Define the structure for a validator
+struct Validator {
+    id: String,
+    stake: u64,
+    // ...other properties...
+}
+
+// Define the structure for the genesis block
+struct GenesisBlock {
+    initial_validators: Vec<Validator>,
+    // ...other properties...
+}
+
+// Function to enforce cooperative governance rules
+fn enforce_governance_rules(validators: &mut Vec<Validator>, rules: &GovernanceRules) {
+    // Implement rules to prevent centralized control
+    // ...code to enforce rules...
+}
+
+// Function to finalize the genesis block format
+fn finalize_genesis_block(validators: Vec<Validator>) -> GenesisBlock {
+    GenesisBlock {
+        initial_validators: validators,
+        // ...initialize other properties...
+    }
+}
+
+// Function to develop a validator election mechanism
+fn elect_validators(current_validators: &Vec<Validator>, candidates: &Vec<Validator>, rules: &GovernanceRules) -> Vec<Validator> {
+    // Implement democratic election mechanism
+    // ...code to elect validators...
+}
+
+// ...existing code...
+```
+
+===================
+File: ./backend/src/lib.rs
+Size: 440 bytes
+Modified: 2025-02-24 09:46:42.581369689 +0000
+Dependencies:
+
+===================
+```rs
+pub mod api;
+pub mod services;
+pub mod database;
+pub mod networking;
+pub mod core;
+pub mod main;
+
+pub mod federation;
+pub mod governance;
+pub mod resources;
+pub mod reputation;
+
+#[cfg(test)]
+pub mod test_utils;
+#[cfg(test)]
+pub mod test_config;
+#[cfg(test)]
+pub mod test_macros;
+
+// Re-export test utilities for integration tests
+#[cfg(test)]
+pub use test_utils::*;
+#[cfg(test)]
+pub use test_config::*;
+#[cfg(test)]
+pub use test_macros::*;
+```
+
+===================
+File: ./backend/src/api/identity.rs
+Size: 5880 bytes
+Modified: 2025-02-24 09:46:42.577369689 +0000
+Dependencies:
+mod tests {
+use crate::services::identity_service::{IdentityService, IdentityServiceImpl};
+use icn_core::verifiable_credentials::{VerifiableCredential, Proof}; // Import VerifiableCredential and Proof
+use icn_zkp::zk_snark; // Import zk-SNARK
+use std::sync::Arc;
+use warp::Filter;
+
+===================
+```rs
+use warp::Filter;
+use crate::services::identity_service::{IdentityService, IdentityServiceImpl};
+use std::sync::Arc;
+use icn_core::verifiable_credentials::{VerifiableCredential, Proof}; // Import VerifiableCredential and Proof
+use icn_zkp::zk_snark; // Import zk-SNARK
+
+pub fn identity_routes(
+    identity_service: Arc<dyn IdentityService>,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    let create_identity = warp::path!("api" / "v1" / "identity" / "create")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_identity_service(identity_service.clone()))
+        .and_then(handle_create_identity);
+
+    let get_identity = warp::path!("api" / "v1" / "identity" / "get" / String)
+        .and(warp::get())
+        .and(with_identity_service(identity_service.clone()))
+        .and_then(handle_get_identity);
+
+    let rotate_key = warp::path!("api" / "v1" / "identity" / "rotate_key" / String)
+        .and(warp::post())
+        .and(with_identity_service(identity_service.clone()))
+        .and_then(handle_rotate_key);
+
+    let revoke_key = warp::path!("api" / "v1" / "identity" / "revoke_key" / String)
+        .and(warp::post())
+        .and(with_identity_service(identity_service.clone()))
+        .and_then(handle_revoke_key);
+
+    create_identity.or(get_identity).or(rotate_key).or(revoke_key)
+}
+
+fn with_identity_service(
+    identity_service: Arc<dyn IdentityService>,
+) -> impl Filter<Extract = (Arc<dyn IdentityService>,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || identity_service.clone())
+}
+
+async fn handle_create_identity(
+    identity: String,
+    identity_service: Arc<dyn IdentityService>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    identity_service.create_identity(&identity).await.map_err(|e| {
+        warp::reject::custom(warp::reject::custom(e))
+    })?;
+
+    // Generate verifiable credential
+    let credential = VerifiableCredential {
+        credential_type: "IdentityCredential".to_string(),
+        issuer_did: "did:icn:issuer".to_string(),
+        subject_did: identity.clone(),
+        issuance_date: chrono::Utc::now().to_rfc3339(),
+        expiration_date: None,
+        credential_status: None,
+        credential_schema: None,
+        proof: Proof {
+            type_: "Ed25519Signature2018".to_string(),
+            created: chrono::Utc::now().to_rfc3339(),
+            proof_purpose: "assertionMethod".to_string(),
+            verification_method: "did:icn:issuer#keys-1".to_string(),
+            jws: "example-jws".to_string(),
+        },
+    };
+
+    Ok(warp::reply::json(&credential))
+}
+
+async fn handle_get_identity(
+    identity: String,
+    identity_service: Arc<dyn IdentityService>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let data = identity_service.get_identity(&identity).await.map_err(|e| {
+        warp::reject::custom(warp::reject::custom(e))
+    })?;
+
+    // Generate zk-SNARK proof for identity validation
+    let proof = zk_snark::generate_proof(&data);
+
+    Ok(warp::reply::json(&proof))
+}
+
+async fn handle_rotate_key(
+    identity: String,
+    identity_service: Arc<dyn IdentityService>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    identity_service.rotate_key(&identity).await.map_err(|e| {
+        warp::reject::custom(warp::reject::custom(e))
+    })?;
+    Ok(warp::reply::with_status("Key rotated", warp::http::StatusCode::OK))
+}
+
+async fn handle_revoke_key(
+    identity: String,
+    identity_service: Arc<dyn IdentityService>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    identity_service.revoke_key(&identity).await.map_err(|e| {
+        warp::reject::custom(warp::reject::custom(e))
+    })?;
+    Ok(warp::reply::with_status("Key revoked", warp::http::StatusCode::OK))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::Filter;
+    use crate::services::identity_service::IdentityServiceImpl;
+    use std::sync::Arc;
+    use warp::http::StatusCode;
+
+    #[tokio::test]
+    async fn test_create_identity() {
+        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
+        let api = identity_routes(identity_service);
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/identity/create")
+            .json(&"did:icn:test")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn test_get_identity() {
+        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
+        let api = identity_routes(identity_service);
+
+        let resp = warp::test::request()
+            .method("GET")
+            .path("/api/v1/identity/get/did:icn:test")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_rotate_key() {
+        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
+        let api = identity_routes(identity_service);
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/identity/rotate_key/did:icn:test")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_revoke_key() {
+        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
+        let api = identity_routes(identity_service);
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/identity/revoke_key/did:icn:test")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+}
+```
+
+===================
+File: ./backend/src/api/reputation.rs
+Size: 8297 bytes
+Modified: 2025-02-24 09:46:42.577369689 +0000
+Dependencies:
+mod tests {
+use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution, handle_sybil_resistance, apply_reputation_decay, batch_reputation_updates};
+use icn_networking::p2p::{P2PManager, ReputationEvent}; // Import P2PManager and ReputationEvent
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use warp::Filter;
+
+===================
+```rs
+use warp::Filter;
+use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution, handle_sybil_resistance, apply_reputation_decay, batch_reputation_updates};
+use icn_networking::p2p::{P2PManager, ReputationEvent}; // Import P2PManager and ReputationEvent
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ZkSnarkProofRequest {
+    proof: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SybilResistanceRequest {
+    did: String,
+    reputation_score: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ReputationDecayRequest {
+    did: String,
+    decay_rate: f64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct BatchReputationUpdateRequest {
+    events: Vec<ReputationEvent>,
+}
+
+pub fn reputation_routes(
+    p2p_manager: Arc<Mutex<P2PManager>>, // Add P2PManager to reputation_routes
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::path("api")
+        .and(
+            warp::path("v1")
+                .and(
+                    warp::path("reputation")
+                        .and(
+                            warp::path("get")
+                                .and(warp::get())
+                                .and(warp::query::<String>())
+                                .and_then(get_reputation)
+                        )
+                        .or(
+                            warp::path("adjust")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(adjust_reputation)
+                        )
+                        .or(
+                            warp::path("verify")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(verify_contribution)
+                        )
+                        .or(
+                            warp::path("zk_snark_proof")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
+                                .and_then(submit_zk_snark_proof_handler)
+                        )
+                        .or(
+                            warp::path("sybil_resistance")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(handle_sybil_resistance)
+                        )
+                        .or(
+                            warp::path("reputation_decay")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(apply_reputation_decay)
+                        )
+                        .or(
+                            warp::path("apply_reputation_decay")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(apply_reputation_decay_handler)
+                        )
+                        .or(
+                            warp::path("handle_sybil_resistance")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and_then(handle_sybil_resistance_handler)
+                        )
+                        .or(
+                            warp::path("batch_updates")
+                                .and(warp::post())
+                                .and(warp::body::json())
+                                .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
+                                .and_then(batch_reputation_updates_handler)
+                        )
+                )
+        )
+}
+
+fn with_p2p_manager(
+    p2p_manager: Arc<Mutex<P2PManager>>,
+) -> impl Filter<Extract = (Arc<Mutex<P2PManager>>,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || p2p_manager.clone())
+}
+
+async fn submit_zk_snark_proof_handler(
+    request: ZkSnarkProofRequest,
+    p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // Publish event
+    let event = ReputationEvent::ZkSnarkProofSubmitted {
+        proof: request.proof.clone(),
+    };
+    let mut p2p = p2p_manager.lock().await;
+    p2p.publish(event).await.unwrap();
+
+    // Placeholder logic for zk-SNARK proof submission
+    Ok(warp::reply::json(&"zk-SNARK proof submitted"))
+}
+
+async fn apply_reputation_decay_handler(
+    request: ReputationDecayRequest,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // Placeholder logic for applying reputation decay
+    Ok(warp::reply::json(&"Reputation decay applied"))
+}
+
+async fn handle_sybil_resistance_handler(
+    request: SybilResistanceRequest,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // Placeholder logic for handling sybil resistance
+    Ok(warp::reply::json(&"Sybil resistance handled"))
+}
+
+async fn batch_reputation_updates_handler(
+    request: BatchReputationUpdateRequest,
+    p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // Publish events
+    for event in &request.events {
+        let mut p2p = p2p_manager.lock().await;
+        p2p.publish(event.clone()).await.unwrap();
+    }
+
+    // Placeholder logic for batch reputation updates
+    Ok(warp::reply::json(&"Batch reputation updates applied"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::Filter;
+    use crate::services::reputation_service::{ReputationService, ReputationServiceImpl};
+    use std::sync::Arc;
+    use warp::http::StatusCode;
+
+    #[tokio::test]
+    async fn test_submit_zk_snark_proof() {
+        let reputation_service = Arc::new(ReputationServiceImpl::new(Arc::new(Database::new())));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new())); // Add P2PManager instance
+        let api = reputation_routes(p2p_manager);
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/reputation/zk_snark_proof")
+            .json(&ZkSnarkProofRequest { proof: "test_proof".to_string() })
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_apply_reputation_decay() {
+        let reputation_service = Arc::new(ReputationServiceImpl::new(Arc::new(Database::new())));
+        let api = reputation_routes();
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/reputation/reputation_decay")
+            .json(&ReputationDecayRequest { did: "did:icn:test".to_string(), decay_rate: 0.1 })
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_handle_sybil_resistance() {
+        let reputation_service = Arc::new(ReputationServiceImpl::new(Arc::new(Database::new())));
+        let api = reputation_routes();
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/reputation/sybil_resistance")
+            .json(&SybilResistanceRequest { did: "did:icn:test".to_string(), reputation_score: 50 })
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_batch_reputation_updates() {
+        let reputation_service = Arc::new(ReputationServiceImpl::new(Arc::new(Database::new())));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new())); // Add P2PManager instance
+        let api = reputation_routes(p2p_manager);
+
+        let events = vec![
+            ReputationEvent::ZkSnarkProofSubmitted { proof: "proof1".to_string() },
+            ReputationEvent::ZkSnarkProofSubmitted { proof: "proof2".to_string() },
+        ];
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/reputation/batch_updates")
+            .json(&BatchReputationUpdateRequest { events })
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+}
+```
+
+===================
+File: ./backend/src/api/resources.rs
+Size: 9492 bytes
+Modified: 2025-02-24 09:46:42.577369689 +0000
+Dependencies:
+mod tests {
+use crate::services::resource_service::{ResourceService, ResourceQuery};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use warp::Filter;
+
+===================
+```rs
+use warp::Filter;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use crate::services::resource_service::{ResourceService, ResourceQuery};
+
+#[derive(Debug, Deserialize, Serialize)]
+struct QuerySharedResourcesRequest {
+    resource_type: String,
+    owner: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ResourceSharingRequest {
+    resource_id: String,
+    recipient_id: String,
+    amount: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ResourceSharingResponse {
+    success: bool,
+    message: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct TransferResourceRequest {
+    resource_id: String,
+    recipient_id: String,
+    amount: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct AllocateResourceSharesRequest {
+    resource_id: String,
+    shares: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct CreateLocalClusterRequest {
+    cluster_name: String,
+    region: String,
+    members: Vec<String>,
+}
+
+pub fn resource_routes(
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    let query_shared_resources = warp::path!("api" / "v1" / "resources" / "query")
+        .and(warp::get())
+        .and(warp::body::json())
+        .and(with_resource_service(resource_service.clone()))
+        .and_then(query_shared_resources_handler);
+
+    let share_resource = warp::path!("api" / "v1" / "resources" / "share")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_resource_service(resource_service.clone()))
+        .and_then(share_resource_handler);
+
+    let transfer_resource = warp::path!("api" / "v1" / "resources" / "transfer")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_resource_service(resource_service.clone()))
+        .and_then(transfer_resource_handler);
+
+    let allocate_resource_shares = warp::path!("api" / "v1" / "resources" / "allocate")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_resource_service(resource_service.clone()))
+        .and_then(allocate_resource_shares_handler);
+
+    let create_local_cluster = warp::path!("api" / "v1" / "resources" / "local_cluster" / "create")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_resource_service(resource_service.clone()))
+        .and_then(create_local_cluster_handler);
+
+    query_shared_resources
+        .or(share_resource)
+        .or(transfer_resource)
+        .or(allocate_resource_shares)
+        .or(create_local_cluster)
+}
+
+fn with_resource_service(
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> impl Filter<Extract = (Arc<Mutex<ResourceService>>,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || resource_service.clone())
+}
+
+async fn query_shared_resources_handler(
+    request: QuerySharedResourcesRequest,
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let query = ResourceQuery {
+        resource_type: request.resource_type,
+        owner: request.owner,
+    };
+
+    let mut service = resource_service.lock().await;
+    match service.query_shared_resources(query).await {
+        Ok(resources) => {
+            // Use EXPLAIN ANALYZE to verify index usage
+            let explain_query = format!(
+                "EXPLAIN ANALYZE SELECT * FROM resources WHERE resource_type = '{}' AND owner = '{}'",
+                request.resource_type,
+                request.owner.clone().unwrap_or_default()
+            );
+            let explain_result = sqlx::query(&explain_query)
+                .fetch_all(&service.pool)
+                .await
+                .map_err(|e| warp::reject::custom(e))?;
+            println!("EXPLAIN ANALYZE result: {:?}", explain_result);
+
+            Ok(warp::reply::json(&resources))
+        },
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn share_resource_handler(
+    request: ResourceSharingRequest,
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = resource_service.lock().await;
+    match service.share_resource(request.resource_id, request.recipient_id, request.amount).await {
+        Ok(_) => Ok(warp::reply::json(&ResourceSharingResponse {
+            success: true,
+            message: "Resource shared successfully".to_string(),
+        })),
+        Err(e) => Ok(warp::reply::json(&ResourceSharingResponse {
+            success: false,
+            message: format!("Failed to share resource: {}", e),
+        })),
+    }
+}
+
+async fn transfer_resource_handler(
+    request: TransferResourceRequest,
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = resource_service.lock().await;
+    match service.transfer_resource(request.resource_id, request.recipient_id, request.amount).await {
+        Ok(_) => Ok(warp::reply::json(&"Resource transferred successfully")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn allocate_resource_shares_handler(
+    request: AllocateResourceSharesRequest,
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = resource_service.lock().await;
+    match service.allocate_resource_shares(request.resource_id, request.shares).await {
+        Ok(_) => Ok(warp::reply::json(&"Resource shares allocated successfully")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn create_local_cluster_handler(
+    request: CreateLocalClusterRequest,
+    resource_service: Arc<Mutex<ResourceService>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let operation = ResourceOperation::CreateLocalCluster {
+        cluster_name: request.cluster_name,
+        region: request.region,
+        members: request.members,
+    };
+
+    let mut service = resource_service.lock().await;
+    match service.handle_operation(operation).await {
+        Ok(_) => Ok(warp::reply::json(&"Local cluster created")),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::Filter;
+    use crate::services::resource_service::ResourceService;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    use warp::http::StatusCode;
+
+    #[tokio::test]
+    async fn test_query_shared_resources() {
+        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+        let api = resource_routes(resource_service);
+
+        let request = QuerySharedResourcesRequest {
+            resource_type: "test_type".to_string(),
+            owner: Some("test_owner".to_string()),
+        };
+
+        let resp = warp::test::request()
+            .method("GET")
+            .path("/api/v1/resources/query")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_share_resource() {
+        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+        let api = resource_routes(resource_service);
+
+        let request = ResourceSharingRequest {
+            resource_id: "test_resource".to_string(),
+            recipient_id: "test_recipient".to_string(),
+            amount: 10,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/resources/share")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_transfer_resource() {
+        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+        let api = resource_routes(resource_service);
+
+        let request = TransferResourceRequest {
+            resource_id: "test_resource".to_string(),
+            recipient_id: "test_recipient".to_string(),
+            amount: 10,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/resources/transfer")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_allocate_resource_shares() {
+        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+        let api = resource_routes(resource_service);
+
+        let request = AllocateResourceSharesRequest {
+            resource_id: "test_resource".to_string(),
+            shares: 10,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/resources/allocate")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_create_local_cluster() {
+        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+        let api = resource_routes(resource_service);
+
+        let request = CreateLocalClusterRequest {
+            cluster_name: "test_cluster".to_string(),
+            region: "test_region".to_string(),
+            members: vec!["member1".to_string(), "member2".to_string()],
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/resources/local_cluster/create")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+}
+```
 
 ===================
 File: ./backend/src/api/federation.rs
-Size: 22159 bytes
-Modified: 2025-02-23 19:12:30.154658200 +0000
+Size: 23075 bytes
+Modified: 2025-02-24 09:46:42.577369689 +0000
 Dependencies:
 use icn_federation::{FederationService, FederationOperation};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
-use icn_networking::p2p::{P2PManager, FederationEvent}; // Import P2PManager and FederationEvent
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -819,7 +1718,6 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use icn_federation::{FederationService, FederationOperation};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
-use icn_networking::p2p::{P2PManager, FederationEvent}; // Import P2PManager and FederationEvent
 
 #[derive(Debug, Deserialize, Serialize)]
 struct InitiateFederationRequest {
@@ -885,6 +1783,13 @@ struct TransferResourceRequest {
 struct AllocateResourceSharesRequest {
     resource_id: String,
     shares: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct CreateLocalClusterRequest {
+    cluster_name: String,
+    region: String,
+    members: Vec<String>,
 }
 
 pub fn federation_routes(
@@ -999,6 +1904,13 @@ pub fn federation_routes(
         .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
         .and_then(allocate_resource_shares_handler);
 
+    let create_local_cluster = warp::path!("api" / "v1" / "federation" / "local_cluster" / "create")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
+        .and_then(create_local_cluster_handler);
+
     initiate_federation
         .or(join_federation)
         .or(initiate_federation_dissolution)
@@ -1015,6 +1927,7 @@ pub fn federation_routes(
         .or(federation_lifecycle)
         .or(transfer_resource)
         .or(allocate_resource_shares)
+        .or(create_local_cluster)
 }
 
 fn with_federation_service(
@@ -1366,12 +2279,40 @@ async fn allocate_resource_shares_handler(
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
+
+async fn create_local_cluster_handler(
+    request: CreateLocalClusterRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+    p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let operation = FederationOperation::CreateLocalCluster {
+        cluster_name: request.cluster_name,
+        region: request.region,
+        members: request.members,
+    };
+
+    let mut service = federation_service.lock().await;
+    match service.handle_operation(operation).await {
+        Ok(_) => {
+            // Publish event
+            let event = FederationEvent::CreateLocalCluster {
+                cluster_name: request.cluster_name,
+                region: request.region,
+                members: request.members,
+            };
+            let mut p2p = p2p_manager.lock().await;
+            p2p.publish(event).await.unwrap();
+            Ok(warp::reply::json(&"Local cluster created"))
+        },
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
 ```
 
 ===================
 File: ./backend/src/api/governance.rs
-Size: 11252 bytes
-Modified: 2025-02-23 19:12:30.165313900 +0000
+Size: 12354 bytes
+Modified: 2025-02-24 09:46:42.577369689 +0000
 Dependencies:
 use crate::services::governance_service::{GovernanceService, Proposal, Vote};
 use icn_networking::p2p::{P2PManager, GovernanceEvent}; // Import P2PManager and GovernanceEvent
@@ -1422,6 +2363,12 @@ struct RecallVoteRequest {
     target_member: String,
     voter: String,
     approve: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct DelegatedGovernanceRequest {
+    federation_id: String,
+    representative_id: String,
 }
 
 pub fn governance_routes(
@@ -1476,6 +2423,13 @@ pub fn governance_routes(
         .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
         .and_then(vote_on_proposal_handler);
 
+    let delegated_governance = warp::path!("api" / "v1" / "governance" / "delegated")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_governance_service(governance_service.clone()))
+        .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
+        .and_then(delegated_governance_handler);
+
     create_proposal
         .or(vote_on_proposal)
         .or(sybil_resistance)
@@ -1483,6 +2437,7 @@ pub fn governance_routes(
         .or(proposal_status)
         .or(submit_proposal)
         .or(vote_on_proposal)
+        .or(delegated_governance)
 }
 
 fn with_governance_service(
@@ -1679,658 +2634,33 @@ async fn vote_on_proposal_handler(
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
-```
 
-===================
-File: ./backend/src/api/identity.rs
-Size: 5880 bytes
-Modified: 2025-02-23 19:12:30.171315200 +0000
-Dependencies:
-mod tests {
-use crate::services::identity_service::{IdentityService, IdentityServiceImpl};
-use icn_core::verifiable_credentials::{VerifiableCredential, Proof}; // Import VerifiableCredential and Proof
-use icn_zkp::zk_snark; // Import zk-SNARK
-use std::sync::Arc;
-use warp::Filter;
-
-===================
-```rs
-use warp::Filter;
-use crate::services::identity_service::{IdentityService, IdentityServiceImpl};
-use std::sync::Arc;
-use icn_core::verifiable_credentials::{VerifiableCredential, Proof}; // Import VerifiableCredential and Proof
-use icn_zkp::zk_snark; // Import zk-SNARK
-
-pub fn identity_routes(
-    identity_service: Arc<dyn IdentityService>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    let create_identity = warp::path!("api" / "v1" / "identity" / "create")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_identity_service(identity_service.clone()))
-        .and_then(handle_create_identity);
-
-    let get_identity = warp::path!("api" / "v1" / "identity" / "get" / String)
-        .and(warp::get())
-        .and(with_identity_service(identity_service.clone()))
-        .and_then(handle_get_identity);
-
-    let rotate_key = warp::path!("api" / "v1" / "identity" / "rotate_key" / String)
-        .and(warp::post())
-        .and(with_identity_service(identity_service.clone()))
-        .and_then(handle_rotate_key);
-
-    let revoke_key = warp::path!("api" / "v1" / "identity" / "revoke_key" / String)
-        .and(warp::post())
-        .and(with_identity_service(identity_service.clone()))
-        .and_then(handle_revoke_key);
-
-    create_identity.or(get_identity).or(rotate_key).or(revoke_key)
-}
-
-fn with_identity_service(
-    identity_service: Arc<dyn IdentityService>,
-) -> impl Filter<Extract = (Arc<dyn IdentityService>,), Error = std::convert::Infallible> + Clone {
-    warp::any().map(move || identity_service.clone())
-}
-
-async fn handle_create_identity(
-    identity: String,
-    identity_service: Arc<dyn IdentityService>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    identity_service.create_identity(&identity).await.map_err(|e| {
-        warp::reject::custom(warp::reject::custom(e))
-    })?;
-
-    // Generate verifiable credential
-    let credential = VerifiableCredential {
-        credential_type: "IdentityCredential".to_string(),
-        issuer_did: "did:icn:issuer".to_string(),
-        subject_did: identity.clone(),
-        issuance_date: chrono::Utc::now().to_rfc3339(),
-        expiration_date: None,
-        credential_status: None,
-        credential_schema: None,
-        proof: Proof {
-            type_: "Ed25519Signature2018".to_string(),
-            created: chrono::Utc::now().to_rfc3339(),
-            proof_purpose: "assertionMethod".to_string(),
-            verification_method: "did:icn:issuer#keys-1".to_string(),
-            jws: "example-jws".to_string(),
-        },
-    };
-
-    Ok(warp::reply::json(&credential))
-}
-
-async fn handle_get_identity(
-    identity: String,
-    identity_service: Arc<dyn IdentityService>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let data = identity_service.get_identity(&identity).await.map_err(|e| {
-        warp::reject::custom(warp::reject::custom(e))
-    })?;
-
-    // Generate zk-SNARK proof for identity validation
-    let proof = zk_snark::generate_proof(&data);
-
-    Ok(warp::reply::json(&proof))
-}
-
-async fn handle_rotate_key(
-    identity: String,
-    identity_service: Arc<dyn IdentityService>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    identity_service.rotate_key(&identity).await.map_err(|e| {
-        warp::reject::custom(warp::reject::custom(e))
-    })?;
-    Ok(warp::reply::with_status("Key rotated", warp::http::StatusCode::OK))
-}
-
-async fn handle_revoke_key(
-    identity: String,
-    identity_service: Arc<dyn IdentityService>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    identity_service.revoke_key(&identity).await.map_err(|e| {
-        warp::reject::custom(warp::reject::custom(e))
-    })?;
-    Ok(warp::reply::with_status("Key revoked", warp::http::StatusCode::OK))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use warp::Filter;
-    use crate::services::identity_service::IdentityServiceImpl;
-    use std::sync::Arc;
-    use warp::http::StatusCode;
-
-    #[tokio::test]
-    async fn test_create_identity() {
-        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
-        let api = identity_routes(identity_service);
-
-        let resp = warp::test::request()
-            .method("POST")
-            .path("/api/v1/identity/create")
-            .json(&"did:icn:test")
-            .reply(&api)
-            .await;
-
-        assert_eq!(resp.status(), StatusCode::CREATED);
-    }
-
-    #[tokio::test]
-    async fn test_get_identity() {
-        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
-        let api = identity_routes(identity_service);
-
-        let resp = warp::test::request()
-            .method("GET")
-            .path("/api/v1/identity/get/did:icn:test")
-            .reply(&api)
-            .await;
-
-        assert_eq!(resp.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_rotate_key() {
-        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
-        let api = identity_routes(identity_service);
-
-        let resp = warp::test::request()
-            .method("POST")
-            .path("/api/v1/identity/rotate_key/did:icn:test")
-            .reply(&api)
-            .await;
-
-        assert_eq!(resp.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_revoke_key() {
-        let identity_service = Arc::new(IdentityServiceImpl::new(Arc::new(Database::new())));
-        let api = identity_routes(identity_service);
-
-        let resp = warp::test::request()
-            .method("POST")
-            .path("/api/v1/identity/revoke_key/did:icn:test")
-            .reply(&api)
-            .await;
-
-        assert_eq!(resp.status(), StatusCode::OK);
-    }
-}
-```
-
-===================
-File: ./backend/src/api/reputation.rs
-Size: 6642 bytes
-Modified: 2025-02-23 19:12:30.178313300 +0000
-Dependencies:
-mod tests {
-use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution, handle_sybil_resistance, apply_reputation_decay};
-use icn_networking::p2p::{P2PManager, ReputationEvent}; // Import P2PManager and ReputationEvent
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use warp::Filter;
-
-===================
-```rs
-use warp::Filter;
-use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution, handle_sybil_resistance, apply_reputation_decay};
-use icn_networking::p2p::{P2PManager, ReputationEvent}; // Import P2PManager and ReputationEvent
-use std::sync::Arc;
-use tokio::sync::Mutex;
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ZkSnarkProofRequest {
-    proof: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct SybilResistanceRequest {
-    did: String,
-    reputation_score: i64,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ReputationDecayRequest {
-    did: String,
-    decay_rate: f64,
-}
-
-pub fn reputation_routes(
-    p2p_manager: Arc<Mutex<P2PManager>>, // Add P2PManager to reputation_routes
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path("api")
-        .and(
-            warp::path("v1")
-                .and(
-                    warp::path("reputation")
-                        .and(
-                            warp::path("get")
-                                .and(warp::get())
-                                .and(warp::query::<String>())
-                                .and_then(get_reputation)
-                        )
-                        .or(
-                            warp::path("adjust")
-                                .and(warp::post())
-                                .and(warp::body::json())
-                                .and_then(adjust_reputation)
-                        )
-                        .or(
-                            warp::path("verify")
-                                .and(warp::post())
-                                .and(warp::body::json())
-                                .and_then(verify_contribution)
-                        )
-                        .or(
-                            warp::path("zk_snark_proof")
-                                .and(warp::post())
-                                .and(warp::body::json())
-                                .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
-                                .and_then(submit_zk_snark_proof_handler)
-                        )
-                        .or(
-                            warp::path("sybil_resistance")
-                                .and(warp::post())
-                                .and(warp::body::json())
-                                .and_then(handle_sybil_resistance)
-                        )
-                        .or(
-                            warp::path("reputation_decay")
-                                .and(warp::post())
-                                .and(warp::body::json())
-                                .and_then(apply_reputation_decay)
-                        )
-                        .or(
-                            warp::path("apply_reputation_decay")
-                                .and(warp::post())
-                                .and(warp::body::json())
-                                .and_then(apply_reputation_decay_handler)
-                        )
-                        .or(
-                            warp::path("handle_sybil_resistance")
-                                .and(warp::post())
-                                .and(warp::body::json())
-                                .and_then(handle_sybil_resistance_handler)
-                        )
-                )
-        )
-}
-
-fn with_p2p_manager(
-    p2p_manager: Arc<Mutex<P2PManager>>,
-) -> impl Filter<Extract = (Arc<Mutex<P2PManager>>,), Error = std::convert::Infallible> + Clone {
-    warp::any().map(move || p2p_manager.clone())
-}
-
-async fn submit_zk_snark_proof_handler(
-    request: ZkSnarkProofRequest,
+async fn delegated_governance_handler(
+    request: DelegatedGovernanceRequest,
+    governance_service: Arc<Mutex<GovernanceService>>,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    // Publish event
-    let event = ReputationEvent::ZkSnarkProofSubmitted {
-        proof: request.proof.clone(),
-    };
-    let mut p2p = p2p_manager.lock().await;
-    p2p.publish(event).await.unwrap();
-
-    // Placeholder logic for zk-SNARK proof submission
-    Ok(warp::reply::json(&"zk-SNARK proof submitted"))
-}
-
-async fn apply_reputation_decay_handler(
-    request: ReputationDecayRequest,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    // Placeholder logic for applying reputation decay
-    Ok(warp::reply::json(&"Reputation decay applied"))
-}
-
-async fn handle_sybil_resistance_handler(
-    request: SybilResistanceRequest,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    // Placeholder logic for handling sybil resistance
-    Ok(warp::reply::json(&"Sybil resistance handled"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use warp::Filter;
-    use crate::services::reputation_service::{ReputationService, ReputationServiceImpl};
-    use std::sync::Arc;
-    use warp::http::StatusCode;
-
-    #[tokio::test]
-    async fn test_submit_zk_snark_proof() {
-        let reputation_service = Arc::new(ReputationServiceImpl::new(Arc::new(Database::new())));
-        let p2p_manager = Arc::new(Mutex::new(P2PManager::new())); // Add P2PManager instance
-        let api = reputation_routes(p2p_manager);
-
-        let resp = warp::test::request()
-            .method("POST")
-            .path("/api/v1/reputation/zk_snark_proof")
-            .json(&ZkSnarkProofRequest { proof: "test_proof".to_string() })
-            .reply(&api)
-            .await;
-
-        assert_eq!(resp.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_apply_reputation_decay() {
-        let reputation_service = Arc::new(ReputationServiceImpl::new(Arc::new(Database::new())));
-        let api = reputation_routes();
-
-        let resp = warp::test::request()
-            .method("POST")
-            .path("/api/v1/reputation/reputation_decay")
-            .json(&ReputationDecayRequest { did: "did:icn:test".to_string(), decay_rate: 0.1 })
-            .reply(&api)
-            .await;
-
-        assert_eq!(resp.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_handle_sybil_resistance() {
-        let reputation_service = Arc::new(ReputationServiceImpl::new(Arc::new(Database::new())));
-        let api = reputation_routes();
-
-        let resp = warp::test::request()
-            .method("POST")
-            .path("/api/v1/reputation/sybil_resistance")
-            .json(&SybilResistanceRequest { did: "did:icn:test".to_string(), reputation_score: 50 })
-            .reply(&api)
-            .await;
-
-        assert_eq!(resp.status(), StatusCode::OK);
-    }
-}
-```
-
-===================
-File: ./backend/src/api/resources.rs
-Size: 7995 bytes
-Modified: 2025-02-23 16:04:45.915022200 +0000
-Dependencies:
-mod tests {
-use crate::services::resource_service::{ResourceService, ResourceQuery};
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use warp::Filter;
-
-===================
-```rs
-use warp::Filter;
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use crate::services::resource_service::{ResourceService, ResourceQuery};
-
-#[derive(Debug, Deserialize, Serialize)]
-struct QuerySharedResourcesRequest {
-    resource_type: String,
-    owner: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ResourceSharingRequest {
-    resource_id: String,
-    recipient_id: String,
-    amount: u64,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ResourceSharingResponse {
-    success: bool,
-    message: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct TransferResourceRequest {
-    resource_id: String,
-    recipient_id: String,
-    amount: u64,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct AllocateResourceSharesRequest {
-    resource_id: String,
-    shares: u64,
-}
-
-pub fn resource_routes(
-    resource_service: Arc<Mutex<ResourceService>>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    let query_shared_resources = warp::path!("api" / "v1" / "resources" / "query")
-        .and(warp::get())
-        .and(warp::body::json())
-        .and(with_resource_service(resource_service.clone()))
-        .and_then(query_shared_resources_handler);
-
-    let share_resource = warp::path!("api" / "v1" / "resources" / "share")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_resource_service(resource_service.clone()))
-        .and_then(share_resource_handler);
-
-    let transfer_resource = warp::path!("api" / "v1" / "resources" / "transfer")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_resource_service(resource_service.clone()))
-        .and_then(transfer_resource_handler);
-
-    let allocate_resource_shares = warp::path!("api" / "v1" / "resources" / "allocate")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_resource_service(resource_service.clone()))
-        .and_then(allocate_resource_shares_handler);
-
-    query_shared_resources
-        .or(share_resource)
-        .or(transfer_resource)
-        .or(allocate_resource_shares)
-}
-
-fn with_resource_service(
-    resource_service: Arc<Mutex<ResourceService>>,
-) -> impl Filter<Extract = (Arc<Mutex<ResourceService>>,), Error = std::convert::Infallible> + Clone {
-    warp::any().map(move || resource_service.clone())
-}
-
-async fn query_shared_resources_handler(
-    request: QuerySharedResourcesRequest,
-    resource_service: Arc<Mutex<ResourceService>>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let query = ResourceQuery {
-        resource_type: request.resource_type,
-        owner: request.owner,
-    };
-
-    let mut service = resource_service.lock().await;
-    match service.query_shared_resources(query).await {
-        Ok(resources) => {
-            // Use EXPLAIN ANALYZE to verify index usage
-            let explain_query = format!(
-                "EXPLAIN ANALYZE SELECT * FROM resources WHERE resource_type = '{}' AND owner = '{}'",
-                request.resource_type,
-                request.owner.clone().unwrap_or_default()
-            );
-            let explain_result = sqlx::query(&explain_query)
-                .fetch_all(&service.pool)
-                .await
-                .map_err(|e| warp::reject::custom(e))?;
-            println!("EXPLAIN ANALYZE result: {:?}", explain_result);
-
-            Ok(warp::reply::json(&resources))
+    let mut service = governance_service.lock().await;
+    match service.handle_delegated_governance(request.federation_id, request.representative_id).await {
+        Ok(_) => {
+            // Publish event
+            let event = GovernanceEvent::DelegatedGovernance {
+                federation_id: request.federation_id,
+                representative_id: request.representative_id,
+            };
+            let mut p2p = p2p_manager.lock().await;
+            p2p.publish(event).await.unwrap();
+            Ok(warp::reply::json(&"Delegated governance applied"))
         },
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
-
-async fn share_resource_handler(
-    request: ResourceSharingRequest,
-    resource_service: Arc<Mutex<ResourceService>>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let mut service = resource_service.lock().await;
-    match service.share_resource(request.resource_id, request.recipient_id, request.amount).await {
-        Ok(_) => Ok(warp::reply::json(&ResourceSharingResponse {
-            success: true,
-            message: "Resource shared successfully".to_string(),
-        })),
-        Err(e) => Ok(warp::reply::json(&ResourceSharingResponse {
-            success: false,
-            message: format!("Failed to share resource: {}", e),
-        })),
-    }
-}
-
-async fn transfer_resource_handler(
-    request: TransferResourceRequest,
-    resource_service: Arc<Mutex<ResourceService>>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let mut service = resource_service.lock().await;
-    match service.transfer_resource(request.resource_id, request.recipient_id, request.amount).await {
-        Ok(_) => Ok(warp::reply::json(&"Resource transferred successfully")),
-        Err(e) => Err(warp::reject::custom(e)),
-    }
-}
-
-async fn allocate_resource_shares_handler(
-    request: AllocateResourceSharesRequest,
-    resource_service: Arc<Mutex<ResourceService>>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let mut service = resource_service.lock().await;
-    match service.allocate_resource_shares(request.resource_id, request.shares).await {
-        Ok(_) => Ok(warp::reply::json(&"Resource shares allocated successfully")),
-        Err(e) => Err(warp::reject::custom(e)),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use warp::Filter;
-    use crate::services::resource_service::ResourceService;
-    use std::sync::Arc;
-    use tokio::sync::Mutex;
-    use warp::http::StatusCode;
-
-    #[tokio::test]
-    async fn test_query_shared_resources() {
-        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
-        let api = resource_routes(resource_service);
-
-        let request = QuerySharedResourcesRequest {
-            resource_type: "test_type".to_string(),
-            owner: Some("test_owner".to_string()),
-        };
-
-        let resp = warp::test::request()
-            .method("GET")
-            .path("/api/v1/resources/query")
-            .json(&request)
-            .reply(&api)
-            .await;
-
-        assert_eq!(resp.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_share_resource() {
-        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
-        let api = resource_routes(resource_service);
-
-        let request = ResourceSharingRequest {
-            resource_id: "test_resource".to_string(),
-            recipient_id: "test_recipient".to_string(),
-            amount: 10,
-        };
-
-        let resp = warp::test::request()
-            .method("POST")
-            .path("/api/v1/resources/share")
-            .json(&request)
-            .reply(&api)
-            .await;
-
-        assert_eq!(resp.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_transfer_resource() {
-        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
-        let api = resource_routes(resource_service);
-
-        let request = TransferResourceRequest {
-            resource_id: "test_resource".to_string(),
-            recipient_id: "test_recipient".to_string(),
-            amount: 10,
-        };
-
-        let resp = warp::test::request()
-            .method("POST")
-            .path("/api/v1/resources/transfer")
-            .json(&request)
-            .reply(&api)
-            .await;
-
-        assert_eq!(resp.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_allocate_resource_shares() {
-        let resource_service = Arc::new(Mutex::new(ResourceService::new()));
-        let api = resource_routes(resource_service);
-
-        let request = AllocateResourceSharesRequest {
-            resource_id: "test_resource".to_string(),
-            shares: 10,
-        };
-
-        let resp = warp::test::request()
-            .method("POST")
-            .path("/api/v1/resources/allocate")
-            .json(&request)
-            .reply(&api)
-            .await;
-
-        assert_eq!(resp.status(), StatusCode::OK);
-    }
-}
-```
-
-===================
-File: ./backend/src/lib.rs
-Size: 188 bytes
-Modified: 2025-02-23 15:18:22.103032000 +0000
-Dependencies:
-
-===================
-```rs
-pub mod api;
-pub mod services;
-pub mod database;
-pub mod networking;
-pub mod core;
-pub mod main;
-
-pub mod federation;
-pub mod governance;
-pub mod resources;
-pub mod reputation;
 ```
 
 ===================
 File: ./backend/src/main.rs
 Size: 11909 bytes
-Modified: 2025-02-23 19:37:08.998234400 +0000
+Modified: 2025-02-24 09:46:42.581369689 +0000
 Dependencies:
 mod api;
 mod config;
@@ -2727,72 +3057,547 @@ fn main() {
 ```
 
 ===================
-File: ./contracts/cooperative/src/lib.rs
-Size: 1327 bytes
-Modified: 2025-02-23 19:12:30.198318000 +0000
+File: ./src/lib.rs
+Size: 249 bytes
+Modified: 2025-02-24 09:46:42.649369691 +0000
 Dependencies:
-mod proposals;
-use ethers::prelude::*;
-use icn_zkp::{RollupBatch, VerificationKey};
-use proposals::{ProposalContract, Proposal};
+mod tests {
 
 ===================
 ```rs
-mod proposals;
+pub mod api;
+pub mod governance;
+pub mod dsl;
+pub mod attestation;
+pub mod consensus;
 
-use proposals::{ProposalContract, Proposal};
-use icn_zkp::{RollupBatch, VerificationKey};
-use ethers::prelude::*;
+/// Re-export commonly used types and functions
+pub use icn_types;
 
-pub struct CooperativeContract {
-    proposal_contract: ProposalContract,
-    contract_address: Address,
-    // ...existing code...
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_works() {
+        assert_eq!(2 + 2, 4);
+    }
+}```
+
+===================
+File: ./src/api/mod.rs
+Size: 160 bytes
+Modified: 2025-02-24 09:46:42.645369691 +0000
+Dependencies:
+use crate::icn_types::IcnResult;
+
+===================
+```rs
+// API module for the ICN system
+pub mod routes;
+pub mod handlers;
+
+use crate::icn_types::IcnResult;
+
+pub async fn initialize() -> IcnResult<()> {
+    Ok(())
+} ```
+
+===================
+File: ./src/api/routes.rs
+Size: 213 bytes
+Modified: 2025-02-24 09:46:42.645369691 +0000
+Dependencies:
+use warp::Filter;
+
+===================
+```rs
+use warp::Filter;
+
+pub fn icn_routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::path!("health")
+        .and(warp::get())
+        .map(|| warp::reply::json(&"OK"))
 }
+```
 
-impl CooperativeContract {
-    pub fn new(contract_address: Address, verification_key: VerificationKey) -> Self {
-        Self {
-            proposal_contract: ProposalContract::new(
-                3,
-                verification_key,
-                contract_address
-            ),
-            contract_address,
-            // ...existing code...
+===================
+File: ./src/api/handlers.rs
+Size: 106 bytes
+Modified: 2025-02-24 09:46:42.645369691 +0000
+Dependencies:
+use crate::icn_types::IcnResult;
+
+===================
+```rs
+use crate::icn_types::IcnResult;
+
+pub async fn health_check() -> IcnResult<&'static str> {
+    Ok("OK")
+}
+```
+
+===================
+File: ./src/main.rs
+Size: 3965 bytes
+Modified: 2025-02-24 09:46:42.649369691 +0000
+Dependencies:
+use icn_core::{
+use icn_types::StorageBackend;
+use log::{info, error, debug};
+use std::sync::Arc;
+
+===================
+```rs
+use std::sync::Arc;
+use log::{info, error, debug};
+use icn_types::StorageBackend;
+use icn_core::{
+    Core, 
+    TelemetryManager, 
+    PrometheusMetrics,
+    Logger, 
+    TracingSystem,
+    RuntimeManager,
+    StorageManager,
+    NetworkManager,
+    IdentityManager,
+    ReputationManager,
+    FederationManager,
+    ResourceAllocationSystem,
+    storage::InMemoryStorageBackend
+};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize logging
+    env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
+    info!("Starting ICN node initialization...");
+
+    // Initialize core components
+    let storage_manager = StorageManager::new(Box::new(create_storage_backend()));
+    let network_manager = NetworkManager::new();
+    let runtime_manager = RuntimeManager::new();
+    let prometheus = PrometheusMetrics::new();
+    let logger = Logger::new();
+    let tracing = TracingSystem::new();
+    let telemetry_manager = TelemetryManager::new(prometheus, logger, tracing);
+    let identity_manager = IdentityManager::new();
+    let reputation_manager = ReputationManager::new();
+    let resource_system = Arc::new(ResourceAllocationSystem::new());
+    let federation_manager = Arc::new(FederationManager::new(resource_system.clone()));
+
+    // Wrap components in Arc for shared ownership
+    let storage = Arc::new(storage_manager);
+    let network = Arc::new(network_manager);
+    let runtime = Arc::new(runtime_manager);
+    let telemetry = Arc::new(telemetry_manager);
+    let identity = Arc::new(identity_manager);
+    let reputation = Arc::new(reputation_manager);
+
+    // Create core system
+    let core = Core::new(
+        storage.clone(),
+        network.clone(),
+        runtime.clone(),
+        telemetry.clone(),
+        identity.clone(),
+        reputation.clone()
+    );
+
+    // Start the core system
+    info!("Starting core system components...");
+    match core.start().await {
+        Ok(_) => info!("Core system started successfully"),
+        Err(e) => {
+            error!("Failed to start core system: {}", e);
+            std::process::exit(1);
         }
     }
 
-    pub async fn submit_vote_batch(&mut self, batch: RollupBatch) -> Result<(), String> {
-        self.proposal_contract.submit_vote_batch(batch).await
+    // Initialize P2P networking
+    info!("Initializing P2P networking...");
+    if let Err(e) = network.start().await {
+        error!("Failed to start P2P networking: {}", e);
+        std::process::exit(1);
     }
 
-    pub async fn execute_proposal(&mut self, proposal_id: &str) -> Result<bool, String> {
-        self.proposal_contract.execute_proposal(proposal_id).await
+    // Start consensus engine
+    info!("Starting consensus engine...");
+    if let Err(e) = core.start_consensus().await {
+        error!("Failed to start consensus engine: {}", e);
+        std::process::exit(1);
     }
 
-    pub async fn submit_zk_snark_proof(&self, proof: Vec<u8>) -> Result<(), String> {
-        // Implement zk-SNARK proof submission logic
+    // Start federation manager
+    info!("Starting federation manager...");
+    if let Err(e) = federation_manager.start().await {
+        error!("Failed to start federation manager: {}", e);
+        std::process::exit(1);
+    }
+
+    // Set up signal handlers for graceful shutdown
+    let core_clone = core.clone();
+    let network_clone = network.clone();
+    let federation_clone = federation_manager.clone();
+    
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.expect("Failed to listen for ctrl+c");
+        info!("Received shutdown signal, initiating graceful shutdown...");
+        
+        // Shutdown sequence
+        if let Err(e) = federation_clone.stop().await {
+            error!("Error stopping federation manager: {}", e);
+        }
+        if let Err(e) = network_clone.stop().await {
+            error!("Error stopping P2P networking: {}", e);
+        }
+        if let Err(e) = core_clone.stop().await {
+            error!("Error stopping core system: {}", e);
+        }
+        
+        info!("Node shutdown completed");
+        std::process::exit(0);
+    });
+
+    info!("ICN node startup complete - running...");
+
+    // Keep the main thread alive
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    }
+
+    Ok(())
+}
+
+fn create_storage_backend() -> impl StorageBackend {
+    InMemoryStorageBackend::new()
+}```
+
+===================
+File: ./scripts/backend/src/main.rs
+Size: 45 bytes
+Modified: 2025-02-24 09:46:42.609369690 +0000
+Dependencies:
+
+===================
+```rs
+fn main() {
+    println!("Hello, world!");
+}
+```
+
+===================
+File: ./crates/icn-zk/src/lib.rs
+Size: 459 bytes
+Modified: 2025-02-24 09:46:42.593369689 +0000
+Dependencies:
+use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use ff::PrimeField;
+
+===================
+```rs
+use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use ff::PrimeField;
+
+pub struct ProofOfCooperation<F: PrimeField> {
+    pub reputation_score: Option<F>,
+    pub cooperation_proof: Option<F>,
+}
+
+impl<F: PrimeField> Circuit<F> for ProofOfCooperation<F> {
+    fn synthesize<CS: ConstraintSystem<F>>(
+        self,
+        cs: &mut CS
+    ) -> Result<(), SynthesisError> {
+        // Basic circuit implementation - to be expanded
         Ok(())
-    }
-
-    pub async fn verify_zk_snark_proof(&self, proof: Vec<u8>) -> Result<bool, String> {
-        // Implement zk-SNARK proof verification logic
-        Ok(true)
     }
 }
 ```
 
 ===================
+File: ./crates/icn-mutual-credit/src/lib.rs
+Size: 2371 bytes
+Modified: 2025-02-24 09:46:42.593369689 +0000
+Dependencies:
+use chrono::Utc;
+use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
+
+===================
+```rs
+use std::collections::HashMap;
+use chrono::Utc;
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MutualCreditTransaction {
+    pub sender_did: String,
+    pub receiver_did: String,
+    pub amount: i64,
+    pub signature: String,
+    pub timestamp: i64,
+}
+
+pub struct MutualCreditLedger {
+    // Maps member DID to current credit balance.
+    pub balances: HashMap<String, i64>,
+    // Ordered list of all mutual credit transactions.
+    pub history: Vec<MutualCreditTransaction>,
+}
+
+impl MutualCreditLedger {
+    pub fn new() -> Self {
+        Self {
+            balances: HashMap::new(),
+            history: Vec::new(),
+        }
+    }
+
+    // Process a new mutual credit transaction.
+    pub fn process_transaction(&mut self, tx: MutualCreditTransaction) -> Result<(), String> {
+        // Verify sender signature (placeholder)
+        if !Self::verify_signature(&tx.sender_did, &tx.signature, tx.amount) {
+            return Err("Invalid signature".into());
+        }
+        // Update sender and receiver balances
+        *self.balances.entry(tx.sender_did.clone()).or_insert(0) -= tx.amount;
+        *self.balances.entry(tx.receiver_did.clone()).or_insert(0) += tx.amount;
+        // Append to history
+        self.history.push(tx);
+        Ok(())
+    }
+
+    // Dummy signature verifier (to be replaced with actual verification logic)
+    fn verify_signature(_did: &str, _signature: &str, _amount: i64) -> bool {
+        true // In practice, verify using the sender's DID key.
+    }
+
+    // Get balance summary for a member
+    pub fn get_balance(&self, did: &str) -> i64 {
+        *self.balances.get(did).unwrap_or(&0)
+    }
+
+    // Print simple ledger summary (for logging)
+    pub fn print_summary(&self) {
+        for (did, balance) in &self.balances {
+            println!("Member {}: Balance {}", did, balance);
+        }
+    }
+}
+
+// Example usage (to be removed or used in unit tests)
+// fn main() {
+//     let mut ledger = MutualCreditLedger::new();
+//     let tx = MutualCreditTransaction {
+//         sender_did: "did:icn:member1".into(),
+//         receiver_did: "did:icn:member2".into(),
+//         amount: 50,
+//         signature: "signature_placeholder".into(),
+//         timestamp: Utc::now().timestamp(),
+//     };
+//     ledger.process_transaction(tx).unwrap();
+//     ledger.print_summary();
+// }
+```
+
+===================
+File: ./crates/icn-dsl/src/lib.rs
+Size: 5568 bytes
+Modified: 2025-02-24 09:46:42.589369689 +0000
+Dependencies:
+use nom::{
+
+===================
+```rs
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_while1},
+    character::complete::{char, multispace0, multispace1},
+    combinator::{map, opt},
+    multi::{many0, many1},
+    sequence::{delimited, preceded, terminated, tuple},
+    IResult,
+};
+
+#[derive(Debug, Clone)]
+pub struct CoopLangAST {
+    pub governance: Option<GovernanceNode>,
+    pub reputation: Option<ReputationNode>,
+    pub marketplace: Option<MarketplaceNode>,
+    pub federation: Option<FederationNode>,
+    pub validation: Option<ValidationNode>,
+    pub logging: Option<LoggingNode>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ValidationNode {
+    pub pre_checks: Vec<Check>,
+    pub post_checks: Vec<Check>,
+    pub state_validation: Option<StateValidation>,
+    pub resource_checks: Option<ResourceChecks>,
+    pub custom_merge: Option<CustomMerge>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Check {
+    pub condition: String,
+    pub action: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct StateValidation {
+    pub current: Option<String>,
+    pub expected: Option<String>,
+    pub transition: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CustomMerge {
+    pub strategy: String,
+    pub handlers: Vec<ConflictHandler>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConflictHandler {
+    pub field_path: String,
+    pub resolution_type: String,
+}
+
+// Parser implementation
+impl CoopLangAST {
+    pub fn parse(input: &str) -> IResult<&str, Self> {
+        let (input, _) = multispace0(input)?;
+        let (input, governance) = opt(Self::parse_governance_section)(input)?;
+        let (input, reputation) = opt(Self::parse_reputation_section)(input)?;
+        let (input, marketplace) = opt(Self::parse_marketplace_section)(input)?;
+        let (input, federation) = opt(Self::parse_federation_section)(input)?;
+        let (input, validation) = opt(Self::parse_validation_section)(input)?;
+        let (input, logging) = opt(Self::parse_logging_section)(input)?;
+        
+        Ok((input, CoopLangAST {
+            governance,
+            reputation,
+            marketplace,
+            federation,
+            validation,
+            logging,
+        }))
+    }
+
+    fn parse_validation_section(input: &str) -> IResult<&str, ValidationNode> {
+        let (input, _) = tag("validation:")(input)?;
+        let (input, _) = multispace1(input)?;
+        
+        let (input, pre_checks) = Self::parse_checks("pre_checks:")(input)?;
+        let (input, post_checks) = Self::parse_checks("post_checks:")(input)?;
+        let (input, state_validation) = opt(Self::parse_state_validation)(input)?;
+        let (input, resource_checks) = opt(Self::parse_resource_checks)(input)?;
+        let (input, custom_merge) = opt(Self::parse_custom_merge)(input)?;
+
+        Ok((input, ValidationNode {
+            pre_checks,
+            post_checks,
+            state_validation,
+            resource_checks,
+            custom_merge,
+        }))
+    }
+
+    fn parse_checks(label: &'static str) -> impl Fn(&str) -> IResult<&str, Vec<Check>> {
+        move |input: &str| {
+            let (input, _) = tag(label)(input)?;
+            let (input, _) = multispace1(input)?;
+            many0(Self::parse_check)(input)
+        }
+    }
+
+    fn parse_check(input: &str) -> IResult<&str, Check> {
+        let (input, _) = char('-')(input)?;
+        let (input, _) = multispace0(input)?;
+        let (input, condition) = take_while1(|c| c != ':')(input)?;
+        let (input, _) = char(':')(input)?;
+        let (input, _) = multispace0(input)?;
+        let (input, action) = take_while1(|c| c != '\n')(input)?;
+        let (input, _) = multispace0(input)?;
+
+        Ok((input, Check {
+            condition: condition.trim().to_string(),
+            action: action.trim().to_string(),
+        }))
+    }
+
+    // Add other section parsers similarly...
+}
+
+// Bytecode generation
+pub fn compile_to_icvm(ast: &CoopLangAST) -> Vec<u8> {
+    let mut bytecode = Vec::new();
+
+    // Header
+    bytecode.extend_from_slice(&[0x49, 0x43, 0x56, 0x4D]); // "ICVM" magic bytes
+    bytecode.push(0x01); // Version
+
+    // Compile validation rules
+    if let Some(validation) = &ast.validation {
+        bytecode.push(0x01); // Validation section marker
+        
+        // Pre-checks
+        bytecode.push(validation.pre_checks.len() as u8);
+        for check in &validation.pre_checks {
+            compile_check(&mut bytecode, check);
+        }
+
+        // Post-checks
+        bytecode.push(validation.post_checks.len() as u8);
+        for check in &validation.post_checks {
+            compile_check(&mut bytecode, check);
+        }
+
+        // State validation
+        if let Some(state_validation) = &validation.state_validation {
+            bytecode.push(0x01);
+            compile_state_validation(&mut bytecode, state_validation);
+        } else {
+            bytecode.push(0x00);
+        }
+    }
+
+    // Compile other sections similarly...
+
+    bytecode
+}
+
+fn compile_check(bytecode: &mut Vec<u8>, check: &Check) {
+    // Convert check condition to bytecode operations
+    bytecode.extend_from_slice(check.condition.as_bytes());
+    bytecode.push(0x00); // Null terminator
+    bytecode.extend_from_slice(check.action.as_bytes());
+    bytecode.push(0x00); // Null terminator
+}
+
+fn compile_state_validation(bytecode: &mut Vec<u8>, validation: &StateValidation) {
+    if let Some(current) = &validation.current {
+        bytecode.push(0x01);
+        bytecode.extend_from_slice(current.as_bytes());
+        bytecode.push(0x00);
+    } else {
+        bytecode.push(0x00);
+    }
+    // Similarly for expected and transition...
+}
+```
+
+===================
 File: ./crates/icn-consensus/src/lib.rs
-Size: 15006 bytes
-Modified: 2025-02-22 03:55:53.744710400 +0000
+Size: 15095 bytes
+Modified: 2025-02-24 09:46:42.585369689 +0000
 Dependencies:
 use async_trait::async_trait;
 use bit_set::BitSet;
 use federation::{Federation, FederationError};
-use icn_core::ReputationManager;
+use icn_common::{ReputationManager, ConsensusEngine, Vote, VoteStatus, GovernanceError};
 use icn_types::Block;
+use serde::{Serialize, Deserialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
@@ -2815,13 +3620,14 @@ use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
 use tokio::time::sleep;
 use tokio::task;
-use icn_core::ReputationManager;
+use icn_common::{ReputationManager, ConsensusEngine, Vote, VoteStatus, GovernanceError};
 use icn_types::Block;
 use std::sync::Arc;
 use bit_set::BitSet;
 use trie_rs::Trie;
 use thiserror::Error;
 use federation::{Federation, FederationError};
+use serde::{Serialize, Deserialize};
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 #[derive(Error, Debug)]
@@ -3223,660 +4029,1100 @@ enum FederationType {
     Community,
     Hybrid,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Vote {
+    pub proposal_id: String,
+    pub voter: String,
+    pub approve: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum VoteStatus {
+    Accepted,
+    Rejected,
+    Pending,
+}
+
+#[derive(Error, Debug)]
+pub enum GovernanceError {
+    #[error("Proposal not found")]
+    ProposalNotFound,
+    #[error("Not eligible to vote")]
+    NotEligibleToVote,
+}
 ```
 
 ===================
-File: ./crates/icn-core/src/lib.rs
-Size: 9507 bytes
-Modified: 2025-02-22 03:55:53.744710400 +0000
+File: ./crates/icn-common/src/lib.rs
+Size: 1095 bytes
+Modified: 2025-02-24 09:46:42.585369689 +0000
 Dependencies:
 use async_trait::async_trait;
-use icn_consensus::ProofOfCooperation;
-use icn_types::{Block, Transaction, FederationType, FederationTerms, FederationOperation};
-use log::{info, error};
-use std::sync::Arc;
-use tokio::time::{sleep, Duration};
-use zk_snarks::verify_proof; // Import zk-SNARK verification function
+use serde::{Serialize, Deserialize};
+use thiserror::Error;
 
 ===================
 ```rs
-use std::sync::Arc;
 use async_trait::async_trait;
-use icn_types::{Block, Transaction, FederationType, FederationTerms, FederationOperation};
-use icn_consensus::ProofOfCooperation;
-use tokio::time::{sleep, Duration};
-use log::{info, error};
-use zk_snarks::verify_proof; // Import zk-SNARK verification function
+use serde::{Serialize, Deserialize};
+use thiserror::Error;
 
-pub struct Core {
-    consensus: Arc<dyn ConsensusEngine>,
-    storage: Arc<dyn StorageManager>,
-    network: Arc<dyn NetworkManager>,
-    runtime: Arc<dyn RuntimeManager>,
-    telemetry: Arc<TelemetryManager>,
-    identity: Arc<dyn IdentityManager>,
-    reputation: Arc<dyn ReputationManager>,
-    federation_manager: Arc<FederationManager>,
-    resource_system: Arc<ResourceAllocationSystem>,
+#[async_trait]
+pub trait ReputationManager: Send + Sync {
+    fn get_reputation(&self, participant: &str, context: &str) -> i64;
+    fn is_eligible(&self, participant: &str, threshold: i64, context: &str) -> bool;
+    async fn update_reputation(&self, participant: &str, change: i64, context: &str);
 }
 
-impl Core {
-    pub fn new(
-        storage: Arc<dyn StorageManager>,
-        network: Arc<dyn NetworkManager>,
-        runtime: Arc<dyn RuntimeManager>,
-        telemetry: Arc<TelemetryManager>,
-        identity: Arc<dyn IdentityManager>,
-        reputation: Arc<dyn ReputationManager>,
-    ) -> Self {
-        let resource_system = Arc::new(ResourceAllocationSystem::new());
-        let federation_manager = Arc::new(FederationManager::new(resource_system.clone()));
-        let consensus = Arc::new(ProofOfCooperation::new(reputation.clone()));
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Vote {
+    pub proposal_id: String,
+    pub voter: String,
+    pub approve: bool,
+}
 
-        Core {
-            consensus,
-            storage,
-            network,
-            runtime,
-            telemetry,
-            identity,
-            reputation,
-            federation_manager,
-            resource_system,
+#[derive(Debug, Serialize, Deserialize)]
+pub enum VoteStatus {
+    Accepted,
+    Rejected,
+    Pending,
+}
+
+#[derive(Error, Debug)]
+pub enum GovernanceError {
+    #[error("Proposal not found")]
+    ProposalNotFound,
+    #[error("Not eligible to vote")]
+    NotEligibleToVote,
+}
+
+#[async_trait]
+pub trait ConsensusEngine {
+    async fn start(&self);
+    async fn stop(&self);
+    async fn submit_vote(&mut self, vote: Vote) -> Result<VoteStatus, GovernanceError>;
+    async fn process_approved_proposal(&mut self, proposal_id: &str) -> Result<(), GovernanceError>;
+}
+```
+
+===================
+File: ./crates/icn-resource/src/lib.rs
+Size: 6916 bytes
+Modified: 2025-02-24 09:46:42.593369689 +0000
+Dependencies:
+use async_trait::async_trait;
+use icn_federation::ResourceManager;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+===================
+```rs
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use icn_federation::ResourceManager;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Resource {
+    pub id: String,
+    pub resource_type: String,
+    pub owner: String,
+    pub total_amount: u64,
+    pub available_amount: u64,
+    pub price_per_unit: f64,
+    pub constraints: ResourceConstraints,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceConstraints {
+    pub min_reputation: i64,
+    pub max_allocation: u64,
+    pub time_limit: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationResourcePool {
+    pub federation_id: String,
+    pub resources: HashMap<String, Resource>,
+    pub access_control: FederationAccessControl,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationAccessControl {
+    pub allowed_federations: Vec<String>,
+    pub min_reputation: i64,
+    pub max_allocation_per_federation: u64,
+}
+
+pub struct ResourceAllocationSystem {
+    resources: Arc<RwLock<HashMap<String, Resource>>>,
+    allocations: Arc<RwLock<HashMap<String, Vec<ResourceAllocation>>>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceAllocation {
+    pub allocation_id: String,
+    pub resource_id: String,
+    pub recipient: String,
+    pub amount: u64,
+    pub allocated_at: u64,
+    pub expires_at: Option<u64>,
+}
+
+impl ResourceAllocationSystem {
+    pub fn new() -> Self {
+        Self {
+            resources: Arc::new(RwLock::new(HashMap::new())),
+            allocations: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
-    pub async fn start(&self) -> Result<(), String> {
-        self.telemetry.log("Starting Core...");
-        if let Err(e) = self.consensus.start().await {
-            return Err(format!("Failed to start consensus: {}", e));
-        }
-        if let Err(e) = self.network.start().await {
-            return Err(format!("Failed to start network: {}", e));
-        }
-        if let Err(e) = self.runtime.start().await {
-            return Err(format!("Failed to start runtime: {}", e));
-        }
-        if let Err(e) = self.identity.start().await {
-            return Err(format!("Failed to start identity: {}", e));
-        }
-        if let Err(e) = self.reputation.start().await {
-            return Err(format!("Failed to start reputation: {}", e));
-        }
+    pub async fn register_resource(
+        &self,
+        owner: String,
+        resource_type: String,
+        amount: u64,
+        price: f64,
+        constraints: ResourceConstraints,
+    ) -> Result<String, ResourceError> {
+        let resource_id = format!("res_{}", uuid::Uuid::new_v4());
+        let resource = Resource {
+            id: resource_id.clone(),
+            resource_type,
+            owner,
+            total_amount: amount,
+            available_amount: amount,
+            price_per_unit: price,
+            constraints,
+        };
 
-        // Start real-time reputation recalibration
-        let reputation_system = self.reputation.clone();
-        tokio::spawn(async move {
-            loop {
-                reputation_system.dynamic_adjustment("did:icn:test", 10).await;
-                reputation_system.apply_decay("did:icn:test", 0.1).await;
-                sleep(Duration::from_secs(10)).await;
-            }
-        });
+        let mut resources = self.resources.write().await;
+        resources.insert(resource_id.clone(), resource);
 
-        self.telemetry.log("Core started.");
-        Ok(())
+        Ok(resource_id)
     }
 
-    pub async fn stop(&self) -> Result<(), String> {
-        self.telemetry.log("Stopping Core...");
-        if let Err(e) = self.runtime.stop().await {
-            return Err(format!("Failed to stop runtime: {}", e));
-        }
-        if let Err(e) = self.network.stop().await {
-            return Err(format!("Failed to stop network: {}", e));
-        }
-        if let Err(e) = self.consensus.stop().await {
-            return Err(format!("Failed to stop consensus: {}", e));
-        }
-        if let Err(e) = self.identity.stop().await {
-            return Err(format!("Failed to stop identity: {}", e));
-        }
-        if let Err(e) = self.reputation.stop().await {
-            return Err(format!("Failed to stop reputation: {}", e));
-        }
-        self.telemetry.log("Core stopped.");
-        Ok(())
-    }
+    pub async fn allocate(
+        &self,
+        resource_id: &str,
+        recipient: String,
+        amount: u64,
+    ) -> Result<String, ResourceError> {
+        let mut resources = self.resources.write().await;
+        let resource = resources.get_mut(resource_id)
+            .ok_or(ResourceError::ResourceNotFound)?;
 
-    pub async fn process_transaction(&self, transaction: Transaction) -> Result<(), String> {
-        self.telemetry.log("Processing transaction...");
-        self.runtime.execute_transaction(transaction).await;
-        self.telemetry.log("Transaction processed.");
-        Ok(())
-    }
-
-    pub async fn add_block(&self, block: Block) -> Result<(), String> {
-        self.telemetry.log("Adding block...");
-        self.storage.store_block(block).await;
-        self.telemetry.log("Block added.");
-        Ok(())
-    }
-
-    pub async fn create_proposal(&self, proposal: Proposal) -> Result<(), Box<dyn std::error::Error>> {
-        self.telemetry.log("Creating proposal...");
-        // Logic to handle proposal creation
-        self.telemetry.log("Proposal created.");
-        Ok(())
-    }
-
-    pub async fn vote_on_proposal(&self, vote: Vote) -> Result<(), Box<dyn std::error::Error>> {
-        self.telemetry.log("Voting on proposal...");
-        // Logic to handle voting on a proposal
-        self.telemetry.log("Vote cast.");
-        Ok(())
-    }
-
-    pub async fn handle_federation_operation(&self, operation: FederationOperation) -> Result<(), Box<dyn std::error::Error>> {
-        self.telemetry.log("Handling federation operation...");
-        
-        match operation {
-            FederationOperation::InitiateFederation { federation_type, partner_id, terms } => {
-                self.federation_manager.create_federation(
-                    format!("Federation with {}", partner_id),
-                    federation_type,
-                    terms,
-                    partner_id,
-                ).await?;
-            }
-            FederationOperation::JoinFederation { federation_id, commitment } => {
-                // Get the requesting member's DID from context
-                let member_did = "did:icn:requesting_member"; // This should come from auth context
-                self.federation_manager.join_federation(&federation_id, member_did, commitment).await?;
-            }
-            // ... handle other federation operations ...
+        if resource.available_amount < amount {
+            return Err(ResourceError::InsufficientResources);
         }
 
-        self.telemetry.log("Federation operation handled.");
-        Ok(())
-    }
+        let allocation_id = format!("alloc_{}", uuid::Uuid::new_v4());
+        let allocation = ResourceAllocation {
+            allocation_id: allocation_id.clone(),
+            resource_id: resource_id.to_string(),
+            recipient,
+            amount,
+            allocated_at: chrono::Utc::now().timestamp() as u64,
+            expires_at: None,
+        };
 
-    pub async fn allocate_resource(&self, request: ResourceAllocation) -> Result<String, Box<dyn std::error::Error>> {
-        self.telemetry.log("Allocating resources...");
-        let allocation_id = self.resource_system.allocate(
-            &request.resource_type,
-            request.recipient,
-            request.amount,
-        ).await?;
-        self.telemetry.log("Resources allocated.");
+        resource.available_amount -= amount;
+
+        let mut allocations = self.allocations.write().await;
+        allocations.entry(resource_id.to_string())
+            .or_insert_with(Vec::new)
+            .push(allocation);
+
         Ok(allocation_id)
     }
 
-    pub async fn load_cooperative_rules(&self, dsl_code: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // Parse DSL code
-        let ast = icn_dsl::CoopLangAST::parse(dsl_code)
-            .map_err(|e| format!("Failed to parse DSL: {}", e))?;
+    pub async fn release(
+        &self,
+        allocation_id: &str,
+    ) -> Result<(), ResourceError> {
+        let mut allocations = self.allocations.write().await;
+        for (resource_id, resource_allocations) in allocations.iter_mut() {
+            if let Some(index) = resource_allocations.iter().position(|alloc| alloc.allocation_id == allocation_id) {
+                let allocation = resource_allocations.remove(index);
+                let mut resources = self.resources.write().await;
+                if let Some(resource) = resources.get_mut(&allocation.resource_id) {
+                    resource.available_amount += allocation.amount;
+                }
+                return Ok(());
+            }
+        }
+        Err(ResourceError::InvalidAllocation)
+    }
+
+    pub async fn adjust_price(
+        &self,
+        resource_id: &str,
+        new_price: f64,
+    ) -> Result<(), ResourceError> {
+        let mut resources = self.resources.write().await;
+        if let Some(resource) = resources.get_mut(resource_id) {
+            resource.price_per_unit = new_price;
+            Ok(())
+        } else {
+            Err(ResourceError::ResourceNotFound)
+        }
+    }
+
+    pub async fn create_federation_pool(
+        &self,
+        federation_id: String,
+        access_control: FederationAccessControl,
+    ) -> Result<(), ResourceError> {
+        let pool = FederationResourcePool {
+            federation_id: federation_id.clone(),
+            resources: HashMap::new(),
+            access_control,
+        };
         
-        // Compile to ICVM bytecode
-        let bytecode = icn_dsl::compile_to_icvm(&ast);
-        
-        // Load into VM
-        self.runtime.load_bytecode(&bytecode).await?;
-        
+        let mut resources = self.resources.write().await;
+        resources.insert(federation_id, pool);
         Ok(())
     }
 
-    pub async fn handle_mutual_credit_transaction_with_proof(&self, sender: &str, receiver: &str, amount: f64, proof: &str) -> Result<(), String> {
-        self.telemetry.log("Handling mutual credit transaction with zk-SNARK proof...");
-        if !verify_proof(proof) {
-            return Err("Invalid zk-SNARK proof".to_string());
+    pub async fn share_with_federation(
+        &self,
+        source_federation: &str,
+        target_federation: &str, 
+        resource_id: &str,
+        amount: u64,
+    ) -> Result<String, ResourceError> {
+        let mut resources = self.resources.write().await;
+        
+        // Verify federation access permissions
+        let source_pool = resources.get(source_federation)
+            .ok_or(ResourceError::ResourceNotFound)?;
+            
+        if !source_pool.access_control.allowed_federations.contains(&target_federation.to_string()) {
+            return Err(ResourceError::UnauthorizedAction);
         }
-        // Placeholder logic for mutual credit transaction
-        self.telemetry.log("Mutual credit transaction with zk-SNARK proof completed.");
+
+        // Create allocation record
+        let allocation_id = format!("alloc_{}", uuid::Uuid::new_v4());
+        
+        // Allocate resources to target federation
+        self.allocate(resource_id, target_federation.to_string(), amount).await?;
+
+        Ok(allocation_id)
+    }
+}
+
+#[async_trait]
+impl ResourceManager for ResourceAllocationSystem {
+    async fn allocate_resources(&self, allocation: icn_federation::ResourceAllocation) -> Result<(), String> {
+        self.allocate(&allocation.resource_type, allocation.recipient, allocation.amount)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    async fn release_resources(&self, resource_type: &str, amount: u64) -> Result<(), String> {
+        // Implementation for releasing resources back to the pool
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub enum ResourceError {
+    ResourceNotFound,
+    InsufficientResources,
+    InvalidAllocation,
+    UnauthorizedAction,
+}
+```
+
+===================
+File: ./crates/icn-runtime/src/lib.rs
+Size: 8344 bytes
+Modified: 2025-02-24 09:46:42.593369689 +0000
+Dependencies:
+mod tests {
+use async_trait::async_trait;
+use icn_dsl::CoopLangAST;
+use icn_types::{
+use tracing::{info, warn, error};
+
+===================
+```rs
+use async_trait::async_trait;
+use icn_types::{
+    Block, Transaction, RuntimeError, RuntimeResult, ExecutionContext,
+    ValidationNode, GovernanceNode, MarketplaceNode, Check, StateValidation,
+    RuntimeConfig
+};
+use icn_dsl::CoopLangAST;
+use tracing::{info, warn, error};
+
+/// Manages the execution runtime for cooperative operations
+pub struct RuntimeManager {
+    config: RuntimeConfig,
+    dsl_context: Option<CoopLangAST>,
+}
+
+impl RuntimeManager {
+    /// Creates a new runtime manager with the given configuration
+    pub fn new(config: RuntimeConfig) -> Self {
+        Self {
+            config,
+            dsl_context: None,
+        }
+    }
+
+    /// Loads DSL bytecode into the runtime
+    pub async fn load_bytecode(&mut self, bytecode: &[u8]) -> RuntimeResult<()> {
+        info!("Loading DSL bytecode into runtime");
+        self.dsl_context = Some(CoopLangAST::parse(bytecode)
+            .map_err(|e| RuntimeError::DslError(e.to_string()))?);
+        Ok(())
+    }
+
+    /// Executes cooperative rules in the current context
+    pub async fn execute_cooperative_rules(&self, context: &ExecutionContext) -> RuntimeResult<()> {
+        if let Some(ast) = &self.dsl_context {
+            info!("Executing cooperative rules");
+            
+            // Execute validation rules
+            if let Some(validation) = &ast.validation {
+                info!("Executing validation rules");
+                self.execute_validation_rules(validation, context).await?;
+            }
+
+            // Execute governance rules
+            if let Some(governance) = &ast.governance {
+                info!("Executing governance rules");
+                self.execute_governance_rules(governance, context).await?;
+            }
+
+            // Execute marketplace rules
+            if let Some(marketplace) = &ast.marketplace {
+                info!("Executing marketplace rules");
+                self.execute_marketplace_rules(marketplace, context).await?;
+            }
+        } else {
+            warn!("No DSL context loaded");
+        }
+        Ok(())
+    }
+
+    /// Executes governance rules
+    async fn execute_governance_rules(&self, governance: &GovernanceNode, context: &ExecutionContext) -> RuntimeResult<()> {
+        for rule in &governance.rules {
+            info!("Executing governance rule: {}", rule);
+            let condition_result = self.evaluate_condition(rule, context).await?;
+            if !condition_result {
+                return Err(RuntimeError::ValidationFailed(format!("Governance rule failed: {}", rule)));
+            }
+        }
+        Ok(())
+    }
+
+    /// Executes marketplace rules
+    async fn execute_marketplace_rules(&self, marketplace: &MarketplaceNode, context: &ExecutionContext) -> RuntimeResult<()> {
+        for rule in &marketplace.rules {
+            info!("Executing marketplace rule: {}", rule);
+            let condition_result = self.evaluate_condition(rule, context).await?;
+            if !condition_result {
+                return Err(RuntimeError::ValidationFailed(format!("Marketplace rule failed: {}", rule)));
+            }
+        }
+        Ok(())
+    }
+
+    /// Evaluates a condition in the current context
+    async fn evaluate_condition(&self, condition: &str, context: &ExecutionContext) -> RuntimeResult<bool> {
+        // TODO: Implement proper condition evaluation
+        // This should use a proper expression evaluator
+        Ok(true)
+    }
+
+    /// Gets the current state from the context
+    async fn get_current_state(&self, context: &ExecutionContext) -> RuntimeResult<String> {
+        context.state.get("current_state")
+            .and_then(|bytes| String::from_utf8(bytes.clone()).ok())
+            .ok_or_else(|| RuntimeError::InvalidState)
+    }
+}
+
+#[async_trait]
+pub trait ValidationExecutor {
+    async fn execute_validation_rules(&self, validation: &ValidationNode, context: &ExecutionContext) -> RuntimeResult<()>;
+    async fn execute_check(&self, check: &Check, context: &ExecutionContext) -> RuntimeResult<()>;
+    async fn validate_state(&self, validation: &StateValidation, context: &ExecutionContext) -> RuntimeResult<()>;
+}
+
+#[async_trait]
+impl ValidationExecutor for RuntimeManager {
+    async fn execute_validation_rules(&self, validation: &ValidationNode, context: &ExecutionContext) -> RuntimeResult<()> {
+        // Execute pre-checks
+        for check in &validation.pre_checks {
+            info!("Executing pre-check: {}", check.condition);
+            self.execute_check(check, context).await?;
+        }
+
+        // Validate state if specified
+        if let Some(state_validation) = &validation.state_validation {
+            info!("Validating state");
+            self.validate_state(state_validation, context).await?;
+        }
+
+        // Execute post-checks
+        for check in &validation.post_checks {
+            info!("Executing post-check: {}", check.condition);
+            self.execute_check(check, context).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn execute_check(&self, check: &Check, context: &ExecutionContext) -> RuntimeResult<()> {
+        let condition_result = self.evaluate_condition(&check.condition, context).await?;
+        if !condition_result {
+            error!("Check failed: {}", check.action);
+            return Err(RuntimeError::ValidationFailed(check.action.clone()));
+        }
+        Ok(())
+    }
+
+    async fn validate_state(&self, validation: &StateValidation, context: &ExecutionContext) -> RuntimeResult<()> {
+        let current_state = self.get_current_state(context).await?;
+
+        // Validate current state if specified
+        if let Some(expected_current) = &validation.current {
+            if current_state != *expected_current {
+                error!("Invalid state. Expected: {}, Found: {}", expected_current, current_state);
+                return Err(RuntimeError::InvalidState);
+            }
+        }
+
+        // Validate expected state transitions
+        if let Some(expected) = &validation.expected {
+            if !validation.transitions.contains(expected) {
+                error!("Invalid state transition to: {}", expected);
+                return Err(RuntimeError::InvalidState);
+            }
+        }
+
         Ok(())
     }
 }
 
 #[async_trait]
-pub trait ConsensusEngine {
-    async fn get_reputation(&self, did: String, category: String) -> Result<i64, Box<dyn std::error::Error>>;
-    async fn is_eligible(&self, did: String, min_reputation: i64, category: String) -> Result<bool, Box<dyn std::error::Error>>;
-    async fn dynamic_adjustment(&self, did: String, contribution: i64) -> Result<(), Box<dyn std::error::Error>>;
-    async fn apply_decay(&self, did: String, decay_rate: f64) -> Result<(), Box<dyn std::error::Error>>;
-    async fn reputation_based_access(&self, did: String, min_reputation: i64) -> Result<bool, Box<dyn std::error::Error>>;
+pub trait VM {
+    /// Executes a single transaction
+    async fn execute_transaction(&self, transaction: Transaction) -> RuntimeResult<()>;
+    
+    /// Executes all transactions in a block
+    async fn execute_block(&self, block: Block) -> RuntimeResult<()>;
 }
 
-pub struct TelemetryManager {
-    metrics: PrometheusMetrics,
-    logger: Logger,
-    traces: TracingSystem,
+pub struct ContractExecution {
+    // Fields for the ContractExecution struct
 }
 
-impl TelemetryManager {
-    pub fn new(metrics: PrometheusMetrics, logger: Logger, traces: TracingSystem) -> Self {
-        TelemetryManager {
-            metrics,
-            logger,
-            traces,
-        }
-    }
-
-    pub fn log(&self, message: &str) {
-        self.logger.log(message);
-        self.traces.trace(message);
-    }
-
-    pub fn record_metric(&self, name: &str, value: f64) {
-        self.metrics.record(name, value);
-    }
+impl ContractExecution {
+    // Methods for the ContractExecution struct
 }
 
-pub struct PrometheusMetrics;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use icn_types::{Block, Transaction};
 
-impl PrometheusMetrics {
-    pub fn record(&self, name: &str, value: f64) {
-        // Record the metric
+    #[tokio::test]
+    async fn test_runtime_initialization() {
+        let config = RuntimeConfig {
+            vm_type: "test".to_string(),
+            max_execution_time: 1000,
+            max_memory: 1024 * 1024,
+            enable_debugging: true,
+            log_level: "debug".to_string(),
+        };
+        
+        let runtime = RuntimeManager::new(config);
+        assert!(runtime.dsl_context.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_validation_rules() {
+        let config = RuntimeConfig {
+            vm_type: "test".to_string(),
+            max_execution_time: 1000,
+            max_memory: 1024 * 1024,
+            enable_debugging: true,
+            log_level: "debug".to_string(),
+        };
+        
+        let runtime = RuntimeManager::new(config);
+        
+        let context = ExecutionContext {
+            transaction: None,
+            block: None,
+            state: HashMap::new(),
+            metadata: HashMap::new(),
+        };
+
+        let validation = ValidationNode {
+            pre_checks: vec![
+                Check {
+                    condition: "true".to_string(),
+                    action: "test".to_string(),
+                }
+            ],
+            post_checks: vec![],
+            state_validation: None,
+        };
+
+        runtime.execute_validation_rules(&validation, &context).await.unwrap();
     }
 }
+```
 
-pub struct Logger;
+===================
+File: ./crates/icn-governance/src/lib.rs
+Size: 9048 bytes
+Modified: 2025-02-24 09:46:42.589369689 +0000
+Dependencies:
+mod tests {
+use chrono::{DateTime, Utc};
+use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
+use thiserror::Error;
 
-impl Logger {
-    pub fn log(&self, message: &str) {
-        // Log the message
-    }
+===================
+```rs
+use thiserror::Error;
+use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Utc};
+use std::collections::HashMap;
+
+#[derive(Error, Debug)]
+pub enum GovernanceError {
+    #[error("Proposal not found")]
+    ProposalNotFound,
+    #[error("Invalid rollback - proposal is not in pending state")]
+    InvalidRollback,
+    #[error("Dispute already exists")]
+    DisputeExists,
+    #[error("Insufficient reputation to dispute")]
+    InsufficientReputation,
+    #[error("Invalid dispute resolution")]
+    InvalidResolution,
+    #[error("Database error: {0}")]
+    DatabaseError(String),
 }
 
-pub struct TracingSystem;
-
-impl TracingSystem {
-    pub fn trace(&self, message: &str) {
-        // Trace the message
-    }
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proposal {
-    id: String,
-    title: String,
-    description: String,
-    status: String,
-    votes_for: i64,
-    votes_against: i64,
-    created_by: String,
-    ends_at: String,
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub proposer: String,
+    pub status: ProposalStatus,
+    pub created_at: DateTime<Utc>,
+    pub votes: HashMap<String, Vote>,
+    pub disputes: Vec<Dispute>,
+    pub execution_history: Vec<ExecutionEvent>,
+    pub phase: ProposalPhase,
+    pub required_signers: Vec<String>,
+    pub collected_signatures: Vec<String>,
+    pub state: ProposalState,
+    pub dispute_resolution: Option<DisputeResolution>,
+    pub timeout_timestamp: u64,
+    pub zk_snark_proof: Option<String>, // Added zk-SNARK proof field
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ProposalStatus {
+    Pending,
+    Active,
+    Approved,
+    Rejected,
+    Disputed,
+    RolledBack,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ProposalPhase {
+    Submission,
+    Deliberation { ends_at: DateTime<Utc> },
+    Voting { ends_at: DateTime<Utc> },
+    Execution,
+    Reconsideration { reason: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vote {
-    proposal_id: String,
-    voter: String,
-    approve: bool,
+    pub voter: String,
+    pub approve: bool,
+    pub reputation: i64,
+    pub timestamp: DateTime<Utc>,
 }
 
-pub mod blockchain;
-pub mod core;
-pub mod db;
-pub mod identity;
-pub mod reputation;
-pub mod governance;   // <-- new module export
-pub mod vm;
-pub mod networking;
-pub mod storage;
-pub mod models;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Dispute {
+    pub id: String,
+    pub proposal_id: String,
+    pub disputer: String,
+    pub reason: String,
+    pub evidence: String,
+    pub arbitrator_did: Option<String>,
+    pub resolution: Option<Resolution>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Resolution {
+    pub decision: DecisionType,
+    pub rationale: String,
+    pub signatures: Vec<String>, // Requires 75% of arbitrators
+}
+
+#[derive(Debug)]
+pub struct DissolutionProtocol {
+    federation_id: String,
+    initiated_by: String,
+    reason: DissolutionReason,
+    status: DissolutionStatus,
+    asset_distribution: HashMap<String, AssetAllocation>,
+    debt_settlements: Vec<DebtSettlement>,
+    member_reassignments: Vec<MemberReassignment>,
+}
+
+#[derive(Debug)]
+pub enum DissolutionReason {
+    Voluntary,
+    InactivityThreshold,
+    GovernanceViolation,
+    EconomicNonviability,
+}
+
+#[derive(Debug)]
+pub enum DissolutionStatus {
+    Initiated,
+    InProgress,
+    Completed,
+    Cancelled,
+}
+
+#[derive(Debug)]
+pub struct AssetAllocation {
+    asset_id: String,
+    recipient_id: String,
+    allocation_share: f64,
+}
+
+#[derive(Debug)]
+pub struct DebtSettlement {
+    creditor_id: String,
+    debtor_id: String,
+    amount: f64,
+    due_date: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug)]
+pub struct MemberReassignment {
+    member_id: String,
+    new_federation_id: Option<String>,
+    transition_period: chrono::Duration,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecisionThresholds {
+    pub resource_allocation_threshold: u64,
+    pub technical_effort_threshold: u32, // in days
+    pub financial_impact_threshold: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReputationControls {
+    pub max_gap_multiplier: f64,
+    pub decay_threshold_multiplier: f64,
+    pub monthly_decay_rate: f64,
+    pub equity_bonus_groups: HashMap<String, f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VotingModel {
+    Equal,
+    Proportional { cap_percentage: u8 },
+    Hybrid {
+        governance_model: Box<VotingModel>,
+        resource_model: Box<VotingModel>,
+    },
+}
+
+impl VotingModel {
+    pub fn calculate_voting_power(&self, federation: &Federation, cooperative_id: &str) -> f64 {
+        match self {
+            VotingModel::Equal => 1.0,
+            VotingModel::Proportional { cap_percentage } => {
+                let power = federation.get_cooperative_weight(cooperative_id);
+                power.min(*cap_percentage as f64 / 100.0)
+            },
+            VotingModel::Hybrid { governance_model, resource_model } => {
+                // Use different models based on proposal type
+                // ...existing code...
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReputationManager {
+    pub controls: ReputationControls,
+    reputation_scores: HashMap<String, f64>,
+    last_decay_check: DateTime<Utc>,
+}
+
+impl ReputationManager {
+    pub fn apply_anti_oppression_mechanisms(&mut self) {
+        let avg_reputation = self.calculate_average_reputation();
+        
+        for score in self.reputation_scores.values_mut() {
+            if *score > avg_reputation * self.controls.decay_threshold_multiplier {
+                *score *= 1.0 - self.controls.monthly_decay_rate;
+            }
+        }
+    }
+    
+    // ...existing code...
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ProposalState {
+    Draft,
+    UnderReview,
+    Voting,
+    DisputeResolution,
+    Finalized,
+    TimedOut,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisputeResolution {
+    pub initiator: String,
+    pub reason: String, 
+    pub mediators: Vec<String>,
+    pub resolution: Option<String>,
+    pub votes: HashMap<String, bool>,
+    pub evidence: Vec<EvidenceItem>,
+}
+
+impl Proposal {
+    pub fn transition_state(&mut self, new_state: ProposalState) -> Result<(), String> {
+        match (&self.state, &new_state) {
+            (ProposalState::Draft, ProposalState::UnderReview) => Ok(()),
+            (ProposalState::UnderReview, ProposalState::Voting) => Ok(()),
+            (ProposalState::Voting, ProposalState::DisputeResolution) => Ok(()),
+            (ProposalState::DisputeResolution, ProposalState::Finalized) => Ok(()),
+            _ => Err("Invalid state transition".to_string())
+        }
+        self.state = new_state;
+        Ok(())
+    }
+    
+    pub fn initiate_dispute(&mut self, initiator: String, reason: String) -> Result<(), String> {
+        if self.state != ProposalState::Voting {
+            return Err("Can only initiate dispute during voting phase".to_string());
+        }
+        
+        self.dispute_resolution = Some(DisputeResolution {
+            initiator,
+            reason,
+            mediators: vec![],
+            resolution: None,
+            votes: HashMap::new(),
+            evidence: vec![],
+        });
+        
+        self.transition_state(ProposalState::DisputeResolution)
+    }
+
+    pub async fn execute_proposal(&self) -> bool {
+        if let Some(proof) = &self.zk_snark_proof {
+            if verify_proof(proof) {
+                execute_approved_action();
+                return true;
+            }
+        }
+        false
+    }
+}
+
+fn verify_proof(proof: &str) -> bool {
+    // Implement zk-SNARK proof verification logic
+    true
+}
+
+fn execute_approved_action() {
+    // Implement the action to be executed upon proposal approval
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[tokio::test]
+    async fn test_reputation_decay() {
+        let gov = GovernanceService::new(db_pool).await;
+        
+        // Test normal decay
+        let result = gov.apply_decay("did:icn:test", 0.1).await;
+        assert!(result.is_ok());
+        
+        // Test maximum decay limit
+        let result = gov.apply_decay("did:icn:test", 0.9).await;
+        assert!(result.is_err());
+        
+        // Test decay exemption
+        let result = gov.apply_decay("did:icn:exempt", 0.1).await;
+        assert!(result.is_ok());
+        assert_eq!(gov.get_reputation("did:icn:exempt").await.unwrap(), 100);
+    }
+
+    #[tokio::test]
+    async fn test_voting_edge_cases() {
+        let gov = GovernanceService::new(db_pool).await;
+
+        // Test vote after period ends
+        let proposal = gov.create_proposal("Test", "Description", "did:icn:test", 0).await.unwrap();
+        let result = gov.vote(&proposal.id, "did:icn:voter", true).await;
+        assert!(matches!(result, Err(GovernanceError::VotingPeriodEnded(_))));
+
+        // Test double voting
+        let proposal = gov.create_proposal("Test", "Description", "did:icn:test", 3600).await.unwrap();
+        gov.vote(&proposal.id, "did:icn:voter", true).await.unwrap();
+        let result = gov.vote(&proposal.id, "did:icn:voter", false).await;
+        assert!(matches!(result, Err(GovernanceError::AlreadyVoted(_))));
+    }
+}
 ```
 
 ===================
-File: ./crates/icn-crypto/src/lib.rs
-Size: 5761 bytes
-Modified: 2025-01-16 22:02:57.844616100 +0000
+File: ./crates/icn-storage/src/lib.rs
+Size: 6298 bytes
+Modified: 2025-02-24 09:46:42.593369689 +0000
 Dependencies:
-use dilithium::keypair as dilithium_keypair;
-use dilithium::sign as dilithium_sign;
-use dilithium::verify as dilithium_verify;
-use ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
-use falcon::keypair as falcon_keypair;
-use falcon::sign as falcon_sign;
-use falcon::verify as falcon_verify;
-use icn_types::Algorithm;
-use kyber::decapsulate as kyber_decapsulate;
-use kyber::encapsulate as kyber_encapsulate;
-use kyber::keypair as kyber_keypair;
-use rsa::{RSAPrivateKey, RSAPublicKey, PaddingScheme};
-use secp256k1::{Secp256k1, SecretKey, PublicKey, Message, Signature};
-use sha2::{Sha256, Digest};
+mod cache;
+mod tests {
+use cache::StorageCache;
+use futures::TryStreamExt;
+use icn_types::{StorageError, StorageResult, StorageBackend, StorageConfig};
+use ipfs_api_backend_actix::{IpfsClient, TryFromUri};
+use serde::{Serialize, Deserialize};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::Mutex;
 
 ===================
 ```rs
-use secp256k1::{Secp256k1, SecretKey, PublicKey, Message, Signature};
-use sha2::{Sha256, Digest};
-use rsa::{RSAPrivateKey, RSAPublicKey, PaddingScheme};
-use ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
-use icn_types::Algorithm;
-use kyber::keypair as kyber_keypair;
-use kyber::encapsulate as kyber_encapsulate;
-use kyber::decapsulate as kyber_decapsulate;
-use dilithium::keypair as dilithium_keypair;
-use dilithium::sign as dilithium_sign;
-use dilithium::verify as dilithium_verify;
-use falcon::keypair as falcon_keypair;
-use falcon::sign as falcon_sign;
-use falcon::verify as falcon_verify;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use serde::{Serialize, Deserialize};
+use icn_types::{StorageError, StorageResult, StorageBackend, StorageConfig};
+use std::time::Duration;
+use ipfs_api_backend_actix::{IpfsClient, TryFromUri};
+use futures::TryStreamExt;
 
-pub enum Algorithm {
-    Secp256k1,
-    RSA,
-    ECDSA,
-    Kyber,
-    Dilithium,
-    Falcon,
+mod cache;
+use cache::StorageCache;
+
+/// Errors that can occur in storage operations
+#[derive(Error, Debug)]
+pub enum StorageError {
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+    
+    #[error("Item not found: {0}")]
+    NotFound(String),
+    
+    #[error("Invalid data: {0}")]
+    InvalidData(String),
+    
+    #[error("IPFS error: {0}")]
+    IpfsError(String),
 }
 
-pub struct KeyPair {
-    pub public_key: Vec<u8>,
-    pub private_key: Vec<u8>,
-    pub algorithm: Algorithm,
+/// Represents the result of storage operations
+pub type StorageResult<T> = Result<T, StorageError>;
+
+/// Core storage interface for the system
+#[async_trait::async_trait]
+pub trait StorageBackend: Send + Sync {
+    /// Store a value with the given key
+    async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()>;
+    
+    /// Retrieve a value by key
+    async fn get(&self, key: &str) -> StorageResult<Vec<u8>>;
+    
+    /// Delete a value by key
+    async fn delete(&self, key: &str) -> StorageResult<()>;
+    
+    /// Check if a key exists
+    async fn exists(&self, key: &str) -> StorageResult<bool>;
 }
 
-impl KeyPair {
-    pub fn generate(algorithm: Algorithm) -> Self {
-        match algorithm {
-            Algorithm::Secp256k1 => {
-                let secp = Secp256k1::new();
-                let (private_key, public_key) = secp.generate_keypair(&mut rand::thread_rng());
-                KeyPair {
-                    public_key: public_key.serialize().to_vec(),
-                    private_key: private_key[..].to_vec(),
-                    algorithm,
-                }
-            },
-            Algorithm::RSA => {
-                let private_key = RSAPrivateKey::new(&mut rand::thread_rng(), 2048).expect("failed to generate a key");
-                let public_key = RSAPublicKey::from(&private_key);
-                KeyPair {
-                    public_key: public_key.to_pkcs1().expect("failed to encode public key"),
-                    private_key: private_key.to_pkcs1().expect("failed to encode private key"),
-                    algorithm,
-                }
-            },
-            Algorithm::ECDSA => {
-                let signing_key = SigningKey::random(&mut rand::thread_rng());
-                let verifying_key = VerifyingKey::from(&signing_key);
-                KeyPair {
-                    public_key: verifying_key.to_bytes().to_vec(),
-                    private_key: signing_key.to_bytes().to_vec(),
-                    algorithm,
-                }
-            },
-            Algorithm::Kyber => {
-                let (public_key, private_key) = kyber_keypair();
-                KeyPair {
-                    public_key,
-                    private_key,
-                    algorithm,
-                }
-            },
-            Algorithm::Dilithium => {
-                let (public_key, private_key) = dilithium_keypair();
-                KeyPair {
-                    public_key,
-                    private_key,
-                    algorithm,
-                }
-            },
-            Algorithm::Falcon => {
-                let (public_key, private_key) = falcon_keypair();
-                KeyPair {
-                    public_key,
-                    private_key,
-                    algorithm,
-                }
-            },
+/// Manages persistent storage for the system
+pub struct StorageManager {
+    backend: Arc<Mutex<Box<dyn StorageBackend>>>,
+    cache: Arc<StorageCache>,
+    ipfs_client: IpfsClient,
+}
+
+impl StorageManager {
+    /// Create a new storage manager with the given backend and configuration
+    pub fn new(backend: Box<dyn StorageBackend>, config: StorageConfig) -> Self {
+        Self {
+            backend: Arc::new(Mutex::new(backend)),
+            cache: Arc::new(StorageCache::new(
+                config.cache_size,
+                Duration::from_secs(config.cache_ttl_seconds)
+            )),
+            ipfs_client: IpfsClient::from_str(&config.ipfs_url).expect("Invalid IPFS URL"),
         }
     }
-
-    pub fn sign(&self, message: &[u8]) -> Vec<u8> {
-        match self.algorithm {
-            Algorithm::Secp256k1 => {
-                let secp = Secp256k1::new();
-                let private_key = SecretKey::from_slice(&self.private_key).expect("32 bytes");
-                let message = Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
-                secp.sign(&message, &private_key).serialize_compact().to_vec()
-            },
-            Algorithm::RSA => {
-                let private_key = RSAPrivateKey::from_pkcs1(&self.private_key).expect("failed to decode private key");
-                let padding = PaddingScheme::new_pkcs1v15_sign(None);
-                private_key.sign(padding, &Sha256::digest(message)).expect("failed to sign message")
-            },
-            Algorithm::ECDSA => {
-                let signing_key = SigningKey::from_bytes(&self.private_key).expect("failed to decode private key");
-                signing_key.sign(message).to_bytes().to_vec()
-            },
-            Algorithm::Dilithium => {
-                dilithium_sign(&self.private_key, message)
-            },
-            Algorithm::Falcon => {
-                falcon_sign(&self.private_key, message)
-            },
-            _ => vec![],
-        }
-    }
-
-    pub fn verify(&self, message: &[u8], signature: &[u8]) -> bool {
-        match self.algorithm {
-            Algorithm::Secp256k1 => {
-                let secp = Secp256k1::new();
-                let public_key = PublicKey::from_slice(&self.public_key).expect("invalid public key");
-                let message = Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
-                let signature = Signature::from_compact(signature).expect("invalid signature");
-                secp.verify(&message, &signature, &public_key).is_ok()
-            },
-            Algorithm::RSA => {
-                let public_key = RSAPublicKey::from_pkcs1(&self.public_key).expect("failed to decode public key");
-                let padding = PaddingScheme::new_pkcs1v15_sign(None);
-                public_key.verify(padding, &Sha256::digest(message), signature).is_ok()
-            },
-            Algorithm::ECDSA => {
-                let verifying_key = VerifyingKey::from_bytes(&self.public_key).expect("failed to decode public key");
-                verifying_key.verify(message, signature).is_ok()
-            },
-            Algorithm::Dilithium => {
-                dilithium_verify(&self.public_key, message, signature)
-            },
-            Algorithm::Falcon => {
-                falcon_verify(&self.public_key, message, signature)
-            },
-            _ => false,
-        }
-    }
-}
-
-pub fn hash(data: &[u8]) -> Vec<u8> {
-    Sha256::digest(data).to_vec()
-}
-```
-
-===================
-File: ./crates/icn-dsl/src/lib.rs
-Size: 5568 bytes
-Modified: 2025-02-18 06:50:47.143649200 +0000
-Dependencies:
-use nom::{
-
-===================
-```rs
-use nom::{
-    branch::alt,
-    bytes::complete::{tag, take_while1},
-    character::complete::{char, multispace0, multispace1},
-    combinator::{map, opt},
-    multi::{many0, many1},
-    sequence::{delimited, preceded, terminated, tuple},
-    IResult,
-};
-
-#[derive(Debug, Clone)]
-pub struct CoopLangAST {
-    pub governance: Option<GovernanceNode>,
-    pub reputation: Option<ReputationNode>,
-    pub marketplace: Option<MarketplaceNode>,
-    pub federation: Option<FederationNode>,
-    pub validation: Option<ValidationNode>,
-    pub logging: Option<LoggingNode>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ValidationNode {
-    pub pre_checks: Vec<Check>,
-    pub post_checks: Vec<Check>,
-    pub state_validation: Option<StateValidation>,
-    pub resource_checks: Option<ResourceChecks>,
-    pub custom_merge: Option<CustomMerge>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Check {
-    pub condition: String,
-    pub action: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct StateValidation {
-    pub current: Option<String>,
-    pub expected: Option<String>,
-    pub transition: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct CustomMerge {
-    pub strategy: String,
-    pub handlers: Vec<ConflictHandler>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ConflictHandler {
-    pub field_path: String,
-    pub resolution_type: String,
-}
-
-// Parser implementation
-impl CoopLangAST {
-    pub fn parse(input: &str) -> IResult<&str, Self> {
-        let (input, _) = multispace0(input)?;
-        let (input, governance) = opt(Self::parse_governance_section)(input)?;
-        let (input, reputation) = opt(Self::parse_reputation_section)(input)?;
-        let (input, marketplace) = opt(Self::parse_marketplace_section)(input)?;
-        let (input, federation) = opt(Self::parse_federation_section)(input)?;
-        let (input, validation) = opt(Self::parse_validation_section)(input)?;
-        let (input, logging) = opt(Self::parse_logging_section)(input)?;
+    
+    /// Store a serializable value
+    pub async fn store<T: Serialize>(&self, key: &str, value: &T) -> StorageResult<()> {
+        let serialized = serde_json::to_vec(value)
+            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            
+        // Update backend
+        let backend = self.backend.lock().await;
+        backend.set(key, &serialized).await?;
         
-        Ok((input, CoopLangAST {
-            governance,
-            reputation,
-            marketplace,
-            federation,
-            validation,
-            logging,
-        }))
-    }
-
-    fn parse_validation_section(input: &str) -> IResult<&str, ValidationNode> {
-        let (input, _) = tag("validation:")(input)?;
-        let (input, _) = multispace1(input)?;
+        // Update cache
+        self.cache.set(key.to_string(), serialized);
         
-        let (input, pre_checks) = Self::parse_checks("pre_checks:")(input)?;
-        let (input, post_checks) = Self::parse_checks("post_checks:")(input)?;
-        let (input, state_validation) = opt(Self::parse_state_validation)(input)?;
-        let (input, resource_checks) = opt(Self::parse_resource_checks)(input)?;
-        let (input, custom_merge) = opt(Self::parse_custom_merge)(input)?;
-
-        Ok((input, ValidationNode {
-            pre_checks,
-            post_checks,
-            state_validation,
-            resource_checks,
-            custom_merge,
-        }))
+        Ok(())
     }
-
-    fn parse_checks(label: &'static str) -> impl Fn(&str) -> IResult<&str, Vec<Check>> {
-        move |input: &str| {
-            let (input, _) = tag(label)(input)?;
-            let (input, _) = multispace1(input)?;
-            many0(Self::parse_check)(input)
+    
+    /// Retrieve and deserialize a value
+    pub async fn retrieve<T: for<'de> Deserialize<'de>>(&self, key: &str) -> StorageResult<T> {
+        // Try cache first
+        if let Some(cached_data) = self.cache.get(key) {
+            return serde_json::from_slice(&cached_data)
+                .map_err(|e| StorageError::SerializationError(e.to_string()));
         }
-    }
 
-    fn parse_check(input: &str) -> IResult<&str, Check> {
-        let (input, _) = char('-')(input)?;
-        let (input, _) = multispace0(input)?;
-        let (input, condition) = take_while1(|c| c != ':')(input)?;
-        let (input, _) = char(':')(input)?;
-        let (input, _) = multispace0(input)?;
-        let (input, action) = take_while1(|c| c != '\n')(input)?;
-        let (input, _) = multispace0(input)?;
-
-        Ok((input, Check {
-            condition: condition.trim().to_string(),
-            action: action.trim().to_string(),
-        }))
-    }
-
-    // Add other section parsers similarly...
-}
-
-// Bytecode generation
-pub fn compile_to_icvm(ast: &CoopLangAST) -> Vec<u8> {
-    let mut bytecode = Vec::new();
-
-    // Header
-    bytecode.extend_from_slice(&[0x49, 0x43, 0x56, 0x4D]); // "ICVM" magic bytes
-    bytecode.push(0x01); // Version
-
-    // Compile validation rules
-    if let Some(validation) = &ast.validation {
-        bytecode.push(0x01); // Validation section marker
+        // Fall back to backend
+        let backend = self.backend.lock().await;
+        let data = backend.get(key).await?;
         
-        // Pre-checks
-        bytecode.push(validation.pre_checks.len() as u8);
-        for check in &validation.pre_checks {
-            compile_check(&mut bytecode, check);
-        }
-
-        // Post-checks
-        bytecode.push(validation.post_checks.len() as u8);
-        for check in &validation.post_checks {
-            compile_check(&mut bytecode, check);
-        }
-
-        // State validation
-        if let Some(state_validation) = &validation.state_validation {
-            bytecode.push(0x01);
-            compile_state_validation(&mut bytecode, state_validation);
-        } else {
-            bytecode.push(0x00);
-        }
+        // Update cache
+        self.cache.set(key.to_string(), data.clone());
+        
+        serde_json::from_slice(&data)
+            .map_err(|e| StorageError::SerializationError(e.to_string()))
+    }
+    
+    /// Delete a stored value
+    pub async fn remove(&self, key: &str) -> StorageResult<()> {
+        let backend = self.backend.lock().await;
+        backend.delete(key).await
+    }
+    
+    /// Check if a key exists in storage
+    pub async fn has_key(&self, key: &str) -> StorageResult<bool> {
+        let backend = self.backend.lock().await;
+        backend.exists(key).await
     }
 
-    // Compile other sections similarly...
-
-    bytecode
-}
-
-fn compile_check(bytecode: &mut Vec<u8>, check: &Check) {
-    // Convert check condition to bytecode operations
-    bytecode.extend_from_slice(check.condition.as_bytes());
-    bytecode.push(0x00); // Null terminator
-    bytecode.extend_from_slice(check.action.as_bytes());
-    bytecode.push(0x00); // Null terminator
-}
-
-fn compile_state_validation(bytecode: &mut Vec<u8>, validation: &StateValidation) {
-    if let Some(current) = &validation.current {
-        bytecode.push(0x01);
-        bytecode.extend_from_slice(current.as_bytes());
-        bytecode.push(0x00);
-    } else {
-        bytecode.push(0x00);
+    /// Store data using IPFS
+    pub async fn store_ipfs(&self, data: &[u8]) -> StorageResult<String> {
+        let result = self.ipfs_client.add(data).await
+            .map_err(|e| StorageError::IpfsError(e.to_string()))?;
+        Ok(result.hash)
     }
-    // Similarly for expected and transition...
+
+    /// Retrieve data from IPFS
+    pub async fn retrieve_ipfs(&self, hash: &str) -> StorageResult<Vec<u8>> {
+        let data = self.ipfs_client.cat(hash).map_ok(|chunk| chunk.to_vec()).try_concat().await
+            .map_err(|e| StorageError::IpfsError(e.to_string()))?;
+        Ok(data)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    
+    // Mock storage backend for testing
+    struct MockStorage {
+        data: HashMap<String, Vec<u8>>,
+    }
+    
+    #[async_trait::async_trait]
+    impl StorageBackend for MockStorage {
+        async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()> {
+            self.data.insert(key.to_string(), value.to_vec());
+            Ok(())
+        }
+        
+        async fn get(&self, key: &str) -> StorageResult<Vec<u8>> {
+            self.data.get(key)
+                .cloned()
+                .ok_or_else(|| StorageError::NotFound(key.to_string()))
+        }
+        
+        async fn delete(&self, key: &str) -> StorageResult<()> {
+            self.data.remove(key);
+            Ok(())
+        }
+        
+        async fn exists(&self, key: &str) -> StorageResult<bool> {
+            Ok(self.data.contains_key(key))
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_basic_storage_operations() {
+        let config = StorageConfig {
+            backend_type: "mock".to_string(),
+            cache_size: 1000,
+            cache_ttl_seconds: 300,
+            ipfs_url: "http://localhost:5001".to_string(),
+            database_url: None,
+        };
+        
+        let storage = StorageManager::new(
+            Box::new(MockStorage { data: HashMap::new() }),
+            config
+        );
+
+        // Test store and retrieve
+        let key = "test_key";
+        let value = "test_value";
+        storage.store(key, &value).await.unwrap();
+        
+        let retrieved: String = storage.retrieve(key).await.unwrap();
+        assert_eq!(retrieved, value);
+        
+        // Test exists
+        assert!(storage.has_key(key).await.unwrap());
+        
+        // Test delete
+        storage.remove(key).await.unwrap();
+        assert!(!storage.has_key(key).await.unwrap());
+    }
 }
 ```
 
 ===================
 File: ./crates/icn-federation/src/lib.rs
 Size: 24560 bytes
-Modified: 2025-02-23 19:12:30.211315800 +0000
+Modified: 2025-02-24 09:46:42.589369689 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
@@ -4597,1033 +5843,209 @@ pub enum CrossFederationProposalType {
 ```
 
 ===================
-File: ./crates/icn-governance/src/lib.rs
-Size: 9048 bytes
-Modified: 2025-02-23 19:12:30.218314000 +0000
+File: ./crates/icn-crypto/src/lib.rs
+Size: 5761 bytes
+Modified: 2025-02-24 09:46:42.589369689 +0000
 Dependencies:
-mod tests {
-use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
-use thiserror::Error;
+use dilithium::keypair as dilithium_keypair;
+use dilithium::sign as dilithium_sign;
+use dilithium::verify as dilithium_verify;
+use ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
+use falcon::keypair as falcon_keypair;
+use falcon::sign as falcon_sign;
+use falcon::verify as falcon_verify;
+use icn_types::Algorithm;
+use kyber::decapsulate as kyber_decapsulate;
+use kyber::encapsulate as kyber_encapsulate;
+use kyber::keypair as kyber_keypair;
+use rsa::{RSAPrivateKey, RSAPublicKey, PaddingScheme};
+use secp256k1::{Secp256k1, SecretKey, PublicKey, Message, Signature};
+use sha2::{Sha256, Digest};
 
 ===================
 ```rs
-use thiserror::Error;
-use serde::{Serialize, Deserialize};
-use chrono::{DateTime, Utc};
-use std::collections::HashMap;
+use secp256k1::{Secp256k1, SecretKey, PublicKey, Message, Signature};
+use sha2::{Sha256, Digest};
+use rsa::{RSAPrivateKey, RSAPublicKey, PaddingScheme};
+use ecdsa::{SigningKey, VerifyingKey, signature::Signer, signature::Verifier};
+use icn_types::Algorithm;
+use kyber::keypair as kyber_keypair;
+use kyber::encapsulate as kyber_encapsulate;
+use kyber::decapsulate as kyber_decapsulate;
+use dilithium::keypair as dilithium_keypair;
+use dilithium::sign as dilithium_sign;
+use dilithium::verify as dilithium_verify;
+use falcon::keypair as falcon_keypair;
+use falcon::sign as falcon_sign;
+use falcon::verify as falcon_verify;
 
-#[derive(Error, Debug)]
-pub enum GovernanceError {
-    #[error("Proposal not found")]
-    ProposalNotFound,
-    #[error("Invalid rollback - proposal is not in pending state")]
-    InvalidRollback,
-    #[error("Dispute already exists")]
-    DisputeExists,
-    #[error("Insufficient reputation to dispute")]
-    InsufficientReputation,
-    #[error("Invalid dispute resolution")]
-    InvalidResolution,
-    #[error("Database error: {0}")]
-    DatabaseError(String),
+pub enum Algorithm {
+    Secp256k1,
+    RSA,
+    ECDSA,
+    Kyber,
+    Dilithium,
+    Falcon,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Proposal {
-    pub id: String,
-    pub title: String,
-    pub description: String,
-    pub proposer: String,
-    pub status: ProposalStatus,
-    pub created_at: DateTime<Utc>,
-    pub votes: HashMap<String, Vote>,
-    pub disputes: Vec<Dispute>,
-    pub execution_history: Vec<ExecutionEvent>,
-    pub phase: ProposalPhase,
-    pub required_signers: Vec<String>,
-    pub collected_signatures: Vec<String>,
-    pub state: ProposalState,
-    pub dispute_resolution: Option<DisputeResolution>,
-    pub timeout_timestamp: u64,
-    pub zk_snark_proof: Option<String>, // Added zk-SNARK proof field
+pub struct KeyPair {
+    pub public_key: Vec<u8>,
+    pub private_key: Vec<u8>,
+    pub algorithm: Algorithm,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum ProposalStatus {
-    Pending,
-    Active,
-    Approved,
-    Rejected,
-    Disputed,
-    RolledBack,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum ProposalPhase {
-    Submission,
-    Deliberation { ends_at: DateTime<Utc> },
-    Voting { ends_at: DateTime<Utc> },
-    Execution,
-    Reconsideration { reason: String },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Vote {
-    pub voter: String,
-    pub approve: bool,
-    pub reputation: i64,
-    pub timestamp: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Dispute {
-    pub id: String,
-    pub proposal_id: String,
-    pub disputer: String,
-    pub reason: String,
-    pub evidence: String,
-    pub arbitrator_did: Option<String>,
-    pub resolution: Option<Resolution>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Resolution {
-    pub decision: DecisionType,
-    pub rationale: String,
-    pub signatures: Vec<String>, // Requires 75% of arbitrators
-}
-
-#[derive(Debug)]
-pub struct DissolutionProtocol {
-    federation_id: String,
-    initiated_by: String,
-    reason: DissolutionReason,
-    status: DissolutionStatus,
-    asset_distribution: HashMap<String, AssetAllocation>,
-    debt_settlements: Vec<DebtSettlement>,
-    member_reassignments: Vec<MemberReassignment>,
-}
-
-#[derive(Debug)]
-pub enum DissolutionReason {
-    Voluntary,
-    InactivityThreshold,
-    GovernanceViolation,
-    EconomicNonviability,
-}
-
-#[derive(Debug)]
-pub enum DissolutionStatus {
-    Initiated,
-    InProgress,
-    Completed,
-    Cancelled,
-}
-
-#[derive(Debug)]
-pub struct AssetAllocation {
-    asset_id: String,
-    recipient_id: String,
-    allocation_share: f64,
-}
-
-#[derive(Debug)]
-pub struct DebtSettlement {
-    creditor_id: String,
-    debtor_id: String,
-    amount: f64,
-    due_date: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug)]
-pub struct MemberReassignment {
-    member_id: String,
-    new_federation_id: Option<String>,
-    transition_period: chrono::Duration,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DecisionThresholds {
-    pub resource_allocation_threshold: u64,
-    pub technical_effort_threshold: u32, // in days
-    pub financial_impact_threshold: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReputationControls {
-    pub max_gap_multiplier: f64,
-    pub decay_threshold_multiplier: f64,
-    pub monthly_decay_rate: f64,
-    pub equity_bonus_groups: HashMap<String, f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum VotingModel {
-    Equal,
-    Proportional { cap_percentage: u8 },
-    Hybrid {
-        governance_model: Box<VotingModel>,
-        resource_model: Box<VotingModel>,
-    },
-}
-
-impl VotingModel {
-    pub fn calculate_voting_power(&self, federation: &Federation, cooperative_id: &str) -> f64 {
-        match self {
-            VotingModel::Equal => 1.0,
-            VotingModel::Proportional { cap_percentage } => {
-                let power = federation.get_cooperative_weight(cooperative_id);
-                power.min(*cap_percentage as f64 / 100.0)
-            },
-            VotingModel::Hybrid { governance_model, resource_model } => {
-                // Use different models based on proposal type
-                // ...existing code...
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReputationManager {
-    pub controls: ReputationControls,
-    reputation_scores: HashMap<String, f64>,
-    last_decay_check: DateTime<Utc>,
-}
-
-impl ReputationManager {
-    pub fn apply_anti_oppression_mechanisms(&mut self) {
-        let avg_reputation = self.calculate_average_reputation();
-        
-        for score in self.reputation_scores.values_mut() {
-            if *score > avg_reputation * self.controls.decay_threshold_multiplier {
-                *score *= 1.0 - self.controls.monthly_decay_rate;
-            }
-        }
-    }
-    
-    // ...existing code...
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ProposalState {
-    Draft,
-    UnderReview,
-    Voting,
-    DisputeResolution,
-    Finalized,
-    TimedOut,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DisputeResolution {
-    pub initiator: String,
-    pub reason: String, 
-    pub mediators: Vec<String>,
-    pub resolution: Option<String>,
-    pub votes: HashMap<String, bool>,
-    pub evidence: Vec<EvidenceItem>,
-}
-
-impl Proposal {
-    pub fn transition_state(&mut self, new_state: ProposalState) -> Result<(), String> {
-        match (&self.state, &new_state) {
-            (ProposalState::Draft, ProposalState::UnderReview) => Ok(()),
-            (ProposalState::UnderReview, ProposalState::Voting) => Ok(()),
-            (ProposalState::Voting, ProposalState::DisputeResolution) => Ok(()),
-            (ProposalState::DisputeResolution, ProposalState::Finalized) => Ok(()),
-            _ => Err("Invalid state transition".to_string())
-        }
-        self.state = new_state;
-        Ok(())
-    }
-    
-    pub fn initiate_dispute(&mut self, initiator: String, reason: String) -> Result<(), String> {
-        if self.state != ProposalState::Voting {
-            return Err("Can only initiate dispute during voting phase".to_string());
-        }
-        
-        self.dispute_resolution = Some(DisputeResolution {
-            initiator,
-            reason,
-            mediators: vec![],
-            resolution: None,
-            votes: HashMap::new(),
-            evidence: vec![],
-        });
-        
-        self.transition_state(ProposalState::DisputeResolution)
-    }
-
-    pub async fn execute_proposal(&self) -> bool {
-        if let Some(proof) = &self.zk_snark_proof {
-            if verify_proof(proof) {
-                execute_approved_action();
-                return true;
-            }
-        }
-        false
-    }
-}
-
-fn verify_proof(proof: &str) -> bool {
-    // Implement zk-SNARK proof verification logic
-    true
-}
-
-fn execute_approved_action() {
-    // Implement the action to be executed upon proposal approval
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[tokio::test]
-    async fn test_reputation_decay() {
-        let gov = GovernanceService::new(db_pool).await;
-        
-        // Test normal decay
-        let result = gov.apply_decay("did:icn:test", 0.1).await;
-        assert!(result.is_ok());
-        
-        // Test maximum decay limit
-        let result = gov.apply_decay("did:icn:test", 0.9).await;
-        assert!(result.is_err());
-        
-        // Test decay exemption
-        let result = gov.apply_decay("did:icn:exempt", 0.1).await;
-        assert!(result.is_ok());
-        assert_eq!(gov.get_reputation("did:icn:exempt").await.unwrap(), 100);
-    }
-
-    #[tokio::test]
-    async fn test_voting_edge_cases() {
-        let gov = GovernanceService::new(db_pool).await;
-
-        // Test vote after period ends
-        let proposal = gov.create_proposal("Test", "Description", "did:icn:test", 0).await.unwrap();
-        let result = gov.vote(&proposal.id, "did:icn:voter", true).await;
-        assert!(matches!(result, Err(GovernanceError::VotingPeriodEnded(_))));
-
-        // Test double voting
-        let proposal = gov.create_proposal("Test", "Description", "did:icn:test", 3600).await.unwrap();
-        gov.vote(&proposal.id, "did:icn:voter", true).await.unwrap();
-        let result = gov.vote(&proposal.id, "did:icn:voter", false).await;
-        assert!(matches!(result, Err(GovernanceError::AlreadyVoted(_))));
-    }
-}
-```
-
-===================
-File: ./crates/icn-mutual-credit/src/lib.rs
-Size: 2371 bytes
-Modified: 2025-02-22 01:50:09.718197800 +0000
-Dependencies:
-use chrono::Utc;
-use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
-
-===================
-```rs
-use std::collections::HashMap;
-use chrono::Utc;
-use serde::{Serialize, Deserialize};
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct MutualCreditTransaction {
-    pub sender_did: String,
-    pub receiver_did: String,
-    pub amount: i64,
-    pub signature: String,
-    pub timestamp: i64,
-}
-
-pub struct MutualCreditLedger {
-    // Maps member DID to current credit balance.
-    pub balances: HashMap<String, i64>,
-    // Ordered list of all mutual credit transactions.
-    pub history: Vec<MutualCreditTransaction>,
-}
-
-impl MutualCreditLedger {
-    pub fn new() -> Self {
-        Self {
-            balances: HashMap::new(),
-            history: Vec::new(),
-        }
-    }
-
-    // Process a new mutual credit transaction.
-    pub fn process_transaction(&mut self, tx: MutualCreditTransaction) -> Result<(), String> {
-        // Verify sender signature (placeholder)
-        if !Self::verify_signature(&tx.sender_did, &tx.signature, tx.amount) {
-            return Err("Invalid signature".into());
-        }
-        // Update sender and receiver balances
-        *self.balances.entry(tx.sender_did.clone()).or_insert(0) -= tx.amount;
-        *self.balances.entry(tx.receiver_did.clone()).or_insert(0) += tx.amount;
-        // Append to history
-        self.history.push(tx);
-        Ok(())
-    }
-
-    // Dummy signature verifier (to be replaced with actual verification logic)
-    fn verify_signature(_did: &str, _signature: &str, _amount: i64) -> bool {
-        true // In practice, verify using the sender's DID key.
-    }
-
-    // Get balance summary for a member
-    pub fn get_balance(&self, did: &str) -> i64 {
-        *self.balances.get(did).unwrap_or(&0)
-    }
-
-    // Print simple ledger summary (for logging)
-    pub fn print_summary(&self) {
-        for (did, balance) in &self.balances {
-            println!("Member {}: Balance {}", did, balance);
-        }
-    }
-}
-
-// Example usage (to be removed or used in unit tests)
-// fn main() {
-//     let mut ledger = MutualCreditLedger::new();
-//     let tx = MutualCreditTransaction {
-//         sender_did: "did:icn:member1".into(),
-//         receiver_did: "did:icn:member2".into(),
-//         amount: 50,
-//         signature: "signature_placeholder".into(),
-//         timestamp: Utc::now().timestamp(),
-//     };
-//     ledger.process_transaction(tx).unwrap();
-//     ledger.print_summary();
-// }
-```
-
-===================
-File: ./crates/icn-p2p/src/lib.rs
-Size: 93 bytes
-Modified: 2025-02-19 06:23:14.798626400 +0000
-Dependencies:
-use icn_types::Transaction;
-
-===================
-```rs
-pub mod websocket;
-pub mod protocol;
-pub mod networking;
-
-use icn_types::Transaction;
-
-```
-
-===================
-File: ./crates/icn-reputation/src/lib.rs
-Size: 543 bytes
-Modified: 2025-02-23 19:12:30.223316200 +0000
-Dependencies:
-use icn_zkp::zk_snark;
-use serde::{Serialize, Deserialize};
-
-===================
-```rs
-use serde::{Serialize, Deserialize};
-use icn_zkp::zk_snark;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ReputationScore {
-    pub score: i64,
-}
-
-impl ReputationScore {
-    pub fn generate_proof(&self) -> Vec<u8> {
-        // Generate zk-SNARK proof for the reputation score
-        zk_snark::generate_proof(self.score)
-    }
-
-    pub fn verify_proof(proof: &[u8], expected_score: i64) -> bool {
-        // Verify zk-SNARK proof for the reputation score
-        zk_snark::verify_proof(proof, expected_score)
-    }
-}
-```
-
-===================
-File: ./crates/icn-resource/src/lib.rs
-Size: 6916 bytes
-Modified: 2025-02-19 06:23:14.798626400 +0000
-Dependencies:
-use async_trait::async_trait;
-use icn_federation::ResourceManager;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-
-===================
-```rs
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use icn_federation::ResourceManager;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Resource {
-    pub id: String,
-    pub resource_type: String,
-    pub owner: String,
-    pub total_amount: u64,
-    pub available_amount: u64,
-    pub price_per_unit: f64,
-    pub constraints: ResourceConstraints,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceConstraints {
-    pub min_reputation: i64,
-    pub max_allocation: u64,
-    pub time_limit: Option<u64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FederationResourcePool {
-    pub federation_id: String,
-    pub resources: HashMap<String, Resource>,
-    pub access_control: FederationAccessControl,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FederationAccessControl {
-    pub allowed_federations: Vec<String>,
-    pub min_reputation: i64,
-    pub max_allocation_per_federation: u64,
-}
-
-pub struct ResourceAllocationSystem {
-    resources: Arc<RwLock<HashMap<String, Resource>>>,
-    allocations: Arc<RwLock<HashMap<String, Vec<ResourceAllocation>>>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceAllocation {
-    pub allocation_id: String,
-    pub resource_id: String,
-    pub recipient: String,
-    pub amount: u64,
-    pub allocated_at: u64,
-    pub expires_at: Option<u64>,
-}
-
-impl ResourceAllocationSystem {
-    pub fn new() -> Self {
-        Self {
-            resources: Arc::new(RwLock::new(HashMap::new())),
-            allocations: Arc::new(RwLock::new(HashMap::new())),
-        }
-    }
-
-    pub async fn register_resource(
-        &self,
-        owner: String,
-        resource_type: String,
-        amount: u64,
-        price: f64,
-        constraints: ResourceConstraints,
-    ) -> Result<String, ResourceError> {
-        let resource_id = format!("res_{}", uuid::Uuid::new_v4());
-        let resource = Resource {
-            id: resource_id.clone(),
-            resource_type,
-            owner,
-            total_amount: amount,
-            available_amount: amount,
-            price_per_unit: price,
-            constraints,
-        };
-
-        let mut resources = self.resources.write().await;
-        resources.insert(resource_id.clone(), resource);
-
-        Ok(resource_id)
-    }
-
-    pub async fn allocate(
-        &self,
-        resource_id: &str,
-        recipient: String,
-        amount: u64,
-    ) -> Result<String, ResourceError> {
-        let mut resources = self.resources.write().await;
-        let resource = resources.get_mut(resource_id)
-            .ok_or(ResourceError::ResourceNotFound)?;
-
-        if resource.available_amount < amount {
-            return Err(ResourceError::InsufficientResources);
-        }
-
-        let allocation_id = format!("alloc_{}", uuid::Uuid::new_v4());
-        let allocation = ResourceAllocation {
-            allocation_id: allocation_id.clone(),
-            resource_id: resource_id.to_string(),
-            recipient,
-            amount,
-            allocated_at: chrono::Utc::now().timestamp() as u64,
-            expires_at: None,
-        };
-
-        resource.available_amount -= amount;
-
-        let mut allocations = self.allocations.write().await;
-        allocations.entry(resource_id.to_string())
-            .or_insert_with(Vec::new)
-            .push(allocation);
-
-        Ok(allocation_id)
-    }
-
-    pub async fn release(
-        &self,
-        allocation_id: &str,
-    ) -> Result<(), ResourceError> {
-        let mut allocations = self.allocations.write().await;
-        for (resource_id, resource_allocations) in allocations.iter_mut() {
-            if let Some(index) = resource_allocations.iter().position(|alloc| alloc.allocation_id == allocation_id) {
-                let allocation = resource_allocations.remove(index);
-                let mut resources = self.resources.write().await;
-                if let Some(resource) = resources.get_mut(&allocation.resource_id) {
-                    resource.available_amount += allocation.amount;
+impl KeyPair {
+    pub fn generate(algorithm: Algorithm) -> Self {
+        match algorithm {
+            Algorithm::Secp256k1 => {
+                let secp = Secp256k1::new();
+                let (private_key, public_key) = secp.generate_keypair(&mut rand::thread_rng());
+                KeyPair {
+                    public_key: public_key.serialize().to_vec(),
+                    private_key: private_key[..].to_vec(),
+                    algorithm,
                 }
-                return Ok(());
-            }
+            },
+            Algorithm::RSA => {
+                let private_key = RSAPrivateKey::new(&mut rand::thread_rng(), 2048).expect("failed to generate a key");
+                let public_key = RSAPublicKey::from(&private_key);
+                KeyPair {
+                    public_key: public_key.to_pkcs1().expect("failed to encode public key"),
+                    private_key: private_key.to_pkcs1().expect("failed to encode private key"),
+                    algorithm,
+                }
+            },
+            Algorithm::ECDSA => {
+                let signing_key = SigningKey::random(&mut rand::thread_rng());
+                let verifying_key = VerifyingKey::from(&signing_key);
+                KeyPair {
+                    public_key: verifying_key.to_bytes().to_vec(),
+                    private_key: signing_key.to_bytes().to_vec(),
+                    algorithm,
+                }
+            },
+            Algorithm::Kyber => {
+                let (public_key, private_key) = kyber_keypair();
+                KeyPair {
+                    public_key,
+                    private_key,
+                    algorithm,
+                }
+            },
+            Algorithm::Dilithium => {
+                let (public_key, private_key) = dilithium_keypair();
+                KeyPair {
+                    public_key,
+                    private_key,
+                    algorithm,
+                }
+            },
+            Algorithm::Falcon => {
+                let (public_key, private_key) = falcon_keypair();
+                KeyPair {
+                    public_key,
+                    private_key,
+                    algorithm,
+                }
+            },
         }
-        Err(ResourceError::InvalidAllocation)
     }
 
-    pub async fn adjust_price(
-        &self,
-        resource_id: &str,
-        new_price: f64,
-    ) -> Result<(), ResourceError> {
-        let mut resources = self.resources.write().await;
-        if let Some(resource) = resources.get_mut(resource_id) {
-            resource.price_per_unit = new_price;
-            Ok(())
-        } else {
-            Err(ResourceError::ResourceNotFound)
+    pub fn sign(&self, message: &[u8]) -> Vec<u8> {
+        match self.algorithm {
+            Algorithm::Secp256k1 => {
+                let secp = Secp256k1::new();
+                let private_key = SecretKey::from_slice(&self.private_key).expect("32 bytes");
+                let message = Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
+                secp.sign(&message, &private_key).serialize_compact().to_vec()
+            },
+            Algorithm::RSA => {
+                let private_key = RSAPrivateKey::from_pkcs1(&self.private_key).expect("failed to decode private key");
+                let padding = PaddingScheme::new_pkcs1v15_sign(None);
+                private_key.sign(padding, &Sha256::digest(message)).expect("failed to sign message")
+            },
+            Algorithm::ECDSA => {
+                let signing_key = SigningKey::from_bytes(&self.private_key).expect("failed to decode private key");
+                signing_key.sign(message).to_bytes().to_vec()
+            },
+            Algorithm::Dilithium => {
+                dilithium_sign(&self.private_key, message)
+            },
+            Algorithm::Falcon => {
+                falcon_sign(&self.private_key, message)
+            },
+            _ => vec![],
         }
     }
 
-    pub async fn create_federation_pool(
-        &self,
-        federation_id: String,
-        access_control: FederationAccessControl,
-    ) -> Result<(), ResourceError> {
-        let pool = FederationResourcePool {
-            federation_id: federation_id.clone(),
-            resources: HashMap::new(),
-            access_control,
-        };
-        
-        let mut resources = self.resources.write().await;
-        resources.insert(federation_id, pool);
-        Ok(())
-    }
-
-    pub async fn share_with_federation(
-        &self,
-        source_federation: &str,
-        target_federation: &str, 
-        resource_id: &str,
-        amount: u64,
-    ) -> Result<String, ResourceError> {
-        let mut resources = self.resources.write().await;
-        
-        // Verify federation access permissions
-        let source_pool = resources.get(source_federation)
-            .ok_or(ResourceError::ResourceNotFound)?;
-            
-        if !source_pool.access_control.allowed_federations.contains(&target_federation.to_string()) {
-            return Err(ResourceError::UnauthorizedAction);
+    pub fn verify(&self, message: &[u8], signature: &[u8]) -> bool {
+        match self.algorithm {
+            Algorithm::Secp256k1 => {
+                let secp = Secp256k1::new();
+                let public_key = PublicKey::from_slice(&self.public_key).expect("invalid public key");
+                let message = Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
+                let signature = Signature::from_compact(signature).expect("invalid signature");
+                secp.verify(&message, &signature, &public_key).is_ok()
+            },
+            Algorithm::RSA => {
+                let public_key = RSAPublicKey::from_pkcs1(&self.public_key).expect("failed to decode public key");
+                let padding = PaddingScheme::new_pkcs1v15_sign(None);
+                public_key.verify(padding, &Sha256::digest(message), signature).is_ok()
+            },
+            Algorithm::ECDSA => {
+                let verifying_key = VerifyingKey::from_bytes(&self.public_key).expect("failed to decode public key");
+                verifying_key.verify(message, signature).is_ok()
+            },
+            Algorithm::Dilithium => {
+                dilithium_verify(&self.public_key, message, signature)
+            },
+            Algorithm::Falcon => {
+                falcon_verify(&self.public_key, message, signature)
+            },
+            _ => false,
         }
-
-        // Create allocation record
-        let allocation_id = format!("alloc_{}", uuid::Uuid::new_v4());
-        
-        // Allocate resources to target federation
-        self.allocate(resource_id, target_federation.to_string(), amount).await?;
-
-        Ok(allocation_id)
     }
 }
 
-#[async_trait]
-impl ResourceManager for ResourceAllocationSystem {
-    async fn allocate_resources(&self, allocation: icn_federation::ResourceAllocation) -> Result<(), String> {
-        self.allocate(&allocation.resource_type, allocation.recipient, allocation.amount)
-            .await
-            .map_err(|e| e.to_string())
-    }
-
-    async fn release_resources(&self, resource_type: &str, amount: u64) -> Result<(), String> {
-        // Implementation for releasing resources back to the pool
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
-pub enum ResourceError {
-    ResourceNotFound,
-    InsufficientResources,
-    InvalidAllocation,
-    UnauthorizedAction,
-}
-```
-
-===================
-File: ./crates/icn-runtime/src/lib.rs
-Size: 4266 bytes
-Modified: 2025-02-19 03:17:24.483393900 +0000
-Dependencies:
-use async_trait::async_trait;
-use icn_dsl::CoopLangAST;
-use icn_types::{Block, Transaction};
-
-===================
-```rs
-use async_trait::async_trait;
-use icn_types::{Block, Transaction};
-use icn_dsl::CoopLangAST;
-
-pub struct RuntimeManager {
-    // Fields for the RuntimeManager struct
-    dsl_context: Option<CoopLangAST>,
-}
-
-impl RuntimeManager {
-    // Methods for the RuntimeManager struct
-
-    pub async fn load_bytecode(&mut self, bytecode: &[u8]) -> Result<(), RuntimeError> {
-        // Implementation to load and validate DSL bytecode
-        self.dsl_context = Some(CoopLangAST::parse(bytecode)?);
-        Ok(())
-    }
-
-    pub async fn execute_cooperative_rules(&self, context: &ExecutionContext) -> Result<(), RuntimeError> {
-        if let Some(ast) = &self.dsl_context {
-            // Execute validation rules
-            if let Some(validation) = &ast.validation {
-                self.execute_validation_rules(validation, context).await?;
-            }
-
-            // Execute governance rules
-            if let Some(governance) = &ast.governance {
-                self.execute_governance_rules(governance, context).await?;
-            }
-
-            // Execute marketplace rules
-            if let Some(marketplace) = &ast.marketplace {
-                self.execute_marketplace_rules(marketplace, context).await?;
-            }
-        }
-        Ok(())
-    }
-
-    async fn execute_governance_rules(&self, governance: &GovernanceNode, context: &ExecutionContext) -> Result<(), RuntimeError> {
-        // Implementation for executing governance rules
-        Ok(())
-    }
-
-    async fn execute_marketplace_rules(&self, marketplace: &MarketplaceNode, context: &ExecutionContext) -> Result<(), RuntimeError> {
-        // Implementation for executing marketplace rules
-        Ok(())
-    }
-
-    async fn evaluate_condition(&self, condition: &str, context: &ExecutionContext) -> Result<bool, RuntimeError> {
-        // Parse and evaluate condition expression
-        // This could use a simple expression evaluator or more complex logic
-        Ok(true) // Placeholder
-    }
-}
-
-#[async_trait]
-pub trait ValidationExecutor {
-    async fn execute_validation_rules(&self, validation: &ValidationNode, context: &ExecutionContext) -> Result<(), RuntimeError>;
-    async fn execute_check(&self, check: &Check, context: &ExecutionContext) -> Result<(), RuntimeError>;
-    async fn validate_state(&self, validation: &StateValidation, context: &ExecutionContext) -> Result<(), RuntimeError>;
-}
-
-#[async_trait]
-impl ValidationExecutor for RuntimeManager {
-    async fn execute_validation_rules(&self, validation: &ValidationNode, context: &ExecutionContext) -> Result<(), RuntimeError> {
-        // Execute pre-checks
-        for check in &validation.pre_checks {
-            self.execute_check(check, context).await?;
-        }
-
-        // Validate state if specified
-        if let Some(state_validation) = &validation.state_validation {
-            self.validate_state(state_validation, context).await?;
-        }
-
-        // Execute post-checks
-        for check in &validation.post_checks {
-            self.execute_check(check, context).await?;
-        }
-
-        Ok(())
-    }
-
-    async fn execute_check(&self, check: &Check, context: &ExecutionContext) -> Result<(), RuntimeError> {
-        let condition_result = self.evaluate_condition(&check.condition, context).await?;
-        if !condition_result {
-            return Err(RuntimeError::ValidationFailed(check.action.clone()));
-        }
-        Ok(())
-    }
-
-    async fn validate_state(&self, validation: &StateValidation, context: &ExecutionContext) -> Result<(), RuntimeError> {
-        if let Some(current) = &validation.current {
-            let state = self.get_current_state(context).await?;
-            if state != *current {
-                return Err(RuntimeError::InvalidState);
-            }
-        }
-        // Similarly check expected state and transitions...
-        Ok(())
-    }
-}
-
-#[async_trait]
-pub trait VM {
-    async fn execute_transaction(&self, transaction: Transaction);
-    async fn execute_block(&self, block: Block);
-}
-
-pub struct ContractExecution {
-    // Fields for the ContractExecution struct
-}
-
-impl ContractExecution {
-    // Methods for the ContractExecution struct
-}
-```
-
-===================
-File: ./crates/icn-storage/src/lib.rs
-Size: 5328 bytes
-Modified: 2025-02-23 19:12:30.230314500 +0000
-Dependencies:
-mod tests {
-use futures::TryStreamExt;
-use icn_types::Block;
-use ipfs_api_backend_actix::{IpfsClient, TryFromUri};
-use serde::{Serialize, Deserialize};
-use std::sync::Arc;
-use std::time::Duration;
-use thiserror::Error;
-use tokio::sync::Mutex;
-
-===================
-```rs
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use serde::{Serialize, Deserialize};
-use thiserror::Error;
-use icn_types::Block;
-use std::time::Duration;
-use ipfs_api_backend_actix::{IpfsClient, TryFromUri};
-use futures::TryStreamExt;
-
-/// Errors that can occur in storage operations
-#[derive(Error, Debug)]
-pub enum StorageError {
-    #[error("Database error: {0}")]
-    DatabaseError(String),
-    
-    #[error("Serialization error: {0}")]
-    SerializationError(String),
-    
-    #[error("Item not found: {0}")]
-    NotFound(String),
-    
-    #[error("Invalid data: {0}")]
-    InvalidData(String),
-    
-    #[error("IPFS error: {0}")]
-    IpfsError(String),
-}
-
-/// Represents the result of storage operations
-pub type StorageResult<T> = Result<T, StorageError>;
-
-/// Core storage interface for the system
-#[async_trait::async_trait]
-pub trait StorageBackend: Send + Sync {
-    /// Store a value with the given key
-    async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()>;
-    
-    /// Retrieve a value by key
-    async fn get(&self, key: &str) -> StorageResult<Vec<u8>>;
-    
-    /// Delete a value by key
-    async fn delete(&self, key: &str) -> StorageResult<()>;
-    
-    /// Check if a key exists
-    async fn exists(&self, key: &str) -> StorageResult<bool>;
-}
-
-/// Manages persistent storage for the system
-pub struct StorageManager {
-    backend: Arc<Mutex<Box<dyn StorageBackend>>>,
-    cache: Arc<StorageCache>,
-    ipfs_client: IpfsClient,
-}
-
-impl StorageManager {
-    /// Create a new storage manager with the given backend
-    pub fn new(backend: Box<dyn StorageBackend>, cache_size: usize, cache_ttl: Duration, ipfs_url: &str) -> Self {
-        Self {
-            backend: Arc::new(Mutex::new(backend)),
-            cache: Arc::new(StorageCache::new(cache_size, cache_ttl)),
-            ipfs_client: IpfsClient::from_str(ipfs_url).expect("Invalid IPFS URL"),
-        }
-    }
-    
-    /// Store a serializable value
-    pub async fn store<T: Serialize>(&self, key: &str, value: &T) -> StorageResult<()> {
-        let serialized = serde_json::to_vec(value)
-            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-            
-        // Update backend
-        let backend = self.backend.lock().await;
-        backend.set(key, &serialized).await?;
-        
-        // Update cache
-        self.cache.set(key.to_string(), serialized);
-        
-        Ok(())
-    }
-    
-    /// Retrieve and deserialize a value
-    pub async fn retrieve<T: for<'de> Deserialize<'de>>(&self, key: &str) -> StorageResult<T> {
-        // Try cache first
-        if let Some(cached_data) = self.cache.get(key) {
-            return serde_json::from_slice(&cached_data)
-                .map_err(|e| StorageError::SerializationError(e.to_string()));
-        }
-
-        // Fall back to backend
-        let backend = self.backend.lock().await;
-        let data = backend.get(key).await?;
-        
-        // Update cache
-        self.cache.set(key.to_string(), data.clone());
-        
-        serde_json::from_slice(&data)
-            .map_err(|e| StorageError::SerializationError(e.to_string()))
-    }
-    
-    /// Delete a stored value
-    pub async fn remove(&self, key: &str) -> StorageResult<()> {
-        let backend = self.backend.lock().await;
-        backend.delete(key).await
-    }
-    
-    /// Check if a key exists in storage
-    pub async fn has_key(&self, key: &str) -> StorageResult<bool> {
-        let backend = self.backend.lock().await;
-        backend.exists(key).await
-    }
-
-    /// Store data using IPFS
-    pub async fn store_ipfs(&self, data: &[u8]) -> StorageResult<String> {
-        let result = self.ipfs_client.add(data).await
-            .map_err(|e| StorageError::IpfsError(e.to_string()))?;
-        Ok(result.hash)
-    }
-
-    /// Retrieve data from IPFS
-    pub async fn retrieve_ipfs(&self, hash: &str) -> StorageResult<Vec<u8>> {
-        let data = self.ipfs_client.cat(hash).map_ok(|chunk| chunk.to_vec()).try_concat().await
-            .map_err(|e| StorageError::IpfsError(e.to_string()))?;
-        Ok(data)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashMap;
-    
-    // Mock storage backend for testing
-    struct MockStorage {
-        data: HashMap<String, Vec<u8>>,
-    }
-    
-    #[async_trait::async_trait]
-    impl StorageBackend for MockStorage {
-        async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()> {
-            self.data.insert(key.to_string(), value.to_vec());
-            Ok(())
-        }
-        
-        async fn get(&self, key: &str) -> StorageResult<Vec<u8>> {
-            self.data.get(key)
-                .cloned()
-                .ok_or_else(|| StorageError::NotFound(key.to_string()))
-        }
-        
-        async fn delete(&self, key: &str) -> StorageResult<()> {
-            self.data.remove(key);
-            Ok(())
-        }
-        
-        async fn exists(&self, key: &str) -> StorageResult<bool> {
-            Ok(self.data.contains_key(key))
-        }
-    }
-    
-    #[tokio::test]
-    async fn test_basic_storage_operations() {
-        // Test implementation here
-        // Will add comprehensive tests as we develop
-    }
+pub fn hash(data: &[u8]) -> Vec<u8> {
+    Sha256::digest(data).to_vec()
 }
 ```
 
 ===================
 File: ./crates/icn-types/src/lib.rs
-Size: 23544 bytes
-Modified: 2025-02-21 01:05:05.402617800 +0000
+Size: 30870 bytes
+Modified: 2025-02-24 09:46:42.593369689 +0000
 Dependencies:
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
-use rayon::prelude::*;
 use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest};
 use std::collections::HashMap;
-use std::sync::Mutex; // Remove Arc since it's unused
+use std::sync::Mutex;
 use std::time::SystemTime;
 use thiserror::Error;
 use tokio::task;
 
 ===================
 ```rs
+//! Core types for the ICN (Inter-Cooperative Network) system
+//! 
+//! This crate provides the fundamental types used across all ICN modules.
+//! It serves as a central repository for shared data structures, ensuring
+//! consistency across the codebase.
+
 use std::time::SystemTime;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use tokio::task;
-use rayon::prelude::*;
 use std::collections::HashMap;
-
-use std::sync::Mutex; // Remove Arc since it's unused
+use std::sync::Mutex;
 use lazy_static::lazy_static;
 use thiserror::Error;
+use async_trait::async_trait;
 
 #[derive(Debug, Error)]
 pub enum BlockError {
@@ -5735,7 +6157,10 @@ pub struct RelationshipMetadata {
 }
 
 lazy_static! {
-    static ref TRANSACTION_CACHE: Mutex<HashMap<String, bool>> = Mutex::new(HashMap::new());
+    static ref TRANSACTION_CACHE: Mutex<HashMap<String, bool>> = {
+        let m = HashMap::new();
+        Mutex::new(m)
+    };
 }
 
 impl Block {
@@ -5788,20 +6213,18 @@ impl Block {
     pub fn calculate_hash(&self) -> String {
         let mut hasher = Sha256::new();
         
-        // Add block header fields
         hasher.update(self.index.to_string());
         hasher.update(&self.previous_hash);
         hasher.update(self.timestamp.to_string());
         
-        // Add entire transaction data
         for tx in &self.transactions {
-            hasher.update(serde_json::to_string(tx).unwrap());
+            if let Ok(tx_json) = serde_json::to_string(tx) {
+                hasher.update(tx_json);
+            }
         }
         
-        // Add proposer
         hasher.update(&self.proposer);
         
-        // Convert hash to hex string
         format!("{:x}", hasher.finalize())
     }
 
@@ -5885,29 +6308,22 @@ impl Block {
 
     /// Validates the transactions in the block
     async fn validate_transactions(&self) -> Result<(), BlockError> {
-        let validation_tasks: Vec<_> = self.transactions.iter()
-            .map(|tx| {
-                let tx = tx.clone();
-                task::spawn(async move {
-                    let tx_hash = tx.hash.clone();
-                    let mut cache = TRANSACTION_CACHE.lock().unwrap();
-                    if let Some(&is_valid) = cache.get(&tx_hash) {
-                        is_valid
-                    } else {
-                        let is_valid = tx.validate();
-                        cache.insert(tx_hash, is_valid);
-                        is_valid
-                    }
-                })
-            })
-            .collect();
-
-        for task in validation_tasks {
-            if !task.await.unwrap() {
-                return Err(BlockError::InvalidTransaction("One or more invalid transactions".into()));
+        for tx in &self.transactions {
+            let mut cache = TRANSACTION_CACHE.lock().unwrap();
+            
+            // Check if transaction is already processed
+            if cache.contains_key(&tx.hash) {
+                return Err(BlockError::InvalidTransaction("Duplicate transaction".to_string()));
             }
+            
+            // Validate the transaction
+            if !tx.validate() {
+                return Err(BlockError::InvalidTransaction("Invalid transaction".to_string()));
+            }
+            
+            // Add to cache
+            cache.insert(tx.hash.clone(), true);
         }
-
         Ok(())
     }
 
@@ -5982,7 +6398,7 @@ impl Block {
     pub async fn finalize(&mut self) -> Result<(), BlockError> {
         self.verify(None).await?;
         
-        let resource_usage = self.transactions.par_iter()
+        let resource_usage: u64 = self.transactions.iter()
             .map(|tx| tx.resource_cost)
             .sum();
             
@@ -5993,38 +6409,35 @@ impl Block {
             .len() as u64;
             
         self.hash = self.calculate_hash();
-        
+
         Ok(())
     }
 
     /// Initiates a consensus round among the validators
     pub async fn start_consensus_round(&mut self) -> Result<(), BlockError> {
-        // Simulate consensus round
-        let consensus_duration = 1000; // Simulated duration in milliseconds
-        tokio::time::sleep(tokio::time::Duration::from_millis(consensus_duration)).await;
-
-        // Simulate validator signatures
-        let validators = vec!["validator1", "validator2", "validator3"];
-        for validator in validators {
-            let signature = format!("signature_of_{}", validator);
-            self.add_signature(validator.to_string(), signature, 1.0).await?;
+        // Simulate consensus process
+        let validator = "validator1";
+        let signature = format!("signature_of_{}", validator);
+        
+        if !self.add_signature(validator.to_string(), signature, 1.0).await {
+            return Err(BlockError::InvalidTransaction("Failed to add validator signature".to_string()));
         }
-
-        // Update metadata after consensus
-        self.update_metadata(consensus_duration, bincode::serialize(&self).unwrap().len() as u64);
 
         Ok(())
     }
 
     /// Records a validator's vote on the block
     pub async fn vote_on_block(&mut self, validator_did: String, vote: bool) -> Result<(), BlockError> {
-        let signature = if vote {
-            format!("signature_of_{}", validator_did)
-        } else {
-            return Err(BlockError::InvalidTransaction("Validator voted against the block".into()));
-        };
+        if !vote {
+            return Err(BlockError::InvalidTransaction("Vote rejected".to_string()));
+        }
 
-        self.add_signature(validator_did, signature, 1.0).await?;
+        let signature = "signature".to_string(); // In real implementation, this would be a proper signature
+        
+        if !self.add_signature(validator_did, signature, 1.0).await {
+            return Err(BlockError::InvalidTransaction("Failed to add signature".to_string()));
+        }
+
         Ok(())
     }
 
@@ -6117,17 +6530,36 @@ pub struct Transaction {
 
 impl Transaction {
     pub fn new(sender: String, transaction_type: TransactionType) -> Self {
-        let timestamp = Utc::now().timestamp_millis() as u128;
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+
+        let receiver = match &transaction_type {
+            TransactionType::Transfer { receiver, .. } => receiver.clone(),
+            TransactionType::RecordMutualAid { receiver, .. } => receiver.clone(),
+            TransactionType::UpdateRelationship { member_two, .. } => member_two.clone(),
+            TransactionType::AddEndorsement { to_did, .. } => to_did.clone(),
+            _ => String::new(),
+        };
+
+        let amount = match &transaction_type {
+            TransactionType::Transfer { amount, .. } => *amount,
+            _ => 0,
+        };
+
         let hash = Self::calculate_transaction_hash(&sender, &transaction_type, timestamp);
         let resource_cost = Self::calculate_resource_cost(&transaction_type);
-        
+
         Transaction {
             sender,
+            receiver,
+            amount,
+            hash,
             transaction_type,
             timestamp,
-            hash,
             resource_cost,
-            resource_priority: 5, // Default priority level
+            resource_priority: 5, // Default priority
         }
     }
 
@@ -6244,7 +6676,7 @@ impl Transaction {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        bincode::serialize(self).unwrap_or_default()
+        bincode::serialize(self).unwrap_or_else(|_| Vec::new())
     }
 }
 
@@ -6301,72 +6733,369 @@ pub enum FederationOperation {
         new_terms: FederationTerms,
     },
 }
+
+/// Represents a unique identifier for a federation
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+pub struct FederationId(pub String);
+
+/// Represents a unique identifier for a cooperative
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+pub struct CooperativeId(pub String);
+
+/// Represents a member's identity within the system
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct MemberId {
+    pub did: String,
+    pub cooperative_id: CooperativeId,
+}
+
+/// Represents the status of a federation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationStatus {
+    Active,
+    Suspended,
+    Inactive,
+}
+
+/// Represents a governance proposal
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Proposal {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub proposer: MemberId,
+    pub created_at: DateTime<Utc>,
+    pub status: ProposalStatus,
+    pub votes: HashMap<MemberId, Vote>,
+}
+
+/// Represents the status of a proposal
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ProposalStatus {
+    Draft,
+    Active,
+    Passed,
+    Rejected,
+    Executed,
+}
+
+/// Represents a vote on a proposal
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Vote {
+    Yes,
+    No,
+    Abstain,
+}
+
+/// Represents a member's reputation score
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReputationScore {
+    pub member_id: MemberId,
+    pub score: f64,
+    pub last_updated: chrono::DateTime<chrono::Utc>,
+}
+
+/// Represents a resource in the system
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Resource {
+    pub id: String,
+    pub owner: CooperativeId,
+    pub resource_type: String,
+    pub metadata: HashMap<String, String>,
+    pub availability: ResourceAvailability,
+}
+
+/// Represents the availability status of a resource
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ResourceAvailability {
+    Available,
+    InUse,
+    Maintenance,
+    Offline,
+}
+
+/// Error types that can occur in ICN operations
+#[derive(Debug, thiserror::Error)]
+pub enum IcnError {
+    #[error("Authentication failed: {0}")]
+    AuthenticationError(String),
+    
+    #[error("Authorization failed: {0}")]
+    AuthorizationError(String),
+    
+    #[error("Resource not found: {0}")]
+    ResourceNotFound(String),
+    
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
+    
+    #[error("Network error: {0}")]
+    NetworkError(String),
+    
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+}
+
+/// Result type for ICN operations
+pub type IcnResult<T> = Result<T, IcnError>;
+
+/// Storage-related error types
+#[derive(Debug, thiserror::Error)]
+pub enum StorageError {
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+    
+    #[error("Item not found: {0}")]
+    NotFound(String),
+    
+    #[error("Invalid data: {0}")]
+    InvalidData(String),
+    
+    #[error("IPFS error: {0}")]
+    IpfsError(String),
+    #[error("Storage reference already exists")]
+    ReferenceAlreadyExists,
+    #[error("Storage reference not found")]
+    ReferenceNotFound,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StorageReference {
+    pub id: String,
+    pub storage_type: StorageType,
+    pub location: String,
+    pub status: StorageStatus,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum StorageType {
+    Local,
+    Distributed,
+    Cloud,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum StorageStatus {
+    Available,
+    Unavailable,
+    Syncing,
+}
+
+#[async_trait]
+pub trait StorageBackend: Send + Sync {
+    /// Store a value with the given key
+    async fn store(&self, data: &[u8]) -> Result<String, StorageError>;
+    
+    /// Retrieve a value by key
+    async fn retrieve(&self, id: &str) -> Result<Vec<u8>, StorageError>;
+    
+    /// Delete a value by key
+    async fn delete(&self, key: &str) -> StorageResult<()>;
+    
+    /// Check if a key exists
+    async fn exists(&self, key: &str) -> StorageResult<bool>;
+}
+
+/// Result type for storage operations
+pub type StorageResult<T> = Result<T, StorageError>;
+
+/// Storage configuration options
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorageConfig {
+    pub backend_type: String,
+    pub cache_size: usize,
+    pub cache_ttl_seconds: u64,
+    pub ipfs_url: String,
+    pub database_url: Option<String>,
+}
+
+/// Runtime-related error types
+#[derive(Debug, thiserror::Error)]
+pub enum RuntimeError {
+    #[error("Validation failed: {0}")]
+    ValidationFailed(String),
+    
+    #[error("Invalid state")]
+    InvalidState,
+    
+    #[error("Execution error: {0}")]
+    ExecutionError(String),
+    
+    #[error("DSL error: {0}")]
+    DslError(String),
+    
+    #[error("Contract error: {0}")]
+    ContractError(String),
+}
+
+/// Result type for runtime operations
+pub type RuntimeResult<T> = Result<T, RuntimeError>;
+
+/// Represents the execution context for runtime operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionContext {
+    pub transaction: Option<Transaction>,
+    pub block: Option<Block>,
+    pub state: HashMap<String, Vec<u8>>,
+    pub metadata: HashMap<String, String>,
+}
+
+/// Represents a validation check in the runtime
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Check {
+    pub condition: String,
+    pub action: String,
+}
+
+/// Represents state validation rules
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StateValidation {
+    pub current: Option<String>,
+    pub expected: Option<String>,
+    pub transitions: Vec<String>,
+}
+
+/// Represents a validation node in the DSL
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationNode {
+    pub pre_checks: Vec<Check>,
+    pub post_checks: Vec<Check>,
+    pub state_validation: Option<StateValidation>,
+}
+
+/// Represents a governance node in the DSL
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GovernanceNode {
+    pub rules: Vec<String>,
+    pub voting_config: HashMap<String, String>,
+    pub permissions: HashMap<String, Vec<String>>,
+}
+
+/// Represents a marketplace node in the DSL
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketplaceNode {
+    pub rules: Vec<String>,
+    pub pricing_model: String,
+    pub constraints: Vec<String>,
+}
+
+/// Runtime configuration options
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeConfig {
+    pub vm_type: String,
+    pub max_execution_time: u64,
+    pub max_memory: u64,
+    pub enable_debugging: bool,
+    pub log_level: String,
+}
 ```
 
 ===================
-File: ./icn-consensus/src/lib.rs
-Size: 1234 bytes
-Modified: 2025-02-18 05:59:31.559796600 +0000
+File: ./crates/icn-core/src/lib.rs
+Size: 1098 bytes
+Modified: 2025-02-24 09:46:42.585369689 +0000
 Dependencies:
+use icn_common::{ConsensusEngine, ReputationManager};
+use icn_types::{Block, Transaction, FederationOperation};
+use log::{info, error};
+use serde::{Serialize, Deserialize};
+use std::sync::Arc;
 
 ===================
 ```rs
-// ...existing code...
+use std::sync::Arc;
+use log::{info, error};
+use serde::{Serialize, Deserialize};
+use icn_types::{Block, Transaction, FederationOperation};
+use icn_common::{ConsensusEngine, ReputationManager};
 
-// Define the structure for cooperative governance rules
-struct GovernanceRules {
-    max_validators: usize,
-    min_stake: u64,
-    election_period: u64,
-    // ...other rules...
+// Module declarations
+pub mod blockchain;
+pub mod core;
+pub mod db;
+pub mod identity;
+pub mod reputation;
+pub mod storage;
+pub mod vm;
+pub mod networking;
+pub mod models;
+pub mod telemetry;
+
+// Re-export main components
+pub use self::{
+    core::Core,
+    storage::StorageInterface,
+    networking::NetworkInterface,
+    identity::IdentityInterface,
+    reputation::ReputationInterface,
+    vm::RuntimeInterface,
+    telemetry::{TelemetryManager, PrometheusMetrics, Logger, TracingSystem},
+    models::{ResourceAllocationSystem, FederationManager, ResourceAllocation},
+};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Proposal {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub status: String,
+    pub votes_for: i64,
+    pub votes_against: i64,
+    pub created_by: String,
+    pub ends_at: String,
 }
 
-// Define the structure for a validator
-struct Validator {
-    id: String,
-    stake: u64,
-    // ...other properties...
+pub mod governance;
+```
+
+===================
+File: ./crates/icn-reputation/src/lib.rs
+Size: 543 bytes
+Modified: 2025-02-24 09:46:42.593369689 +0000
+Dependencies:
+use icn_zkp::zk_snark;
+use serde::{Serialize, Deserialize};
+
+===================
+```rs
+use serde::{Serialize, Deserialize};
+use icn_zkp::zk_snark;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReputationScore {
+    pub score: i64,
 }
 
-// Define the structure for the genesis block
-struct GenesisBlock {
-    initial_validators: Vec<Validator>,
-    // ...other properties...
-}
+impl ReputationScore {
+    pub fn generate_proof(&self) -> Vec<u8> {
+        // Generate zk-SNARK proof for the reputation score
+        zk_snark::generate_proof(self.score)
+    }
 
-// Function to enforce cooperative governance rules
-fn enforce_governance_rules(validators: &mut Vec<Validator>, rules: &GovernanceRules) {
-    // Implement rules to prevent centralized control
-    // ...code to enforce rules...
-}
-
-// Function to finalize the genesis block format
-fn finalize_genesis_block(validators: Vec<Validator>) -> GenesisBlock {
-    GenesisBlock {
-        initial_validators: validators,
-        // ...initialize other properties...
+    pub fn verify_proof(proof: &[u8], expected_score: i64) -> bool {
+        // Verify zk-SNARK proof for the reputation score
+        zk_snark::verify_proof(proof, expected_score)
     }
 }
-
-// Function to develop a validator election mechanism
-fn elect_validators(current_validators: &Vec<Validator>, candidates: &Vec<Validator>, rules: &GovernanceRules) -> Vec<Validator> {
-    // Implement democratic election mechanism
-    // ...code to elect validators...
-}
-
-// ...existing code...
 ```
 
 ===================
-File: ./scripts/backend/src/main.rs
-Size: 45 bytes
-Modified: 2025-02-18 07:59:01.140151200 +0000
+File: ./crates/icn-p2p/src/lib.rs
+Size: 93 bytes
+Modified: 2025-02-24 09:46:42.593369689 +0000
 Dependencies:
+use icn_types::Transaction;
 
 ===================
 ```rs
-fn main() {
-    println!("Hello, world!");
-}
+pub mod websocket;
+pub mod protocol;
+pub mod networking;
+
+use icn_types::Transaction;
+
 ```
 
