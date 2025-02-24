@@ -9,14 +9,13 @@ use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
 use tokio::time::sleep;
 use tokio::task;
-use icn_core::ReputationManager;
+use icn_common::{ReputationManager, ConsensusEngine, Vote, VoteStatus, GovernanceError};
 use icn_types::Block;
 use std::sync::Arc;
 use bit_set::BitSet;
 use trie_rs::Trie;
 use thiserror::Error;
 use federation::{Federation, FederationError};
-use zk_snarks::verify_proof; // Import zk-SNARK verification function
 use serde::{Serialize, Deserialize};
 
 #[derive(Error, Debug)]

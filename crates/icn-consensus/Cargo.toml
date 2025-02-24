@@ -15,4 +15,4 @@ bit-set = "0.5"
 trie-rs = "0.1"
 rand = "0.8"
 icn-types = { path = "../icn-types" }
-icn-core = { path = "../icn-core" }
+icn-common = { path = "../icn-common" }
