@@ -1,8 +1,8 @@
 use std::sync::Arc;
 use log::{info, error};
 use serde::{Serialize, Deserialize};
-use async_trait::async_trait;
 use icn_types::{Block, Transaction, FederationOperation};
+use icn_common::{ConsensusEngine, ReputationManager};
 
 // Module declarations
 pub mod blockchain;
@@ -28,8 +28,6 @@ pub use self::{
     models::{ResourceAllocationSystem, FederationManager, ResourceAllocation},
 };
 
-use tokio::time::{sleep, Duration};
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Proposal {
     pub id: String,
@@ -40,13 +38,6 @@ pub struct Proposal {
     pub votes_against: i64,
     pub created_by: String,
     pub ends_at: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Vote {
-    pub proposal_id: String,
-    pub voter: String,
-    pub approve: bool,
 }
 
 pub mod governance;
