@@ -2,3 +2,12 @@
 name = "icn-core"
 version = "0.1.0"
 edition = "2021"
+
+[dependencies]
+icn-types = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"

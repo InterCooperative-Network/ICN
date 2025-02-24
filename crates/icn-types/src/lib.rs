@@ -9,12 +9,11 @@ use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use tokio::task;
-use rayon::prelude::*;
 use std::collections::HashMap;
-
-use std::sync::Mutex; // Remove Arc since it's unused
+use std::sync::Mutex;
 use lazy_static::lazy_static;
 use thiserror::Error;
+use async_trait::async_trait;
 
 #[derive(Debug, Error)]
 pub enum BlockError {
@@ -126,7 +125,10 @@ pub struct RelationshipMetadata {
 }
 
 lazy_static! {
-    static ref TRANSACTION_CACHE: Mutex<HashMap<String, bool>> = Mutex::new(HashMap::new());
+    static ref TRANSACTION_CACHE: Mutex<HashMap<String, bool>> = {
+        let m = HashMap::new();
+        Mutex::new(m)
+    };
 }
 
 impl Block {
@@ -179,20 +181,18 @@ impl Block {
     pub fn calculate_hash(&self) -> String {
         let mut hasher = Sha256::new();
         
-        // Add block header fields
         hasher.update(self.index.to_string());
         hasher.update(&self.previous_hash);
         hasher.update(self.timestamp.to_string());
         
-        // Add entire transaction data
         for tx in &self.transactions {
-            hasher.update(serde_json::to_string(tx).unwrap());
+            if let Ok(tx_json) = serde_json::to_string(tx) {
+                hasher.update(tx_json);
+            }
         }
         
-        // Add proposer
         hasher.update(&self.proposer);
         
-        // Convert hash to hex string
         format!("{:x}", hasher.finalize())
     }
 
@@ -276,29 +276,22 @@ impl Block {
 
     /// Validates the transactions in the block
     async fn validate_transactions(&self) -> Result<(), BlockError> {
-        let validation_tasks: Vec<_> = self.transactions.iter()
-            .map(|tx| {
-                let tx = tx.clone();
-                task::spawn(async move {
-                    let tx_hash = tx.hash.clone();
-                    let mut cache = TRANSACTION_CACHE.lock().unwrap();
-                    if let Some(&is_valid) = cache.get(&tx_hash) {
-                        is_valid
-                    } else {
-                        let is_valid = tx.validate();
-                        cache.insert(tx_hash, is_valid);
-                        is_valid
-                    }
-                })
-            })
-            .collect();
-
-        for task in validation_tasks {
-            if !task.await.unwrap() {
-                return Err(BlockError::InvalidTransaction("One or more invalid transactions".into()));
+        for tx in &self.transactions {
+            let mut cache = TRANSACTION_CACHE.lock().unwrap();
+            
+            // Check if transaction is already processed
+            if cache.contains_key(&tx.hash) {
+                return Err(BlockError::InvalidTransaction("Duplicate transaction".to_string()));
             }
+            
+            // Validate the transaction
+            if !tx.validate() {
+                return Err(BlockError::InvalidTransaction("Invalid transaction".to_string()));
+            }
+            
+            // Add to cache
+            cache.insert(tx.hash.clone(), true);
         }
-
         Ok(())
     }
 
@@ -373,7 +366,7 @@ impl Block {
     pub async fn finalize(&mut self) -> Result<(), BlockError> {
         self.verify(None).await?;
         
-        let resource_usage = self.transactions.par_iter()
+        let resource_usage: u64 = self.transactions.iter()
             .map(|tx| tx.resource_cost)
             .sum();
             
@@ -384,38 +377,35 @@ impl Block {
             .len() as u64;
             
         self.hash = self.calculate_hash();
-        
+
         Ok(())
     }
 
     /// Initiates a consensus round among the validators
     pub async fn start_consensus_round(&mut self) -> Result<(), BlockError> {
-        // Simulate consensus round
-        let consensus_duration = 1000; // Simulated duration in milliseconds
-        tokio::time::sleep(tokio::time::Duration::from_millis(consensus_duration)).await;
-
-        // Simulate validator signatures
-        let validators = vec!["validator1", "validator2", "validator3"];
-        for validator in validators {
-            let signature = format!("signature_of_{}", validator);
-            self.add_signature(validator.to_string(), signature, 1.0).await?;
+        // Simulate consensus process
+        let validator = "validator1";
+        let signature = format!("signature_of_{}", validator);
+        
+        if !self.add_signature(validator.to_string(), signature, 1.0).await {
+            return Err(BlockError::InvalidTransaction("Failed to add validator signature".to_string()));
         }
-
-        // Update metadata after consensus
-        self.update_metadata(consensus_duration, bincode::serialize(&self).unwrap().len() as u64);
 
         Ok(())
     }
 
     /// Records a validator's vote on the block
     pub async fn vote_on_block(&mut self, validator_did: String, vote: bool) -> Result<(), BlockError> {
-        let signature = if vote {
-            format!("signature_of_{}", validator_did)
-        } else {
-            return Err(BlockError::InvalidTransaction("Validator voted against the block".into()));
-        };
+        if !vote {
+            return Err(BlockError::InvalidTransaction("Vote rejected".to_string()));
+        }
 
-        self.add_signature(validator_did, signature, 1.0).await?;
+        let signature = "signature".to_string(); // In real implementation, this would be a proper signature
+        
+        if !self.add_signature(validator_did, signature, 1.0).await {
+            return Err(BlockError::InvalidTransaction("Failed to add signature".to_string()));
+        }
+
         Ok(())
     }
 
@@ -508,17 +498,36 @@ pub struct Transaction {
 
 impl Transaction {
     pub fn new(sender: String, transaction_type: TransactionType) -> Self {
-        let timestamp = Utc::now().timestamp_millis() as u128;
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+
+        let receiver = match &transaction_type {
+            TransactionType::Transfer { receiver, .. } => receiver.clone(),
+            TransactionType::RecordMutualAid { receiver, .. } => receiver.clone(),
+            TransactionType::UpdateRelationship { member_two, .. } => member_two.clone(),
+            TransactionType::AddEndorsement { to_did, .. } => to_did.clone(),
+            _ => String::new(),
+        };
+
+        let amount = match &transaction_type {
+            TransactionType::Transfer { amount, .. } => *amount,
+            _ => 0,
+        };
+
         let hash = Self::calculate_transaction_hash(&sender, &transaction_type, timestamp);
         let resource_cost = Self::calculate_resource_cost(&transaction_type);
-        
+
         Transaction {
             sender,
+            receiver,
+            amount,
+            hash,
             transaction_type,
             timestamp,
-            hash,
             resource_cost,
-            resource_priority: 5, // Default priority level
+            resource_priority: 5, // Default priority
         }
     }
 
@@ -635,7 +644,7 @@ impl Transaction {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        bincode::serialize(self).unwrap_or_default()
+        bincode::serialize(self).unwrap_or_else(|_| Vec::new())
     }
 }
 
@@ -702,7 +711,7 @@ pub struct FederationId(pub String);
 pub struct CooperativeId(pub String);
 
 /// Represents a member's identity within the system
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct MemberId {
     pub did: String,
     pub cooperative_id: CooperativeId,
@@ -820,8 +829,7 @@ pub enum StorageError {
 /// Result type for storage operations
 pub type StorageResult<T> = Result<T, StorageError>;
 
-/// Storage backend trait defining the interface for different storage implementations
-#[async_trait::async_trait]
+#[async_trait]
 pub trait StorageBackend: Send + Sync {
     /// Store a value with the given key
     async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()>;
