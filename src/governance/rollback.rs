@@ -1,5 +1,6 @@
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use std::collections::HashMap;
+use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone)]
 pub enum DisputeStatus {
@@ -13,7 +14,7 @@ pub enum DisputeStatus {
 pub struct DisputeInfo {
     pub initiator: String,
     pub reason: String,
-    pub timestamp: SystemTime,
+    pub timestamp: DateTime<Utc>,
     pub evidence: Option<String>,
     pub status: DisputeStatus,
     pub votes: HashMap<String, bool>,

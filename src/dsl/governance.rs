@@ -1,14 +1,15 @@
-use super::vm::{IcnVM, VMValue};
+use super::vm::IcnVM;
 use crate::consensus::ConsensusMessage;
 use std::sync::Arc;
+use tokio::sync::mpsc;
 
 pub struct GovernanceExecutor {
     vm: Arc<IcnVM>,
-    consensus_tx: tokio::sync::mpsc::Sender<ConsensusMessage>,
+    consensus_tx: mpsc::Sender<ConsensusMessage>,
 }
 
 impl GovernanceExecutor {
-    pub fn new(vm: Arc<IcnVM>, consensus_tx: tokio::sync::mpsc::Sender<ConsensusMessage>) -> Self {
+    pub fn new(vm: Arc<IcnVM>, consensus_tx: mpsc::Sender<ConsensusMessage>) -> Self {
         Self { vm, consensus_tx }
     }
 
@@ -52,7 +53,7 @@ mod tests {
             }
         "#;
 
-        let (consensus_tx, _consensus_rx) = tokio::sync::mpsc::channel(32);
+        let (consensus_tx, _consensus_rx) = mpsc::channel(32);
         let vm = Arc::new(IcnVM::new());
         let executor = GovernanceExecutor::new(vm, consensus_tx);
 

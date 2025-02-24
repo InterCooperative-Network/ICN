@@ -1,14 +1,15 @@
 mod rollback;
 
-use rollback::{DisputeInfo, RollbackError, RollbackConfig};
+use rollback::{DisputeInfo, DisputeStatus, RollbackError, RollbackConfig};
 use std::collections::HashMap;
-use std::time::SystemTime;
+use chrono::{DateTime, Utc};
 use crate::icn_types::Proposal;
 
 pub struct GovernanceService {
     // ...existing code...
     disputes: HashMap<String, DisputeInfo>,
     rollback_config: RollbackConfig,
+    proposals: HashMap<String, Proposal>,
 }
 
 impl GovernanceService {
@@ -19,8 +20,9 @@ impl GovernanceService {
         reason: String,
         evidence: Option<String>,
     ) -> Result<(), RollbackError> {
-        let proposal = self.get_proposal(proposal_id)
-            .map_err(|_| RollbackError::ProposalNotFound)?;
+        let proposal = self.proposals
+            .get(proposal_id)
+            .ok_or(RollbackError::ProposalNotFound)?;
 
         if !self.is_within_rollback_window(&proposal) {
             return Err(RollbackError::TimeframePassed);
@@ -29,7 +31,7 @@ impl GovernanceService {
         let dispute = DisputeInfo {
             initiator,
             reason,
-            timestamp: SystemTime::now(),
+            timestamp: Utc::now(),
             evidence,
             status: DisputeStatus::Pending,
             votes: HashMap::new(),
@@ -51,16 +53,16 @@ impl GovernanceService {
             return Err(RollbackError::UnauthorizedRollback);
         }
 
-        self.remove_proposal(proposal_id)?;
+        self.proposals.remove(proposal_id)
+            .ok_or(RollbackError::ProposalNotFound)?;
         self.disputes.remove(proposal_id);
         Ok(())
     }
 
     fn is_within_rollback_window(&self, proposal: &Proposal) -> bool {
-        SystemTime::now()
-            .duration_since(proposal.created_at)
-            .map(|duration| duration <= self.rollback_config.rollback_window)
-            .unwrap_or(false)
+        let now = Utc::now();
+        let window = chrono::Duration::seconds(self.rollback_config.rollback_window.as_secs() as i64);
+        now.signed_duration_since(proposal.created_at) <= window
     }
 
     fn freeze_proposal(&mut self, proposal_id: &str) -> Result<(), RollbackError> {

@@ -732,7 +732,7 @@ pub struct Proposal {
     pub title: String,
     pub description: String,
     pub proposer: MemberId,
-    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub created_at: DateTime<Utc>,
     pub status: ProposalStatus,
     pub votes: HashMap<MemberId, Vote>,
 }
