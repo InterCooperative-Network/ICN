@@ -177,6 +177,36 @@ Executes an approved proposal.
 }
 ```
 
+### Delegated Governance
+
+Handles delegated governance within federations.
+
+**Endpoint:** `POST /api/v1/governance/delegated`
+
+**Request Body:**
+```typescript
+{
+    federation_id: string,
+    representative_id: string
+}
+```
+
+**Example Request:**
+```json
+{
+    "federation_id": "fed:icn:123xyz",
+    "representative_id": "did:icn:member:rep456"
+}
+```
+
+**Response:**
+```typescript
+{
+    success: boolean,
+    message: string
+}
+```
+
 ## WebSocket Events
 
 The Governance API provides real-time updates through WebSocket connections:

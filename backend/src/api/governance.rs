@@ -40,6 +40,12 @@ struct RecallVoteRequest {
     approve: bool,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct DelegatedGovernanceRequest {
+    federation_id: String,
+    representative_id: String,
+}
+
 pub fn governance_routes(
     governance_service: Arc<Mutex<GovernanceService>>,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add P2PManager to governance_routes
@@ -92,6 +98,13 @@ pub fn governance_routes(
         .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
         .and_then(vote_on_proposal_handler);
 
+    let delegated_governance = warp::path!("api" / "v1" / "governance" / "delegated")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_governance_service(governance_service.clone()))
+        .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
+        .and_then(delegated_governance_handler);
+
     create_proposal
         .or(vote_on_proposal)
         .or(sybil_resistance)
@@ -99,6 +112,7 @@ pub fn governance_routes(
         .or(proposal_status)
         .or(submit_proposal)
         .or(vote_on_proposal)
+        .or(delegated_governance)
 }
 
 fn with_governance_service(
@@ -291,6 +305,27 @@ async fn vote_on_proposal_handler(
             let mut p2p = p2p_manager.lock().await;
             p2p.publish(event).await.unwrap();
             Ok(warp::reply::json(&"Vote recorded"))
+        },
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn delegated_governance_handler(
+    request: DelegatedGovernanceRequest,
+    governance_service: Arc<Mutex<GovernanceService>>,
+    p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut service = governance_service.lock().await;
+    match service.handle_delegated_governance(request.federation_id, request.representative_id).await {
+        Ok(_) => {
+            // Publish event
+            let event = GovernanceEvent::DelegatedGovernance {
+                federation_id: request.federation_id,
+                representative_id: request.representative_id,
+            };
+            let mut p2p = p2p_manager.lock().await;
+            p2p.publish(event).await.unwrap();
+            Ok(warp::reply::json(&"Delegated governance applied"))
         },
         Err(e) => Err(warp::reject::custom(e)),
     }

@@ -72,6 +72,13 @@ struct AllocateResourceSharesRequest {
     shares: u64,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct CreateLocalClusterRequest {
+    cluster_name: String,
+    region: String,
+    members: Vec<String>,
+}
+
 pub fn federation_routes(
     federation_service: Arc<Mutex<FederationService>>,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add P2PManager to federation_routes
@@ -184,6 +191,13 @@ pub fn federation_routes(
         .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
         .and_then(allocate_resource_shares_handler);
 
+    let create_local_cluster = warp::path!("api" / "v1" / "federation" / "local_cluster" / "create")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_federation_service(federation_service.clone()))
+        .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
+        .and_then(create_local_cluster_handler);
+
     initiate_federation
         .or(join_federation)
         .or(initiate_federation_dissolution)
@@ -200,6 +214,7 @@ pub fn federation_routes(
         .or(federation_lifecycle)
         .or(transfer_resource)
         .or(allocate_resource_shares)
+        .or(create_local_cluster)
 }
 
 fn with_federation_service(
@@ -547,6 +562,34 @@ async fn allocate_resource_shares_handler(
             let mut p2p = p2p_manager.lock().await;
             p2p.publish(event).await.unwrap();
             Ok(warp::reply::json(&"Resource shares allocated successfully"))
+        },
+        Err(e) => Err(warp::reject::custom(e)),
+    }
+}
+
+async fn create_local_cluster_handler(
+    request: CreateLocalClusterRequest,
+    federation_service: Arc<Mutex<FederationService>>,
+    p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let operation = FederationOperation::CreateLocalCluster {
+        cluster_name: request.cluster_name,
+        region: request.region,
+        members: request.members,
+    };
+
+    let mut service = federation_service.lock().await;
+    match service.handle_operation(operation).await {
+        Ok(_) => {
+            // Publish event
+            let event = FederationEvent::CreateLocalCluster {
+                cluster_name: request.cluster_name,
+                region: request.region,
+                members: request.members,
+            };
+            let mut p2p = p2p_manager.lock().await;
+            p2p.publish(event).await.unwrap();
+            Ok(warp::reply::json(&"Local cluster created"))
         },
         Err(e) => Err(warp::reject::custom(e)),
     }

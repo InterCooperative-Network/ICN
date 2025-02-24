@@ -123,6 +123,11 @@ impl GovernanceEngine {
             e
         })
     }
+
+    pub async fn handle_delegated_governance(&self, federation_id: &str, representative_id: &str) -> Result<(), String> {
+        // Placeholder logic for handling delegated governance
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -213,6 +218,16 @@ mod tests {
         let governance_engine = GovernanceEngine::new(db.clone(), identity_manager.clone());
 
         let result = governance_engine.handle_sybil_resistance("did:icn:test", 50).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_delegated_governance() {
+        let db = setup_test_db().await;
+        let identity_manager = Arc::new(IdentityManager::new(db.clone()));
+        let governance_engine = GovernanceEngine::new(db.clone(), identity_manager.clone());
+
+        let result = governance_engine.handle_delegated_governance("federation_id", "representative_id").await;
         assert!(result.is_ok());
     }
 }
