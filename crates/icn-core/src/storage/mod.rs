@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use async_trait::async_trait;
-use icn_types::{StorageError, StorageReference, StorageStatus, StorageType};
+use icn_types::{StorageError, StorageReference, StorageStatus, StorageType, Block};
 
 #[async_trait]
 pub trait StorageInterface: Send + Sync {
@@ -19,18 +19,6 @@ impl StorageManager {
         Self {
             references: HashMap::new()
         }
-    }
-
-    pub fn add_storage_reference(&mut self, reference: StorageReference) -> Result<(), StorageError> {
-        if self.references.contains_key(&reference.id) {
-            return Err(StorageError::ReferenceAlreadyExists);
-        }
-        self.references.insert(reference.id.clone(), reference);
-        Ok(())
-    }
-
-    pub fn get_storage_location(&self, content_hash: &str) -> Option<&StorageReference> {
-        self.references.get(content_hash)
     }
 }
 

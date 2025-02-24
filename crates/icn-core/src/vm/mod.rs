@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-use async_trait::async_trait;
-use icn_types::{RuntimeError, ExecutionContext};
-
 mod runtime;
 
 pub use runtime::{RuntimeInterface, RuntimeManager};
+use std::collections::HashMap;
+use icn_types::{RuntimeError, ExecutionContext};
 
 pub struct VirtualMachine {
     state: HashMap<String, Vec<u8>>,
@@ -36,36 +34,5 @@ impl VirtualMachine {
     fn simulate_execution(&self, _bytecode: &[u8], _context: ExecutionContext) -> Result<Vec<u8>, RuntimeError> {
         // Placeholder for actual VM execution logic
         Ok(vec![])
-    }
-}
-
-pub struct RuntimeManager {
-    vm: VirtualMachine,
-    contexts: HashMap<String, ExecutionContext>,
-}
-
-#[async_trait]
-impl RuntimeManager {
-    pub fn new() -> Self {
-        Self {
-            vm: VirtualMachine::new(1_000_000, 1024 * 1024), // 1M instructions, 1MB memory
-            contexts: HashMap::new(),
-        }
-    }
-
-    pub async fn start(&self) -> Result<(), String> {
-        Ok(())
-    }
-
-    pub async fn stop(&self) -> Result<(), String> {
-        Ok(())
-    }
-
-    pub async fn execute_contract(&mut self, contract_id: &str, input: Vec<u8>) -> Result<Vec<u8>, RuntimeError> {
-        let context = self.contexts.get(contract_id)
-            .cloned()
-            .unwrap_or_default();
-        
-        self.vm.execute(&input, context).await
     }
 }
