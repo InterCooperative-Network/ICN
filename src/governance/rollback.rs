@@ -2,7 +2,8 @@ use std::time::Duration;
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum DisputeStatus {
     Pending,
     UnderReview,

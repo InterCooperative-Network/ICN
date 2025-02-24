@@ -2,7 +2,7 @@ mod rollback;
 
 use rollback::{DisputeInfo, DisputeStatus, RollbackError, RollbackConfig};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use crate::icn_types::Proposal;
 
 pub struct GovernanceService {
@@ -49,6 +49,10 @@ impl GovernanceService {
         let dispute = self.disputes.get(proposal_id)
             .ok_or(RollbackError::InvalidRollbackState)?;
 
+        if dispute.status != DisputeStatus::Pending {
+            return Err(RollbackError::InvalidRollbackState);
+        }
+
         if self.get_rollback_approvals(proposal_id) < self.rollback_config.required_approvals {
             return Err(RollbackError::UnauthorizedRollback);
         }
@@ -65,12 +69,12 @@ impl GovernanceService {
         now.signed_duration_since(proposal.created_at) <= window
     }
 
-    fn freeze_proposal(&mut self, proposal_id: &str) -> Result<(), RollbackError> {
+    fn freeze_proposal(&mut self, _proposal_id: &str) -> Result<(), RollbackError> {
         // Implementation to freeze proposal during dispute resolution
         Ok(())
     }
 
-    fn get_rollback_approvals(&self, proposal_id: &str) -> u32 {
+    fn get_rollback_approvals(&self, _proposal_id: &str) -> u32 {
         // Implementation to count governance members' approvals for rollback
         0
     }

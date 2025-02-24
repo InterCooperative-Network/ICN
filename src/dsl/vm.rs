@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use serde_json::Value;
 
 #[derive(Debug)]
 pub enum VMValue {
@@ -10,6 +9,7 @@ pub enum VMValue {
     Object(HashMap<String, VMValue>),
 }
 
+#[allow(dead_code)]
 #[derive(Default)]
 pub struct ExecutionContext {
     variables: HashMap<String, VMValue>,

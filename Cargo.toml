@@ -25,6 +25,8 @@ sha2 = "0.10.6"
 rayon = "1.6.1"
 lazy_static = "1.4.0"
 serde_json = "1.0.94"
+log = "0.4"
+env_logger = "0.10"
 
 [package]
 name = "icn"
@@ -33,7 +35,7 @@ description = "Inter-Cooperative Network - A platform for cooperative resource s
 edition = "2021"
 
 [features]
-default = ["basic"]
+default = ["basic", "federation"]  # Added federation to default features
 basic = []
 federation = ["dep:tokio", "dep:async-trait"]
 advanced-governance = ["dep:parity-scale-codec"]
@@ -41,13 +43,15 @@ monitoring = ["dep:prometheus"]
 
 [dependencies]
 icn-types = { workspace = true }
-tokio = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }  # Added optional = true
 warp = { workspace = true }
 async-trait = { workspace = true, optional = true }
 parity-scale-codec = { version = "2.3", optional = true }
 prometheus = { version = "0.12", optional = true }
 serde = { workspace = true }
-
+icn-core = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
 pest = "2.5"
 pest_derive = "2.5"
 serde_json = { workspace = true }
