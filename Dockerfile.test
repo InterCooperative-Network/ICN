@@ -1,0 +1,40 @@
+FROM rust:1.70-slim-bullseye
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    libpq-dev \
+    pkg-config \
+    libssl-dev \
+    git \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install k6
+RUN curl -s https://packagecloud.io/install/repositories/k6/stable/script.deb.sh | bash \
+    && apt-get install k6
+
+# Install cargo tools
+RUN cargo install cargo-tarpaulin \
+    cargo-audit \
+    cargo-deny
+
+# Create app directory
+WORKDIR /app
+
+# Copy project files
+COPY . .
+
+# Build dependencies
+RUN cargo build
+
+# Make scripts executable
+RUN chmod +x scripts/setup_test_env.sh scripts/run_tests.sh
+
+# Set environment variables
+ENV RUST_LOG=debug
+ENV RUST_BACKTRACE=1
+
+# Default command
+CMD ["./scripts/run_tests.sh"] 
