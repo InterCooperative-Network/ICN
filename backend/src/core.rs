@@ -126,7 +126,22 @@ impl Core {
 
     pub async fn handle_mutual_credit_transaction(&self, sender: &str, receiver: &str, amount: f64) -> Result<(), String> {
         self._telemetry_manager.log("Handling mutual credit transaction...");
-        // Placeholder logic for mutual credit transaction
+        // Validate the transaction
+        if amount <= 0.0 {
+            return Err("Invalid transaction amount".to_string());
+        }
+
+        // Update balances
+        let sender_balance = self._storage_manager.get_balance(sender).await?;
+        let receiver_balance = self._storage_manager.get_balance(receiver).await?;
+
+        if sender_balance < amount {
+            return Err("Insufficient balance".to_string());
+        }
+
+        self._storage_manager.update_balance(sender, sender_balance - amount).await?;
+        self._storage_manager.update_balance(receiver, receiver_balance + amount).await?;
+
         self._telemetry_manager.log("Mutual credit transaction completed.");
         Ok(())
     }
@@ -136,7 +151,23 @@ impl Core {
         if !verify_proof(proof) {
             return Err("Invalid zk-SNARK proof".to_string());
         }
-        // Placeholder logic for mutual credit transaction
+
+        // Validate the transaction
+        if amount <= 0.0 {
+            return Err("Invalid transaction amount".to_string());
+        }
+
+        // Update balances
+        let sender_balance = self._storage_manager.get_balance(sender).await?;
+        let receiver_balance = self._storage_manager.get_balance(receiver).await?;
+
+        if sender_balance < amount {
+            return Err("Insufficient balance".to_string());
+        }
+
+        self._storage_manager.update_balance(sender, sender_balance - amount).await?;
+        self._storage_manager.update_balance(receiver, receiver_balance + amount).await?;
+
         self._telemetry_manager.log("Mutual credit transaction with zk-SNARK proof completed.");
         Ok(())
     }

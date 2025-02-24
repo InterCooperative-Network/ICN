@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Proposal {
-    pub id: String,
+    pub id: i64,
     pub title: String,
     pub description: String,
     pub created_by: String,
@@ -11,7 +11,7 @@ pub struct Proposal {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Vote {
-    pub proposal_id: String,
+    pub proposal_id: i64,
     pub voter: String,
     pub approve: bool,
 }

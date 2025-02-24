@@ -4,7 +4,6 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use icn_federation::{FederationService, FederationOperation};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
-use icn_networking::p2p::{P2PManager, FederationEvent}; // Import P2PManager and FederationEvent
 
 #[derive(Debug, Deserialize, Serialize)]
 struct InitiateFederationRequest {
