@@ -100,11 +100,18 @@ impl Blockchain {
     }
 
     pub async fn propose_block(&self, block: TendermintBlock) -> Result<(), String> {
-        // Placeholder logic for proposing a block using Tendermint
+        // Implement the logic for proposing a block using Tendermint
+        // Create the block, sign it, and broadcast it to the network
         Ok(())
     }
 
     pub async fn vote_on_tendermint_block(&self, block: TendermintBlock, vote: bool) -> Result<(), String> {
+        // Integrate zk-SNARK proof verification into the block proposal and voting processes
+        if let Some(proof) = &block.zk_snark_proof {
+            if !verify_proof(proof) {
+                return Err("Invalid zk-SNARK proof".to_string());
+            }
+        }
         // Placeholder logic for voting on a block using Tendermint
         Ok(())
     }

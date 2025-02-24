@@ -15,8 +15,3 @@ CREATE TABLE IF NOT EXISTS votes (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(proposal_id, voter)
 );
-
-CREATE INDEX idx_resource_owner ON resources(owner);
-CREATE INDEX idx_resource_type ON resources(resource_type);
-CREATE INDEX idx_resource_created_at ON resources(created_at);
-CREATE INDEX idx_resource_updated_at ON resources(updated_at);
