@@ -8,7 +8,7 @@ use crate::{
     telemetry::TelemetryManager,
     models::{ResourceAllocationSystem, FederationManager},
 };
-use icn_types::{Block, Transaction, FederationOperation};
+use icn_types::Transaction;
 
 pub struct Core {
     storage: Arc<dyn StorageInterface>,

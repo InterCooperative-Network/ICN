@@ -17,19 +17,17 @@ pub mod models;
 pub mod telemetry;
 
 // Re-export main components
-pub use self::{
+pub use crate::{
     core::Core,
-    storage::{StorageManager, StorageInterface},
-    networking::{NetworkManager, NetworkInterface},
-    identity::{IdentityManager, IdentityInterface},
-    reputation::{ReputationManager, ReputationInterface},
+    storage::StorageInterface,
+    networking::NetworkInterface,
+    identity::IdentityInterface,
+    reputation::ReputationInterface,
+    vm::RuntimeInterface,
     telemetry::{TelemetryManager, PrometheusMetrics, Logger, TracingSystem},
-    models::*,
 };
 
-use icn_consensus::ProofOfCooperation;
 use tokio::time::{sleep, Duration};
-use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 pub struct Core {
     consensus: Arc<dyn ConsensusEngine>,
