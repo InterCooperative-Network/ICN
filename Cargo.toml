@@ -12,19 +12,19 @@ icn-core = { path = "crates/icn-core" }
 icn-runtime = { path = "crates/icn-runtime" }
 
 # External dependencies
-tokio = { version = "1.30", features = ["full"] }
-serde = { version = "1.0", features = ["derive"] }
-warp = "0.3"
-sqlx = { version = "0.7", features = ["postgres", "runtime-tokio"] }
-thiserror = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
-async-trait = "0.1"
-futures = "0.3"
-tracing = "0.1"
-sha2 = "0.10"
-rayon = "1.7"
-lazy_static = "1.4"
-serde_json = "1.0"
+tokio = { version = "1.25", features = ["full"] }  # Further downgraded
+serde = { version = "1.0.130", features = ["derive"] }
+warp = "0.3.2"
+sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "postgres"] }  # Major downgrade
+thiserror = "1.0.30"
+chrono = { version = "0.4.23", features = ["serde"] }
+async-trait = "0.1.64"  # Downgraded
+futures = "0.3.25"  # Downgraded
+tracing = "0.1.37"
+sha2 = "0.10.6"
+rayon = "1.6.1"
+lazy_static = "1.4.0"
+serde_json = "1.0.94"
 
 [package]
 name = "icn"
@@ -42,10 +42,16 @@ monitoring = ["dep:prometheus"]
 [dependencies]
 icn-types = { workspace = true }
 tokio = { workspace = true, optional = true }
+warp = { workspace = true }
 async-trait = { workspace = true, optional = true }
-parity-scale-codec = { version = "3.0", optional = true }
-prometheus = { version = "0.13", optional = true }
+parity-scale-codec = { version = "2.3", optional = true }
+prometheus = { version = "0.12", optional = true }
 serde = { workspace = true }
+
+pest = "2.5"
+pest_derive = "2.5"
+serde_json = { workspace = true }
+chrono = { workspace = true }
 
 [lib]
 name = "icn_lib"
