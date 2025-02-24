@@ -1,4 +1,4 @@
-Project Code Dump - Generated Mon 24 Feb 2025 10:18:57 AM UTC
+Project Code Dump - Generated Mon 24 Feb 2025 05:10:29 PM UTC
 ======================================
 
 LLM Context Information
@@ -3589,8 +3589,8 @@ fn compile_state_validation(bytecode: &mut Vec<u8>, validation: &StateValidation
 
 ===================
 File: ./crates/icn-consensus/src/lib.rs
-Size: 15095 bytes
-Modified: 2025-02-24 09:46:42.585369689 +0000
+Size: 15246 bytes
+Modified: 2025-02-24 16:25:44.581361179 +0000
 Dependencies:
 use async_trait::async_trait;
 use bit_set::BitSet;
@@ -3743,8 +3743,17 @@ impl ProofOfCooperation {
             let reputation_manager = self.reputation_manager.clone();
             let votes = self.votes.clone();
             let handle = task::spawn(async move {
-                let total_reputation: i64 = chunk.iter().map(|p| reputation_manager.get_reputation(p, "consensus")).sum();
-                let approval_reputation: i64 = chunk.iter().enumerate().filter(|(i, _)| votes.contains(*i)).map(|(_, p)| reputation_manager.get_reputation(p, "consensus")).sum();
+                let mut total_reputation = 0i64;
+                let mut approval_reputation = 0i64;
+                
+                for (i, p) in chunk.iter().enumerate() {
+                    let rep = reputation_manager.get_reputation(p, "consensus");
+                    total_reputation += rep;
+                    if votes.contains(i) {
+                        approval_reputation += rep;
+                    }
+                }
+                
                 Ok((total_reputation, approval_reputation))
             });
             handles.push(handle);
