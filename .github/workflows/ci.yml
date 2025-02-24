@@ -1,29 +1,48 @@
-name: ICN Backend CI/CD
+name: Continuous Integration
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/icndb_test
+  RUST_LOG: debug
 
 jobs:
   test:
+    name: Test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: icndb_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+    - uses: actions/checkout@v3
 
-    - name: Set up Rust
+    - name: Install Rust toolchain
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: stable
         profile: minimal
+        toolchain: stable
         override: true
+        components: rustfmt, clippy
 
-    - name: Cache Cargo registry
+    - name: Cache dependencies
       uses: actions/cache@v3
       with:
         path: |
@@ -31,121 +50,181 @@ jobs:
           ~/.cargo/git
           target
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
 
-    - name: Cache Docker layers
-      uses: actions/cache@v3
-      with:
-        path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-buildx-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-buildx-
-
-    - name: Cache Frontend dependencies
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.npm
-          frontend/node_modules
-        key: ${{ runner.os }}-node-${{ hashFiles('frontend/package-lock.json') }}
-        restore-keys: |
-          ${{ runner.os }}-node-
-
-    - name: Cache Test Results
-      uses: actions/cache@v2
-      with:
-        path: ~/.cargo/test-results
-        key: ${{ runner.os }}-test-results-${{ hashFiles('**/*.rs') }}
-        restore-keys: |
-          ${{ runner.os }}-test-results-
-
-    - name: Build Backend
-      run: cargo build --verbose
-
-    - name: Run Unit Tests
-      run: cargo test --verbose
-
-    - name: Integration Tests
-      run: cargo test --test integration_test --verbose
-
-    - name: Run Clippy
-      run: cargo clippy -- -D warnings
-
-    - name: Run Format Check
+    - name: Check formatting
       run: cargo fmt -- --check
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v2
-      with:
-        node-version: '16'
+    - name: Run clippy
+      run: cargo clippy -- -D warnings
 
-    - name: Install Frontend Dependencies
-      run: npm install
-      working-directory: frontend
+    - name: Run unit tests
+      run: cargo test --lib --all-features --workspace
 
-    - name: Build Frontend
-      run: npm run build
-      working-directory: frontend
-
-    - name: Run Frontend Tests
-      run: npm test
-      working-directory: frontend
-
-    - name: Run Accessibility Tests
-      run: npm run test:accessibility
-      working-directory: frontend
-
-    - name: Run Responsiveness Tests
-      run: npm run test:responsiveness
-      working-directory: frontend
-
-    - name: Run E2E Tests
-      run: cargo test --test integration_test --features e2e --verbose
+    - name: Run integration tests
+      run: cargo test --test '*' --all-features
       env:
-        TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
-        
-    - name: Setup k6
-      uses: grafana/k6-action@v0.3.0
-      
-    - name: Run Load Tests
-      run: k6 run tests/load_test.js
-      
-    - name: Run Federation Tests
-      run: cargo test --test federation_test --verbose
-      
-    - name: Performance Regression Check
+        TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/icndb_test
+
+    - name: Run property tests
+      run: cargo test --test property_tests --all-features
+
+    - name: Run end-to-end tests
+      run: cargo test --test e2e_tests --all-features
+      env:
+        TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/icndb_test
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+
+    - name: Run security audit
+      run: cargo audit
+
+    - name: Install cargo-deny
+      run: cargo install cargo-deny
+
+    - name: Check licenses
+      run: cargo deny check licenses
+
+    - name: Check for banned dependencies
+      run: cargo deny check bans
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: icndb_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - name: Install cargo-tarpaulin
+      run: cargo install cargo-tarpaulin
+
+    - name: Generate coverage report
       run: |
-        cargo bench
-        cargo bench --bench federation_bench
-        cargo bench --bench consensus_bench
+        cargo tarpaulin --verbose --workspace --timeout 120 --out Xml --out Html
+      env:
+        TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/icndb_test
 
-  deploy-staging:
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        fail_ci_if_error: true
+
+    - name: Archive code coverage results
+      uses: actions/upload-artifact@v3
+      with:
+        name: code-coverage-report
+        path: tarpaulin-report.html
+
+  benchmark:
+    name: Performance Benchmarks
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: icndb_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
-      - uses: actions/checkout@v3
+    - uses: actions/checkout@v3
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - name: Run benchmarks
+      run: cargo bench --all-features
+      env:
+        TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/icndb_test
       
-      - name: Deploy to Staging
-        run: |
-          echo "Deploying to staging environment"
-          # Add deployment steps
-          
-      - name: Run Staging Integration Tests
-        run: |
-          cargo test --test integration_test --features staging
-          k6 run tests/load_test.js
+    - name: Store benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: target/criterion
 
-  deploy-production:
-    needs: deploy-staging
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  load-test:
+    name: Load Testing
     runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: https://production.example.com
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: icndb_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
-      - name: Deploy to Production
-        run: |
-          echo "Deploying to production"
-          # Add production deployment steps
+    - uses: actions/checkout@v3
+
+    - name: Install k6
+      run: |
+        sudo gpg -k
+        sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+        echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+        sudo apt-get update
+        sudo apt-get install k6
+
+    - name: Start test server
+      run: |
+        cargo run &
+        sleep 5  # Wait for server to start
+      env:
+        TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/icndb_test
+
+    - name: Run load tests
+      run: |
+        k6 run tests/load_tests/federation_test.js
+        k6 run tests/load_tests/governance_test.js
+        k6 run tests/load_tests/resource_test.js
+
+    - name: Store load test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: load-test-results
+        path: k6-results
