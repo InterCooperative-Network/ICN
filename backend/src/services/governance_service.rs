@@ -3,22 +3,39 @@ use crate::database::models::{Proposal, Vote};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
+use crate::services::identity_service::IdentityService; // Import IdentityService
 
 pub struct GovernanceService {
     db: Arc<Mutex<dyn Database>>,
+    identity_service: Arc<dyn IdentityService>, // Add IdentityService to GovernanceService
 }
 
 impl GovernanceService {
-    pub fn new(db: Arc<Mutex<dyn Database>>) -> Self {
-        Self { db }
+    pub fn new(db: Arc<Mutex<dyn Database>>, identity_service: Arc<dyn IdentityService>) -> Self {
+        Self { db, identity_service }
     }
 
     pub async fn create_proposal(&self, proposal: Proposal) -> Result<i64, sqlx::Error> {
+        // Verify DID using IdentityService
+        if !self.identity_service.verify_did(&proposal.created_by).await {
+            return Err(sqlx::Error::Protocol("Invalid DID".to_string()));
+        }
+
+        // Validate verifiable credential
+        if !self.identity_service.verify_credential(&proposal.verifiable_credential).await {
+            return Err(sqlx::Error::Protocol("Invalid verifiable credential".to_string()));
+        }
+
         let db = self.db.lock().await;
         create_proposal_in_db(&*db, &proposal).await
     }
 
     pub async fn record_vote(&self, vote: Vote) -> Result<(), sqlx::Error> {
+        // Validate verifiable credential
+        if !self.identity_service.verify_credential(&vote.verifiable_credential).await {
+            return Err(sqlx::Error::Protocol("Invalid verifiable credential".to_string()));
+        }
+
         if let Some(proof) = &vote.zk_snark_proof {
             if !verify_proof(proof) {
                 return Err(sqlx::Error::Protocol("Invalid zk-SNARK proof".to_string()));
