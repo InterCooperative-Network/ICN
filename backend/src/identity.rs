@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use icn_identity::ledger::{create_identity_in_ledger, get_identity_from_ledger, rotate_key_in_ledger, revoke_key_in_ledger};
+use icn_core::verifiable_credentials::{VerifiableCredential, Proof};
 
 pub struct IdentityManager {
     identities: Arc<Mutex<HashMap<String, String>>>,
@@ -21,12 +23,34 @@ impl IdentityManager {
             return Err("Identity already exists".to_string());
         }
         identities.insert(identity.to_string(), String::new());
+
+        // Issue Verifiable Credential in ICN format
+        let credential = VerifiableCredential {
+            credential_type: "IdentityCredential".to_string(),
+            issuer_did: "did:icn:issuer".to_string(),
+            subject_did: identity.to_string(),
+            issuance_date: chrono::Utc::now().to_rfc3339(),
+            expiration_date: None,
+            credential_status: None,
+            credential_schema: None,
+            proof: Proof {
+                type_: "Ed25519Signature2018".to_string(),
+                created: chrono::Utc::now().to_rfc3339(),
+                proof_purpose: "assertionMethod".to_string(),
+                verification_method: "did:icn:issuer#keys-1".to_string(),
+                jws: "example-jws".to_string(),
+            },
+        };
+
+        // Store identity in icn-identity ledger
+        create_identity_in_ledger(identity, &credential).await.map_err(|e| e.to_string())?;
+
         Ok(())
     }
 
     pub async fn get_identity(&self, identity: &str) -> Result<String, String> {
-        let identities = self.identities.lock().await;
-        identities.get(identity).cloned().ok_or_else(|| "Identity not found".to_string())
+        // Retrieve identity from icn-identity ledger
+        get_identity_from_ledger(identity).await.map_err(|e| e.to_string())
     }
 
     pub async fn update_identity(&self, identity: &str, new_data: &str) -> Result<(), String> {
@@ -46,6 +70,16 @@ impl IdentityManager {
         } else {
             Err("Identity not found".to_string())
         }
+    }
+
+    pub async fn rotate_key(&self, identity: &str) -> Result<(), String> {
+        // Rotate key in icn-identity ledger
+        rotate_key_in_ledger(identity).await.map_err(|e| e.to_string())
+    }
+
+    pub async fn revoke_key(&self, identity: &str) -> Result<(), String> {
+        // Revoke key in icn-identity ledger
+        revoke_key_in_ledger(identity).await.map_err(|e| e.to_string())
     }
 
     pub async fn create_local_cluster(&self, cluster_name: &str, members: Vec<String>) -> Result<(), String> {

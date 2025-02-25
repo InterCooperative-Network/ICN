@@ -9,6 +9,7 @@ use tendermint::rpc::Client;
 use tendermint::lite::TrustedState;
 use crate::core::consensus::TendermintConsensus;
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
+use icn_identity::ledger::{get_identity_from_ledger}; // Import icn-identity ledger function
 
 pub struct Core {
     _storage_manager: Arc<StorageManager>,
