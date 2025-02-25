@@ -8,6 +8,7 @@ use std::time::{SystemTime, Duration, UNIX_EPOCH};
 use tokio::sync::mpsc::{self, Sender, Receiver};
 use tokio::task;
 use tokio::time::{self, Duration};
+use icn_identity::ledger::{apply_reputation_decay_in_ledger, handle_sybil_resistance_in_ledger}; // Import icn-identity ledger functions
 
 /// A cache for storing reputation scores.
 pub struct ReputationCache {
@@ -179,39 +180,12 @@ impl ReputationService {
 
     /// Handles Sybil resistance mechanisms for DID reputation tracking.
     pub async fn handle_sybil_resistance(&self, did: &str, reputation_score: i64) -> Result<(), sqlx::Error> {
-        // Placeholder logic for handling Sybil resistance
-        Ok(())
+        handle_sybil_resistance_in_ledger(did, reputation_score).await.map_err(|e| sqlx::Error::Protocol(e.to_string()))
     }
 
     /// Applies reputation decay for the given DID with a specified decay rate.
     pub async fn apply_reputation_decay(&self, did: &str, decay_rate: f64) -> Result<(), sqlx::Error> {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as f64;
-        let contributions = sqlx::query_as!(
-            Contribution,
-            r#"
-            SELECT score, timestamp FROM contributions WHERE did = $1
-            "#,
-            did
-        )
-        .fetch_all(&*self.db.pool)
-        .await?;
-
-        for contribution in contributions {
-            let age = now - contribution.timestamp;
-            let decayed_score = (contribution.score as f64 * (-decay_rate * age).exp()) as i64;
-            sqlx::query!(
-                r#"
-                UPDATE contributions SET score = $1 WHERE did = $2 AND timestamp = $3
-                "#,
-                decayed_score,
-                did,
-                contribution.timestamp
-            )
-            .execute(&*self.db.pool)
-            .await?;
-        }
-
-        Ok(())
+        apply_reputation_decay_in_ledger(did, decay_rate).await.map_err(|e| sqlx::Error::Protocol(e.to_string()))
     }
 
     pub async fn apply_adaptive_decay(&self, did: &str) -> Result<(), sqlx::Error> {

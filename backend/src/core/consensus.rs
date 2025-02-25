@@ -5,6 +5,7 @@ use tendermint::rpc::Client;
 use tokio::sync::Mutex;
 use std::sync::Arc;
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
+use icn_identity::ledger::{apply_reputation_decay_in_ledger, handle_sybil_resistance_in_ledger}; // Import icn-identity ledger functions
 
 #[async_trait]
 pub trait ConsensusEngine {
@@ -129,13 +130,11 @@ impl ProofOfCooperation {
     }
 
     pub async fn handle_sybil_resistance(&self, did: &str, reputation_score: i64) -> Result<(), String> { // Pfffb
-        // Placeholder logic for handling Sybil resistance
-        Ok(())
+        handle_sybil_resistance_in_ledger(did, reputation_score).await.map_err(|e| e.to_string())
     }
 
     pub async fn apply_reputation_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> { // Pf5c9
-        // Placeholder logic for applying reputation decay
-        Ok(())
+        apply_reputation_decay_in_ledger(did, decay_rate).await.map_err(|e| e.to_string())
     }
 }
 

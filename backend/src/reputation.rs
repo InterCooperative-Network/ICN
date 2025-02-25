@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::{self, Sender, Receiver};
 use tokio::task;
 use tokio::time::{self, Duration};
+use icn_identity::ledger::{apply_reputation_decay_in_ledger, handle_sybil_resistance_in_ledger}; // Import icn-identity ledger functions
 
 pub struct ReputationManager {
     reputations: Mutex<HashMap<String, i64>>,
@@ -39,39 +40,12 @@ impl ReputationManager {
         }
     }
 
-    pub fn apply_reputation_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as f64;
-        let contributions = sqlx::query_as!(
-            Contribution,
-            r#"
-            SELECT score, timestamp FROM contributions WHERE did = $1
-            "#,
-            did
-        )
-        .fetch_all(&*self.db.pool)
-        .await?;
-
-        for contribution in contributions {
-            let age = now - contribution.timestamp;
-            let decayed_score = (contribution.score as f64 * (-decay_rate * age).exp()) as i64;
-            sqlx::query!(
-                r#"
-                UPDATE contributions SET score = $1 WHERE did = $2 AND timestamp = $3
-                "#,
-                decayed_score,
-                did,
-                contribution.timestamp
-            )
-            .execute(&*self.db.pool)
-            .await?;
-        }
-
-        Ok(())
+    pub async fn apply_reputation_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> {
+        apply_reputation_decay_in_ledger(did, decay_rate).await.map_err(|e| e.to_string())
     }
 
-    pub fn handle_sybil_resistance(&self, did: &str, reputation_score: i64) -> Result<(), String> {
-        // Placeholder logic for handling Sybil resistance
-        Ok(())
+    pub async fn handle_sybil_resistance(&self, did: &str, reputation_score: i64) -> Result<(), String> {
+        handle_sybil_resistance_in_ledger(did, reputation_score).await.map_err(|e| e.to_string())
     }
 
     pub fn emit_event(&self, event: ReputationEvent) {
@@ -129,18 +103,18 @@ mod tests {
         assert_eq!(manager.get_reputation("did:example:123"), 90);
     }
 
-    #[test]
-    fn test_apply_reputation_decay() {
+    #[tokio::test]
+    async fn test_apply_reputation_decay() {
         let manager = ReputationManager::new();
         manager.adjust_reputation("did:example:123", 100);
-        manager.apply_reputation_decay("did:example:123", 0.1).unwrap();
+        manager.apply_reputation_decay("did:example:123", 0.1).await.unwrap();
         assert_eq!(manager.get_reputation("did:example:123"), 90);
     }
 
-    #[test]
-    fn test_handle_sybil_resistance() {
+    #[tokio::test]
+    async fn test_handle_sybil_resistance() {
         let manager = ReputationManager::new();
-        manager.handle_sybil_resistance("did:example:123", 50).unwrap();
+        manager.handle_sybil_resistance("did:example:123", 50).await.unwrap();
         // Add assertions based on the expected behavior of handle_sybil_resistance
     }
 

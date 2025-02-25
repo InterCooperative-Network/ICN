@@ -45,7 +45,7 @@ async fn handle_create_identity(
         warp::reject::custom(warp::reject::custom(e))
     })?;
 
-    // Generate verifiable credential
+    // Generate ICN-compliant verifiable credential
     let credential = VerifiableCredential {
         credential_type: "IdentityCredential".to_string(),
         issuer_did: "did:icn:issuer".to_string(),

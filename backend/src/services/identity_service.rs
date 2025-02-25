@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use crate::database::db::Database;
+use icn_identity::ledger::{create_identity_in_ledger, get_identity_from_ledger, rotate_key_in_ledger, revoke_key_in_ledger};
+use icn_core::verifiable_credentials::{VerifiableCredential, Proof};
 
 #[async_trait]
 pub trait IdentityService: Send + Sync {
@@ -23,21 +25,36 @@ impl IdentityServiceImpl {
 #[async_trait]
 impl IdentityService for IdentityServiceImpl {
     async fn create_identity(&self, identity: &str) -> Result<(), String> {
-        self.db.store_identity(identity, "").await.map_err(|e| e.to_string())
+        let credential = VerifiableCredential {
+            credential_type: "IdentityCredential".to_string(),
+            issuer_did: "did:icn:issuer".to_string(),
+            subject_did: identity.to_string(),
+            issuance_date: chrono::Utc::now().to_rfc3339(),
+            expiration_date: None,
+            credential_status: None,
+            credential_schema: None,
+            proof: Proof {
+                type_: "Ed25519Signature2018".to_string(),
+                created: chrono::Utc::now().to_rfc3339(),
+                proof_purpose: "assertionMethod".to_string(),
+                verification_method: "did:icn:issuer#keys-1".to_string(),
+                jws: "example-jws".to_string(),
+            },
+        };
+
+        create_identity_in_ledger(identity, &credential).await.map_err(|e| e.to_string())
     }
 
     async fn get_identity(&self, identity: &str) -> Result<String, String> {
-        self.db.retrieve_identity(identity).await.map_err(|e| e.to_string())
+        get_identity_from_ledger(identity).await.map_err(|e| e.to_string())
     }
 
     async fn rotate_key(&self, identity: &str) -> Result<(), String> {
-        // Implement key rotation logic here
-        Ok(())
+        rotate_key_in_ledger(identity).await.map_err(|e| e.to_string())
     }
 
     async fn revoke_key(&self, identity: &str) -> Result<(), String> {
-        // Implement key revocation logic here
-        Ok(())
+        revoke_key_in_ledger(identity).await.map_err(|e| e.to_string())
     }
 }
 

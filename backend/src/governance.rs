@@ -25,6 +25,11 @@ impl GovernanceEngine {
             return Err(sqlx::Error::Protocol("Invalid DID".to_string()));
         }
 
+        // Validate verifiable credential
+        if !self.identity_manager.verify_credential(&proposal.verifiable_credential).await {
+            return Err(sqlx::Error::Protocol("Invalid verifiable credential".to_string()));
+        }
+
         self.db.create_proposal(&proposal).await.map_err(|e| {
             error!("Error creating proposal: {}", e);
             e
@@ -32,6 +37,11 @@ impl GovernanceEngine {
     }
 
     pub async fn record_vote(&self, vote: Vote) -> Result<(), sqlx::Error> {
+        // Validate verifiable credential
+        if !self.identity_manager.verify_credential(&vote.verifiable_credential).await {
+            return Err(sqlx::Error::Protocol("Invalid verifiable credential".to_string()));
+        }
+
         if let Some(proof) = &vote.zk_snark_proof {
             if !verify_proof(proof) {
                 return Err(sqlx::Error::Protocol("Invalid zk-SNARK proof".to_string()));

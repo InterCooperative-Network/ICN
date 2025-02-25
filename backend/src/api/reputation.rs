@@ -3,6 +3,8 @@ use crate::services::reputation_service::{get_reputation, adjust_reputation, ver
 use icn_networking::p2p::{P2PManager, ReputationEvent}; // Import P2PManager and ReputationEvent
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use icn_identity::ledger::{apply_reputation_decay_in_ledger, handle_sybil_resistance_in_ledger}; // Import icn-identity ledger functions
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ZkSnarkProofRequest {
@@ -104,6 +106,11 @@ async fn submit_zk_snark_proof_handler(
     request: ZkSnarkProofRequest,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Verify zk-SNARK proof
+    if !verify_proof(&request.proof) {
+        return Err(warp::reject::custom("Invalid zk-SNARK proof"));
+    }
+
     // Publish event
     let event = ReputationEvent::ZkSnarkProofSubmitted {
         proof: request.proof.clone(),
@@ -118,14 +125,22 @@ async fn submit_zk_snark_proof_handler(
 async fn apply_reputation_decay_handler(
     request: ReputationDecayRequest,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    // Placeholder logic for applying reputation decay
+    // Interact with icn-identity ledger to apply reputation decay
+    apply_reputation_decay_in_ledger(&request.did, request.decay_rate).await.map_err(|e| {
+        warp::reject::custom(warp::reject::custom(e))
+    })?;
+
     Ok(warp::reply::json(&"Reputation decay applied"))
 }
 
 async fn handle_sybil_resistance_handler(
     request: SybilResistanceRequest,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    // Placeholder logic for handling sybil resistance
+    // Interact with icn-identity ledger to handle sybil resistance
+    handle_sybil_resistance_in_ledger(&request.did, request.reputation_score).await.map_err(|e| {
+        warp::reject::custom(warp::reject::custom(e))
+    })?;
+
     Ok(warp::reply::json(&"Sybil resistance handled"))
 }
 
