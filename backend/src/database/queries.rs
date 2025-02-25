@@ -4,15 +4,16 @@ use crate::database::models::{Proposal, Vote, Contribution, Federation, Resource
 pub async fn create_proposal(pool: &PgPool, proposal: &Proposal) -> Result<i64, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        INSERT INTO proposals (title, description, created_by, ends_at, created_at)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO proposals (title, description, created_by, ends_at, created_at, did)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id
         "#,
         proposal.title,
         proposal.description,
         proposal.created_by,
         proposal.ends_at,
-        proposal.created_at
+        proposal.created_at,
+        proposal.did
     )
     .fetch_one(pool)
     .await?;

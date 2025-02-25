@@ -8,6 +8,7 @@ pub struct Proposal {
     pub created_by: String,
     pub ends_at: chrono::NaiveDateTime,
     pub created_at: chrono::NaiveDateTime,
+    pub did: String, // Add did field for DID-based access control
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -58,6 +59,7 @@ mod tests {
             created_by: "did:icn:test".to_string(),
             ends_at: chrono::NaiveDateTime::from_timestamp(1_614_000_000, 0),
             created_at: chrono::NaiveDateTime::from_timestamp(1_614_000_000, 0),
+            did: "did:icn:test".to_string(), // Add did field for DID-based access control
         };
 
         let serialized = serde_json::to_string(&proposal).unwrap();
