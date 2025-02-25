@@ -25,14 +25,15 @@ impl Database {
     pub async fn create_proposal(&self, proposal: &Proposal) -> Result<i64, sqlx::Error> {
         sqlx::query!(
             r#"
-            INSERT INTO proposals (title, description, created_by, ends_at)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO proposals (title, description, created_by, ends_at, did)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id
             "#,
             proposal.title,
             proposal.description,
             proposal.created_by,
-            proposal.ends_at
+            proposal.ends_at,
+            proposal.did
         )
         .fetch_one(&self.pool)
         .await
@@ -173,6 +174,7 @@ mod tests {
             created_by: "did:icn:test".to_string(),
             ends_at: chrono::NaiveDateTime::from_timestamp(1_614_000_000, 0),
             created_at: chrono::NaiveDateTime::from_timestamp(1_614_000_000, 0),
+            did: "did:icn:test".to_string(),
         };
 
         let result = db.create_proposal(&proposal).await;
