@@ -20,6 +20,11 @@ impl GovernanceEngine {
     }
 
     pub async fn create_proposal(&self, proposal: Proposal) -> Result<i64, sqlx::Error> {
+        // Verify DID using IdentityManager
+        if !self.identity_manager.verify_did(&proposal.created_by).await {
+            return Err(sqlx::Error::Protocol("Invalid DID".to_string()));
+        }
+
         self.db.create_proposal(&proposal).await.map_err(|e| {
             error!("Error creating proposal: {}", e);
             e
@@ -72,6 +77,11 @@ impl GovernanceEngine {
     }
 
     pub async fn submit_proposal(&self, title: &str, description: &str, created_by: &str, ends_at: &str) -> Result<i64, String> {
+        // Verify DID using IdentityManager
+        if !self.identity_manager.verify_did(created_by).await {
+            return Err("Invalid DID".to_string());
+        }
+
         let proposal = Proposal {
             id: 0, // Placeholder, will be set by the database
             title: title.to_string(),
@@ -79,6 +89,7 @@ impl GovernanceEngine {
             created_by: created_by.to_string(),
             ends_at: chrono::NaiveDateTime::parse_from_str(ends_at, "%Y-%m-%d %H:%M:%S").map_err(|e| e.to_string())?,
             created_at: chrono::Utc::now().naive_utc(),
+            did: created_by.to_string(), // Add did field for DID-based access control
         };
 
         self.create_proposal(proposal).await.map_err(|e| e.to_string())

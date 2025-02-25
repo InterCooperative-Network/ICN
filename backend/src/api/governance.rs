@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::services::governance_service::{GovernanceService, Proposal, Vote};
 use icn_networking::p2p::{P2PManager, GovernanceEvent}; // Import P2PManager and GovernanceEvent
+use crate::services::identity_service::IdentityService; // Import IdentityService
 
 #[derive(Debug, Deserialize, Serialize)]
 struct CreateProposalRequest {
@@ -11,6 +12,8 @@ struct CreateProposalRequest {
     description: String,
     created_by: String,
     ends_at: String,
+    did: String, // Add did field for DID-based access control
+    verifiable_credential: String, // Add verifiable credential field
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -19,6 +22,7 @@ struct VoteRequest {
     voter: String,
     approve: bool,
     zk_snark_proof: String, // Added zk-SNARK proof field
+    verifiable_credential: String, // Add verifiable credential field
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -49,12 +53,14 @@ struct DelegatedGovernanceRequest {
 pub fn governance_routes(
     governance_service: Arc<Mutex<GovernanceService>>,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add P2PManager to governance_routes
+    identity_service: Arc<dyn IdentityService>, // Add IdentityService to governance_routes
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     let create_proposal = warp::path!("api" / "v1" / "governance" / "proposals")
         .and(warp::post())
         .and(warp::body::json())
         .and(with_governance_service(governance_service.clone()))
         .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
+        .and(with_identity_service(identity_service.clone())) // Add with_identity_service
         .and_then(create_proposal_handler);
 
     let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
@@ -62,6 +68,7 @@ pub fn governance_routes(
         .and(warp::body::json())
         .and(with_governance_service(governance_service.clone()))
         .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
+        .and(with_identity_service(identity_service.clone())) // Add with_identity_service
         .and_then(vote_on_proposal_handler);
 
     let sybil_resistance = warp::path!("api" / "v1" / "governance" / "sybil_resistance")
@@ -89,6 +96,7 @@ pub fn governance_routes(
         .and(warp::body::json())
         .and(with_governance_service(governance_service.clone()))
         .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
+        .and(with_identity_service(identity_service.clone())) // Add with_identity_service
         .and_then(submit_proposal_handler);
 
     let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / "vote")
@@ -96,6 +104,7 @@ pub fn governance_routes(
         .and(warp::body::json())
         .and(with_governance_service(governance_service.clone()))
         .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
+        .and(with_identity_service(identity_service.clone())) // Add with_identity_service
         .and_then(vote_on_proposal_handler);
 
     let delegated_governance = warp::path!("api" / "v1" / "governance" / "delegated")
@@ -127,11 +136,28 @@ fn with_p2p_manager(
     warp::any().map(move || p2p_manager.clone())
 }
 
+fn with_identity_service(
+    identity_service: Arc<dyn IdentityService>,
+) -> impl Filter<Extract = (Arc<dyn IdentityService>,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || identity_service.clone())
+}
+
 async fn create_proposal_handler(
     request: CreateProposalRequest,
     governance_service: Arc<Mutex<GovernanceService>>,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+    identity_service: Arc<dyn IdentityService>, // Add identity_service parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Verify DID using IdentityService
+    if !identity_service.verify_did(&request.did).await {
+        return Err(warp::reject::custom("Invalid DID"));
+    }
+
+    // Validate verifiable credential
+    if !identity_service.verify_credential(&request.verifiable_credential).await {
+        return Err(warp::reject::custom("Invalid verifiable credential"));
+    }
+
     let proposal = Proposal {
         title: request.title,
         description: request.description,
@@ -161,7 +187,13 @@ async fn vote_on_proposal_handler(
     request: VoteRequest,
     governance_service: Arc<Mutex<GovernanceService>>,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+    identity_service: Arc<dyn IdentityService>, // Add identity_service parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Validate verifiable credential
+    if !identity_service.verify_credential(&request.verifiable_credential).await {
+        return Err(warp::reject::custom("Invalid verifiable credential"));
+    }
+
     let vote = Vote {
         proposal_id: request.proposal_id,
         voter: request.voter,
@@ -254,7 +286,18 @@ async fn submit_proposal_handler(
     request: CreateProposalRequest,
     governance_service: Arc<Mutex<GovernanceService>>,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+    identity_service: Arc<dyn IdentityService>, // Add identity_service parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Verify DID using IdentityService
+    if !identity_service.verify_did(&request.did).await {
+        return Err(warp::reject::custom("Invalid DID"));
+    }
+
+    // Validate verifiable credential
+    if !identity_service.verify_credential(&request.verifiable_credential).await {
+        return Err(warp::reject::custom("Invalid verifiable credential"));
+    }
+
     let proposal = Proposal {
         title: request.title,
         description: request.description,
@@ -284,7 +327,13 @@ async fn vote_on_proposal_handler(
     request: VoteRequest,
     governance_service: Arc<Mutex<GovernanceService>>,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+    identity_service: Arc<dyn IdentityService>, // Add identity_service parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Validate verifiable credential
+    if !identity_service.verify_credential(&request.verifiable_credential).await {
+        return Err(warp::reject::custom("Invalid verifiable credential"));
+    }
+
     let vote = Vote {
         proposal_id: request.proposal_id,
         voter: request.voter,
