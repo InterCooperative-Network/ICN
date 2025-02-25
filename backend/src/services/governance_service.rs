@@ -77,6 +77,7 @@ impl GovernanceService {
             created_by: created_by.to_string(),
             ends_at: chrono::NaiveDateTime::parse_from_str(ends_at, "%Y-%m-%d %H:%M:%S").map_err(|e| e.to_string())?,
             created_at: chrono::Utc::now().naive_utc(),
+            did: created_by.to_string(), // Add did field for DID-based access control
         };
 
         self.create_proposal(proposal).await.map_err(|e| e.to_string())
@@ -98,8 +99,8 @@ impl GovernanceService {
     }
 
     pub async fn apply_reputation_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> {
-        // Placeholder logic for applying reputation decay
-        Ok(())
+        let db = self.db.lock().await;
+        db.apply_reputation_decay(did, decay_rate).await.map_err(|e| e.to_string())
     }
 
     pub async fn handle_delegated_governance(&self, federation_id: &str, representative_id: &str) -> Result<(), String> {
