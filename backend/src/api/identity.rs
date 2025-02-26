@@ -3,6 +3,7 @@ use crate::services::identity_service::{IdentityService, IdentityServiceImpl};
 use std::sync::Arc;
 use icn_core::verifiable_credentials::{VerifiableCredential, Proof}; // Import VerifiableCredential and Proof
 use icn_zkp::zk_snark; // Import zk-SNARK
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 pub fn identity_routes(
     identity_service: Arc<dyn IdentityService>,
@@ -41,6 +42,11 @@ async fn handle_create_identity(
     identity: String,
     identity_service: Arc<dyn IdentityService>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Verify signature using icn-crypto
+    if !verify_signature(&identity, &identity_service).await {
+        return Err(warp::reject::custom("Invalid signature"));
+    }
+
     identity_service.create_identity(&identity).await.map_err(|e| {
         warp::reject::custom(warp::reject::custom(e))
     })?;
@@ -98,6 +104,18 @@ async fn handle_revoke_key(
         warp::reject::custom(warp::reject::custom(e))
     })?;
     Ok(warp::reply::with_status("Key revoked", warp::http::StatusCode::OK))
+}
+
+async fn verify_signature(identity: &str, identity_service: &Arc<dyn IdentityService>) -> bool {
+    if let Some(public_key) = identity_service.get_public_key(identity).await {
+        let key_pair = KeyPair {
+            public_key,
+            private_key: vec![], // Not needed for verification
+            algorithm: icn_crypto::Algorithm::Secp256k1, // Assuming Secp256k1 for this example
+        };
+        return key_pair.verify(identity.as_bytes(), identity.as_bytes());
+    }
+    false
 }
 
 #[cfg(test)]

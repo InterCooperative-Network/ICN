@@ -18,6 +18,7 @@ use thiserror::Error;
 use federation::{Federation, FederationError};
 use serde::{Serialize, Deserialize};
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Error, Debug)]
 pub enum ConsensusError {
@@ -334,6 +335,24 @@ impl ProofOfCooperation {
 
     pub fn dynamic_contribution_valuation(&self, value: i64, repeated: i64, lambda: f64) -> i64 {
         (value as f64 * (-lambda * repeated as f64).exp()) as i64
+    }
+
+    pub async fn add_signature(&self, did: &str, signature: &str, message: &str) -> Result<(), ConsensusError> {
+        // Retrieve public key from IdentityService
+        if let Some(public_key) = self.identity_service.get_public_key(did).await {
+            let key_pair = KeyPair {
+                public_key,
+                private_key: vec![], // Not needed for verification
+                algorithm: icn_crypto::Algorithm::Secp256k1, // Assuming Secp256k1 for this example
+            };
+            if key_pair.verify(message.as_bytes(), signature.as_bytes()) {
+                Ok(())
+            } else {
+                Err(ConsensusError::ValidationFailure("Invalid signature".to_string()))
+            }
+        } else {
+            Err(ConsensusError::ValidationFailure("Public key not found".to_string()))
+        }
     }
 }
 
