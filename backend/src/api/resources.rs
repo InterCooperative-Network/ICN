@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::services::resource_service::{ResourceService, ResourceQuery};
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Debug, Deserialize, Serialize)]
 struct QuerySharedResourcesRequest {
@@ -15,6 +16,7 @@ struct ResourceSharingRequest {
     resource_id: String,
     recipient_id: String,
     amount: u64,
+    signature: String, // Add signature field
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -123,6 +125,14 @@ async fn share_resource_handler(
     request: ResourceSharingRequest,
     resource_service: Arc<Mutex<ResourceService>>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Verify signature using icn-crypto
+    if !verify_signature(&request.resource_id, &request.signature, &request.recipient_id).await {
+        return Ok(warp::reply::json(&ResourceSharingResponse {
+            success: false,
+            message: "Invalid signature".to_string(),
+        }));
+    }
+
     let mut service = resource_service.lock().await;
     match service.share_resource(request.resource_id, request.recipient_id, request.amount).await {
         Ok(_) => Ok(warp::reply::json(&ResourceSharingResponse {
@@ -175,6 +185,17 @@ async fn create_local_cluster_handler(
     }
 }
 
+async fn verify_signature(resource_id: &str, signature: &str, recipient_id: &str) -> bool {
+    // Retrieve public key from IdentityService (placeholder)
+    let public_key = vec![]; // Replace with actual public key retrieval logic
+    let key_pair = KeyPair {
+        public_key,
+        private_key: vec![], // Not needed for verification
+        algorithm: icn_crypto::Algorithm::Secp256k1, // Assuming Secp256k1 for this example
+    };
+    key_pair.verify(resource_id.as_bytes(), signature.as_bytes())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,6 +234,7 @@ mod tests {
             resource_id: "test_resource".to_string(),
             recipient_id: "test_recipient".to_string(),
             amount: 10,
+            signature: "test_signature".to_string(), // Add signature field
         };
 
         let resp = warp::test::request()
