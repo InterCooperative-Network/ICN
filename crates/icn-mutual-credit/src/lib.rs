@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use chrono::Utc;
 use serde::{Serialize, Deserialize};
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MutualCreditTransaction {
@@ -28,7 +29,7 @@ impl MutualCreditLedger {
 
     // Process a new mutual credit transaction.
     pub fn process_transaction(&mut self, tx: MutualCreditTransaction) -> Result<(), String> {
-        // Verify sender signature (placeholder)
+        // Verify sender signature
         if !Self::verify_signature(&tx.sender_did, &tx.signature, tx.amount) {
             return Err("Invalid signature".into());
         }
@@ -40,9 +41,16 @@ impl MutualCreditLedger {
         Ok(())
     }
 
-    // Dummy signature verifier (to be replaced with actual verification logic)
-    fn verify_signature(_did: &str, _signature: &str, _amount: i64) -> bool {
-        true // In practice, verify using the sender's DID key.
+    // Verify signature using icn-crypto
+    fn verify_signature(did: &str, signature: &str, amount: i64) -> bool {
+        // Retrieve public key from IdentityService (placeholder)
+        let public_key = vec![]; // Replace with actual public key retrieval logic
+        let key_pair = KeyPair {
+            public_key,
+            private_key: vec![], // Not needed for verification
+            algorithm: icn_crypto::Algorithm::Secp256k1, // Assuming Secp256k1 for this example
+        };
+        key_pair.verify(amount.to_string().as_bytes(), signature.as_bytes())
     }
 
     // Get balance summary for a member
@@ -57,17 +65,3 @@ impl MutualCreditLedger {
         }
     }
 }
-
-// Example usage (to be removed or used in unit tests)
-// fn main() {
-//     let mut ledger = MutualCreditLedger::new();
-//     let tx = MutualCreditTransaction {
-//         sender_did: "did:icn:member1".into(),
-//         receiver_did: "did:icn:member2".into(),
-//         amount: 50,
-//         signature: "signature_placeholder".into(),
-//         timestamp: Utc::now().timestamp(),
-//     };
-//     ledger.process_transaction(tx).unwrap();
-//     ledger.print_summary();
-// }

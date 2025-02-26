@@ -1,5 +1,5 @@
 [package]
-name = "icn-common"
+name = "icn-mutual-credit"
 version = "0.1.0"
 edition = "2021"
 
@@ -15,3 +15,4 @@ bit-set = "0.5"
 trie-rs = "0.1"
 rand = "0.8"
 icn-types = { path = "../icn-types" }
+icn-common = { path = "../icn-common" }

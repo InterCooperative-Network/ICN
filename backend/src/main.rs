@@ -35,6 +35,7 @@ use warp::cors::Cors;
 use crate::db::create_pool;
 use middleware::rate_limit::with_rate_limit;
 use networking::p2p::{P2PManager, FederationEvent, GovernanceEvent, IdentityEvent, ReputationEvent}; // Import P2PManager and events
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Debug, Error)]
 pub enum AppError {

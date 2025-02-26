@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 use crate::services::governance_service::{GovernanceService, Proposal, Vote};
 use icn_networking::p2p::{P2PManager, GovernanceEvent}; // Import P2PManager and GovernanceEvent
 use crate::services::identity_service::IdentityService; // Import IdentityService
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Debug, Deserialize, Serialize)]
 struct CreateProposalRequest {
