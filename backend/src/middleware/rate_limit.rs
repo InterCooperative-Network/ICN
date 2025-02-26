@@ -5,12 +5,21 @@ use tokio::time::Instant;
 use tower::ServiceBuilder;
 use tower::limit::RateLimit;
 use warp::Filter;
+use std::collections::HashMap;
+use log::{info, error};
+
+pub trait RateLimitingOperations {
+    fn calculate_limit_multiplier(&self, did: &str) -> f64;
+    fn get_rate_limit(&self, did: &str) -> u32;
+    fn check_rate_limit(&self, did: &str) -> bool;
+}
 
 pub struct AdaptiveRateLimiter {
     reputation_manager: Arc<ReputationManager>,
     base_limit: u32,
     max_limit: u32,
     min_limit: u32,
+    cache: HashMap<String, u32>,
 }
 
 impl AdaptiveRateLimiter {
@@ -20,6 +29,7 @@ impl AdaptiveRateLimiter {
             base_limit: 10,
             max_limit: 50,
             min_limit: 5,
+            cache: HashMap::new(),
         }
     }
 
@@ -38,14 +48,39 @@ impl AdaptiveRateLimiter {
     }
 
     async fn get_rate_limit(&self, did: &str) -> u32 {
+        if let Some(&cached_limit) = self.cache.get(did) {
+            return cached_limit;
+        }
+
         let multiplier = self.calculate_limit_multiplier(did).await;
         let limit = (self.base_limit as f64 * multiplier) as u32;
-        limit.clamp(self.min_limit, self.max_limit)
+        let clamped_limit = limit.clamp(self.min_limit, self.max_limit);
+        self.cache.insert(did.to_string(), clamped_limit);
+        clamped_limit
     }
 
     async fn check_rate_limit(&self, did: &str) -> bool {
         let limit = self.get_rate_limit(did).await;
         // ...existing rate check logic...
+        info!("Rate limit for {}: {}", did, limit);
+        true
+    }
+}
+
+impl RateLimitingOperations for AdaptiveRateLimiter {
+    fn calculate_limit_multiplier(&self, did: &str) -> f64 {
+        // Placeholder implementation
+        1.0
+    }
+
+    fn get_rate_limit(&self, did: &str) -> u32 {
+        // Placeholder implementation
+        10
+    }
+
+    fn check_rate_limit(&self, did: &str) -> bool {
+        // Placeholder implementation
+        true
     }
 }
 

@@ -1,37 +1,60 @@
-pub struct NetworkManager;
+use std::collections::HashMap;
+use log::{info, error};
+
+pub trait NetworkingOperations {
+    fn start(&self) -> Result<(), String>;
+    fn stop(&self) -> Result<(), String>;
+    fn connect(&self, address: &str) -> Result<(), String>;
+    fn disconnect(&self, address: &str) -> Result<(), String>;
+    fn send_message(&self, address: &str, message: &[u8]) -> Result<(), String>;
+    fn receive_message(&self, address: &str) -> Result<Vec<u8>, String>;
+}
+
+pub struct NetworkManager {
+    cache: HashMap<String, Vec<u8>>,
+}
 
 impl NetworkManager {
     pub fn new() -> Self {
-        NetworkManager
+        NetworkManager {
+            cache: HashMap::new(),
+        }
     }
+}
 
-    pub async fn start(&self) -> Result<(), String> {
-        // Logic to start network connections
+impl NetworkingOperations for NetworkManager {
+    fn start(&self) -> Result<(), String> {
+        info!("Starting network connections");
         Ok(())
     }
 
-    pub async fn stop(&self) -> Result<(), String> {
-        // Logic to stop network connections
+    fn stop(&self) -> Result<(), String> {
+        info!("Stopping network connections");
         Ok(())
     }
 
-    pub async fn connect(&self, address: &str) -> Result<(), String> {
-        // Logic to connect to a network address
+    fn connect(&self, address: &str) -> Result<(), String> {
+        info!("Connecting to network address: {}", address);
         Ok(())
     }
 
-    pub async fn disconnect(&self, address: &str) -> Result<(), String> {
-        // Logic to disconnect from a network address
+    fn disconnect(&self, address: &str) -> Result<(), String> {
+        info!("Disconnecting from network address: {}", address);
         Ok(())
     }
 
-    pub async fn send_message(&self, address: &str, message: &[u8]) -> Result<(), String> {
-        // Logic to send a message to a network address
+    fn send_message(&self, address: &str, message: &[u8]) -> Result<(), String> {
+        info!("Sending message to network address: {}", address);
+        self.cache.insert(address.to_string(), message.to_vec());
         Ok(())
     }
 
-    pub async fn receive_message(&self, address: &str) -> Result<Vec<u8>, String> {
-        // Logic to receive a message from a network address
-        Ok(vec![])
+    fn receive_message(&self, address: &str) -> Result<Vec<u8>, String> {
+        info!("Receiving message from network address: {}", address);
+        if let Some(message) = self.cache.get(address) {
+            Ok(message.clone())
+        } else {
+            Ok(vec![])
+        }
     }
 }
