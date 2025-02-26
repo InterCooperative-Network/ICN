@@ -1,4 +1,4 @@
-Project Code Dump - Generated Mon 24 Feb 2025 05:10:29 PM UTC
+Project Code Dump - Generated Wed 26 Feb 2025 10:13:54 PM UTC
 ======================================
 
 LLM Context Information
@@ -62,6 +62,7 @@ Project Tree:
 ├── bridges
 │   └── cross_chain
 │       └── mod.rs
+├── Cargo.lock
 ├── Cargo.toml
 ├── config
 │   ├── feature-flags.json
@@ -96,6 +97,7 @@ Project Tree:
 │   ├── icn-governance
 │   │   └── src
 │   ├── icn-mutual-credit
+│   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-p2p
 │   │   ├── Cargo.toml
@@ -170,6 +172,7 @@ Project Tree:
 ├── inventory_nodes.sh
 ├── messaging
 │   └── server.rs
+├── MyNewFile.ts
 ├── poc-zk-snarks-overview.md
 ├── project_code_dump.txt
 ├── project_docs_dump.txt
@@ -191,6 +194,7 @@ Project Tree:
 ├── setup_docs.sh
 ├── setup_venv.sh
 ├── src
+│   ├── ai
 │   ├── api
 │   │   ├── handlers.rs
 │   │   ├── mod.rs
@@ -209,14 +213,22 @@ Project Tree:
 │   │   ├── parser.rs
 │   │   └── vm.rs
 │   ├── errors.js
+│   ├── federation
 │   ├── governance
 │   │   ├── mod.rs
 │   │   └── rollback.rs
 │   ├── lib.rs
 │   ├── logger.js
 │   ├── main.rs
+│   ├── network
+│   │   └── communication.rs
 │   ├── parser.rs
-│   └── security.js
+│   ├── reputation
+│   ├── security.js
+│   ├── services
+│   │   └── event_service.rs
+│   └── storage
+│       └── event_store.rs
 ├── start_docs_server.sh
 ├── Technical_Architecture.md
 └── tools
@@ -234,7 +246,7 @@ Project Tree:
 ===================
 File: ./backend/Cargo.toml
 Size: 926 bytes
-Modified: 2025-02-24 09:46:42.577369689 +0000
+Modified: 2025-02-26 01:47:59.436034677 +0000
 
 ===================
 ```toml
@@ -250,7 +262,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sqlx = { version = "0.7", features = ["postgres", "runtime-tokio"] }
 icn-federation = { path = "../crates/icn-federation" }
-tower = { version = "0.4", features = ["limit"] }
+tower = { version = "0.5", features = ["limit"] }
 tower-http = { version = "0.4", features = ["limit"] }
 bls-signatures = "0.8"
 didcomm-rs = "0.1"
@@ -262,10 +274,10 @@ quickcheck_async = "0.1"
 quickcheck_macros = "1.0"
 tokio-test = "0.4"
 test-log = "0.2"
-env_logger = "0.10"
+env_logger = "0.11"
 pretty_assertions = "1.4"
 fake = { version = "2.8", features = ["derive"] }
-rstest = "0.18"
+rstest = "0.24"
 mockall = "0.11"
 async-trait = "0.1"
 futures = "0.3"
@@ -313,8 +325,8 @@ pub use test_macros::*;
 
 ===================
 File: ./backend/src/main.rs
-Size: 11909 bytes
-Modified: 2025-02-24 09:46:42.581369689 +0000
+Size: 11626 bytes
+Modified: 2025-02-26 17:08:54.400097956 +0000
 Dependencies:
 mod api;
 mod config;
@@ -339,6 +351,7 @@ use crate::websocket::{WebSocketClients, handle_websocket, broadcast_message};
 use dashmap::DashMap;
 use env_logger;
 use futures_util::StreamExt;
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 use log::{info, error};
 use middleware::rate_limit::with_rate_limit;
 use networking::p2p::{P2PManager, FederationEvent, GovernanceEvent, IdentityEvent, ReputationEvent}; // Import P2PManager and events
@@ -392,6 +405,7 @@ use warp::cors::Cors;
 use crate::db::create_pool;
 use middleware::rate_limit::with_rate_limit;
 use networking::p2p::{P2PManager, FederationEvent, GovernanceEvent, IdentityEvent, ReputationEvent}; // Import P2PManager and events
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -759,7 +773,7 @@ main
 ===================
 File: ./contracts/cooperative/src/lib.rs
 Size: 1327 bytes
-Modified: 2025-02-24 09:46:42.581369689 +0000
+Modified: 2025-02-25 19:27:06.312036756 +0000
 Dependencies:
 mod proposals;
 use ethers::prelude::*;
@@ -830,7 +844,7 @@ Modified: 2025-02-24 09:46:42.593369689 +0000
 ===================
 File: ./contracts/cooperative/src/lib.rs
 Size: 1327 bytes
-Modified: 2025-02-24 09:46:42.581369689 +0000
+Modified: 2025-02-25 19:27:06.312036756 +0000
 Dependencies:
 mod proposals;
 use ethers::prelude::*;
@@ -976,12 +990,13 @@ pub use test_macros::*;
 
 ===================
 File: ./backend/src/api/identity.rs
-Size: 5880 bytes
-Modified: 2025-02-24 09:46:42.577369689 +0000
+Size: 6469 bytes
+Modified: 2025-02-26 17:08:54.396097956 +0000
 Dependencies:
 mod tests {
 use crate::services::identity_service::{IdentityService, IdentityServiceImpl};
 use icn_core::verifiable_credentials::{VerifiableCredential, Proof}; // Import VerifiableCredential and Proof
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 use icn_zkp::zk_snark; // Import zk-SNARK
 use std::sync::Arc;
 use warp::Filter;
@@ -993,6 +1008,7 @@ use crate::services::identity_service::{IdentityService, IdentityServiceImpl};
 use std::sync::Arc;
 use icn_core::verifiable_credentials::{VerifiableCredential, Proof}; // Import VerifiableCredential and Proof
 use icn_zkp::zk_snark; // Import zk-SNARK
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 pub fn identity_routes(
     identity_service: Arc<dyn IdentityService>,
@@ -1031,11 +1047,16 @@ async fn handle_create_identity(
     identity: String,
     identity_service: Arc<dyn IdentityService>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Verify signature using icn-crypto
+    if !verify_signature(&identity, &identity_service).await {
+        return Err(warp::reject::custom("Invalid signature"));
+    }
+
     identity_service.create_identity(&identity).await.map_err(|e| {
         warp::reject::custom(warp::reject::custom(e))
     })?;
 
-    // Generate verifiable credential
+    // Generate ICN-compliant verifiable credential
     let credential = VerifiableCredential {
         credential_type: "IdentityCredential".to_string(),
         issuer_did: "did:icn:issuer".to_string(),
@@ -1088,6 +1109,18 @@ async fn handle_revoke_key(
         warp::reject::custom(warp::reject::custom(e))
     })?;
     Ok(warp::reply::with_status("Key revoked", warp::http::StatusCode::OK))
+}
+
+async fn verify_signature(identity: &str, identity_service: &Arc<dyn IdentityService>) -> bool {
+    if let Some(public_key) = identity_service.get_public_key(identity).await {
+        let key_pair = KeyPair {
+            public_key,
+            private_key: vec![], // Not needed for verification
+            algorithm: icn_crypto::Algorithm::Secp256k1, // Assuming Secp256k1 for this example
+        };
+        return key_pair.verify(identity.as_bytes(), identity.as_bytes());
+    }
+    false
 }
 
 #[cfg(test)]
@@ -1159,15 +1192,18 @@ mod tests {
 
 ===================
 File: ./backend/src/api/reputation.rs
-Size: 8297 bytes
-Modified: 2025-02-24 09:46:42.577369689 +0000
+Size: 10038 bytes
+Modified: 2025-02-26 17:08:54.400097956 +0000
 Dependencies:
 mod tests {
 use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution, handle_sybil_resistance, apply_reputation_decay, batch_reputation_updates};
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
+use icn_identity::ledger::{apply_reputation_decay_in_ledger, handle_sybil_resistance_in_ledger}; // Import icn-identity ledger functions
 use icn_networking::p2p::{P2PManager, ReputationEvent}; // Import P2PManager and ReputationEvent
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use warp::Filter;
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 ===================
 ```rs
@@ -1176,10 +1212,15 @@ use crate::services::reputation_service::{get_reputation, adjust_reputation, ver
 use icn_networking::p2p::{P2PManager, ReputationEvent}; // Import P2PManager and ReputationEvent
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use icn_identity::ledger::{apply_reputation_decay_in_ledger, handle_sybil_resistance_in_ledger}; // Import icn-identity ledger functions
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ZkSnarkProofRequest {
     proof: String,
+    did: String,
+    signature: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1277,6 +1318,16 @@ async fn submit_zk_snark_proof_handler(
     request: ZkSnarkProofRequest,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Verify signature using icn-crypto
+    if !verify_signature(&request.did, &request.signature, &request.proof).await {
+        return Err(warp::reject::custom("Invalid signature"));
+    }
+
+    // Verify zk-SNARK proof
+    if !verify_proof(&request.proof) {
+        return Err(warp::reject::custom("Invalid zk-SNARK proof"));
+    }
+
     // Publish event
     let event = ReputationEvent::ZkSnarkProofSubmitted {
         proof: request.proof.clone(),
@@ -1288,17 +1339,43 @@ async fn submit_zk_snark_proof_handler(
     Ok(warp::reply::json(&"zk-SNARK proof submitted"))
 }
 
+async fn verify_signature(did: &str, signature: &str, message: &str) -> bool {
+    // Retrieve public key from IdentityService
+    if let Some(public_key) = get_public_key(did).await {
+        let key_pair = KeyPair {
+            public_key,
+            private_key: vec![], // Not needed for verification
+            algorithm: icn_crypto::Algorithm::Secp256k1, // Assuming Secp256k1 for this example
+        };
+        return key_pair.verify(message.as_bytes(), signature.as_bytes());
+    }
+    false
+}
+
+async fn get_public_key(did: &str) -> Option<Vec<u8>> {
+    // Placeholder function to retrieve public key
+    Some(vec![]) // Replace with actual implementation
+}
+
 async fn apply_reputation_decay_handler(
     request: ReputationDecayRequest,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    // Placeholder logic for applying reputation decay
+    // Interact with icn-identity ledger to apply reputation decay
+    apply_reputation_decay_in_ledger(&request.did, request.decay_rate).await.map_err(|e| {
+        warp::reject::custom(warp::reject::custom(e))
+    })?;
+
     Ok(warp::reply::json(&"Reputation decay applied"))
 }
 
 async fn handle_sybil_resistance_handler(
     request: SybilResistanceRequest,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    // Placeholder logic for handling sybil resistance
+    // Interact with icn-identity ledger to handle sybil resistance
+    handle_sybil_resistance_in_ledger(&request.did, request.reputation_score).await.map_err(|e| {
+        warp::reject::custom(warp::reject::custom(e))
+    })?;
+
     Ok(warp::reply::json(&"Sybil resistance handled"))
 }
 
@@ -1333,7 +1410,7 @@ mod tests {
         let resp = warp::test::request()
             .method("POST")
             .path("/api/v1/reputation/zk_snark_proof")
-            .json(&ZkSnarkProofRequest { proof: "test_proof".to_string() })
+            .json(&ZkSnarkProofRequest { proof: "test_proof".to_string(), did: "did:icn:test".to_string(), signature: "test_signature".to_string() })
             .reply(&api)
             .await;
 
@@ -1395,11 +1472,12 @@ mod tests {
 
 ===================
 File: ./backend/src/api/resources.rs
-Size: 9492 bytes
-Modified: 2025-02-24 09:46:42.577369689 +0000
+Size: 10498 bytes
+Modified: 2025-02-26 17:08:54.400097956 +0000
 Dependencies:
 mod tests {
 use crate::services::resource_service::{ResourceService, ResourceQuery};
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -1412,6 +1490,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::services::resource_service::{ResourceService, ResourceQuery};
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Debug, Deserialize, Serialize)]
 struct QuerySharedResourcesRequest {
@@ -1424,6 +1503,7 @@ struct ResourceSharingRequest {
     resource_id: String,
     recipient_id: String,
     amount: u64,
+    signature: String, // Add signature field
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1532,6 +1612,14 @@ async fn share_resource_handler(
     request: ResourceSharingRequest,
     resource_service: Arc<Mutex<ResourceService>>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Verify signature using icn-crypto
+    if !verify_signature(&request.resource_id, &request.signature, &request.recipient_id).await {
+        return Ok(warp::reply::json(&ResourceSharingResponse {
+            success: false,
+            message: "Invalid signature".to_string(),
+        }));
+    }
+
     let mut service = resource_service.lock().await;
     match service.share_resource(request.resource_id, request.recipient_id, request.amount).await {
         Ok(_) => Ok(warp::reply::json(&ResourceSharingResponse {
@@ -1584,6 +1672,17 @@ async fn create_local_cluster_handler(
     }
 }
 
+async fn verify_signature(resource_id: &str, signature: &str, recipient_id: &str) -> bool {
+    // Retrieve public key from IdentityService (placeholder)
+    let public_key = vec![]; // Replace with actual public key retrieval logic
+    let key_pair = KeyPair {
+        public_key,
+        private_key: vec![], // Not needed for verification
+        algorithm: icn_crypto::Algorithm::Secp256k1, // Assuming Secp256k1 for this example
+    };
+    key_pair.verify(resource_id.as_bytes(), signature.as_bytes())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1622,6 +1721,7 @@ mod tests {
             resource_id: "test_resource".to_string(),
             recipient_id: "test_recipient".to_string(),
             amount: 10,
+            signature: "test_signature".to_string(), // Add signature field
         };
 
         let resp = warp::test::request()
@@ -1700,9 +1800,10 @@ mod tests {
 
 ===================
 File: ./backend/src/api/federation.rs
-Size: 23075 bytes
-Modified: 2025-02-24 09:46:42.577369689 +0000
+Size: 23895 bytes
+Modified: 2025-02-26 17:08:54.396097956 +0000
 Dependencies:
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 use icn_federation::{FederationService, FederationOperation};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
 use serde::{Deserialize, Serialize};
@@ -1718,12 +1819,14 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use icn_federation::{FederationService, FederationOperation};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Debug, Deserialize, Serialize)]
 struct InitiateFederationRequest {
     federation_type: String,
     partner_id: String,
     terms: String,
+    signature: String, // Add signature field
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1947,6 +2050,11 @@ async fn initiate_federation_handler(
     federation_service: Arc<Mutex<FederationService>>,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Verify signature using icn-crypto
+    if !verify_signature(&request.partner_id, &request.signature, &request.federation_type).await {
+        return Err(warp::reject::custom("Invalid signature"));
+    }
+
     let operation = FederationOperation::InitiateFederation {
         federation_type: request.federation_type,
         partner_id: request.partner_id,
@@ -2307,14 +2415,27 @@ async fn create_local_cluster_handler(
         Err(e) => Err(warp::reject::custom(e)),
     }
 }
+
+async fn verify_signature(did: &str, signature: &str, message: &str) -> bool {
+    // Retrieve public key from IdentityService (placeholder)
+    let public_key = vec![]; // Replace with actual public key retrieval logic
+    let key_pair = KeyPair {
+        public_key,
+        private_key: vec![], // Not needed for verification
+        algorithm: icn_crypto::Algorithm::Secp256k1, // Assuming Secp256k1 for this example
+    };
+    key_pair.verify(message.as_bytes(), signature.as_bytes())
+}
 ```
 
 ===================
 File: ./backend/src/api/governance.rs
-Size: 12354 bytes
-Modified: 2025-02-24 09:46:42.577369689 +0000
+Size: 14860 bytes
+Modified: 2025-02-26 17:08:54.396097956 +0000
 Dependencies:
 use crate::services::governance_service::{GovernanceService, Proposal, Vote};
+use crate::services::identity_service::IdentityService; // Import IdentityService
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 use icn_networking::p2p::{P2PManager, GovernanceEvent}; // Import P2PManager and GovernanceEvent
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -2329,6 +2450,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::services::governance_service::{GovernanceService, Proposal, Vote};
 use icn_networking::p2p::{P2PManager, GovernanceEvent}; // Import P2PManager and GovernanceEvent
+use crate::services::identity_service::IdentityService; // Import IdentityService
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Debug, Deserialize, Serialize)]
 struct CreateProposalRequest {
@@ -2336,6 +2459,8 @@ struct CreateProposalRequest {
     description: String,
     created_by: String,
     ends_at: String,
+    did: String, // Add did field for DID-based access control
+    verifiable_credential: String, // Add verifiable credential field
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -2344,6 +2469,7 @@ struct VoteRequest {
     voter: String,
     approve: bool,
     zk_snark_proof: String, // Added zk-SNARK proof field
+    verifiable_credential: String, // Add verifiable credential field
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -2374,12 +2500,14 @@ struct DelegatedGovernanceRequest {
 pub fn governance_routes(
     governance_service: Arc<Mutex<GovernanceService>>,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add P2PManager to governance_routes
+    identity_service: Arc<dyn IdentityService>, // Add IdentityService to governance_routes
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     let create_proposal = warp::path!("api" / "v1" / "governance" / "proposals")
         .and(warp::post())
         .and(warp::body::json())
         .and(with_governance_service(governance_service.clone()))
         .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
+        .and(with_identity_service(identity_service.clone())) // Add with_identity_service
         .and_then(create_proposal_handler);
 
     let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
@@ -2387,6 +2515,7 @@ pub fn governance_routes(
         .and(warp::body::json())
         .and(with_governance_service(governance_service.clone()))
         .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
+        .and(with_identity_service(identity_service.clone())) // Add with_identity_service
         .and_then(vote_on_proposal_handler);
 
     let sybil_resistance = warp::path!("api" / "v1" / "governance" / "sybil_resistance")
@@ -2414,6 +2543,7 @@ pub fn governance_routes(
         .and(warp::body::json())
         .and(with_governance_service(governance_service.clone()))
         .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
+        .and(with_identity_service(identity_service.clone())) // Add with_identity_service
         .and_then(submit_proposal_handler);
 
     let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / "vote")
@@ -2421,6 +2551,7 @@ pub fn governance_routes(
         .and(warp::body::json())
         .and(with_governance_service(governance_service.clone()))
         .and(with_p2p_manager(p2p_manager.clone())) // Add with_p2p_manager
+        .and(with_identity_service(identity_service.clone())) // Add with_identity_service
         .and_then(vote_on_proposal_handler);
 
     let delegated_governance = warp::path!("api" / "v1" / "governance" / "delegated")
@@ -2452,11 +2583,28 @@ fn with_p2p_manager(
     warp::any().map(move || p2p_manager.clone())
 }
 
+fn with_identity_service(
+    identity_service: Arc<dyn IdentityService>,
+) -> impl Filter<Extract = (Arc<dyn IdentityService>,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || identity_service.clone())
+}
+
 async fn create_proposal_handler(
     request: CreateProposalRequest,
     governance_service: Arc<Mutex<GovernanceService>>,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+    identity_service: Arc<dyn IdentityService>, // Add identity_service parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Verify DID using IdentityService
+    if !identity_service.verify_did(&request.did).await {
+        return Err(warp::reject::custom("Invalid DID"));
+    }
+
+    // Validate verifiable credential
+    if !identity_service.verify_credential(&request.verifiable_credential).await {
+        return Err(warp::reject::custom("Invalid verifiable credential"));
+    }
+
     let proposal = Proposal {
         title: request.title,
         description: request.description,
@@ -2486,7 +2634,13 @@ async fn vote_on_proposal_handler(
     request: VoteRequest,
     governance_service: Arc<Mutex<GovernanceService>>,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+    identity_service: Arc<dyn IdentityService>, // Add identity_service parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Validate verifiable credential
+    if !identity_service.verify_credential(&request.verifiable_credential).await {
+        return Err(warp::reject::custom("Invalid verifiable credential"));
+    }
+
     let vote = Vote {
         proposal_id: request.proposal_id,
         voter: request.voter,
@@ -2579,7 +2733,18 @@ async fn submit_proposal_handler(
     request: CreateProposalRequest,
     governance_service: Arc<Mutex<GovernanceService>>,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+    identity_service: Arc<dyn IdentityService>, // Add identity_service parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Verify DID using IdentityService
+    if !identity_service.verify_did(&request.did).await {
+        return Err(warp::reject::custom("Invalid DID"));
+    }
+
+    // Validate verifiable credential
+    if !identity_service.verify_credential(&request.verifiable_credential).await {
+        return Err(warp::reject::custom("Invalid verifiable credential"));
+    }
+
     let proposal = Proposal {
         title: request.title,
         description: request.description,
@@ -2609,7 +2774,13 @@ async fn vote_on_proposal_handler(
     request: VoteRequest,
     governance_service: Arc<Mutex<GovernanceService>>,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+    identity_service: Arc<dyn IdentityService>, // Add identity_service parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Validate verifiable credential
+    if !identity_service.verify_credential(&request.verifiable_credential).await {
+        return Err(warp::reject::custom("Invalid verifiable credential"));
+    }
+
     let vote = Vote {
         proposal_id: request.proposal_id,
         voter: request.voter,
@@ -2659,8 +2830,8 @@ async fn delegated_governance_handler(
 
 ===================
 File: ./backend/src/main.rs
-Size: 11909 bytes
-Modified: 2025-02-24 09:46:42.581369689 +0000
+Size: 11626 bytes
+Modified: 2025-02-26 17:08:54.400097956 +0000
 Dependencies:
 mod api;
 mod config;
@@ -2685,6 +2856,7 @@ use crate::websocket::{WebSocketClients, handle_websocket, broadcast_message};
 use dashmap::DashMap;
 use env_logger;
 use futures_util::StreamExt;
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 use log::{info, error};
 use middleware::rate_limit::with_rate_limit;
 use networking::p2p::{P2PManager, FederationEvent, GovernanceEvent, IdentityEvent, ReputationEvent}; // Import P2PManager and events
@@ -2738,6 +2910,7 @@ use warp::cors::Cors;
 use crate::db::create_pool;
 use middleware::rate_limit::with_rate_limit;
 use networking::p2p::{P2PManager, FederationEvent, GovernanceEvent, IdentityEvent, ReputationEvent}; // Import P2PManager and events
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -3121,17 +3294,59 @@ pub fn icn_routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rej
 
 ===================
 File: ./src/api/handlers.rs
-Size: 106 bytes
-Modified: 2025-02-24 09:46:42.645369691 +0000
+Size: 1149 bytes
+Modified: 2025-02-24 17:34:07.737489115 +0000
 Dependencies:
 use crate::icn_types::IcnResult;
+use crate::network::communication::NetworkLayer;
+use crate::services::event_service::EventService;
+use crate::storage::event_store::EventStore;
+use warp::Reply;
 
 ===================
 ```rs
 use crate::icn_types::IcnResult;
+use crate::network::communication::NetworkLayer;
+use crate::services::event_service::EventService;
+use crate::storage::event_store::EventStore;
+use warp::Reply;
 
 pub async fn health_check() -> IcnResult<&'static str> {
     Ok("OK")
+}
+
+pub struct ApiHandlers {
+    network: NetworkLayer,
+    event_service: EventService,
+    event_store: EventStore,
+}
+
+impl ApiHandlers {
+    pub async fn new() -> Self {
+        Self {
+            network: NetworkLayer::new().await,
+            event_service: EventService::new(),
+            event_store: EventStore::new(),
+        }
+    }
+
+    pub async fn handle_vote(&self, proposal_id: String, vote: bool) -> impl Reply {
+        // Handle vote through all layers
+        self.event_service.publish(DomainEvent::VoteCast {
+            proposal_id: proposal_id.clone(),
+            voter: "user".to_string(),
+            vote,
+        }).await;
+
+        self.network.broadcast_event(NetworkEvent::VoteUpdate {
+            proposal_id,
+            votes: 1,
+        }).await;
+
+        warp::reply::json(&"Vote recorded")
+    }
+
+    // Add more handlers for other API endpoints
 }
 ```
 
@@ -3316,10 +3531,11 @@ impl<F: PrimeField> Circuit<F> for ProofOfCooperation<F> {
 
 ===================
 File: ./crates/icn-mutual-credit/src/lib.rs
-Size: 2371 bytes
-Modified: 2025-02-24 09:46:42.593369689 +0000
+Size: 2294 bytes
+Modified: 2025-02-26 17:08:54.404097956 +0000
 Dependencies:
 use chrono::Utc;
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
@@ -3328,6 +3544,7 @@ use std::collections::HashMap;
 use std::collections::HashMap;
 use chrono::Utc;
 use serde::{Serialize, Deserialize};
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MutualCreditTransaction {
@@ -3355,7 +3572,7 @@ impl MutualCreditLedger {
 
     // Process a new mutual credit transaction.
     pub fn process_transaction(&mut self, tx: MutualCreditTransaction) -> Result<(), String> {
-        // Verify sender signature (placeholder)
+        // Verify sender signature
         if !Self::verify_signature(&tx.sender_did, &tx.signature, tx.amount) {
             return Err("Invalid signature".into());
         }
@@ -3367,9 +3584,16 @@ impl MutualCreditLedger {
         Ok(())
     }
 
-    // Dummy signature verifier (to be replaced with actual verification logic)
-    fn verify_signature(_did: &str, _signature: &str, _amount: i64) -> bool {
-        true // In practice, verify using the sender's DID key.
+    // Verify signature using icn-crypto
+    fn verify_signature(did: &str, signature: &str, amount: i64) -> bool {
+        // Retrieve public key from IdentityService (placeholder)
+        let public_key = vec![]; // Replace with actual public key retrieval logic
+        let key_pair = KeyPair {
+            public_key,
+            private_key: vec![], // Not needed for verification
+            algorithm: icn_crypto::Algorithm::Secp256k1, // Assuming Secp256k1 for this example
+        };
+        key_pair.verify(amount.to_string().as_bytes(), signature.as_bytes())
     }
 
     // Get balance summary for a member
@@ -3384,20 +3608,6 @@ impl MutualCreditLedger {
         }
     }
 }
-
-// Example usage (to be removed or used in unit tests)
-// fn main() {
-//     let mut ledger = MutualCreditLedger::new();
-//     let tx = MutualCreditTransaction {
-//         sender_did: "did:icn:member1".into(),
-//         receiver_did: "did:icn:member2".into(),
-//         amount: 50,
-//         signature: "signature_placeholder".into(),
-//         timestamp: Utc::now().timestamp(),
-//     };
-//     ledger.process_transaction(tx).unwrap();
-//     ledger.print_summary();
-// }
 ```
 
 ===================
@@ -3589,13 +3799,14 @@ fn compile_state_validation(bytecode: &mut Vec<u8>, validation: &StateValidation
 
 ===================
 File: ./crates/icn-consensus/src/lib.rs
-Size: 15246 bytes
-Modified: 2025-02-24 16:25:44.581361179 +0000
+Size: 16155 bytes
+Modified: 2025-02-26 17:08:54.400097956 +0000
 Dependencies:
 use async_trait::async_trait;
 use bit_set::BitSet;
 use federation::{Federation, FederationError};
 use icn_common::{ReputationManager, ConsensusEngine, Vote, VoteStatus, GovernanceError};
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 use icn_types::Block;
 use serde::{Serialize, Deserialize};
 use std::collections::{HashMap, VecDeque};
@@ -3629,6 +3840,7 @@ use thiserror::Error;
 use federation::{Federation, FederationError};
 use serde::{Serialize, Deserialize};
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Error, Debug)]
 pub enum ConsensusError {
@@ -3945,6 +4157,24 @@ impl ProofOfCooperation {
 
     pub fn dynamic_contribution_valuation(&self, value: i64, repeated: i64, lambda: f64) -> i64 {
         (value as f64 * (-lambda * repeated as f64).exp()) as i64
+    }
+
+    pub async fn add_signature(&self, did: &str, signature: &str, message: &str) -> Result<(), ConsensusError> {
+        // Retrieve public key from IdentityService
+        if let Some(public_key) = self.identity_service.get_public_key(did).await {
+            let key_pair = KeyPair {
+                public_key,
+                private_key: vec![], // Not needed for verification
+                algorithm: icn_crypto::Algorithm::Secp256k1, // Assuming Secp256k1 for this example
+            };
+            if key_pair.verify(message.as_bytes(), signature.as_bytes()) {
+                Ok(())
+            } else {
+                Err(ConsensusError::ValidationFailure("Invalid signature".to_string()))
+            }
+        } else {
+            Err(ConsensusError::ValidationFailure("Public key not found".to_string()))
+        }
     }
 }
 
@@ -7004,8 +7234,8 @@ pub struct RuntimeConfig {
 
 ===================
 File: ./crates/icn-core/src/lib.rs
-Size: 1098 bytes
-Modified: 2025-02-24 09:46:42.585369689 +0000
+Size: 1055 bytes
+Modified: 2025-02-26 17:08:54.400097956 +0000
 Dependencies:
 use icn_common::{ConsensusEngine, ReputationManager};
 use icn_types::{Block, Transaction, FederationOperation};
