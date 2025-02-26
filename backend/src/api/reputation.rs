@@ -5,10 +5,13 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use icn_identity::ledger::{apply_reputation_decay_in_ledger, handle_sybil_resistance_in_ledger}; // Import icn-identity ledger functions
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ZkSnarkProofRequest {
     proof: String,
+    did: String,
+    signature: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -106,6 +109,11 @@ async fn submit_zk_snark_proof_handler(
     request: ZkSnarkProofRequest,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Verify signature using icn-crypto
+    if !verify_signature(&request.did, &request.signature, &request.proof).await {
+        return Err(warp::reject::custom("Invalid signature"));
+    }
+
     // Verify zk-SNARK proof
     if !verify_proof(&request.proof) {
         return Err(warp::reject::custom("Invalid zk-SNARK proof"));
@@ -120,6 +128,24 @@ async fn submit_zk_snark_proof_handler(
 
     // Placeholder logic for zk-SNARK proof submission
     Ok(warp::reply::json(&"zk-SNARK proof submitted"))
+}
+
+async fn verify_signature(did: &str, signature: &str, message: &str) -> bool {
+    // Retrieve public key from IdentityService
+    if let Some(public_key) = get_public_key(did).await {
+        let key_pair = KeyPair {
+            public_key,
+            private_key: vec![], // Not needed for verification
+            algorithm: icn_crypto::Algorithm::Secp256k1, // Assuming Secp256k1 for this example
+        };
+        return key_pair.verify(message.as_bytes(), signature.as_bytes());
+    }
+    false
+}
+
+async fn get_public_key(did: &str) -> Option<Vec<u8>> {
+    // Placeholder function to retrieve public key
+    Some(vec![]) // Replace with actual implementation
 }
 
 async fn apply_reputation_decay_handler(
@@ -175,7 +201,7 @@ mod tests {
         let resp = warp::test::request()
             .method("POST")
             .path("/api/v1/reputation/zk_snark_proof")
-            .json(&ZkSnarkProofRequest { proof: "test_proof".to_string() })
+            .json(&ZkSnarkProofRequest { proof: "test_proof".to_string(), did: "did:icn:test".to_string(), signature: "test_signature".to_string() })
             .reply(&api)
             .await;
 

@@ -10,6 +10,7 @@ use crate::{
     models::{ResourceAllocationSystem, FederationManager, ResourceAllocation},
 };
 use icn_types::{Block, Transaction, FederationOperation};
+use crate::telemetry::{PrometheusMetrics, Logger, TracingSystem};
 
 pub struct Core {
     storage: Arc<dyn StorageInterface>,

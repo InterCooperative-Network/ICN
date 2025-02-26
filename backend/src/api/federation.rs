@@ -4,12 +4,14 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use icn_federation::{FederationService, FederationOperation};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Debug, Deserialize, Serialize)]
 struct InitiateFederationRequest {
     federation_type: String,
     partner_id: String,
     terms: String,
+    signature: String, // Add signature field
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -233,6 +235,11 @@ async fn initiate_federation_handler(
     federation_service: Arc<Mutex<FederationService>>,
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Verify signature using icn-crypto
+    if !verify_signature(&request.partner_id, &request.signature, &request.federation_type).await {
+        return Err(warp::reject::custom("Invalid signature"));
+    }
+
     let operation = FederationOperation::InitiateFederation {
         federation_type: request.federation_type,
         partner_id: request.partner_id,
@@ -592,4 +599,15 @@ async fn create_local_cluster_handler(
         },
         Err(e) => Err(warp::reject::custom(e)),
     }
+}
+
+async fn verify_signature(did: &str, signature: &str, message: &str) -> bool {
+    // Retrieve public key from IdentityService (placeholder)
+    let public_key = vec![]; // Replace with actual public key retrieval logic
+    let key_pair = KeyPair {
+        public_key,
+        private_key: vec![], // Not needed for verification
+        algorithm: icn_crypto::Algorithm::Secp256k1, // Assuming Secp256k1 for this example
+    };
+    key_pair.verify(message.as_bytes(), signature.as_bytes())
 }

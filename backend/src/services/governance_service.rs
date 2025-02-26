@@ -4,15 +4,18 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
 use crate::services::identity_service::IdentityService; // Import IdentityService
+use icn_crypto::KeyPair; // Import KeyPair for signature verification
+use crate::reputation::ReputationManager; // Import ReputationManager
 
 pub struct GovernanceService {
     db: Arc<Mutex<dyn Database>>,
     identity_service: Arc<dyn IdentityService>, // Add IdentityService to GovernanceService
+    reputation_manager: Arc<ReputationManager>, // Add ReputationManager to GovernanceService
 }
 
 impl GovernanceService {
-    pub fn new(db: Arc<Mutex<dyn Database>>, identity_service: Arc<dyn IdentityService>) -> Self {
-        Self { db, identity_service }
+    pub fn new(db: Arc<Mutex<dyn Database>>, identity_service: Arc<dyn IdentityService>, reputation_manager: Arc<ReputationManager>) -> Self {
+        Self { db, identity_service, reputation_manager }
     }
 
     pub async fn create_proposal(&self, proposal: Proposal) -> Result<i64, sqlx::Error> {
@@ -26,6 +29,11 @@ impl GovernanceService {
             return Err(sqlx::Error::Protocol("Invalid verifiable credential".to_string()));
         }
 
+        // Check reputation using ReputationManager
+        if !self.verify_member_eligibility(&proposal.created_by).await {
+            return Err(sqlx::Error::Protocol("Insufficient reputation".to_string()));
+        }
+
         let db = self.db.lock().await;
         create_proposal_in_db(&*db, &proposal).await
     }
@@ -36,6 +44,11 @@ impl GovernanceService {
             return Err(sqlx::Error::Protocol("Invalid verifiable credential".to_string()));
         }
 
+        // Verify signature using icn-crypto
+        if !self.verify_signature(&vote.voter, &vote.signature, &vote.proposal_id).await {
+            return Err(sqlx::Error::Protocol("Invalid signature".to_string()));
+        }
+
         if let Some(proof) = &vote.zk_snark_proof {
             if !verify_proof(proof) {
                 return Err(sqlx::Error::Protocol("Invalid zk-SNARK proof".to_string()));
@@ -44,7 +57,24 @@ impl GovernanceService {
         let db = self.db.lock().await;
         record_vote_in_db(&*db, &vote).await
     }
-    
+
+    async fn verify_signature(&self, did: &str, signature: &str, message: &str) -> bool {
+        // Retrieve public key from IdentityService
+        if let Some(public_key) = self.identity_service.get_public_key(did).await {
+            let key_pair = KeyPair {
+                public_key,
+                private_key: vec![], // Not needed for verification
+                algorithm: icn_crypto::Algorithm::Secp256k1, // Assuming Secp256k1 for this example
+            };
+            return key_pair.verify(message.as_bytes(), signature.as_bytes());
+        }
+        false
+    }
+
+    async fn verify_member_eligibility(&self, did: &str) -> bool {
+        self.reputation_manager.get_reputation(did, "governance") >= 50 // Example threshold
+    }
+
     // New handler for creating proposals
     pub async fn handle_create_proposal(
         &self,
@@ -65,7 +95,7 @@ impl GovernanceService {
             Err(e) => Err(warp::reject::custom(e)),
         }
     }
-    
+
     // New handler for voting on proposals
     pub async fn handle_vote_on_proposal(
         &self,
