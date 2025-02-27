@@ -278,7 +278,9 @@ impl ReputationService {
     pub fn emit_event(&self, event: ReputationEvent) {
         let sender = self.event_sender.clone();
         task::spawn(async move {
-            sender.send(event).await.unwrap();
+            if let Err(e) = sender.send(event).await {
+                eprintln!("Failed to send event: {}", e);
+            }
         });
     }
 

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::database::db::Database;
 use icn_identity::ledger::{create_identity_in_ledger, get_identity_from_ledger, rotate_key_in_ledger, revoke_key_in_ledger};
 use icn_core::verifiable_credentials::{VerifiableCredential, Proof};
+use futures::future::join_all; // Import join_all for concurrency
 
 #[async_trait]
 pub trait IdentityService: Send + Sync {
@@ -10,6 +11,9 @@ pub trait IdentityService: Send + Sync {
     async fn get_identity(&self, identity: &str) -> Result<String, String>;
     async fn rotate_key(&self, identity: &str) -> Result<(), String>;
     async fn revoke_key(&self, identity: &str) -> Result<(), String>;
+    async fn verify_did(&self, did: &str) -> Result<bool, String>; // Add verify_did method
+    async fn verify_credential(&self, credential: &str) -> Result<bool, String>; // Add verify_credential method
+    async fn get_public_key(&self, did: &str) -> Result<Option<Vec<u8>>, String>; // Add get_public_key method
 }
 
 pub struct IdentityServiceImpl {
@@ -55,6 +59,21 @@ impl IdentityService for IdentityServiceImpl {
 
     async fn revoke_key(&self, identity: &str) -> Result<(), String> {
         revoke_key_in_ledger(identity).await.map_err(|e| e.to_string())
+    }
+
+    async fn verify_did(&self, did: &str) -> Result<bool, String> {
+        // Placeholder logic for verifying DID
+        Ok(true)
+    }
+
+    async fn verify_credential(&self, credential: &str) -> Result<bool, String> {
+        // Placeholder logic for verifying credential
+        Ok(true)
+    }
+
+    async fn get_public_key(&self, did: &str) -> Result<Option<Vec<u8>>, String> {
+        // Placeholder logic for retrieving public key
+        Ok(Some(vec![]))
     }
 }
 
@@ -110,5 +129,38 @@ mod tests {
 
         let result = service.revoke_key("did:icn:test").await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_verify_did() {
+        let pool = setup_test_db().await;
+        let db = Arc::new(Database { pool });
+        let service = IdentityServiceImpl::new(db);
+
+        let result = service.verify_did("did:icn:test").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_verify_credential() {
+        let pool = setup_test_db().await;
+        let db = Arc::new(Database { pool });
+        let service = IdentityServiceImpl::new(db);
+
+        let result = service.verify_credential("example-credential").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_get_public_key() {
+        let pool = setup_test_db().await;
+        let db = Arc::new(Database { pool });
+        let service = IdentityServiceImpl::new(db);
+
+        let result = service.get_public_key("did:icn:test").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_some());
     }
 }

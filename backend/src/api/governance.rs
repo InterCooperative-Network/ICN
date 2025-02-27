@@ -6,6 +6,7 @@ use crate::services::governance_service::{GovernanceService, Proposal, Vote};
 use icn_networking::p2p::{P2PManager, GovernanceEvent}; // Import P2PManager and GovernanceEvent
 use crate::services::identity_service::IdentityService; // Import IdentityService
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
+use futures::future::join_all; // Import join_all for concurrency
 
 #[derive(Debug, Deserialize, Serialize)]
 struct CreateProposalRequest {
@@ -177,7 +178,9 @@ async fn create_proposal_handler(
                 ends_at: request.ends_at,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&proposal_id))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -213,7 +216,9 @@ async fn vote_on_proposal_handler(
                 zk_snark_proof: request.zk_snark_proof, // Added zk-SNARK proof field
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Vote recorded"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -234,7 +239,9 @@ async fn sybil_resistance_handler(
                 reputation_score: request.reputation_score,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Sybil resistance applied"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -255,7 +262,9 @@ async fn reputation_decay_handler(
                 decay_rate: request.decay_rate,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Reputation decay applied"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -276,7 +285,9 @@ async fn proposal_status_handler(
                 status: status.clone(),
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&status))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -317,7 +328,9 @@ async fn submit_proposal_handler(
                 ends_at: request.ends_at,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&proposal_id))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -353,7 +366,9 @@ async fn vote_on_proposal_handler(
                 zk_snark_proof: request.zk_snark_proof, // Added zk-SNARK proof field
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Vote recorded"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -374,7 +389,9 @@ async fn delegated_governance_handler(
                 representative_id: request.representative_id,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Delegated governance applied"))
         },
         Err(e) => Err(warp::reject::custom(e)),

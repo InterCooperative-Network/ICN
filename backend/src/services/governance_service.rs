@@ -6,6 +6,7 @@ use zk_snarks::verify_proof; // Import zk-SNARK verification function
 use crate::services::identity_service::IdentityService; // Import IdentityService
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
 use crate::reputation::ReputationManager; // Import ReputationManager
+use futures::future::join_all; // Import join_all for concurrency
 
 pub struct GovernanceService {
     db: Arc<Mutex<dyn Database>>,
@@ -153,5 +154,16 @@ impl GovernanceService {
     pub async fn handle_delegated_governance(&self, federation_id: &str, representative_id: &str) -> Result<(), String> {
         // Placeholder logic for handling delegated governance
         Ok(())
+    }
+
+    pub async fn verify_signatures_concurrently(&self, dids: Vec<&str>, signatures: Vec<&str>, messages: Vec<&str>) -> Result<Vec<bool>, String> {
+        let verification_futures: Vec<_> = dids.iter().zip(signatures.iter()).zip(messages.iter())
+            .map(|((&did, &signature), &message)| {
+                self.verify_signature(did, signature, message)
+            })
+            .collect();
+
+        let results = join_all(verification_futures).await;
+        Ok(results)
     }
 }
