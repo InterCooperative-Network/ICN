@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 use icn_federation::{FederationService, FederationOperation};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
+use futures::future::join_all; // Import join_all for concurrency
 
 #[derive(Debug, Deserialize, Serialize)]
 struct InitiateFederationRequest {
@@ -256,7 +257,9 @@ async fn initiate_federation_handler(
                 terms: request.terms,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Federation initiated"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -282,7 +285,9 @@ async fn join_federation_handler(
                 member_did: request.commitment,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Joined federation"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -304,7 +309,9 @@ async fn initiate_federation_dissolution_handler(
         reason: request.reason.clone(),
     };
     let mut p2p = p2p_manager.lock().await;
-    p2p.publish(event).await.unwrap();
+    if let Err(e) = p2p.publish(event).await {
+        return Err(warp::reject::custom(e));
+    }
     Ok(warp::reply::json(&protocol))
 }
 
@@ -320,7 +327,9 @@ async fn get_dissolution_status_handler(
         federation_id: federation_id.clone(),
     };
     let mut p2p = p2p_manager.lock().await;
-    p2p.publish(event).await.unwrap();
+    if let Err(e) = p2p.publish(event).await {
+        return Err(warp::reject::custom(e));
+    }
     Ok(warp::reply::json(&status))
 }
 
@@ -336,7 +345,9 @@ async fn cancel_federation_dissolution_handler(
         federation_id: federation_id.clone(),
     };
     let mut p2p = p2p_manager.lock().await;
-    p2p.publish(event).await.unwrap();
+    if let Err(e) = p2p.publish(event).await {
+        return Err(warp::reject::custom(e));
+    }
     Ok(warp::reply::json(&"Dissolution cancelled"))
 }
 
@@ -352,7 +363,9 @@ async fn get_asset_distribution_handler(
         federation_id: federation_id.clone(),
     };
     let mut p2p = p2p_manager.lock().await;
-    p2p.publish(event).await.unwrap();
+    if let Err(e) = p2p.publish(event).await {
+        return Err(warp::reject::custom(e));
+    }
     Ok(warp::reply::json(&distribution))
 }
 
@@ -368,7 +381,9 @@ async fn get_debt_settlements_handler(
         federation_id: federation_id.clone(),
     };
     let mut p2p = p2p_manager.lock().await;
-    p2p.publish(event).await.unwrap();
+    if let Err(e) = p2p.publish(event).await {
+        return Err(warp::reject::custom(e));
+    }
     Ok(warp::reply::json(&settlements))
 }
 
@@ -388,7 +403,9 @@ async fn submit_proposal_handler(
                 ends_at: request.ends_at,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&proposal_id))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -410,7 +427,9 @@ async fn vote_handler(
                 approve: request.approve,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Vote recorded"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -431,7 +450,9 @@ async fn sybil_resistance_handler(
                 reputation_score: request.reputation_score,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Sybil resistance applied"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -452,7 +473,9 @@ async fn reputation_decay_handler(
                 decay_rate: request.decay_rate,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Reputation decay applied"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -475,7 +498,9 @@ async fn submit_dissolution_dispute_handler(
                 evidence: request.evidence.clone(),
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Dispute submitted successfully"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -497,7 +522,9 @@ async fn vote_on_dispute_handler(
                 support: request.support,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Vote recorded successfully"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -523,7 +550,9 @@ async fn federation_lifecycle_handler(
                 action: request.action,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Federation lifecycle operation completed"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -545,7 +574,9 @@ async fn transfer_resource_handler(
                 amount: request.amount,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Resource transferred successfully"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -566,7 +597,9 @@ async fn allocate_resource_shares_handler(
                 shares: request.shares,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Resource shares allocated successfully"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -594,7 +627,9 @@ async fn create_local_cluster_handler(
                 members: request.members,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Local cluster created"))
         },
         Err(e) => Err(warp::reject::custom(e)),
