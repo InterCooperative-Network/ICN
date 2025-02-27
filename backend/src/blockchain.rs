@@ -8,6 +8,7 @@ use std::sync::Arc;
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
 use std::collections::HashMap;
 use log::{info, error};
+use futures::future::join_all; // Import join_all for concurrency
 
 pub trait BlockchainOperations {
     fn add_block(&mut self, block: Block);
