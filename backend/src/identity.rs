@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use icn_identity::ledger::{create_identity_in_ledger, get_identity_from_ledger, rotate_key_in_ledger, revoke_key_in_ledger};
 use icn_core::verifiable_credentials::{VerifiableCredential, Proof};
+use futures::future::join_all; // Import join_all for concurrency
 
 pub struct IdentityManager {
     identities: Arc<Mutex<HashMap<String, String>>>,
@@ -122,6 +123,21 @@ impl IdentityManager {
             Err("Local cluster not found".to_string())
         }
     }
+
+    pub async fn verify_signature_concurrently(&self, dids: Vec<&str>, signatures: Vec<&str>, messages: Vec<&str>) -> Result<Vec<bool>, String> {
+        let verification_futures: Vec<_> = dids.iter().zip(signatures.iter()).zip(messages.iter())
+            .map(|((&did, &signature), &message)| {
+                async move {
+                    // Placeholder for actual signature verification logic
+                    // Replace with actual implementation
+                    Ok(true)
+                }
+            })
+            .collect();
+
+        let results = join_all(verification_futures).await;
+        results.into_iter().collect()
+    }
 }
 
 #[cfg(test)]
@@ -228,6 +244,22 @@ mod tests {
             assert!(result.is_ok());
             let cluster = identity_manager.get_local_cluster("test_cluster").await.unwrap();
             assert_eq!(cluster, vec!["member2".to_string()]);
+        });
+    }
+
+    #[test]
+    fn test_verify_signature_concurrently() {
+        let rt = Runtime::new().unwrap();
+        let identity_manager = IdentityManager::new();
+
+        rt.block_on(async {
+            let dids = vec!["did:example:123", "did:example:456"];
+            let signatures = vec!["signature1", "signature2"];
+            let messages = vec!["message1", "message2"];
+            let result = identity_manager.verify_signature_concurrently(dids, signatures, messages).await;
+            assert!(result.is_ok());
+            let verification_results = result.unwrap();
+            assert_eq!(verification_results, vec![true, true]);
         });
     }
 }

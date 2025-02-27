@@ -5,6 +5,7 @@ use tokio::sync::mpsc::{self, Sender, Receiver};
 use tokio::task;
 use tokio::time::{self, Duration};
 use icn_identity::ledger::{apply_reputation_decay_in_ledger, handle_sybil_resistance_in_ledger}; // Import icn-identity ledger functions
+use futures::future::join_all; // Import join_all for concurrency
 
 pub struct ReputationManager {
     reputations: Mutex<HashMap<String, i64>>,
@@ -71,9 +72,20 @@ impl ReputationManager {
     }
 
     pub async fn batch_reputation_updates(&self, events: Vec<ReputationEvent>) -> Result<(), String> {
-        for event in events {
-            self.emit_event(event);
+        let publish_futures = events.iter().map(|event| {
+            let sender = self.event_sender.clone();
+            async move {
+                sender.send(event.clone()).await.map_err(|e| e.to_string())
+            }
+        });
+
+        let results = join_all(publish_futures).await;
+        for result in results {
+            if let Err(e) = result {
+                return Err(e);
+            }
         }
+
         Ok(())
     }
 }

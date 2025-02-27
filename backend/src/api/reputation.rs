@@ -124,7 +124,9 @@ async fn submit_zk_snark_proof_handler(
         proof: request.proof.clone(),
     };
     let mut p2p = p2p_manager.lock().await;
-    p2p.publish(event).await.unwrap();
+    if let Err(e) = p2p.publish(event).await {
+        return Err(warp::reject::custom(e));
+    }
 
     // Placeholder logic for zk-SNARK proof submission
     Ok(warp::reply::json(&"zk-SNARK proof submitted"))
@@ -175,9 +177,19 @@ async fn batch_reputation_updates_handler(
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
     // Publish events
-    for event in &request.events {
-        let mut p2p = p2p_manager.lock().await;
-        p2p.publish(event.clone()).await.unwrap();
+    let publish_futures = request.events.iter().map(|event| {
+        let p2p = p2p_manager.clone();
+        async move {
+            let mut p2p = p2p.lock().await;
+            p2p.publish(event.clone()).await
+        }
+    });
+
+    let results = futures::future::join_all(publish_futures).await;
+    for result in results {
+        if let Err(e) = result {
+            return Err(warp::reject::custom(e));
+        }
     }
 
     // Placeholder logic for batch reputation updates
