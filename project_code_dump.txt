@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sat 01 Mar 2025 04:36:44 AM UTC
+Project Code Dump - Generated Sat 01 Mar 2025 05:02:01 AM UTC
 ======================================
 
 LLM Context Information
@@ -35,6 +35,7 @@ Project Tree:
 │   ├── Cargo.toml
 │   ├── migrations
 │   │   ├── 20240218000000_initial.sql
+│   │   ├── 20240301000000_add_optimized_indexes.sql
 │   │   └── test
 │   └── src
 │       ├── api
@@ -42,6 +43,7 @@ Project Tree:
 │       ├── core
 │       ├── core.rs
 │       ├── database
+│       ├── db
 │       ├── db.rs
 │       ├── governance.rs
 │       ├── identity.rs
@@ -194,6 +196,8 @@ Project Tree:
 │   │   └── src
 │   ├── frontend
 │   │   └── package-lock.json
+│   ├── make_scripts_executable.sh
+│   ├── run_load_tests.sh
 │   ├── run_tests.sh
 │   ├── setup.sh
 │   └── setup_test_env.sh
@@ -335,8 +339,8 @@ pub use test_macros::*;
 
 ===================
 File: ./backend/src/main.rs
-Size: 11626 bytes
-Modified: 2025-02-26 17:08:54.400097956 +0000
+Size: 11704 bytes
+Modified: 2025-03-01 05:01:54.867455903 +0000
 Dependencies:
 mod api;
 mod config;
@@ -364,6 +368,7 @@ use futures_util::StreamExt;
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
 use log::{info, error};
 use middleware::rate_limit::with_rate_limit;
+use middleware::rate_limit::with_reputation_rate_limit;
 use networking::p2p::{P2PManager, FederationEvent, GovernanceEvent, IdentityEvent, ReputationEvent}; // Import P2PManager and events
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -414,6 +419,7 @@ use warp::http::Method;
 use warp::cors::Cors;
 use crate::db::create_pool;
 use middleware::rate_limit::with_rate_limit;
+use middleware::rate_limit::with_reputation_rate_limit;
 use networking::p2p::{P2PManager, FederationEvent, GovernanceEvent, IdentityEvent, ReputationEvent}; // Import P2PManager and events
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
@@ -521,52 +527,48 @@ async fn main() -> Result<(), AppError> {
         });
     
     // Apply rate limits to routes
-    let create_proposal = with_rate_limit(
-        warp::path!("api" / "v1" / "governance" / "proposals")
-            .and(warp::post())
-            .and(warp::body::json())
-            .and_then(move |proposal: Proposal| {
-                let ns = notification_manager.clone();
-                let wc = websocket_clients.clone();
-                let gs = governance_service.clone();
-                async move {
-                    let mut service = gs.lock().await;
-                    service.handle_create_proposal(proposal, ns, wc).await
-                }
-            }),
-        10 // 10 requests per second
-    );
+    let reputation_manager = Arc::new(reputation_manager);
 
-    let vote_on_proposal = with_rate_limit(
-        warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
-            .and(warp::post())
-            .and(warp::body::json())
-            .and_then(move |proposal_id: String, vote: Vote| {
-                let ns = notification_manager.clone();
-                let wc = websocket_clients.clone();
-                let gs = governance_service.clone();
-                async move {
-                    // Set the proposal_id in vote if not matching
-                    let vote = Vote { proposal_id, ..vote };
-                    let mut service = gs.lock().await;
-                    service.handle_vote_on_proposal(vote, ns, wc).await
-                }
-            }),
-        20 // 20 requests per second
-    );
+    let create_proposal = warp::path!("api" / "v1" / "governance" / "proposals")
+        .and(with_reputation_rate_limit(reputation_manager.clone(), "api/v1/governance/proposals"))
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |proposal: Proposal| {
+            let ns = notification_manager.clone();
+            let wc = websocket_clients.clone();
+            let gs = governance_service.clone();
+            async move {
+                let mut service = gs.lock().await;
+                service.handle_create_proposal(proposal, ns, wc).await
+            }
+        });
 
-    let federation_routes = with_rate_limit(
-        warp::path("api/v1/federation")
-            .and(warp::post())
-            .and(warp::body::json())
-            .and_then(move |operation: FederationOperation| {
-                let notification_manager = notification_manager.clone();
-                async move {
-                    handle_federation_operation(operation, notification_manager).await
-                }
-            }),
-        5 // 5 requests per second
-    );
+    let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
+        .and(with_reputation_rate_limit(reputation_manager.clone(), "api/v1/governance/proposals/vote"))
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |proposal_id: String, vote: Vote| {
+            let ns = notification_manager.clone();
+            let wc = websocket_clients.clone();
+            let gs = governance_service.clone();
+            async move {
+                // Set the proposal_id in vote if not matching
+                let vote = Vote { proposal_id, ..vote };
+                let mut service = gs.lock().await;
+                service.handle_vote_on_proposal(vote, ns, wc).await
+            }
+        });
+
+    let federation_routes = warp::path("api/v1/federation")
+        .and(with_reputation_rate_limit(reputation_manager.clone(), "api/v1/federation"))
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
 
     let query_shared_resources = warp::path!("api" / "v1" / "resources" / "query")
         .and(warp::get())
@@ -1822,8 +1824,8 @@ mod tests {
 
 ===================
 File: ./backend/src/api/federation.rs
-Size: 25156 bytes
-Modified: 2025-02-27 16:06:34.257197501 +0000
+Size: 25289 bytes
+Modified: 2025-03-01 04:55:19.543441992 +0000
 Dependencies:
 use futures::future::join_all; // Import join_all for concurrency
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
@@ -2069,14 +2071,15 @@ fn with_p2p_manager(
     warp::any().map(move || p2p_manager.clone())
 }
 
+// Replace direct error returns with the unified error type
 async fn initiate_federation_handler(
     request: InitiateFederationRequest,
     federation_service: Arc<Mutex<FederationService>>,
-    p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+    p2p_manager: Arc<Mutex<P2PManager>>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     // Verify signature using icn-crypto
     if !verify_signature(&request.partner_id, &request.signature, &request.federation_type).await {
-        return Err(warp::reject::custom("Invalid signature"));
+        return Err(warp::reject::custom(IcnError::ValidationError("Invalid signature".to_string())));
     }
 
     let operation = FederationOperation::InitiateFederation {
@@ -2096,11 +2099,11 @@ async fn initiate_federation_handler(
             };
             let mut p2p = p2p_manager.lock().await;
             if let Err(e) = p2p.publish(event).await {
-                return Err(warp::reject::custom(e));
+                return Err(warp::reject::custom(IcnError::NetworkError(e.to_string())));
             }
             Ok(warp::reply::json(&"Federation initiated"))
         },
-        Err(e) => Err(warp::reject::custom(e)),
+        Err(e) => Err(warp::reject::custom(IcnError::FederationError(e))),
     }
 }
 
@@ -2906,8 +2909,8 @@ async fn delegated_governance_handler(
 
 ===================
 File: ./backend/src/main.rs
-Size: 11626 bytes
-Modified: 2025-02-26 17:08:54.400097956 +0000
+Size: 11704 bytes
+Modified: 2025-03-01 05:01:54.867455903 +0000
 Dependencies:
 mod api;
 mod config;
@@ -2935,6 +2938,7 @@ use futures_util::StreamExt;
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
 use log::{info, error};
 use middleware::rate_limit::with_rate_limit;
+use middleware::rate_limit::with_reputation_rate_limit;
 use networking::p2p::{P2PManager, FederationEvent, GovernanceEvent, IdentityEvent, ReputationEvent}; // Import P2PManager and events
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -2985,6 +2989,7 @@ use warp::http::Method;
 use warp::cors::Cors;
 use crate::db::create_pool;
 use middleware::rate_limit::with_rate_limit;
+use middleware::rate_limit::with_reputation_rate_limit;
 use networking::p2p::{P2PManager, FederationEvent, GovernanceEvent, IdentityEvent, ReputationEvent}; // Import P2PManager and events
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
@@ -3092,52 +3097,48 @@ async fn main() -> Result<(), AppError> {
         });
     
     // Apply rate limits to routes
-    let create_proposal = with_rate_limit(
-        warp::path!("api" / "v1" / "governance" / "proposals")
-            .and(warp::post())
-            .and(warp::body::json())
-            .and_then(move |proposal: Proposal| {
-                let ns = notification_manager.clone();
-                let wc = websocket_clients.clone();
-                let gs = governance_service.clone();
-                async move {
-                    let mut service = gs.lock().await;
-                    service.handle_create_proposal(proposal, ns, wc).await
-                }
-            }),
-        10 // 10 requests per second
-    );
+    let reputation_manager = Arc::new(reputation_manager);
 
-    let vote_on_proposal = with_rate_limit(
-        warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
-            .and(warp::post())
-            .and(warp::body::json())
-            .and_then(move |proposal_id: String, vote: Vote| {
-                let ns = notification_manager.clone();
-                let wc = websocket_clients.clone();
-                let gs = governance_service.clone();
-                async move {
-                    // Set the proposal_id in vote if not matching
-                    let vote = Vote { proposal_id, ..vote };
-                    let mut service = gs.lock().await;
-                    service.handle_vote_on_proposal(vote, ns, wc).await
-                }
-            }),
-        20 // 20 requests per second
-    );
+    let create_proposal = warp::path!("api" / "v1" / "governance" / "proposals")
+        .and(with_reputation_rate_limit(reputation_manager.clone(), "api/v1/governance/proposals"))
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |proposal: Proposal| {
+            let ns = notification_manager.clone();
+            let wc = websocket_clients.clone();
+            let gs = governance_service.clone();
+            async move {
+                let mut service = gs.lock().await;
+                service.handle_create_proposal(proposal, ns, wc).await
+            }
+        });
 
-    let federation_routes = with_rate_limit(
-        warp::path("api/v1/federation")
-            .and(warp::post())
-            .and(warp::body::json())
-            .and_then(move |operation: FederationOperation| {
-                let notification_manager = notification_manager.clone();
-                async move {
-                    handle_federation_operation(operation, notification_manager).await
-                }
-            }),
-        5 // 5 requests per second
-    );
+    let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
+        .and(with_reputation_rate_limit(reputation_manager.clone(), "api/v1/governance/proposals/vote"))
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |proposal_id: String, vote: Vote| {
+            let ns = notification_manager.clone();
+            let wc = websocket_clients.clone();
+            let gs = governance_service.clone();
+            async move {
+                // Set the proposal_id in vote if not matching
+                let vote = Vote { proposal_id, ..vote };
+                let mut service = gs.lock().await;
+                service.handle_vote_on_proposal(vote, ns, wc).await
+            }
+        });
+
+    let federation_routes = warp::path("api/v1/federation")
+        .and(with_reputation_rate_limit(reputation_manager.clone(), "api/v1/federation"))
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(move |operation: FederationOperation| {
+            let notification_manager = notification_manager.clone();
+            async move {
+                handle_federation_operation(operation, notification_manager).await
+            }
+        });
 
     let query_shared_resources = warp::path!("api" / "v1" / "resources" / "query")
         .and(warp::get())
@@ -3875,15 +3876,15 @@ fn compile_state_validation(bytecode: &mut Vec<u8>, validation: &StateValidation
 
 ===================
 File: ./crates/icn-consensus/src/lib.rs
-Size: 16155 bytes
-Modified: 2025-02-26 17:08:54.400097956 +0000
+Size: 19357 bytes
+Modified: 2025-03-01 04:59:14.651450265 +0000
 Dependencies:
 use async_trait::async_trait;
 use bit_set::BitSet;
 use federation::{Federation, FederationError};
 use icn_common::{ReputationManager, ConsensusEngine, Vote, VoteStatus, GovernanceError};
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
-use icn_types::Block;
+use icn_types::{Block, Transaction}; // Import Transaction
 use serde::{Serialize, Deserialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -3901,6 +3902,8 @@ pub mod validation;
 pub mod round_management;
 pub mod timeout_handling;
 pub mod federation;
+pub mod sharding; // Add sharding module
+pub mod pbft; // Add PBFT module
 
 use async_trait::async_trait;
 use std::collections::{HashMap, VecDeque};
@@ -3908,7 +3911,7 @@ use std::time::Duration;
 use tokio::time::sleep;
 use tokio::task;
 use icn_common::{ReputationManager, ConsensusEngine, Vote, VoteStatus, GovernanceError};
-use icn_types::Block;
+use icn_types::{Block, Transaction}; // Import Transaction
 use std::sync::Arc;
 use bit_set::BitSet;
 use trie_rs::Trie;
@@ -3942,10 +3945,18 @@ pub struct ProofOfCooperation {
     federation_operations: HashMap<String, FederationOperation>,
     federations: HashMap<String, Federation>,
     round_start_time: std::time::Instant,
+    shard_manager: sharding::ShardManager, // Add shard manager field
+    pbft_consensus: Option<pbft::PbftConsensus>, // Add PBFT consensus field
 }
 
 impl ProofOfCooperation {
     pub fn new(reputation_manager: Arc<dyn ReputationManager>) -> Self {
+        let shard_config = sharding::ShardConfig {
+            shard_count: 4,  // Start with 4 shards
+            shard_capacity: 1000, // Each shard can hold 1000 transactions
+            rebalance_threshold: 0.3, // Rebalance when load differs by 30%
+        };
+        
         ProofOfCooperation {
             current_round: 0,
             participants: VecDeque::new(),
@@ -3958,6 +3969,8 @@ impl ProofOfCooperation {
             federation_operations: HashMap::new(),
             federations: HashMap::new(),
             round_start_time: std::time::Instant::now(),
+            shard_manager: sharding::ShardManager::new(shard_config),
+            pbft_consensus: None,
         }
     }
 
@@ -3987,28 +4000,66 @@ impl ProofOfCooperation {
     }
 
     pub async fn finalize_block(&mut self) -> Result<Option<Block>, ConsensusError> {
-        let (total_reputation, approval_reputation) = self.parallel_vote_counting().await
+        // Get validator list for this round
+        let validators = self.select_validators(50).await
             .map_err(|e| ConsensusError::ConsensusFailure(e.to_string()))?;
-
-        // BFT requirement: Need more than 2/3 of total reputation for finalization
-        let bft_threshold = (total_reputation as f64 * 2.0 / 3.0) as i64;
+            
+        // Ensure we have enough validators for BFT
+        let f = validators.len() / 4; // Maximum allowed Byzantine nodes
+        let min_validators = 3 * f + 1; // Minimum required for BFT
         
-        if approval_reputation > bft_threshold {
-            if let Some(block) = &self.proposed_block {
-                // Update block metadata before finalization
-                let mut final_block = block.clone();
-                let consensus_duration = self.round_start_time.elapsed().as_millis() as u64;
-                final_block.metadata.consensus_duration_ms = consensus_duration;
+        if validators.len() < min_validators {
+            return Err(ConsensusError::BftError(
+                format!("Insufficient validators: {} (need {})", validators.len(), min_validators)
+            ));
+        }
+        
+        if self.pbft_consensus.is_none() {
+            self.pbft_consensus = Some(pbft::PbftConsensus::new(validators.clone()));
+        }
+        
+        let pbft = self.pbft_consensus.as_mut().unwrap();
+        
+        if let Some(block) = &self.proposed_block {
+            // Primary validator broadcasts pre-prepare message
+            if pbft.is_primary(&self.identity_did) {
+                let pre_prepare = pbft::ConsensusMessage {
+                    message_type: pbft::MessageType::PrePrepare,
+                    view_number: pbft.view_number,
+                    sequence_number: pbft.sequence_number,
+                    block_hash: block.hash.clone(),
+                    sender: self.identity_did.clone(),
+                    signature: "signature".to_string(), // This should be a proper signature
+                };
                 
-                // Clear round state
-                self.start_round();
-                
-                Ok(Some(final_block))
-            } else {
-                Err(ConsensusError::ConsensusFailure("No proposed block".into()))
+                // Distribute to all validators
+                self.broadcast_consensus_message(pre_prepare).await?;
             }
+            
+            // Wait for consensus to be reached
+            let timeout = Duration::from_secs(30);
+            let start = std::time::Instant::now();
+            
+            while start.elapsed() < timeout {
+                if pbft.is_committed(&block.hash) {
+                    // Consensus reached, update block metadata
+                    let consensus_duration = self.round_start_time.elapsed().as_millis() as u64;
+                    let mut final_block = block.clone();
+                    final_block.metadata.consensus_duration_ms = consensus_duration;
+                    
+                    // Clear round state
+                    self.start_round();
+                    
+                    return Ok(Some(final_block));
+                }
+                
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            
+            // Timeout occurred
+            Err(ConsensusError::TimeoutError("PBFT consensus timed out".into()))
         } else {
-            Ok(None)
+            Err(ConsensusError::ConsensusFailure("No proposed block".into()))
         }
     }
 
@@ -4251,6 +4302,28 @@ impl ProofOfCooperation {
         } else {
             Err(ConsensusError::ValidationFailure("Public key not found".to_string()))
         }
+    }
+
+    // Add a method to handle transaction sharding
+    pub fn add_transaction(&mut self, transaction: Transaction) -> Result<u32, ConsensusError> {
+        let shard_id = self.shard_manager.assign_transaction(transaction);
+        
+        // Check if shard is ready for finalization
+        let shard = &self.shard_manager.shards[&shard_id];
+        if shard.len() >= self.shard_manager.config.shard_capacity as usize {
+            if let Some(block) = self.shard_manager.finalize_shard(shard_id) {
+                self.propose_block(block);
+            }
+        }
+        
+        Ok(shard_id)
+    }
+
+    async fn broadcast_consensus_message(&self, message: pbft::ConsensusMessage) -> Result<(), ConsensusError> {
+        // Implementation to broadcast message to all validators
+        // This would use your networking layer to distribute the message
+        // ...
+        Ok(())
     }
 }
 
@@ -6329,9 +6402,10 @@ pub fn hash(data: &[u8]) -> Vec<u8> {
 
 ===================
 File: ./crates/icn-types/src/lib.rs
-Size: 30870 bytes
-Modified: 2025-02-24 09:46:42.593369689 +0000
+Size: 31646 bytes
+Modified: 2025-03-01 05:01:52.739455828 +0000
 Dependencies:
+mod errors;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
@@ -6361,6 +6435,9 @@ use std::sync::Mutex;
 use lazy_static::lazy_static;
 use thiserror::Error;
 use async_trait::async_trait;
+
+mod errors;
+pub use errors::{IcnError, IcnResult, log_error};
 
 #[derive(Debug, Error)]
 pub enum BlockError {
@@ -7149,6 +7226,31 @@ pub enum IcnError {
     
     #[error("Database error: {0}")]
     DatabaseError(String),
+    
+    // Add more granular error types
+    #[error("Federation error: {0}")]
+    FederationError(#[from] FederationError),
+    
+    #[error("Governance error: {0}")]
+    GovernanceError(#[from] GovernanceError),
+    
+    #[error("Identity error: {0}")]
+    IdentityError(#[from] IdentityError),
+    
+    #[error("Consensus error: {0}")]
+    ConsensusError(#[from] ConsensusError),
+    
+    #[error("Storage error: {0}")]
+    StorageError(#[from] StorageError),
+    
+    #[error("Runtime error: {0}")]
+    RuntimeError(#[from] RuntimeError),
+    
+    #[error("Rate limiting: {0}")]
+    RateLimitError(String),
+    
+    #[error("Validation failed: {0}")]
+    ValidationError(String),
 }
 
 /// Result type for ICN operations

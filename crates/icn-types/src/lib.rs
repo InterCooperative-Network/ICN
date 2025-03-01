@@ -15,6 +15,9 @@ use lazy_static::lazy_static;
 use thiserror::Error;
 use async_trait::async_trait;
 
+mod errors;
+pub use errors::{IcnError, IcnResult, log_error};
+
 #[derive(Debug, Error)]
 pub enum BlockError {
     #[error("Invalid block hash")]
