@@ -3,6 +3,8 @@ pub mod validation;
 pub mod round_management;
 pub mod timeout_handling;
 pub mod federation;
+pub mod sharding; // Add sharding module
+pub mod pbft; // Add PBFT module
 
 use async_trait::async_trait;
 use std::collections::{HashMap, VecDeque};
@@ -10,7 +12,7 @@ use std::time::Duration;
 use tokio::time::sleep;
 use tokio::task;
 use icn_common::{ReputationManager, ConsensusEngine, Vote, VoteStatus, GovernanceError};
-use icn_types::Block;
+use icn_types::{Block, Transaction}; // Import Transaction
 use std::sync::Arc;
 use bit_set::BitSet;
 use trie_rs::Trie;
@@ -44,10 +46,18 @@ pub struct ProofOfCooperation {
     federation_operations: HashMap<String, FederationOperation>,
     federations: HashMap<String, Federation>,
     round_start_time: std::time::Instant,
+    shard_manager: sharding::ShardManager, // Add shard manager field
+    pbft_consensus: Option<pbft::PbftConsensus>, // Add PBFT consensus field
 }
 
 impl ProofOfCooperation {
     pub fn new(reputation_manager: Arc<dyn ReputationManager>) -> Self {
+        let shard_config = sharding::ShardConfig {
+            shard_count: 4,  // Start with 4 shards
+            shard_capacity: 1000, // Each shard can hold 1000 transactions
+            rebalance_threshold: 0.3, // Rebalance when load differs by 30%
+        };
+        
         ProofOfCooperation {
             current_round: 0,
             participants: VecDeque::new(),
@@ -60,6 +70,8 @@ impl ProofOfCooperation {
             federation_operations: HashMap::new(),
             federations: HashMap::new(),
             round_start_time: std::time::Instant::now(),
+            shard_manager: sharding::ShardManager::new(shard_config),
+            pbft_consensus: None,
         }
     }
 
@@ -89,28 +101,66 @@ impl ProofOfCooperation {
     }
 
     pub async fn finalize_block(&mut self) -> Result<Option<Block>, ConsensusError> {
-        let (total_reputation, approval_reputation) = self.parallel_vote_counting().await
+        // Get validator list for this round
+        let validators = self.select_validators(50).await
             .map_err(|e| ConsensusError::ConsensusFailure(e.to_string()))?;
-
-        // BFT requirement: Need more than 2/3 of total reputation for finalization
-        let bft_threshold = (total_reputation as f64 * 2.0 / 3.0) as i64;
+            
+        // Ensure we have enough validators for BFT
+        let f = validators.len() / 4; // Maximum allowed Byzantine nodes
+        let min_validators = 3 * f + 1; // Minimum required for BFT
         
-        if approval_reputation > bft_threshold {
-            if let Some(block) = &self.proposed_block {
-                // Update block metadata before finalization
-                let mut final_block = block.clone();
-                let consensus_duration = self.round_start_time.elapsed().as_millis() as u64;
-                final_block.metadata.consensus_duration_ms = consensus_duration;
+        if validators.len() < min_validators {
+            return Err(ConsensusError::BftError(
+                format!("Insufficient validators: {} (need {})", validators.len(), min_validators)
+            ));
+        }
+        
+        if self.pbft_consensus.is_none() {
+            self.pbft_consensus = Some(pbft::PbftConsensus::new(validators.clone()));
+        }
+        
+        let pbft = self.pbft_consensus.as_mut().unwrap();
+        
+        if let Some(block) = &self.proposed_block {
+            // Primary validator broadcasts pre-prepare message
+            if pbft.is_primary(&self.identity_did) {
+                let pre_prepare = pbft::ConsensusMessage {
+                    message_type: pbft::MessageType::PrePrepare,
+                    view_number: pbft.view_number,
+                    sequence_number: pbft.sequence_number,
+                    block_hash: block.hash.clone(),
+                    sender: self.identity_did.clone(),
+                    signature: "signature".to_string(), // This should be a proper signature
+                };
                 
-                // Clear round state
-                self.start_round();
-                
-                Ok(Some(final_block))
-            } else {
-                Err(ConsensusError::ConsensusFailure("No proposed block".into()))
+                // Distribute to all validators
+                self.broadcast_consensus_message(pre_prepare).await?;
             }
+            
+            // Wait for consensus to be reached
+            let timeout = Duration::from_secs(30);
+            let start = std::time::Instant::now();
+            
+            while start.elapsed() < timeout {
+                if pbft.is_committed(&block.hash) {
+                    // Consensus reached, update block metadata
+                    let consensus_duration = self.round_start_time.elapsed().as_millis() as u64;
+                    let mut final_block = block.clone();
+                    final_block.metadata.consensus_duration_ms = consensus_duration;
+                    
+                    // Clear round state
+                    self.start_round();
+                    
+                    return Ok(Some(final_block));
+                }
+                
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            
+            // Timeout occurred
+            Err(ConsensusError::TimeoutError("PBFT consensus timed out".into()))
         } else {
-            Ok(None)
+            Err(ConsensusError::ConsensusFailure("No proposed block".into()))
         }
     }
 
@@ -353,6 +403,28 @@ impl ProofOfCooperation {
         } else {
             Err(ConsensusError::ValidationFailure("Public key not found".to_string()))
         }
+    }
+
+    // Add a method to handle transaction sharding
+    pub fn add_transaction(&mut self, transaction: Transaction) -> Result<u32, ConsensusError> {
+        let shard_id = self.shard_manager.assign_transaction(transaction);
+        
+        // Check if shard is ready for finalization
+        let shard = &self.shard_manager.shards[&shard_id];
+        if shard.len() >= self.shard_manager.config.shard_capacity as usize {
+            if let Some(block) = self.shard_manager.finalize_shard(shard_id) {
+                self.propose_block(block);
+            }
+        }
+        
+        Ok(shard_id)
+    }
+
+    async fn broadcast_consensus_message(&self, message: pbft::ConsensusMessage) -> Result<(), ConsensusError> {
+        // Implementation to broadcast message to all validators
+        // This would use your networking layer to distribute the message
+        // ...
+        Ok(())
     }
 }
 

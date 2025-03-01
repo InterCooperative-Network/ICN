@@ -802,6 +802,31 @@ pub enum IcnError {
     
     #[error("Database error: {0}")]
     DatabaseError(String),
+    
+    // Add more granular error types
+    #[error("Federation error: {0}")]
+    FederationError(#[from] FederationError),
+    
+    #[error("Governance error: {0}")]
+    GovernanceError(#[from] GovernanceError),
+    
+    #[error("Identity error: {0}")]
+    IdentityError(#[from] IdentityError),
+    
+    #[error("Consensus error: {0}")]
+    ConsensusError(#[from] ConsensusError),
+    
+    #[error("Storage error: {0}")]
+    StorageError(#[from] StorageError),
+    
+    #[error("Runtime error: {0}")]
+    RuntimeError(#[from] RuntimeError),
+    
+    #[error("Rate limiting: {0}")]
+    RateLimitError(String),
+    
+    #[error("Validation failed: {0}")]
+    ValidationError(String),
 }
 
 /// Result type for ICN operations
