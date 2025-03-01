@@ -1,4 +1,4 @@
-Project Code Dump - Generated Wed 26 Feb 2025 10:13:54 PM UTC
+Project Code Dump - Generated Sat 01 Mar 2025 04:36:44 AM UTC
 ======================================
 
 LLM Context Information
@@ -67,6 +67,9 @@ Project Tree:
 ├── config
 │   ├── feature-flags.json
 │   └── log4rs.yaml
+├── consensus
+│   ├── engine.py
+│   └── validation.py
 ├── contracts
 │   ├── Cargo.toml
 │   └── cooperative
@@ -130,6 +133,9 @@ Project Tree:
 ├── docker-compose.test.yml
 ├── Dockerfile.test
 ├── DSL_ICN.txt
+├── federation
+│   ├── federation.py
+│   └── signature.py
 ├── fraudDetection.ts
 ├── frontend
 │   ├── Cargo.toml
@@ -167,7 +173,8 @@ Project Tree:
 │   ├── did.rs
 │   ├── identity_system.rs
 │   ├── key_manager.rs
-│   └── mod.rs
+│   ├── mod.rs
+│   └── service.py
 ├── improved-setup.sh
 ├── inventory_nodes.sh
 ├── messaging
@@ -194,7 +201,6 @@ Project Tree:
 ├── setup_docs.sh
 ├── setup_venv.sh
 ├── src
-│   ├── ai
 │   ├── api
 │   │   ├── handlers.rs
 │   │   ├── mod.rs
@@ -202,6 +208,8 @@ Project Tree:
 │   │   └── types.ts
 │   ├── attestation
 │   │   └── mod.rs
+│   ├── blockchain
+│   │   └── validation.py
 │   ├── block.rs
 │   ├── cache.js
 │   ├── consensus
@@ -214,16 +222,18 @@ Project Tree:
 │   │   └── vm.rs
 │   ├── errors.js
 │   ├── federation
+│   │   └── federation.py
 │   ├── governance
 │   │   ├── mod.rs
 │   │   └── rollback.rs
+│   ├── identity
+│   │   └── identity_service.py
 │   ├── lib.rs
 │   ├── logger.js
 │   ├── main.rs
 │   ├── network
 │   │   └── communication.rs
 │   ├── parser.rs
-│   ├── reputation
 │   ├── security.js
 │   ├── services
 │   │   └── event_service.rs
@@ -1192,8 +1202,8 @@ mod tests {
 
 ===================
 File: ./backend/src/api/reputation.rs
-Size: 10038 bytes
-Modified: 2025-02-26 17:08:54.400097956 +0000
+Size: 10381 bytes
+Modified: 2025-02-27 16:06:34.257197501 +0000
 Dependencies:
 mod tests {
 use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution, handle_sybil_resistance, apply_reputation_decay, batch_reputation_updates};
@@ -1333,7 +1343,9 @@ async fn submit_zk_snark_proof_handler(
         proof: request.proof.clone(),
     };
     let mut p2p = p2p_manager.lock().await;
-    p2p.publish(event).await.unwrap();
+    if let Err(e) = p2p.publish(event).await {
+        return Err(warp::reject::custom(e));
+    }
 
     // Placeholder logic for zk-SNARK proof submission
     Ok(warp::reply::json(&"zk-SNARK proof submitted"))
@@ -1384,9 +1396,19 @@ async fn batch_reputation_updates_handler(
     p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
 ) -> Result<impl warp::Reply, warp::Rejection> {
     // Publish events
-    for event in &request.events {
-        let mut p2p = p2p_manager.lock().await;
-        p2p.publish(event.clone()).await.unwrap();
+    let publish_futures = request.events.iter().map(|event| {
+        let p2p = p2p_manager.clone();
+        async move {
+            let mut p2p = p2p.lock().await;
+            p2p.publish(event.clone()).await
+        }
+    });
+
+    let results = futures::future::join_all(publish_futures).await;
+    for result in results {
+        if let Err(e) = result {
+            return Err(warp::reject::custom(e));
+        }
     }
 
     // Placeholder logic for batch reputation updates
@@ -1800,9 +1822,10 @@ mod tests {
 
 ===================
 File: ./backend/src/api/federation.rs
-Size: 23895 bytes
-Modified: 2025-02-26 17:08:54.396097956 +0000
+Size: 25156 bytes
+Modified: 2025-02-27 16:06:34.257197501 +0000
 Dependencies:
+use futures::future::join_all; // Import join_all for concurrency
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
 use icn_federation::{FederationService, FederationOperation};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
@@ -1820,6 +1843,7 @@ use tokio::sync::Mutex;
 use icn_federation::{FederationService, FederationOperation};
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
+use futures::future::join_all; // Import join_all for concurrency
 
 #[derive(Debug, Deserialize, Serialize)]
 struct InitiateFederationRequest {
@@ -2071,7 +2095,9 @@ async fn initiate_federation_handler(
                 terms: request.terms,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Federation initiated"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2097,7 +2123,9 @@ async fn join_federation_handler(
                 member_did: request.commitment,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Joined federation"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2119,7 +2147,9 @@ async fn initiate_federation_dissolution_handler(
         reason: request.reason.clone(),
     };
     let mut p2p = p2p_manager.lock().await;
-    p2p.publish(event).await.unwrap();
+    if let Err(e) = p2p.publish(event).await {
+        return Err(warp::reject::custom(e));
+    }
     Ok(warp::reply::json(&protocol))
 }
 
@@ -2135,7 +2165,9 @@ async fn get_dissolution_status_handler(
         federation_id: federation_id.clone(),
     };
     let mut p2p = p2p_manager.lock().await;
-    p2p.publish(event).await.unwrap();
+    if let Err(e) = p2p.publish(event).await {
+        return Err(warp::reject::custom(e));
+    }
     Ok(warp::reply::json(&status))
 }
 
@@ -2151,7 +2183,9 @@ async fn cancel_federation_dissolution_handler(
         federation_id: federation_id.clone(),
     };
     let mut p2p = p2p_manager.lock().await;
-    p2p.publish(event).await.unwrap();
+    if let Err(e) = p2p.publish(event).await {
+        return Err(warp::reject::custom(e));
+    }
     Ok(warp::reply::json(&"Dissolution cancelled"))
 }
 
@@ -2167,7 +2201,9 @@ async fn get_asset_distribution_handler(
         federation_id: federation_id.clone(),
     };
     let mut p2p = p2p_manager.lock().await;
-    p2p.publish(event).await.unwrap();
+    if let Err(e) = p2p.publish(event).await {
+        return Err(warp::reject::custom(e));
+    }
     Ok(warp::reply::json(&distribution))
 }
 
@@ -2183,7 +2219,9 @@ async fn get_debt_settlements_handler(
         federation_id: federation_id.clone(),
     };
     let mut p2p = p2p_manager.lock().await;
-    p2p.publish(event).await.unwrap();
+    if let Err(e) = p2p.publish(event).await {
+        return Err(warp::reject::custom(e));
+    }
     Ok(warp::reply::json(&settlements))
 }
 
@@ -2203,7 +2241,9 @@ async fn submit_proposal_handler(
                 ends_at: request.ends_at,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&proposal_id))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2225,7 +2265,9 @@ async fn vote_handler(
                 approve: request.approve,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Vote recorded"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2246,7 +2288,9 @@ async fn sybil_resistance_handler(
                 reputation_score: request.reputation_score,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Sybil resistance applied"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2267,7 +2311,9 @@ async fn reputation_decay_handler(
                 decay_rate: request.decay_rate,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Reputation decay applied"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2290,7 +2336,9 @@ async fn submit_dissolution_dispute_handler(
                 evidence: request.evidence.clone(),
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Dispute submitted successfully"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2312,7 +2360,9 @@ async fn vote_on_dispute_handler(
                 support: request.support,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Vote recorded successfully"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2338,7 +2388,9 @@ async fn federation_lifecycle_handler(
                 action: request.action,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Federation lifecycle operation completed"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2360,7 +2412,9 @@ async fn transfer_resource_handler(
                 amount: request.amount,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Resource transferred successfully"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2381,7 +2435,9 @@ async fn allocate_resource_shares_handler(
                 shares: request.shares,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Resource shares allocated successfully"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2409,7 +2465,9 @@ async fn create_local_cluster_handler(
                 members: request.members,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Local cluster created"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2430,11 +2488,12 @@ async fn verify_signature(did: &str, signature: &str, message: &str) -> bool {
 
 ===================
 File: ./backend/src/api/governance.rs
-Size: 14860 bytes
-Modified: 2025-02-26 17:08:54.396097956 +0000
+Size: 15526 bytes
+Modified: 2025-02-27 16:06:34.257197501 +0000
 Dependencies:
 use crate::services::governance_service::{GovernanceService, Proposal, Vote};
 use crate::services::identity_service::IdentityService; // Import IdentityService
+use futures::future::join_all; // Import join_all for concurrency
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
 use icn_networking::p2p::{P2PManager, GovernanceEvent}; // Import P2PManager and GovernanceEvent
 use serde::{Deserialize, Serialize};
@@ -2452,6 +2511,7 @@ use crate::services::governance_service::{GovernanceService, Proposal, Vote};
 use icn_networking::p2p::{P2PManager, GovernanceEvent}; // Import P2PManager and GovernanceEvent
 use crate::services::identity_service::IdentityService; // Import IdentityService
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
+use futures::future::join_all; // Import join_all for concurrency
 
 #[derive(Debug, Deserialize, Serialize)]
 struct CreateProposalRequest {
@@ -2623,7 +2683,9 @@ async fn create_proposal_handler(
                 ends_at: request.ends_at,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&proposal_id))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2659,7 +2721,9 @@ async fn vote_on_proposal_handler(
                 zk_snark_proof: request.zk_snark_proof, // Added zk-SNARK proof field
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Vote recorded"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2680,7 +2744,9 @@ async fn sybil_resistance_handler(
                 reputation_score: request.reputation_score,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Sybil resistance applied"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2701,7 +2767,9 @@ async fn reputation_decay_handler(
                 decay_rate: request.decay_rate,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Reputation decay applied"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2722,7 +2790,9 @@ async fn proposal_status_handler(
                 status: status.clone(),
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&status))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2763,7 +2833,9 @@ async fn submit_proposal_handler(
                 ends_at: request.ends_at,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&proposal_id))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2799,7 +2871,9 @@ async fn vote_on_proposal_handler(
                 zk_snark_proof: request.zk_snark_proof, // Added zk-SNARK proof field
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Vote recorded"))
         },
         Err(e) => Err(warp::reject::custom(e)),
@@ -2820,7 +2894,9 @@ async fn delegated_governance_handler(
                 representative_id: request.representative_id,
             };
             let mut p2p = p2p_manager.lock().await;
-            p2p.publish(event).await.unwrap();
+            if let Err(e) = p2p.publish(event).await {
+                return Err(warp::reject::custom(e));
+            }
             Ok(warp::reply::json(&"Delegated governance applied"))
         },
         Err(e) => Err(warp::reject::custom(e)),
