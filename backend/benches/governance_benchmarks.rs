@@ -7,6 +7,8 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use chrono::Utc;
 use futures::executor::block_on;
 use std::time::Duration;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 fn create_test_proposal(id: i32) -> Proposal {
     Proposal {
@@ -149,6 +151,61 @@ fn benchmark_concurrent_operations(c: &mut Criterion) {
     block_on(services.cleanup());
 }
 
+pub fn governance_benchmark(c: &mut Criterion) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    
+    // Setup test database
+    let db_pool = rt.block_on(async {
+        // Setup test database connection
+        sqlx::PgPool::connect("postgres://test:test@localhost/test_db").await.unwrap()
+    });
+    
+    let service = Arc::new(Mutex::new(GovernanceService::new(Arc::new(db_pool))));
+    
+    // Benchmark proposal creation
+    c.bench_function("create_proposal", |b| {
+        b.iter(|| {
+            rt.block_on(async {
+                let proposal = Proposal {
+                    title: "Test Proposal".to_string(),
+                    description: "Test Description".to_string(),
+                    created_by: "test_user".to_string(),
+                    ends_at: "2099-12-31T23:59:59Z".to_string(),
+                };
+                
+                let mut s = service.lock().await;
+                s.create_proposal(black_box(proposal)).await.unwrap()
+            })
+        })
+    });
+    
+    // Benchmark voting
+    c.bench_function("vote_on_proposal", |b| {
+        b.iter(|| {
+            rt.block_on(async {
+                let vote = Vote {
+                    proposal_id: "test_id".to_string(),
+                    voter: "test_voter".to_string(),
+                    approve: true,
+                };
+                
+                let mut s = service.lock().await;
+                s.record_vote(black_box(vote)).await.unwrap()
+            })
+        })
+    });
+    
+    // Benchmark proposal counting
+    c.bench_function("count_votes", |b| {
+        b.iter(|| {
+            rt.block_on(async {
+                let mut s = service.lock().await;
+                s.count_votes(black_box("test_id")).await.unwrap()
+            })
+        })
+    });
+}
+
 criterion_group!(
     name = benches;
     config = Criterion::default()
@@ -158,6 +215,7 @@ criterion_group!(
     targets = benchmark_proposal_creation,
              benchmark_vote_recording,
              benchmark_proposal_queries,
-             benchmark_concurrent_operations
+             benchmark_concurrent_operations,
+             governance_benchmark
 );
-criterion_main!(benches); 
+criterion_main!(benches);

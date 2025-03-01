@@ -231,14 +231,15 @@ fn with_p2p_manager(
     warp::any().map(move || p2p_manager.clone())
 }
 
+// Replace direct error returns with the unified error type
 async fn initiate_federation_handler(
     request: InitiateFederationRequest,
     federation_service: Arc<Mutex<FederationService>>,
-    p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager parameter
+    p2p_manager: Arc<Mutex<P2PManager>>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     // Verify signature using icn-crypto
     if !verify_signature(&request.partner_id, &request.signature, &request.federation_type).await {
-        return Err(warp::reject::custom("Invalid signature"));
+        return Err(warp::reject::custom(IcnError::ValidationError("Invalid signature".to_string())));
     }
 
     let operation = FederationOperation::InitiateFederation {
@@ -258,11 +259,11 @@ async fn initiate_federation_handler(
             };
             let mut p2p = p2p_manager.lock().await;
             if let Err(e) = p2p.publish(event).await {
-                return Err(warp::reject::custom(e));
+                return Err(warp::reject::custom(IcnError::NetworkError(e.to_string())));
             }
             Ok(warp::reply::json(&"Federation initiated"))
         },
-        Err(e) => Err(warp::reject::custom(e)),
+        Err(e) => Err(warp::reject::custom(IcnError::FederationError(e))),
     }
 }
 

@@ -228,3 +228,44 @@ jobs:
       with:
         name: load-test-results
         path: k6-results
+
+  performance:
+    name: Performance testing
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          
+      - name: Cache dependencies
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          
+      - name: Compile benchmarks
+        run: cargo bench --no-run
+          
+      - name: Run performance benchmarks
+        run: cargo bench -- --output-format bencher | tee bench_results.txt
+          
+      - name: Performance regression check
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'cargo'
+          output-file-path: bench_results.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          # Alert if performance drops more than 10%
+          alert-threshold: '110%'
+          fail-on-alert: true
+          comment-on-alert: true
