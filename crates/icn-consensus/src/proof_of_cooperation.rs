@@ -1,4 +1,4 @@
-use icn_zk::{ProofOfCooperation, Circuit};
+use icn_zk::{ProofOfCooperation, Circuit, verify_proof};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use std::collections::HashMap;
