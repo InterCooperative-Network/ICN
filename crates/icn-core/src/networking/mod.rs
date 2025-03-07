@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use tokio::sync::broadcast;
 use icn_types::{Block, Transaction};
 use async_trait::async_trait;

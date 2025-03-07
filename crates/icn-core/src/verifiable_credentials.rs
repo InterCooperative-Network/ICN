@@ -1,6 +1,5 @@
 use serde::{Serialize, Deserialize};
-use chrono::{DateTime, Utc, FixedOffset};
-use std::collections::HashMap;
+use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifiableCredential {

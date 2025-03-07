@@ -85,31 +85,34 @@ pub struct Resolution {
     pub signatures: Vec<String>, // Requires 75% of arbitrators
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DissolutionProtocol {
-    federation_id: String,
-    initiated_by: String,
-    reason: DissolutionReason,
-    status: DissolutionStatus,
-    asset_distribution: HashMap<String, AssetAllocation>,
-    debt_settlements: Vec<DebtSettlement>,
-    member_reassignments: Vec<MemberReassignment>,
+    pub federation_id: String,
+    pub initiated_by: String,
+    pub reason: DissolutionReason,
+    pub status: DissolutionStatus,
+    pub asset_distribution: HashMap<String, u64>,
+    pub debt_settlements: Vec<String>,
+    pub member_reassignments: Vec<String>,
+    pub dispute_period_ends: std::time::SystemTime,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DissolutionReason {
     Voluntary,
     InactivityThreshold,
-    GovernanceViolation,
-    EconomicNonviability,
+    GovernanceFailure,
+    ResourceDepletion,
+    Other(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DissolutionStatus {
     Initiated,
-    InProgress,
+    UnderReview,
+    Approved,
+    Rejected,
     Completed,
-    Cancelled,
 }
 
 #[derive(Debug)]

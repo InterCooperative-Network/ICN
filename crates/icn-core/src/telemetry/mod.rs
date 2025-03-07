@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 pub struct TelemetryManager {
     metrics: PrometheusMetrics,
     logger: Logger,
