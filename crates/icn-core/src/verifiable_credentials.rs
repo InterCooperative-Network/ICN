@@ -63,7 +63,8 @@ impl VerifiableCredential {
         // Check if credential is expired
         if let Some(expiry_date) = &self.expiration_date {
             if let Ok(expiry) = DateTime::parse_from_rfc3339(expiry_date) {
-                if Utc::now() > expiry.into() {
+                // Use explicit type conversion instead of .into()
+                if Utc::now() > expiry.with_timezone(&Utc) {
                     return false;
                 }
             } else {
@@ -88,7 +89,8 @@ impl VerifiableCredential {
         if !self.is_valid() {
             if let Some(expiry_date) = &self.expiration_date {
                 if let Ok(expiry) = DateTime::parse_from_rfc3339(expiry_date) {
-                    if Utc::now() > expiry.into() {
+                    // Use explicit type conversion instead of .into()
+                    if Utc::now() > expiry.with_timezone(&Utc) {
                         return Err(VerificationError::ExpiredCredential);
                     }
                 }
@@ -114,9 +116,11 @@ pub struct CredentialManager;
 
 impl CredentialManager {
     pub async fn verify_credential(&self, credential: &VerifiableCredential) -> Result<bool, String> {
-        if let Some(expiry) = credential.expiration_date {
-            // Convert expiry to Utc for comparison
-            let expiry_utc: DateTime<Utc> = expiry.with_timezone(&Utc);
+        if let Some(expiry) = &credential.expiration_date {
+            // Convert expiry to Utc for comparison by borrowing the string
+            let expiry_utc: DateTime<Utc> = DateTime::parse_from_rfc3339(expiry)
+                .map_err(|_| "Invalid expiry date format".to_string())?
+                .with_timezone(&Utc);
             if Utc::now() > expiry_utc {
                 return Ok(false);
             }
@@ -126,9 +130,11 @@ impl CredentialManager {
 
     pub async fn verify_presentation(&self, presentation: &VerifiablePresentation) -> Result<bool, String> {
         for credential in &presentation.verifiable_credentials {
-            if let Some(expiry) = credential.expiration_date {
-                // Convert expiry to Utc for comparison
-                let expiry_utc: DateTime<Utc> = expiry.with_timezone(&Utc);
+            if let Some(expiry) = &credential.expiration_date {
+                // Convert expiry to Utc for comparison by borrowing the string
+                let expiry_utc: DateTime<Utc> = DateTime::parse_from_rfc3339(expiry)
+                    .map_err(|_| "Invalid expiry date format".to_string())?
+                    .with_timezone(&Utc);
                 if Utc::now() > expiry_utc {
                     return Ok(false);
                 }

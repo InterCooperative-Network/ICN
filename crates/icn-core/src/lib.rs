@@ -1,6 +1,3 @@
-// Only keep needed imports
-use icn_types::{RuntimeInterface};
-
 // Module declarations
 pub mod blockchain;
 pub mod core;
