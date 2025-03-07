@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use icn_types::{Block, Transaction, BlockError};
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 pub struct Blockchain {
     chain: Arc<RwLock<Vec<Block>>>,
@@ -25,9 +26,15 @@ impl Blockchain {
         Ok(())
     }
 
-    pub async fn add_transaction(&self, transaction: Transaction) {
+    pub async fn add_transaction(&self, transaction: Transaction) -> Result<(), String> {
+        if let Some(proof) = &transaction.zk_snark_proof {
+            if !verify_proof(proof) {
+                return Err("Invalid zk-SNARK proof".to_string());
+            }
+        }
         let mut pending = self.pending_transactions.write().await;
         pending.push(transaction);
+        Ok(())
     }
 
     pub async fn get_pending_transactions(&self) -> Vec<Transaction> {
@@ -40,5 +47,12 @@ impl Blockchain {
 
     pub async fn get_latest_block(&self) -> Block {
         self.chain.read().await.last().unwrap().clone()
+    }
+
+    pub async fn verify_zk_snark_proof(&self, proof: &str) -> Result<bool, String> {
+        if !verify_proof(proof) {
+            return Err("Invalid zk-SNARK proof".to_string());
+        }
+        Ok(true)
     }
 }

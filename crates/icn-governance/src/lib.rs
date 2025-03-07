@@ -2,6 +2,7 @@ use thiserror::Error;
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 #[derive(Error, Debug)]
 pub enum GovernanceError {
@@ -231,6 +232,12 @@ impl Proposal {
     pub fn initiate_dispute(&mut self, initiator: String, reason: String) -> Result<(), String> {
         if self.state != ProposalState::Voting {
             return Err("Can only initiate dispute during voting phase".to_string());
+        }
+        
+        if let Some(proof) = &self.zk_snark_proof {
+            if !verify_proof(proof) {
+                return Err("Invalid zk-SNARK proof".to_string());
+            }
         }
         
         self.dispute_resolution = Some(DisputeResolution {
