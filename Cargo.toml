@@ -2,7 +2,11 @@
 members = [
   "crates/icn-types",
   "crates/icn-core",
-  "crates/icn-runtime"
+  "crates/icn-runtime",
+  "crates/icn-governance",
+  "crates/icn-zk",
+  "crates/networking",
+  "backend"
 ]
 
 [workspace.dependencies]
@@ -15,7 +19,7 @@ icn-runtime = { path = "crates/icn-runtime" }
 tokio = { version = "1.25", features = ["full"] }  # Further downgraded
 serde = { version = "1.0.130", features = ["derive"] }
 warp = "=0.3.3"  # Pinned to older version compatible with Rust 1.71.1
-sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "postgres"] }  # Major downgrade
+sqlx = { version = "0.7.0", features = ["runtime-tokio-native-tls", "postgres"] }  # Major downgrade
 thiserror = "1.0.30"
 chrono = { version = "0.4.23", features = ["serde"] }
 async-trait = "0.1.64"  # Downgraded

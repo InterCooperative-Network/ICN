@@ -1,43 +1,46 @@
-use async_trait::async_trait;
-use tokio::sync::broadcast;
 use serde::{Serialize, Deserialize};
+use tokio::sync::mpsc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DomainEvent {
-    VoteCast { proposal_id: String, voter: String, vote: bool },
-    ReputationUpdated { member_id: String, new_score: i32 },
-    ProposalCreated { id: String, title: String, description: String },
-    StateChanged { entity_id: String, change_type: String },
-}
-
-#[async_trait]
-pub trait EventHandler {
-    async fn handle(&self, event: DomainEvent);
+    VoteCast {
+        proposal_id: String,
+        voter: String,
+        vote: bool,
+    },
+    ReputationChanged {
+        member_id: String,
+        delta: i32,
+    },
+    MembershipChanged {
+        member_id: String,
+        action: String,
+    }
 }
 
 pub struct EventService {
-    tx: broadcast::Sender<DomainEvent>,
-    handlers: Vec<Box<dyn EventHandler + Send + Sync>>,
+    event_tx: mpsc::Sender<DomainEvent>,
 }
 
 impl EventService {
     pub fn new() -> Self {
-        let (tx, _) = broadcast::channel(100);
+        let (tx, mut rx) = mpsc::channel(100);
+        // Spawn event processor
+        tokio::spawn(async move {
+            while let Some(event) = rx.recv().await {
+                // Process domain events
+                println!("Processing domain event: {:?}", event);
+            }
+        });
+        
         Self {
-            tx,
-            handlers: Vec::new(),
+            event_tx: tx,
         }
     }
 
     pub async fn publish(&self, event: DomainEvent) {
-        // Publish to event bus and notify handlers
-        for handler in &self.handlers {
-            handler.handle(event.clone()).await;
+        if let Err(e) = self.event_tx.send(event).await {
+            eprintln!("Failed to publish event: {}", e);
         }
-        self.tx.send(event).unwrap();
-    }
-
-    pub fn subscribe(&self) -> broadcast::Receiver<DomainEvent> {
-        self.tx.subscribe()
     }
 }

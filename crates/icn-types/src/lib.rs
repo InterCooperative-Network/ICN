@@ -604,11 +604,11 @@ impl Transaction {
             TransactionType::ContractExecution { contract_id, input_data } => {
                 !contract_id.is_empty() && !input_data.is_empty()
             },
-            TransactionType::RecordContribution { description, impact_story, tags, .. } => {
-                !description.is_empty() && !impact_story.is_empty() && !tags.is_empty()
+            TransactionType::RecordContribution { description, impact_story, context, tags } => {
+                !description.is_empty() && !impact_story.is_empty() && !context.is_empty() && !tags.is_empty()
             },
-            TransactionType::RecordMutualAid { description, tags, .. } => {
-                !description.is_empty() && !tags.is_empty()
+            TransactionType::RecordMutualAid { receiver, description, tags, .. } => {
+                !receiver.is_empty() && !description.is_empty() && !tags.is_empty()
             },
             TransactionType::UpdateRelationship { member_two, relationship_type, story, .. } => {
                 !member_two.is_empty() && !relationship_type.is_empty() && !story.is_empty()

@@ -70,10 +70,12 @@ impl ReputationInterface for ReputationSystem {
         let score = scores.entry(did.clone()).or_insert_with(|| 
             ReputationScoreExt::default_score(did)
         );
+        
+        let member_id = score.member_id.clone(); // Clone before the update
         *score = ReputationScore {
+            member_id,
             score: score.score + contribution.score,
             last_updated: Utc::now(),
-            ..*score
         };
         Ok(())
     }
@@ -81,10 +83,11 @@ impl ReputationInterface for ReputationSystem {
     async fn apply_decay(&self, decay_rate: f64) -> Result<(), LocalReputationError> {
         let mut scores = self.scores.write().map_err(|_| LocalReputationError::LockError)?;
         for score in scores.values_mut() {
+            let member_id = score.member_id.clone(); // Clone before the update
             *score = ReputationScore {
+                member_id,
                 score: score.score * (1.0 - decay_rate),
                 last_updated: Utc::now(),
-                ..*score
             };
         }
         Ok(())

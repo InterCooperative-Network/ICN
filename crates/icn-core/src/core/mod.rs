@@ -1,14 +1,14 @@
 use std::sync::Arc;
-use log::{info, error};
+use log::info;
 use crate::{
     storage::StorageInterface,
-    networking::NetworkInterface,
     identity::IdentityInterface,
+    networking::NetworkInterface,
     reputation::ReputationInterface,
     telemetry::TelemetryManager,
-    models::{ResourceAllocationSystem, FederationManager, ResourceAllocation},
+    models::{ResourceAllocationSystem, FederationManager}
 };
-use icn_types::{Block, Transaction, FederationOperation, RuntimeInterface};
+use icn_types::{Transaction, RuntimeInterface};
 use crate::telemetry::{PrometheusMetrics, Logger, TracingSystem};
 
 pub struct Core {

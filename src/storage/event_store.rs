@@ -1,50 +1,30 @@
-use serde::{Serialize, Deserialize};
-use tokio::sync::RwLock;
+use std::sync::RwLock;
 use std::collections::HashMap;
-use std::sync::Arc;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StoredEvent {
-    pub sequence: u64,
-    pub event_type: String,
-    pub data: serde_json::Value,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-}
+use crate::services::event_service::DomainEvent;
 
 pub struct EventStore {
-    events: Arc<RwLock<Vec<StoredEvent>>>,
-    snapshots: Arc<RwLock<HashMap<String, serde_json::Value>>>,
+    events: RwLock<HashMap<String, Vec<DomainEvent>>>,
 }
 
 impl EventStore {
     pub fn new() -> Self {
         Self {
-            events: Arc::new(RwLock::new(Vec::new())),
-            snapshots: Arc::new(RwLock::new(HashMap::new())),
+            events: RwLock::new(HashMap::new()),
         }
     }
 
-    pub async fn append_event(&self, event: StoredEvent) {
-        let mut events = self.events.write().await;
-        events.push(event);
-        
-        // Take snapshot every N events
-        if events.len() % 100 == 0 {
-            self.create_snapshot().await;
-        }
+    pub fn append(&self, stream_id: &str, event: DomainEvent) -> Result<(), String> {
+        let mut events = self.events.write().map_err(|_| "Lock error")?;
+        events.entry(stream_id.to_string())
+            .or_insert_with(Vec::new)
+            .push(event);
+        Ok(())
     }
 
-    pub async fn get_events(&self, after_sequence: u64) -> Vec<StoredEvent> {
-        let events = self.events.read().await;
-        events.iter()
-            .filter(|e| e.sequence > after_sequence)
+    pub fn get_stream(&self, stream_id: &str) -> Result<Vec<DomainEvent>, String> {
+        let events = self.events.read().map_err(|_| "Lock error")?;
+        Ok(events.get(stream_id)
             .cloned()
-            .collect()
-    }
-
-    async fn create_snapshot(&self) {
-        // Create point-in-time snapshot of current state
-        let mut snapshots = self.snapshots.write().await;
-        // Snapshot creation logic
+            .unwrap_or_default())
     }
 }

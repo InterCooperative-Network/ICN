@@ -1,4 +1,4 @@
-Project Code Dump - Generated Fri 07 Mar 2025 11:57:08 AM UTC
+Project Code Dump - Generated Fri 07 Mar 2025 02:37:55 PM UTC
 ======================================
 
 LLM Context Information
@@ -106,6 +106,7 @@ Project Tree:
 │   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-governance
+│   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-identity
 │   │   └── src
@@ -130,6 +131,7 @@ Project Tree:
 │   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-zk
+│   │   ├── Cargo.toml
 │   │   └── src
 │   ├── networking
 │   │   └── Cargo.toml
@@ -270,25 +272,31 @@ Project Tree:
 
 ===================
 File: ./backend/Cargo.toml
-Size: 1086 bytes
-Modified: 2025-03-07 10:36:34.036291778 +0000
+Size: 1158 bytes
+Modified: 2025-03-07 14:26:30.343663358 +0000
 
 ===================
 ```toml
 [package]
 name = "backend"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
-tokio = { version = "1.30", features = ["full"] }
-warp = "=0.3.3"  # Pinned to older version
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-sqlx = { version = "0.7", features = ["postgres", "runtime-tokio"] }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+warp = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+thiserror = { workspace = true }
+icn-types = { workspace = true }
 icn-federation = { path = "../crates/icn-federation" }
 tower = { version = "0.4", features = ["limit"] }
-tower-http = { version = "0.3", features = ["limit"] }
+tower-http = { version = "0.6", features = ["limit"] }
 bls-signatures = "=0.7.1"  # Pinned to older version compatible with Rust 1.71.1
 didcomm-rs = "0.1"
 tokio-tungstenite = "=0.18.0"
@@ -302,12 +310,10 @@ quickcheck_async = "0.1"
 quickcheck_macros = "1.0"
 tokio-test = "0.4"
 test-log = "0.2"
-env_logger = "0.11"
 pretty_assertions = "1.4"
 fake = { version = "2.8", features = ["derive"] }
-rstest = "0.24"
+rstest = "0.25"
 mockall = "0.11"
-async-trait = "0.1"
 futures = "0.3"
 
 [[bench]]
@@ -3749,8 +3755,8 @@ impl ReputationInterface for ReputationManager {
 
 ===================
 File: ./crates/icn-governance/src/lib.rs
-Size: 9002 bytes
-Modified: 2025-03-07 09:09:46.448773684 +0000
+Size: 9171 bytes
+Modified: 2025-03-07 14:33:28.818355410 +0000
 Dependencies:
 mod tests {
 use chrono::{DateTime, Utc};
@@ -3848,31 +3854,34 @@ pub struct Resolution {
     pub signatures: Vec<String>, // Requires 75% of arbitrators
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DissolutionProtocol {
-    federation_id: String,
-    initiated_by: String,
-    reason: DissolutionReason,
-    status: DissolutionStatus,
-    asset_distribution: HashMap<String, AssetAllocation>,
-    debt_settlements: Vec<DebtSettlement>,
-    member_reassignments: Vec<MemberReassignment>,
+    pub federation_id: String,
+    pub initiated_by: String,
+    pub reason: DissolutionReason,
+    pub status: DissolutionStatus,
+    pub asset_distribution: HashMap<String, u64>,
+    pub debt_settlements: Vec<String>,
+    pub member_reassignments: Vec<String>,
+    pub dispute_period_ends: std::time::SystemTime,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DissolutionReason {
     Voluntary,
     InactivityThreshold,
-    GovernanceViolation,
-    EconomicNonviability,
+    GovernanceFailure,
+    ResourceDepletion,
+    Other(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DissolutionStatus {
     Initiated,
-    InProgress,
+    UnderReview,
+    Approved,
+    Rejected,
     Completed,
-    Cancelled,
 }
 
 #[derive(Debug)]
@@ -4101,16 +4110,18 @@ pub fn generate_test_proof() -> String {
 
 ===================
 File: ./crates/icn-zk/src/lib.rs
-Size: 459 bytes
-Modified: 2025-03-07 09:09:46.448773684 +0000
+Size: 905 bytes
+Modified: 2025-03-07 14:36:39.074978442 +0000
 Dependencies:
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
+use serde::{Deserialize, Serialize};
 
 ===================
 ```rs
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
+use serde::{Deserialize, Serialize};
 
 pub struct ProofOfCooperation<F: PrimeField> {
     pub reputation_score: Option<F>,
@@ -4126,12 +4137,31 @@ impl<F: PrimeField> Circuit<F> for ProofOfCooperation<F> {
         Ok(())
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RollupBatch {
+    pub proposal_id: String,
+    pub votes: Vec<Vote>,
+    pub rollup_root: [u8; 32],
+    pub proof: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Vote {
+    pub voter: String,
+    pub approve: bool,
+}
+
+pub fn verify_proof(_proof: &str) -> bool {
+    // TODO: Implement actual zk-SNARK verification
+    true
+}
 ```
 
 ===================
 File: ./crates/icn-types/src/lib.rs
-Size: 31519 bytes
-Modified: 2025-03-07 11:36:44.634965517 +0000
+Size: 33812 bytes
+Modified: 2025-03-07 14:27:57.248652728 +0000
 Dependencies:
 mod errors;
 use async_trait::async_trait;
@@ -4648,9 +4678,10 @@ pub struct Transaction {
     pub transaction_type: TransactionType,
     pub timestamp: i64,
     pub hash: String,
-    pub signature: String,
+    pub signature: Option<String>,
     pub resource_cost: u64,
     pub resource_priority: u8,
+    pub zk_snark_proof: Option<String>,
 }
 
 impl Transaction {
@@ -4681,16 +4712,17 @@ impl Transaction {
             sender,
             receiver,
             amount,
-            hash,
             transaction_type,
             timestamp: timestamp as i64,
-            signature: String::new(),
+            hash,
+            signature: None,
             resource_cost,
             resource_priority: 5, // Default priority
+            zk_snark_proof: None,
         }
     }
 
-    fn calculate_transaction_hash(sender: &str, transaction_type: &TransactionType, timestamp: u128) -> String {
+    pub fn calculate_transaction_hash(sender: &str, transaction_type: &TransactionType, timestamp: u128) -> String {
         let mut hasher = Sha256::new();
         let transaction_data = match transaction_type {
             TransactionType::Transfer { receiver, amount } => {
@@ -4712,48 +4744,38 @@ impl Transaction {
                 format!("Endorsement:{}:{}:{}:{:?}", to_did, content, context, skills)
             },
         };
-        
         hasher.update(format!("{}{}{}", sender, transaction_data, timestamp));
         format!("{:x}", hasher.finalize())
     }
 
-    fn calculate_resource_cost(transaction_type: &TransactionType) -> u64 {
+    pub fn calculate_resource_cost(transaction_type: &TransactionType) -> u64 {
         match transaction_type {
             TransactionType::Transfer { amount, .. } => {
-                // Base cost plus percentage of transfer amount
                 100 + (amount / 100)
             },
             TransactionType::ContractExecution { input_data, .. } => {
-                // Base cost plus data size cost
                 200 + (input_data.len() as u64 * 10)
             },
             TransactionType::RecordContribution { description, impact_story, tags, .. } => {
-                // Cost based on content size and complexity
                 let content_length = (description.len() + impact_story.len()) as u64;
                 50 + (content_length / 100) + (tags.len() as u64 * 5)
             },
             TransactionType::RecordMutualAid { description, tags, .. } => {
-                // Base cost plus content size
                 75 + (description.len() as u64 / 100) + (tags.len() as u64 * 5)
             },
             TransactionType::UpdateRelationship { story, .. } => {
-                // Base cost plus story length
                 100 + (story.len() as u64 / 100)
             },
             TransactionType::AddEndorsement { content, skills, .. } => {
-                // Base cost plus content and skills
-                60 + (content.len() as u64 / 100) + (skills.len() as u64 * 10)
+                   60 + (content.len() as u64 / 100) + (skills.len() as u64 * 10)
             },
         }
     }
 
     pub fn validate(&self) -> bool {
-        // Ensure sender is not empty
         if self.sender.is_empty() {
             return false;
         }
-
-        // Validate based on transaction type
         match &self.transaction_type {
             TransactionType::Transfer { receiver, amount } => {
                 !receiver.is_empty() && *amount > 0 && self.sender != *receiver
@@ -4762,26 +4784,16 @@ impl Transaction {
                 !contract_id.is_empty() && !input_data.is_empty()
             },
             TransactionType::RecordContribution { description, impact_story, context, tags } => {
-                !description.is_empty() && 
-                !impact_story.is_empty() && 
-                !context.is_empty() && 
-                !tags.is_empty()
+                !description.is_empty() && !impact_story.is_empty() && !context.is_empty() && !tags.is_empty()
             },
             TransactionType::RecordMutualAid { receiver, description, tags, .. } => {
-                !receiver.is_empty() && 
-                !description.is_empty() && 
-                !tags.is_empty()
+                !receiver.is_empty() && !description.is_empty() && !tags.is_empty()
             },
             TransactionType::UpdateRelationship { member_two, relationship_type, story, .. } => {
-                !member_two.is_empty() && 
-                !relationship_type.is_empty() && 
-                !story.is_empty()
+                !member_two.is_empty() && !relationship_type.is_empty() && !story.is_empty()
             },
             TransactionType::AddEndorsement { to_did, content, context, skills } => {
-                !to_did.is_empty() && 
-                !content.is_empty() && 
-                !context.is_empty() && 
-                !skills.is_empty()
+                !to_did.is_empty() && !content.is_empty() && !context.is_empty() && !skills.is_empty()
             },
         }
     }
@@ -4805,12 +4817,121 @@ impl Transaction {
     pub fn to_bytes(&self) -> Vec<u8> {
         bincode::serialize(self).unwrap_or_else(|_| Vec::new())
     }
+    
+    pub fn get_zk_snark_inputs(&self) -> Vec<u8> {
+        // A simple implementation that concatenates transaction data
+        let mut inputs = Vec::new();
+        inputs.extend_from_slice(self.sender.as_bytes());
+        inputs.extend_from_slice(self.receiver.as_bytes());
+        inputs.extend_from_slice(&self.amount.to_le_bytes());
+        inputs.extend_from_slice(self.hash.as_bytes());
+        inputs
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AuthError(String);
+
+impl std::fmt::Display for AuthError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for AuthError {}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DidRegistryTransaction {
+    pub registry_data: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AttestMembershipTransaction {
+    pub member_did: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MutualCreditTransaction {
+    pub sender_did: String,
+    pub receiver_did: String,
+    pub amount: i64, // positive value; sender's balance decreases and receiver's increases
+    pub signature: String,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GovernanceTransaction {
+    pub proposal_id: String,
+    pub initiator_did: String,
+    pub signature: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResourceTransaction {
+    pub resource_id: String,
+    pub operation: String,
+    pub metadata: String,
+    pub did_proof: DidProof,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DidProof {
+    pub did: String,
+    pub signature: String,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ElectionTransaction {
+    pub candidate_id: String,
+    pub votes: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VoteProposal {
+    pub proposal_id: String,
+    pub initiator_did: String,
+    pub signature: String,
+    pub description: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Vote {
+    pub voter_did: String,
+    pub proposal_id: String,
+    pub approve: bool,
+    pub signature: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DidRegistry;
+
+impl DidRegistry {
+    pub fn new() -> Self {
+        DidRegistry
+    }
+
+    pub fn get_did(&self, _did: &str) -> Option<DidDocument> {
+        // Placeholder implementation
+        Some(DidDocument { is_verified: true })
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DidDocument {
+    pub is_verified: bool,
+}
+
+impl Transaction {
+    pub fn verify_did_signature(_did: &str, _signature: &str, _message: &str) -> Result<bool, AuthError> {
+        Ok(true)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FederationType {
     Cooperative,
-    Community, 
+    Community,
     Hybrid
 }
 
@@ -4893,7 +5014,7 @@ pub struct Proposal {
     pub proposer: MemberId,
     pub created_at: DateTime<Utc>,
     pub status: ProposalStatus,
-    pub votes: HashMap<MemberId, Vote>,
+    pub votes: HashMap<MemberId, VoteChoice>,
 }
 
 /// Represents the status of a proposal
@@ -4906,9 +5027,8 @@ pub enum ProposalStatus {
     Executed,
 }
 
-/// Represents a vote on a proposal
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Vote {
+pub enum VoteChoice {
     Yes,
     No,
     Abstain,
@@ -4958,8 +5078,10 @@ pub enum StorageError {
     
     #[error("IPFS error: {0}")]
     IpfsError(String),
+    
     #[error("Storage reference already exists")]
     ReferenceAlreadyExists,
+    
     #[error("Storage reference not found")]
     ReferenceNotFound,
 }
@@ -5019,12 +5141,16 @@ pub struct StorageConfig {
 pub enum RuntimeError {
     #[error("Validation failed: {0}")]
     ValidationFailed(String),
+    
     #[error("Invalid state")]
     InvalidState,
+    
     #[error("Execution error: {0}")]
     ExecutionError(String),
+    
     #[error("DSL error: {0}")]
     DslError(String),
+    
     #[error("Contract error: {0}")]
     ContractError(String),
 }
@@ -6177,16 +6303,12 @@ fn compile_state_validation(bytecode: &mut Vec<u8>, validation: &StateValidation
 
 ===================
 File: ./crates/icn-core/src/lib.rs
-Size: 603 bytes
-Modified: 2025-03-07 11:39:49.812015046 +0000
+Size: 539 bytes
+Modified: 2025-03-07 13:43:19.174709296 +0000
 Dependencies:
-use icn_types::{RuntimeInterface};
 
 ===================
 ```rs
-// Only keep needed imports
-use icn_types::{RuntimeInterface};
-
 // Module declarations
 pub mod blockchain;
 pub mod core;
@@ -6599,8 +6721,8 @@ pub enum ResourceError {
 
 ===================
 File: ./crates/icn-federation/src/lib.rs
-Size: 23927 bytes
-Modified: 2025-03-07 09:09:46.448773684 +0000
+Size: 26360 bytes
+Modified: 2025-03-07 14:32:06.556214875 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
@@ -6643,7 +6765,7 @@ pub struct Federation {
     pub disputes: HashMap<String, FederationDispute>, // Add disputes field
     pub cross_federation_disputes: HashMap<String, Vec<FederationDispute>>,
     pub audit_log: Vec<AuditEntry>,
-    pub p2p_manager: Arc<Mutex<P2PManager>>, // Add p2p_manager field
+    pub p2p_manager: Arc<tokio::sync::Mutex<P2PManager>>, // Changed to tokio::sync::Mutex
 }
 
 impl Federation {
@@ -6787,7 +6909,7 @@ impl Federation {
         let batch = RollupBatch {
             proposal_id: proposal_id.to_string(),
             votes: proposal.votes.iter()
-                .map(|(voter, approve)| Vote { voter: voter.clone(), approve: *approve })
+                .map(|(voter, approve)| Vote { voter: voter.clone(), approve: *approve, signature: String::new() }) // Added signature field
                 .collect(),
             rollup_root: [0u8; 32], // Computed by ZK prover
             proof: Vec::new(), // Generated by ZK prover
@@ -7016,7 +7138,7 @@ pub struct FederationProposal {
     pub voting_ends_at: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ProposalType {
     AddMember(String),
     RemoveMember(String),
@@ -7025,12 +7147,16 @@ pub enum ProposalType {
     UpdatePolicy(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceAllocation {
-    pub resource_type: String,
-    pub amount: u64,
-    pub recipient: String,
-    pub duration: Option<u64>,
+impl std::fmt::Display for ProposalType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProposalType::AddMember(_) => write!(f, "AddMember"),
+            ProposalType::RemoveMember(_) => write!(f, "RemoveMember"),
+            ProposalType::UpdateTerms(_) => write!(f, "UpdateTerms"),
+            ProposalType::AllocateResources(_) => write!(f, "AllocateResources"),
+            ProposalType::UpdatePolicy(_) => write!(f, "UpdatePolicy"),
+        }
+    }
 }
 
 pub struct FederationManager {
@@ -7068,7 +7194,7 @@ impl FederationManager {
             disputes: HashMap::new(),
             cross_federation_disputes: HashMap::new(),
             audit_log: Vec::new(),
-            p2p_manager: Arc::new(Mutex::new(P2PManager::new())), // Initialize p2p_manager
+            p2p_manager: Arc::new(tokio::sync::Mutex::new(P2PManager::new())), // Initialize p2p_manager
         };
 
         let mut federations = self.federations.write().await;
@@ -7175,7 +7301,7 @@ pub struct GovernanceRules {
     pub veto_rights: HashMap<String, Vec<String>>, // role -> action types that can be vetoed
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FederationStatus {
     Active,
     Suspended,
@@ -7199,6 +7325,16 @@ pub enum MemberRole {
     Observer,
 }
 
+impl std::fmt::Display for MemberRole {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MemberRole::Admin => write!(f, "Admin"),
+            MemberRole::Member => write!(f, "Member"),
+            MemberRole::Observer => write!(f, "Observer"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MemberStatus {
     Active,
@@ -7211,6 +7347,7 @@ pub struct Vote {
     pub voter: String,
     pub proposal_id: String,
     pub approve: bool,
+    pub signature: String, // Added required field
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -7234,11 +7371,21 @@ pub struct DisputeResolution {
     pub resolver: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DisputeStatus {
     Pending,
     Resolved,
     Rejected,
+}
+
+impl std::fmt::Display for DisputeStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DisputeStatus::Pending => write!(f, "Pending"),
+            DisputeStatus::Resolved => write!(f, "Resolved"),
+            DisputeStatus::Rejected => write!(f, "Rejected"),
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -7319,6 +7466,72 @@ pub enum CrossFederationProposalType {
     Alliance,
     ResourceSharing,
     DisputeResolution,
+}
+
+#[derive(Debug)]
+pub struct BatchProcessor {
+    pub coordinator: Arc<tokio::sync::Mutex<ProposalCoordinator>>,
+}
+
+#[derive(Debug)]
+pub struct ProposalCoordinator {
+    // Add fields as needed
+}
+
+impl ProposalCoordinator {
+    pub async fn submit_batch(&self, batch: ProposalBatch) -> Result<(), FederationError> {
+        // Implementation here
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct ProposalBatch {
+    proposals: Vec<FederationProposal>,
+}
+
+impl ProposalBatch {
+    pub fn new() -> Self {
+        Self {
+            proposals: Vec::new(),
+        }
+    }
+
+    pub fn add_proposal(&mut self, proposal: FederationProposal) {
+        self.proposals.push(proposal);
+    }
+}
+
+// Add missing types
+#[derive(Debug)]
+pub struct StorageError;
+
+#[derive(Debug)]
+pub struct ConsensusError;
+
+#[derive(Debug, Clone)]
+pub struct AssetAllocation {
+    pub asset_type: String,
+    pub amount: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct DebtSettlement {
+    pub debtor: String,
+    pub creditor: String,
+    pub amount: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct MemberReassignment {
+    pub member_id: String,
+    pub new_federation: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct CrossFederationTerms {
+    pub resource_sharing_terms: String,
+    pub governance_terms: String,
 }
 ```
 
