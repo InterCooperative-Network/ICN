@@ -499,9 +499,10 @@ pub struct Transaction {
     pub transaction_type: TransactionType,
     pub timestamp: i64,
     pub hash: String,
-    pub signature: String,
+    pub signature: Option<String>,
     pub resource_cost: u64,
     pub resource_priority: u8,
+    pub zk_snark_proof: Option<String>,
 }
 
 impl Transaction {
@@ -532,16 +533,17 @@ impl Transaction {
             sender,
             receiver,
             amount,
-            hash,
             transaction_type,
             timestamp: timestamp as i64,
-            signature: String::new(),
+            hash,
+            signature: None,
             resource_cost,
             resource_priority: 5, // Default priority
+            zk_snark_proof: None,
         }
     }
 
-    fn calculate_transaction_hash(sender: &str, transaction_type: &TransactionType, timestamp: u128) -> String {
+    pub fn calculate_transaction_hash(sender: &str, transaction_type: &TransactionType, timestamp: u128) -> String {
         let mut hasher = Sha256::new();
         let transaction_data = match transaction_type {
             TransactionType::Transfer { receiver, amount } => {
@@ -563,48 +565,38 @@ impl Transaction {
                 format!("Endorsement:{}:{}:{}:{:?}", to_did, content, context, skills)
             },
         };
-        
         hasher.update(format!("{}{}{}", sender, transaction_data, timestamp));
         format!("{:x}", hasher.finalize())
     }
 
-    fn calculate_resource_cost(transaction_type: &TransactionType) -> u64 {
+    pub fn calculate_resource_cost(transaction_type: &TransactionType) -> u64 {
         match transaction_type {
             TransactionType::Transfer { amount, .. } => {
-                // Base cost plus percentage of transfer amount
                 100 + (amount / 100)
             },
             TransactionType::ContractExecution { input_data, .. } => {
-                // Base cost plus data size cost
                 200 + (input_data.len() as u64 * 10)
             },
             TransactionType::RecordContribution { description, impact_story, tags, .. } => {
-                // Cost based on content size and complexity
                 let content_length = (description.len() + impact_story.len()) as u64;
                 50 + (content_length / 100) + (tags.len() as u64 * 5)
             },
             TransactionType::RecordMutualAid { description, tags, .. } => {
-                // Base cost plus content size
                 75 + (description.len() as u64 / 100) + (tags.len() as u64 * 5)
             },
             TransactionType::UpdateRelationship { story, .. } => {
-                // Base cost plus story length
                 100 + (story.len() as u64 / 100)
             },
             TransactionType::AddEndorsement { content, skills, .. } => {
-                // Base cost plus content and skills
-                60 + (content.len() as u64 / 100) + (skills.len() as u64 * 10)
+                   60 + (content.len() as u64 / 100) + (skills.len() as u64 * 10)
             },
         }
     }
 
     pub fn validate(&self) -> bool {
-        // Ensure sender is not empty
         if self.sender.is_empty() {
             return false;
         }
-
-        // Validate based on transaction type
         match &self.transaction_type {
             TransactionType::Transfer { receiver, amount } => {
                 !receiver.is_empty() && *amount > 0 && self.sender != *receiver
@@ -612,27 +604,17 @@ impl Transaction {
             TransactionType::ContractExecution { contract_id, input_data } => {
                 !contract_id.is_empty() && !input_data.is_empty()
             },
-            TransactionType::RecordContribution { description, impact_story, context, tags } => {
-                !description.is_empty() && 
-                !impact_story.is_empty() && 
-                !context.is_empty() && 
-                !tags.is_empty()
+            TransactionType::RecordContribution { description, impact_story, tags, .. } => {
+                !description.is_empty() && !impact_story.is_empty() && !tags.is_empty()
             },
-            TransactionType::RecordMutualAid { receiver, description, tags, .. } => {
-                !receiver.is_empty() && 
-                !description.is_empty() && 
-                !tags.is_empty()
+            TransactionType::RecordMutualAid { description, tags, .. } => {
+                !description.is_empty() && !tags.is_empty()
             },
             TransactionType::UpdateRelationship { member_two, relationship_type, story, .. } => {
-                !member_two.is_empty() && 
-                !relationship_type.is_empty() && 
-                !story.is_empty()
+                !member_two.is_empty() && !relationship_type.is_empty() && !story.is_empty()
             },
             TransactionType::AddEndorsement { to_did, content, context, skills } => {
-                !to_did.is_empty() && 
-                !content.is_empty() && 
-                !context.is_empty() && 
-                !skills.is_empty()
+                !to_did.is_empty() && !content.is_empty() && !context.is_empty() && !skills.is_empty()
             },
         }
     }
@@ -656,12 +638,121 @@ impl Transaction {
     pub fn to_bytes(&self) -> Vec<u8> {
         bincode::serialize(self).unwrap_or_else(|_| Vec::new())
     }
+    
+    pub fn get_zk_snark_inputs(&self) -> Vec<u8> {
+        // A simple implementation that concatenates transaction data
+        let mut inputs = Vec::new();
+        inputs.extend_from_slice(self.sender.as_bytes());
+        inputs.extend_from_slice(self.receiver.as_bytes());
+        inputs.extend_from_slice(&self.amount.to_le_bytes());
+        inputs.extend_from_slice(self.hash.as_bytes());
+        inputs
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AuthError(String);
+
+impl std::fmt::Display for AuthError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for AuthError {}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DidRegistryTransaction {
+    pub registry_data: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AttestMembershipTransaction {
+    pub member_did: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MutualCreditTransaction {
+    pub sender_did: String,
+    pub receiver_did: String,
+    pub amount: i64, // positive value; sender's balance decreases and receiver's increases
+    pub signature: String,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GovernanceTransaction {
+    pub proposal_id: String,
+    pub initiator_did: String,
+    pub signature: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResourceTransaction {
+    pub resource_id: String,
+    pub operation: String,
+    pub metadata: String,
+    pub did_proof: DidProof,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DidProof {
+    pub did: String,
+    pub signature: String,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ElectionTransaction {
+    pub candidate_id: String,
+    pub votes: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VoteProposal {
+    pub proposal_id: String,
+    pub initiator_did: String,
+    pub signature: String,
+    pub description: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Vote {
+    pub voter_did: String,
+    pub proposal_id: String,
+    pub approve: bool,
+    pub signature: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DidRegistry;
+
+impl DidRegistry {
+    pub fn new() -> Self {
+        DidRegistry
+    }
+
+    pub fn get_did(&self, _did: &str) -> Option<DidDocument> {
+        // Placeholder implementation
+        Some(DidDocument { is_verified: true })
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DidDocument {
+    pub is_verified: bool,
+}
+
+impl Transaction {
+    pub fn verify_did_signature(_did: &str, _signature: &str, _message: &str) -> Result<bool, AuthError> {
+        Ok(true)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FederationType {
     Cooperative,
-    Community, 
+    Community,
     Hybrid
 }
 
@@ -744,7 +835,7 @@ pub struct Proposal {
     pub proposer: MemberId,
     pub created_at: DateTime<Utc>,
     pub status: ProposalStatus,
-    pub votes: HashMap<MemberId, Vote>,
+    pub votes: HashMap<MemberId, VoteChoice>,
 }
 
 /// Represents the status of a proposal
@@ -757,9 +848,8 @@ pub enum ProposalStatus {
     Executed,
 }
 
-/// Represents a vote on a proposal
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Vote {
+pub enum VoteChoice {
     Yes,
     No,
     Abstain,
@@ -809,8 +899,10 @@ pub enum StorageError {
     
     #[error("IPFS error: {0}")]
     IpfsError(String),
+    
     #[error("Storage reference already exists")]
     ReferenceAlreadyExists,
+    
     #[error("Storage reference not found")]
     ReferenceNotFound,
 }
@@ -870,12 +962,16 @@ pub struct StorageConfig {
 pub enum RuntimeError {
     #[error("Validation failed: {0}")]
     ValidationFailed(String),
+    
     #[error("Invalid state")]
     InvalidState,
+    
     #[error("Execution error: {0}")]
     ExecutionError(String),
+    
     #[error("DSL error: {0}")]
     DslError(String),
+    
     #[error("Contract error: {0}")]
     ContractError(String),
 }

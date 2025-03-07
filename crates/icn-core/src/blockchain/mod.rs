@@ -31,16 +31,31 @@ impl Blockchain {
     }
 
     pub async fn add_transaction(&self, transaction: Transaction) -> Result<(), String> {
-        if let Some(proof) = transaction.proof {
+        if let Some(proof) = &transaction.zk_snark_proof {
             let inputs = transaction.get_zk_snark_inputs();
+            let public_inputs = vec![inputs]; // Wrap in Vec<Vec<u8>> as required
+            
+            // Convert String to Vec<u8> for proof_data
+            let proof_data = proof.as_bytes().to_vec();
+            
             let zk_proof = ZkProof {
-                proof_data: proof,
-                public_inputs: inputs,
+                proof_data,
+                public_inputs: public_inputs.clone(), // Clone to avoid moving
             };
-            if !crate::zk_snarks::verify_proof(&zk_proof, &inputs)? {
-                return Err("Invalid zk-SNARK proof".to_string());
+            
+            // Handle the error conversion explicitly
+            match crate::zk_snarks::verify_proof(&zk_proof, &public_inputs) {
+                Ok(valid) => {
+                    if !valid {
+                        return Err("Invalid zk-SNARK proof".to_string());
+                    }
+                },
+                Err(e) => {
+                    return Err(format!("ZK proof verification error: {}", e));
+                }
             }
         }
+        
         let mut pending = self.pending_transactions.write().await;
         pending.push(transaction);
         Ok(())
