@@ -8,6 +8,7 @@ use icn_governance::{DissolutionProtocol, DissolutionReason, DissolutionStatus};
 use icn_zkp::RollupBatch;
 use thiserror::Error;
 use icn_networking::p2p::{P2PManager, FederationEvent}; // Import P2PManager and FederationEvent
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Federation {
