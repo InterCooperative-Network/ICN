@@ -1,41 +1,46 @@
+use std::collections::HashMap;
 use async_trait::async_trait;
-use icn_types::{Transaction, RuntimeError};
+use icn_types::{Block, Transaction, RuntimeError, ExecutionContext};
 
 #[async_trait]
-pub trait RuntimeInterface: Send + Sync {
-    async fn start(&self) -> Result<(), String>;
-    async fn stop(&self) -> Result<(), String>;
-    async fn execute_transaction(&self, tx: Transaction) -> Result<(), RuntimeError>;
-    async fn load_bytecode(&self, bytecode: &[u8]) -> Result<(), RuntimeError>;
+pub trait RuntimeInterface {
+    async fn execute_transaction(&self, transaction: &Transaction) -> Result<(), RuntimeError>;
+    async fn execute_block(&self, block: &Block) -> Result<(), RuntimeError>;
 }
 
 pub struct RuntimeManager {
-    vm_instance: super::VirtualMachine,
+    max_instructions: u64,
+    memory_limit: usize,
+    execution_context: HashMap<String, ExecutionContext>,
 }
 
 impl RuntimeManager {
     pub fn new() -> Self {
         Self {
-            vm_instance: super::VirtualMachine::new(1_000_000, 1024 * 1024),
+            max_instructions: 10000,
+            memory_limit: 1024 * 1024, // 1MB
+            execution_context: HashMap::new(),
+        }
+    }
+
+    pub fn with_config(max_instructions: u64, memory_limit: usize) -> Self {
+        Self {
+            max_instructions,
+            memory_limit,
+            execution_context: HashMap::new(),
         }
     }
 }
 
 #[async_trait]
 impl RuntimeInterface for RuntimeManager {
-    async fn start(&self) -> Result<(), String> {
+    async fn execute_transaction(&self, _transaction: &Transaction) -> Result<(), RuntimeError> {
+        // Placeholder implementation
         Ok(())
     }
-
-    async fn stop(&self) -> Result<(), String> {
-        Ok(())
-    }
-
-    async fn execute_transaction(&self, _tx: Transaction) -> Result<(), RuntimeError> {
-        Ok(())
-    }
-
-    async fn load_bytecode(&self, _bytecode: &[u8]) -> Result<(), RuntimeError> {
+    
+    async fn execute_block(&self, _block: &Block) -> Result<(), RuntimeError> {
+        // Placeholder implementation
         Ok(())
     }
 }

@@ -37,6 +37,11 @@ use middleware::rate_limit::with_rate_limit;
 use middleware::rate_limit::with_reputation_rate_limit;
 use networking::p2p::{P2PManager, FederationEvent, GovernanceEvent, IdentityEvent, ReputationEvent}; // Import P2PManager and events
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
+use icn_backend::api::ApiServer;
+use icn_backend::core::Core;
+use icn_backend::database::Database;
+use dotenv::dotenv;
+use std::env;
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -78,153 +83,49 @@ struct TokenizedResource {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), AppError> {
-    // Initialize logging with env_logger
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Load environment variables from .env file if present
+    dotenv().ok();
+    
+    // Initialize logging
     env_logger::init();
-
-    // Load and validate configuration
-    let config: Config = config::load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
-    config.validate()?;
     
-    // Create a single database pool
-    let db_pool = create_pool()
-        .await
-        .map_err(AppError::DatabaseError)?;
-    let db_pool = Arc::new(db_pool);
+    info!("Starting ICN backend...");
     
-    // Share the pool with all services
-    let storage_backend = DatabaseStorageBackend::new(db_pool.clone());
-    let storage_manager = StorageManager::new(Box::new(storage_backend));
-    let governance_service = Arc::new(Mutex::new(GovernanceService::new(db_pool.clone())));
+    // Get port from environment variable or default to 8080
+    let port = env::var("PORT")
+        .unwrap_or_else(|_| "8080".to_string())
+        .parse::<u16>()
+        .unwrap_or(8080);
     
-    // Initialize other components with shared pool
-    let websocket_clients: WebSocketClients = Arc::new(DashMap::new());
-    let network_manager = NetworkManager::new();
-    let runtime_manager = RuntimeManager::new();
-    let telemetry_manager = TelemetryManager::new(PrometheusMetrics, Logger, TracingSystem);
-    let identity_manager = IdentityManager::new();
-    let reputation_cache = ReputationCache::new(config.reputation_cache_max_size);
-    let reputation_manager = ReputationManager::new(
-        config.governance_decay_rate,
-        config.resource_sharing_decay_rate,
-        config.technical_contributions_decay_rate,
-        config.decay_exemptions.clone(),
-        reputation_cache,
+    // Create the core system
+    let core = Core::new();
+    
+    // Start core services
+    core.start().await?;
+    
+    info!("Core services started.");
+    
+    // Create API server with core services
+    let api_server = ApiServer::new(
+        port,
+        core.blockchain_service.clone(),
+        core.identity_service.clone(),
+        core.governance_service.clone(),
     );
-
-    let notification_manager = NotificationManager::new(config.notification_email.clone(), config.notification_sms.clone());
-
-    // Create core system
-    let core = Core::new(
-        Arc::new(storage_manager),
-        Arc::new(network_manager),
-        Arc::new(runtime_manager),
-        Arc::new(telemetry_manager),
-        Arc::new(identity_manager),
-        Arc::new(reputation_manager),
-    );
-
-    // Start core system
-    if let Err(e) = core.start().await {
-        error!("Failed to start core system: {}", e);
-        return Err(AppError::ConfigError(e));
-    }
-
-    // Initialize P2PManager
-    let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
-
-    // Set up WebSocket server
-    let websocket_route = warp::path("ws")
-        .and(warp::ws())
-        .map(move |ws: warp::ws::Ws| {
-            let websocket_clients = websocket_clients.clone();
-            ws.on_upgrade(move |socket| handle_websocket(socket, websocket_clients))
-        });
     
-    // Apply rate limits to routes
-    let reputation_manager = Arc::new(reputation_manager);
-
-    let create_proposal = warp::path!("api" / "v1" / "governance" / "proposals")
-        .and(with_reputation_rate_limit(reputation_manager.clone(), "api/v1/governance/proposals"))
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |proposal: Proposal| {
-            let ns = notification_manager.clone();
-            let wc = websocket_clients.clone();
-            let gs = governance_service.clone();
-            async move {
-                let mut service = gs.lock().await;
-                service.handle_create_proposal(proposal, ns, wc).await
-            }
-        });
-
-    let vote_on_proposal = warp::path!("api" / "v1" / "governance" / "proposals" / String / "vote")
-        .and(with_reputation_rate_limit(reputation_manager.clone(), "api/v1/governance/proposals/vote"))
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |proposal_id: String, vote: Vote| {
-            let ns = notification_manager.clone();
-            let wc = websocket_clients.clone();
-            let gs = governance_service.clone();
-            async move {
-                // Set the proposal_id in vote if not matching
-                let vote = Vote { proposal_id, ..vote };
-                let mut service = gs.lock().await;
-                service.handle_vote_on_proposal(vote, ns, wc).await
-            }
-        });
-
-    let federation_routes = warp::path("api/v1/federation")
-        .and(with_reputation_rate_limit(reputation_manager.clone(), "api/v1/federation"))
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(move |operation: FederationOperation| {
-            let notification_manager = notification_manager.clone();
-            async move {
-                handle_federation_operation(operation, notification_manager).await
-            }
-        });
-
-    let query_shared_resources = warp::path!("api" / "v1" / "resources" / "query")
-        .and(warp::get())
-        .and_then(move || {
-            async move {
-                handle_query_shared_resources().await
-            }
-        });
-
-    let cors = warp::cors()
-        .allow_any_origin()
-        .allow_methods(&[Method::GET, Method::POST, Method::PUT, Method::DELETE])
-        .allow_headers(vec!["content-type"]);
-
-    let routes = create_proposal
-        .or(vote_on_proposal)
-        .or(federation_routes)
-        .or(query_shared_resources)
-        .or(websocket_route)
-        .with(cors);
-
-    let server = warp::serve(routes).run(([0, 0, 0, 0], 8081));
-
-    // Handle graceful shutdown
-    let shutdown_signal = async {
-        signal::ctrl_c().await.expect("Failed to install CTRL+C signal handler");
-    };
-
-    info!("Warp server started.");
-    let (_, server_result) = tokio::join!(shutdown_signal, server);
-
-    if let Err(e) = server_result {
-        error!("Warp server encountered an error: {}", e);
-    }
-
-    // Stop core system
-    if let Err(e) = core.stop().await {
-        error!("Failed to stop core system: {}", e);
-    }
-
-    info!("Backend application stopped.");
+    info!("Starting API server on port {}", port);
+    
+    // Run the server (this will block until the server exits)
+    api_server.run().await?;
+    
+    info!("API server stopped. Shutting down...");
+    
+    // Graceful shutdown
+    core.shutdown().await?;
+    
+    info!("ICN backend stopped.");
+    
     Ok(())
 }
 

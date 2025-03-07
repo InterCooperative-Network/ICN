@@ -15,6 +15,7 @@ pub mod vm;
 pub mod networking;
 pub mod models;
 pub mod telemetry;
+pub mod verifiable_credentials;
 
 // Re-export main components
 pub use self::{
@@ -26,6 +27,7 @@ pub use self::{
     vm::RuntimeInterface,
     telemetry::{TelemetryManager, PrometheusMetrics, Logger, TracingSystem},
     models::{ResourceAllocationSystem, FederationManager, ResourceAllocation},
+    verifiable_credentials::{VerifiableCredential, Proof, CredentialStatus},
 };
 
 #[derive(Debug, Serialize, Deserialize)]

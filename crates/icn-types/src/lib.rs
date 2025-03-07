@@ -987,3 +987,296 @@ pub struct RuntimeConfig {
     pub enable_debugging: bool,
     pub log_level: String,
 }
+
+use std::error::Error;
+use std::fmt;
+
+#[derive(Debug)]
+pub enum RuntimeError {
+    ExecutionError(String),
+    ValidationError(String),
+    ResourceLimitError(String),
+    AccessControlError(String),
+    NetworkError(String),
+    StorageError(String),
+}
+
+impl Error for RuntimeError {}
+
+impl fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RuntimeError::ExecutionError(msg) => write!(f, "Execution error: {}", msg),
+            RuntimeError::ValidationError(msg) => write!(f, "Validation error: {}", msg),
+            RuntimeError::ResourceLimitError(msg) => write!(f, "Resource limit error: {}", msg),
+            RuntimeError::AccessControlError(msg) => write!(f, "Access control error: {}", msg),
+            RuntimeError::NetworkError(msg) => write!(f, "Network error: {}", msg),
+            RuntimeError::StorageError(msg) => write!(f, "Storage error: {}", msg),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionContext {
+    pub transaction: Option<Transaction>,
+    pub block: Option<Block>,
+    pub state: HashMap<String, String>,
+    pub metadata: HashMap<String, String>,
+}
+
+impl ExecutionContext {
+    pub fn new() -> Self {
+        Self {
+            transaction: None,
+            block: None,
+            state: HashMap::new(),
+            metadata: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Block {
+    pub index: u64,
+    pub previous_hash: String,
+    pub timestamp: u64,
+    pub transactions: Vec<Transaction>,
+    pub hash: String,
+    pub proposer: String,
+    pub metadata: BlockMetadata,
+}
+
+impl Block {
+    pub fn new(index: u64, previous_hash: String, transactions: Vec<Transaction>, proposer: String) -> Self {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs();
+        
+        let mut block = Self {
+            index,
+            previous_hash,
+            timestamp,
+            transactions,
+            hash: String::new(),
+            proposer,
+            metadata: BlockMetadata::default(),
+        };
+        
+        block.hash = block.calculate_hash();
+        block
+    }
+    
+    pub fn calculate_hash(&self) -> String {
+        use sha2::{Sha256, Digest};
+        
+        let data = format!(
+            "{}:{}:{}:{}:{}",
+            self.index,
+            self.previous_hash,
+            self.timestamp,
+            self.proposer,
+            self.transactions.len()
+        );
+        
+        format!("{:x}", Sha256::digest(data.as_bytes()))
+    }
+    
+    pub async fn finalize(&mut self) -> Result<(), BlockError> {
+        self.verify(None).await?;
+        
+        let resource_usage: u64 = self.transactions.iter()
+            .map(|tx| tx.resource_cost)
+            .sum();
+            
+        self.metadata.resources_used = resource_usage;
+        
+        self.metadata.size = bincode::serialize(&self)
+            .map_err(|_| BlockError::InvalidHash)?
+            .len() as u64;
+            
+        self.hash = self.calculate_hash();
+
+        Ok(())
+    }
+    
+    pub async fn verify(&self, _previous_block: Option<&Block>) -> Result<(), BlockError> {
+        // Placeholder implementation
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlockMetadata {
+    pub size: u64,
+    pub resources_used: u64,
+    pub validator_signatures: Vec<String>,
+    pub consensus_data: HashMap<String, String>,
+}
+
+impl Default for BlockMetadata {
+    fn default() -> Self {
+        Self {
+            size: 0,
+            resources_used: 0,
+            validator_signatures: Vec::new(),
+            consensus_data: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Transaction {
+    pub sender: String,
+    pub transaction_type: TransactionType,
+    pub timestamp: u64,
+    pub signature: String,
+    pub hash: String,
+    pub resource_cost: u64,
+}
+
+impl Transaction {
+    pub fn new(sender: String, transaction_type: TransactionType) -> Self {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs();
+        
+        let mut tx = Self {
+            sender,
+            transaction_type,
+            timestamp,
+            signature: String::new(),
+            hash: String::new(),
+            resource_cost: 1,  // Default value
+        };
+        
+        tx.hash = tx.calculate_hash();
+        tx
+    }
+    
+    fn calculate_hash(&self) -> String {
+        use sha2::{Sha256, Digest};
+        
+        let data = format!(
+            "{}:{}:{}",
+            self.sender,
+            serde_json::to_string(&self.transaction_type).unwrap_or_default(),
+            self.timestamp,
+        );
+        
+        format!("{:x}", Sha256::digest(data.as_bytes()))
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TransactionType {
+    Transfer {
+        receiver: String,
+        amount: u64,
+    },
+    GovernanceProposal {
+        title: String,
+        description: String,
+        ends_at: String,
+    },
+    Vote {
+        proposal_id: String,
+        approve: bool,
+    },
+    FederationOperation(FederationOperation),
+    ResourceAllocation {
+        resource_type: String,
+        amount: u64,
+        recipient: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationOperation {
+    InitiateFederation {
+        federation_type: FederationType,
+        partner_id: String,
+        terms: FederationTerms,
+    },
+    JoinFederation {
+        federation_id: String,
+        commitment: Vec<String>,
+    },
+    LeaveFederation {
+        federation_id: String,
+        reason: String,
+    },
+    ProposeAction {
+        federation_id: String,
+        action_type: String,
+        description: String,
+        resources: HashMap<String, u64>,
+    },
+    VoteOnProposal {
+        federation_id: String,
+        proposal_id: String,
+        approve: bool,
+        notes: Option<String>,
+    },
+    ShareResources {
+        federation_id: String,
+        resource_type: String,
+        amount: u64,
+        recipient_id: String,
+    },
+    UpdateFederationTerms {
+        federation_id: String,
+        new_terms: FederationTerms,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationType {
+    Cooperative,
+    Mutual,
+    Association,
+    Custom(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationTerms {
+    pub minimum_reputation: u64,
+    pub resource_sharing_policies: String,
+    pub governance_rules: String,
+    pub duration: String,
+}
+
+impl Default for FederationTerms {
+    fn default() -> Self {
+        Self {
+            minimum_reputation: 0,
+            resource_sharing_policies: "Equal".to_string(),
+            governance_rules: "Majority".to_string(),
+            duration: "2025-12-31T23:59:59Z".to_string(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum BlockError {
+    InvalidHash,
+    InvalidPreviousHash,
+    InvalidTransaction,
+    InvalidSignature,
+    ValidationFailed,
+}
+
+impl Error for BlockError {}
+
+impl fmt::Display for BlockError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BlockError::InvalidHash => write!(f, "Invalid block hash"),
+            BlockError::InvalidPreviousHash => write!(f, "Invalid previous hash"),
+            BlockError::InvalidTransaction => write!(f, "Invalid transaction in block"),
+            BlockError::InvalidSignature => write!(f, "Invalid signature in block"),
+            BlockError::ValidationFailed => write!(f, "Block validation failed"),
+        }
+    }
+}

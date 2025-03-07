@@ -265,3 +265,76 @@ mod integration_tests {
         // Add assertions based on the expected behavior of record_contribution
     }
 }
+
+pub struct ReputationSystem {
+    // DID -> (category -> reputation score)
+    reputation_scores: HashMap<String, HashMap<String, i32>>,
+}
+
+impl ReputationSystem {
+    pub fn new() -> Self {
+        Self {
+            reputation_scores: HashMap::new(),
+        }
+    }
+    
+    pub fn increase_reputation(&mut self, did: &str, amount: i32) {
+        self.adjust_reputation(did, amount, "consensus".to_string());
+    }
+    
+    pub fn decrease_reputation(&mut self, did: &str, amount: i32) {
+        self.adjust_reputation(did, -amount, "consensus".to_string());
+    }
+    
+    pub fn adjust_reputation(&mut self, did: &str, amount: i32, category: String) {
+        let categories = self.reputation_scores
+            .entry(did.to_string())
+            .or_insert_with(HashMap::new);
+            
+        let score = categories.entry(category).or_insert(0);
+        *score += amount;
+    }
+    
+    pub fn get_reputation(&self, did: &str, category: String) -> i32 {
+        self.reputation_scores
+            .get(did)
+            .and_then(|categories| categories.get(&category))
+            .copied()
+            .unwrap_or(0)
+    }
+    
+    pub fn is_eligible(&self, did: &str, threshold: i32, category: String) -> bool {
+        self.get_reputation(did, category) >= threshold
+    }
+    
+    // Apply decay to a specific category
+    pub fn apply_decay(&mut self, did: &str, decay_factor: f64, category: String) {
+        if let Some(categories) = self.reputation_scores.get_mut(did) {
+            if let Some(score) = categories.get_mut(&category) {
+                *score = (*score as f64 * (1.0 - decay_factor)) as i32;
+            }
+        }
+    }
+    
+    // Apply decay to all categories
+    pub fn apply_decay_all(&mut self, did: &str, decay_factor: f64) {
+        if let Some(categories) = self.reputation_scores.get_mut(did) {
+            for score in categories.values_mut() {
+                *score = (*score as f64 * (1.0 - decay_factor)) as i32;
+            }
+        }
+    }
+    
+    pub fn dynamic_adjustment(&mut self, did: &str, amount: i32) {
+        self.adjust_reputation(did, amount, "consensus".to_string());
+    }
+    
+    pub fn reputation_based_access(&self, did: &str, threshold: i32) -> bool {
+        self.reputation_scores
+            .get(did)
+            .map(|categories| {
+                categories.values().sum::<i32>() >= threshold
+            })
+            .unwrap_or(false)
+    }
+}

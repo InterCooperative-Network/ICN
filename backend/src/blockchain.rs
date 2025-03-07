@@ -9,6 +9,10 @@ use zk_snarks::verify_proof; // Import zk-SNARK verification function
 use std::collections::HashMap;
 use log::{info, error};
 use futures::future::join_all; // Import join_all for concurrency
+use crate::identity::IdentitySystem;
+use crate::reputation::ReputationSystem;
+use std::sync::{Arc, Mutex};
+use std::collections::VecDeque;
 
 pub trait BlockchainOperations {
     fn add_block(&mut self, block: Block);
@@ -33,17 +37,104 @@ pub struct Blockchain {
     pub tendermint_client: Client,
     pub trusted_state: Arc<Mutex<TrustedState>>,
     pub cache: HashMap<String, Block>,
+    pub identity_system: Arc<Mutex<IdentitySystem>>,
+    pub reputation_system: Arc<Mutex<ReputationSystem>>,
 }
 
 impl Blockchain {
-    pub fn new(tendermint_client: Client, trusted_state: TrustedState) -> Self {
+    pub fn new(tendermint_client: Client, trusted_state: TrustedState, identity_system: Arc<Mutex<IdentitySystem>>, reputation_system: Arc<Mutex<ReputationSystem>>) -> Self {
         Self {
-            blocks: vec![],
+            blocks: vec![Block::new(0, "genesis".to_string(), vec![], "genesis".to_string())],
             pending_transactions: vec![],
             tendermint_client,
             trusted_state: Arc::new(Mutex::new(trusted_state)),
             cache: HashMap::new(),
+            identity_system,
+            reputation_system,
         }
+    }
+
+    pub async fn add_transaction(&mut self, transaction: Transaction) -> Result<(), String> {
+        // Validate transaction
+        let sender = &transaction.sender;
+        
+        // Check if sender has permission
+        {
+            let identity_system = self.identity_system.lock().unwrap();
+            match transaction.transaction_type {
+                icn_types::TransactionType::Transfer { .. } => {
+                    if !identity_system.has_permission(sender, "transfer") {
+                        return Err("Sender does not have transfer permission".to_string());
+                    }
+                },
+                _ => {
+                    // Other transaction types validation
+                }
+            }
+        }
+        
+        // Add to pending transactions
+        self.pending_transactions.push(transaction);
+        Ok(())
+    }
+
+    pub async fn add_block(&mut self, mut block: Block) -> Result<(), String> {
+        // Verify block
+        let last_block = self.blocks.last().ok_or("No blocks in chain")?;
+        if block.previous_hash != last_block.hash {
+            return Err("Invalid previous hash".to_string());
+        }
+        
+        // Process transactions in block
+        for transaction in &block.transactions {
+            // Process transaction effects
+            match &transaction.transaction_type {
+                icn_types::TransactionType::Transfer { receiver, amount } => {
+                    // In a real implementation, this would update balances
+                    // For now, just adjust reputation based on transaction
+                    {
+                        let mut reputation = self.reputation_system.lock().unwrap();
+                        reputation.increase_reputation(&transaction.sender, 1);
+                    }
+                },
+                _ => {
+                    // Process other transaction types
+                }
+            }
+        }
+        
+        // Finalize and add block
+        block.finalize().await?;
+        self.blocks.push(block);
+        
+        // Clear processed transactions from pending
+        self.pending_transactions.clear();
+        
+        Ok(())
+    }
+
+    pub async fn verify_chain(&self) -> Result<(), String> {
+        if self.blocks.is_empty() {
+            return Ok(());
+        }
+        
+        // Check that each block links to previous block
+        for i in 1..self.blocks.len() {
+            let current_block = &self.blocks[i];
+            let previous_block = &self.blocks[i-1];
+            
+            // Verify previous hash
+            if current_block.previous_hash != previous_block.hash {
+                return Err(format!("Block {} has invalid previous_hash", i));
+            }
+            
+            // Verify block hash
+            if current_block.hash != current_block.calculate_hash() {
+                return Err(format!("Block {} has invalid hash", i));
+            }
+        }
+        
+        Ok(())
     }
 }
 
