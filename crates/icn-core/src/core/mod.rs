@@ -5,11 +5,10 @@ use crate::{
     networking::NetworkInterface,
     identity::IdentityInterface,
     reputation::ReputationInterface,
-    vm::RuntimeInterface,
     telemetry::TelemetryManager,
     models::{ResourceAllocationSystem, FederationManager, ResourceAllocation},
 };
-use icn_types::{Block, Transaction, FederationOperation};
+use icn_types::{Block, Transaction, FederationOperation, RuntimeInterface};
 use crate::telemetry::{PrometheusMetrics, Logger, TracingSystem};
 
 pub struct Core {

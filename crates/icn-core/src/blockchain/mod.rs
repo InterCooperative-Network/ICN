@@ -24,7 +24,7 @@ impl Blockchain {
     pub async fn add_block(&self, block: Block) -> Result<(), BlockError> {
         let mut chain = self.chain.write().await;
         if let Some(previous_block) = chain.last() {
-            block.verify(previous_block).await?;
+            block.verify(Some(previous_block)).await?;
         }
         chain.push(block);
         Ok(())
