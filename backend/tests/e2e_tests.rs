@@ -238,4 +238,78 @@ async_test!(test_identity_and_reputation, |services| async {
     assert!(is_valid, "Proof should be valid");
 
     Ok(())
-}); 
+});
+
+// E2E test: Governance proposal lifecycle
+async_test!(test_governance_proposal_lifecycle, |services| async {
+    let (services, base_url) = setup_test_server().await;
+    let client = reqwest::Client::new();
+
+    // 1. Create a proposal
+    let proposal_response = client.post(&format!("{}/api/v1/governance/proposals", base_url))
+        .json(&json!({
+            "title": "Test Proposal",
+            "description": "Test Description",
+            "created_by": "did:icn:test",
+            "ends_at": (Utc::now() + Duration::hours(24)).to_rfc3339()
+        }))
+        .send()
+        .await?;
+
+    assert_eq!(proposal_response.status(), StatusCode::OK);
+    let proposal: Proposal = proposal_response.json().await?;
+
+    // 2. Vote on the proposal
+    let vote_response = client.post(&format!("{}/api/v1/governance/proposals/{}/vote", base_url, proposal.id))
+        .json(&json!({
+            "voter": "did:icn:test",
+            "approve": true
+        }))
+        .send()
+        .await?;
+
+    assert_eq!(vote_response.status(), StatusCode::OK);
+
+    // 3. Verify proposal status
+    let status_response = client.get(&format!("{}/api/v1/governance/proposals/{}", base_url, proposal.id))
+        .send()
+        .await?;
+
+    assert_eq!(status_response.status(), StatusCode::OK);
+    let status: serde_json::Value = status_response.json().await?;
+    assert_eq!(status["status"], "approved");
+
+    Ok(())
+});
+
+// E2E test: Blockchain operations
+async_test!(test_blockchain_operations, |services| async {
+    let (services, base_url) = setup_test_server().await;
+    let client = reqwest::Client::new();
+
+    // 1. Add a block
+    let block_response = client.post(&format!("{}/api/v1/blockchain/blocks", base_url))
+        .json(&json!({
+            "index": 1,
+            "previous_hash": "previous_hash",
+            "timestamp": Utc::now().to_rfc3339(),
+            "transactions": [],
+            "hash": "test_hash",
+            "proposer": "did:icn:test"
+        }))
+        .send()
+        .await?;
+
+    assert_eq!(block_response.status(), StatusCode::OK);
+
+    // 2. Verify blockchain consistency
+    let verify_response = client.get(&format!("{}/api/v1/blockchain/verify", base_url))
+        .send()
+        .await?;
+
+    assert_eq!(verify_response.status(), StatusCode::OK);
+    let is_valid: bool = verify_response.json().await?;
+    assert!(is_valid, "Blockchain should be valid");
+
+    Ok(())
+});

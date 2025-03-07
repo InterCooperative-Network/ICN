@@ -67,8 +67,23 @@ impl IdentityService for IdentityServiceImpl {
     }
 
     async fn verify_credential(&self, credential: &str) -> Result<bool, String> {
-        // Placeholder logic for verifying credential
-        Ok(true)
+        // Implement actual validation logic for verifying credential
+        // For example, you can use a library to parse and validate the credential
+        // Here, we assume the credential is a JSON string and validate its structure
+
+        let parsed_credential: Result<VerifiableCredential, _> = serde_json::from_str(credential);
+        match parsed_credential {
+            Ok(vc) => {
+                // Perform additional validation checks if needed
+                // For example, check the issuer, expiration date, etc.
+                if vc.issuer_did == "did:icn:issuer" {
+                    Ok(true)
+                } else {
+                    Err("Invalid issuer".to_string())
+                }
+            }
+            Err(_) => Err("Invalid credential format".to_string()),
+        }
     }
 
     async fn get_public_key(&self, did: &str) -> Result<Option<Vec<u8>>, String> {
@@ -148,9 +163,50 @@ mod tests {
         let db = Arc::new(Database { pool });
         let service = IdentityServiceImpl::new(db);
 
-        let result = service.verify_credential("example-credential").await;
+        let valid_credential = r#"
+        {
+            "credential_type": "IdentityCredential",
+            "issuer_did": "did:icn:issuer",
+            "subject_did": "did:icn:test",
+            "issuance_date": "2023-01-01T00:00:00Z",
+            "expiration_date": null,
+            "credential_status": null,
+            "credential_schema": null,
+            "proof": {
+                "type_": "Ed25519Signature2018",
+                "created": "2023-01-01T00:00:00Z",
+                "proof_purpose": "assertionMethod",
+                "verification_method": "did:icn:issuer#keys-1",
+                "jws": "example-jws"
+            }
+        }
+        "#;
+
+        let invalid_credential = r#"
+        {
+            "credential_type": "IdentityCredential",
+            "issuer_did": "did:icn:invalid",
+            "subject_did": "did:icn:test",
+            "issuance_date": "2023-01-01T00:00:00Z",
+            "expiration_date": null,
+            "credential_status": null,
+            "credential_schema": null,
+            "proof": {
+                "type_": "Ed25519Signature2018",
+                "created": "2023-01-01T00:00:00Z",
+                "proof_purpose": "assertionMethod",
+                "verification_method": "did:icn:issuer#keys-1",
+                "jws": "example-jws"
+            }
+        }
+        "#;
+
+        let result = service.verify_credential(valid_credential).await;
         assert!(result.is_ok());
         assert!(result.unwrap());
+
+        let result = service.verify_credential(invalid_credential).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
