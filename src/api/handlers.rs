@@ -1,7 +1,9 @@
-use crate::icn_types::IcnResult;
+use icn_types::IcnResult;
 use crate::network::communication::NetworkLayer;
 use crate::services::event_service::EventService;
+use crate::services::event_service::DomainEvent;
 use crate::storage::event_store::EventStore;
+use crate::network::communication::NetworkEvent;
 use warp::Reply;
 
 pub async fn health_check() -> IcnResult<&'static str> {
