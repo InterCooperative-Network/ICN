@@ -20,20 +20,18 @@ pub use errors::{IcnError, IcnResult, log_error};
 
 #[derive(Debug, Error)]
 pub enum BlockError {
-    #[error("Invalid block hash")]
-    InvalidHash,
-    #[error("Previous hash mismatch")]
-    PreviousHashMismatch,
     #[error("Invalid block index")]
     InvalidIndex,
-    #[error("Invalid timestamp")]
-    InvalidTimestamp,
-    #[error("Invalid transaction: {0}")]
-    InvalidTransaction(String),
-    #[error("Resource usage mismatch")]
-    ResourceMismatch,
-    #[error("Relationship metadata mismatch")]
-    MetadataMismatch,
+    #[error("Invalid previous hash")]
+    InvalidPreviousHash,
+    #[error("Invalid transaction")]
+    InvalidTransaction,
+    #[error("Invalid proposer")]
+    InvalidProposer,
+    #[error("Consensus error")]
+    ConsensusError,
+    #[error("Database error")]
+    DatabaseError,
 }
 
 #[derive(Debug)]
@@ -46,57 +44,57 @@ pub struct ResourceDebt {
 /// Represents a block in the blockchain
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Block {
-    /// Sequential index of this block in the chain
     pub index: u64,
-    
-    /// Hash of the previous block
     pub previous_hash: String,
-    
-    /// Unix timestamp in milliseconds when block was created
     pub timestamp: u64,
-    
-    /// List of transactions included in this block
     pub transactions: Vec<Transaction>,
-    
-    /// Hash of this block's contents
     pub hash: String,
-    
-    /// The DID of the validator that proposed this block
     pub proposer: String,
-    
-    /// Collection of validator signatures approving this block
-    pub signatures: Vec<BlockSignature>,
-    
-    /// Metadata about the block creation
     pub metadata: BlockMetadata,
+    pub signatures: Vec<BlockSignature>,
 }
 
-/// Signature from a validator approving a block
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlockSignature {
-    /// DID of the signing validator
     pub validator_did: String,
-    
-    /// The signature itself
     pub signature: String,
-    
-    /// Timestamp when signature was created
     pub timestamp: DateTime<Utc>,
-    
-    /// Voting power of the validator at time of signing
     pub voting_power: f64,
 }
 
-/// Additional metadata about block creation and validation
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlockMetadata {
+    pub height: u64,
+    pub state_root: String,
+    pub transaction_root: String,
+    pub consensus_data: HashMap<String, String>,
+    pub validator_signatures: Vec<String>,
     pub consensus_duration_ms: u64,
     pub validator_count: u32,
     pub total_voting_power: f64,
-    pub resources_used: u64,
     pub size: u64,
-    pub relationship_updates: RelationshipMetadata,
+    pub resources_used: u64,
+    pub relationship_updates: Option<RelationshipMetadata>,
     pub fault_tolerance: Option<u32>,
+}
+
+impl Default for BlockMetadata {
+    fn default() -> Self {
+        Self {
+            height: 0,
+            state_root: String::new(),
+            transaction_root: String::new(),
+            consensus_data: HashMap::new(),
+            validator_signatures: Vec::new(),
+            consensus_duration_ms: 0,
+            validator_count: 0,
+            total_voting_power: 0.0,
+            size: 0,
+            resources_used: 0,
+            relationship_updates: None,
+            fault_tolerance: None,
+        }
+    }
 }
 
 impl BlockMetadata {
@@ -153,6 +151,11 @@ impl Block {
             size: 0,
             relationship_updates: relationship_metadata,
             fault_tolerance: None,
+            height: 0,
+            state_root: String::new(),
+            transaction_root: String::new(),
+            consensus_data: HashMap::new(),
+            validator_signatures: Vec::new(),
         };
 
         let mut block = Block {
@@ -162,8 +165,8 @@ impl Block {
             transactions,
             hash: String::new(),
             proposer,
-            signatures: Vec::new(),
             metadata,
+            signatures: Vec::new(),
         };
 
         block.hash = block.calculate_hash();
@@ -231,19 +234,19 @@ impl Block {
     pub async fn verify(&self, previous_block: Option<&Block>) -> Result<(), BlockError> {
         // Verify hash
         if self.hash != self.calculate_hash() {
-            return Err(BlockError::InvalidHash);
+            return Err(BlockError::InvalidTransaction);
         }
 
         // Verify previous block linkage
         if let Some(prev) = previous_block {
             if self.previous_hash != prev.hash {
-                return Err(BlockError::PreviousHashMismatch);
+                return Err(BlockError::InvalidPreviousHash);
             }
             if self.index != prev.index + 1 {
                 return Err(BlockError::InvalidIndex);
             }
             if self.timestamp <= prev.timestamp {
-                return Err(BlockError::InvalidTimestamp);
+                return Err(BlockError::InvalidTransaction);
             }
         }
 
@@ -254,7 +257,7 @@ impl Block {
             .as_millis() as u64;
 
         if self.timestamp > current_time + 5000 { // Allow 5 second drift
-            return Err(BlockError::InvalidTimestamp);
+            return Err(BlockError::InvalidTransaction);
         }
 
         // Validate transactions
@@ -265,13 +268,13 @@ impl Block {
             .map(|tx| tx.resource_cost)
             .sum();
         if calculated_resources != self.metadata.resources_used {
-            return Err(BlockError::ResourceMismatch);
+            return Err(BlockError::InvalidTransaction);
         }
 
         // Verify relationship metadata
         let calculated_metadata = Self::calculate_relationship_metadata(&self.transactions);
         if calculated_metadata != self.metadata.relationship_updates {
-            return Err(BlockError::MetadataMismatch);
+            return Err(BlockError::InvalidTransaction);
         }
 
         Ok(())
@@ -284,12 +287,12 @@ impl Block {
             
             // Check if transaction is already processed
             if cache.contains_key(&tx.hash) {
-                return Err(BlockError::InvalidTransaction("Duplicate transaction".to_string()));
+                return Err(BlockError::InvalidTransaction);
             }
             
             // Validate the transaction
             if !tx.validate() {
-                return Err(BlockError::InvalidTransaction("Invalid transaction".to_string()));
+                return Err(BlockError::InvalidTransaction);
             }
             
             // Add to cache
@@ -299,7 +302,7 @@ impl Block {
     }
 
     /// Calculates metadata for relationship transactions in the block
-    fn calculate_relationship_metadata(transactions: &[Transaction]) -> RelationshipMetadata {
+    fn calculate_relationship_metadata(transactions: &[Transaction]) -> Option<RelationshipMetadata> {
         let mut metadata = RelationshipMetadata {
             contribution_count: 0,
             mutual_aid_count: 0,
@@ -338,7 +341,7 @@ impl Block {
 
         metadata.total_participants = participants.len() as u32;
 
-        metadata
+        Some(metadata)
     }
 
     /// Updates the block's metadata after consensus is reached
@@ -376,7 +379,7 @@ impl Block {
         self.metadata.resources_used = resource_usage;
         
         self.metadata.size = bincode::serialize(&self)
-            .map_err(|_| BlockError::InvalidHash)?
+            .map_err(|_| BlockError::InvalidTransaction)?
             .len() as u64;
             
         self.hash = self.calculate_hash();
@@ -391,7 +394,7 @@ impl Block {
         let signature = format!("signature_of_{}", validator);
         
         if !self.add_signature(validator.to_string(), signature, 1.0).await {
-            return Err(BlockError::InvalidTransaction("Failed to add validator signature".to_string()));
+            return Err(BlockError::InvalidTransaction);
         }
 
         Ok(())
@@ -400,13 +403,13 @@ impl Block {
     /// Records a validator's vote on the block
     pub async fn vote_on_block(&mut self, validator_did: String, vote: bool) -> Result<(), BlockError> {
         if !vote {
-            return Err(BlockError::InvalidTransaction("Vote rejected".to_string()));
+            return Err(BlockError::InvalidTransaction);
         }
 
         let signature = "signature".to_string(); // In real implementation, this would be a proper signature
         
         if !self.add_signature(validator_did, signature, 1.0).await {
-            return Err(BlockError::InvalidTransaction("Failed to add signature".to_string()));
+            return Err(BlockError::InvalidTransaction);
         }
 
         Ok(())
@@ -489,14 +492,16 @@ impl TransactionType {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Transaction {
+    pub id: String,
     pub sender: String,
     pub receiver: String,
     pub amount: u64,
-    pub hash: String,
     pub transaction_type: TransactionType,
-    pub timestamp: u128,
-    pub resource_cost: u64,      // Resource points required for this transaction
-    pub resource_priority: u8,    // Priority level for resource allocation (1-10)
+    pub timestamp: i64,
+    pub hash: String,
+    pub signature: String,
+    pub resource_cost: u64,
+    pub resource_priority: u8,
 }
 
 impl Transaction {
@@ -523,12 +528,14 @@ impl Transaction {
         let resource_cost = Self::calculate_resource_cost(&transaction_type);
 
         Transaction {
+            id: String::new(),
             sender,
             receiver,
             amount,
             hash,
             transaction_type,
-            timestamp,
+            timestamp: timestamp as i64,
+            signature: String::new(),
             resource_cost,
             resource_priority: 5, // Default priority
         }
@@ -635,7 +642,7 @@ impl Transaction {
     }
 
     pub fn get_timestamp_ms(&self) -> u128 {
-        self.timestamp
+        self.timestamp as u128
     }
 
     pub fn get_sender(&self) -> &str {
@@ -785,56 +792,6 @@ pub enum ResourceAvailability {
     Offline,
 }
 
-/// Error types that can occur in ICN operations
-#[derive(Debug, thiserror::Error)]
-pub enum IcnError {
-    #[error("Authentication failed: {0}")]
-    AuthenticationError(String),
-    
-    #[error("Authorization failed: {0}")]
-    AuthorizationError(String),
-    
-    #[error("Resource not found: {0}")]
-    ResourceNotFound(String),
-    
-    #[error("Invalid operation: {0}")]
-    InvalidOperation(String),
-    
-    #[error("Network error: {0}")]
-    NetworkError(String),
-    
-    #[error("Database error: {0}")]
-    DatabaseError(String),
-    
-    // Add more granular error types
-    #[error("Federation error: {0}")]
-    FederationError(#[from] FederationError),
-    
-    #[error("Governance error: {0}")]
-    GovernanceError(#[from] GovernanceError),
-    
-    #[error("Identity error: {0}")]
-    IdentityError(#[from] IdentityError),
-    
-    #[error("Consensus error: {0}")]
-    ConsensusError(#[from] ConsensusError),
-    
-    #[error("Storage error: {0}")]
-    StorageError(#[from] StorageError),
-    
-    #[error("Runtime error: {0}")]
-    RuntimeError(#[from] RuntimeError),
-    
-    #[error("Rate limiting: {0}")]
-    RateLimitError(String),
-    
-    #[error("Validation failed: {0}")]
-    ValidationError(String),
-}
-
-/// Result type for ICN operations
-pub type IcnResult<T> = Result<T, IcnError>;
-
 /// Storage-related error types
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
@@ -913,21 +870,22 @@ pub struct StorageConfig {
 pub enum RuntimeError {
     #[error("Validation failed: {0}")]
     ValidationFailed(String),
-    
     #[error("Invalid state")]
     InvalidState,
-    
     #[error("Execution error: {0}")]
     ExecutionError(String),
-    
     #[error("DSL error: {0}")]
     DslError(String),
-    
     #[error("Contract error: {0}")]
     ContractError(String),
 }
 
-/// Result type for runtime operations
+impl From<RuntimeError> for IcnError {
+    fn from(err: RuntimeError) -> Self {
+        IcnError::RuntimeError(err.to_string())
+    }
+}
+
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
 
 /// Represents the execution context for runtime operations
@@ -988,295 +946,43 @@ pub struct RuntimeConfig {
     pub log_level: String,
 }
 
-use std::error::Error;
-use std::fmt;
-
-#[derive(Debug)]
-pub enum RuntimeError {
-    ExecutionError(String),
-    ValidationError(String),
-    ResourceLimitError(String),
-    AccessControlError(String),
-    NetworkError(String),
-    StorageError(String),
+#[derive(Debug, Clone)]
+pub struct ReputationError {
+    pub message: String,
 }
 
-impl Error for RuntimeError {}
-
-impl fmt::Display for RuntimeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            RuntimeError::ExecutionError(msg) => write!(f, "Execution error: {}", msg),
-            RuntimeError::ValidationError(msg) => write!(f, "Validation error: {}", msg),
-            RuntimeError::ResourceLimitError(msg) => write!(f, "Resource limit error: {}", msg),
-            RuntimeError::AccessControlError(msg) => write!(f, "Access control error: {}", msg),
-            RuntimeError::NetworkError(msg) => write!(f, "Network error: {}", msg),
-            RuntimeError::StorageError(msg) => write!(f, "Storage error: {}", msg),
-        }
+impl std::fmt::Display for ReputationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExecutionContext {
-    pub transaction: Option<Transaction>,
-    pub block: Option<Block>,
-    pub state: HashMap<String, String>,
-    pub metadata: HashMap<String, String>,
+impl std::error::Error for ReputationError {}
+
+#[derive(Debug, Clone)]
+pub struct ExecutionError {
+    pub message: String,
 }
 
-impl ExecutionContext {
-    pub fn new() -> Self {
-        Self {
-            transaction: None,
-            block: None,
-            state: HashMap::new(),
-            metadata: HashMap::new(),
-        }
+impl std::fmt::Display for ExecutionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Block {
-    pub index: u64,
-    pub previous_hash: String,
-    pub timestamp: u64,
-    pub transactions: Vec<Transaction>,
-    pub hash: String,
-    pub proposer: String,
-    pub metadata: BlockMetadata,
+impl std::error::Error for ExecutionError {}
+
+#[derive(Debug, Clone)]
+pub struct ContractInput {
+    pub contract_id: String,
+    pub method: String,
+    pub args: Vec<u8>,
 }
 
-impl Block {
-    pub fn new(index: u64, previous_hash: String, transactions: Vec<Transaction>, proposer: String) -> Self {
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs();
-        
-        let mut block = Self {
-            index,
-            previous_hash,
-            timestamp,
-            transactions,
-            hash: String::new(),
-            proposer,
-            metadata: BlockMetadata::default(),
-        };
-        
-        block.hash = block.calculate_hash();
-        block
-    }
-    
-    pub fn calculate_hash(&self) -> String {
-        use sha2::{Sha256, Digest};
-        
-        let data = format!(
-            "{}:{}:{}:{}:{}",
-            self.index,
-            self.previous_hash,
-            self.timestamp,
-            self.proposer,
-            self.transactions.len()
-        );
-        
-        format!("{:x}", Sha256::digest(data.as_bytes()))
-    }
-    
-    pub async fn finalize(&mut self) -> Result<(), BlockError> {
-        self.verify(None).await?;
-        
-        let resource_usage: u64 = self.transactions.iter()
-            .map(|tx| tx.resource_cost)
-            .sum();
-            
-        self.metadata.resources_used = resource_usage;
-        
-        self.metadata.size = bincode::serialize(&self)
-            .map_err(|_| BlockError::InvalidHash)?
-            .len() as u64;
-            
-        self.hash = self.calculate_hash();
-
-        Ok(())
-    }
-    
-    pub async fn verify(&self, _previous_block: Option<&Block>) -> Result<(), BlockError> {
-        // Placeholder implementation
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BlockMetadata {
-    pub size: u64,
-    pub resources_used: u64,
-    pub validator_signatures: Vec<String>,
-    pub consensus_data: HashMap<String, String>,
-}
-
-impl Default for BlockMetadata {
-    fn default() -> Self {
-        Self {
-            size: 0,
-            resources_used: 0,
-            validator_signatures: Vec::new(),
-            consensus_data: HashMap::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Transaction {
-    pub sender: String,
-    pub transaction_type: TransactionType,
-    pub timestamp: u64,
-    pub signature: String,
-    pub hash: String,
-    pub resource_cost: u64,
-}
-
-impl Transaction {
-    pub fn new(sender: String, transaction_type: TransactionType) -> Self {
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs();
-        
-        let mut tx = Self {
-            sender,
-            transaction_type,
-            timestamp,
-            signature: String::new(),
-            hash: String::new(),
-            resource_cost: 1,  // Default value
-        };
-        
-        tx.hash = tx.calculate_hash();
-        tx
-    }
-    
-    fn calculate_hash(&self) -> String {
-        use sha2::{Sha256, Digest};
-        
-        let data = format!(
-            "{}:{}:{}",
-            self.sender,
-            serde_json::to_string(&self.transaction_type).unwrap_or_default(),
-            self.timestamp,
-        );
-        
-        format!("{:x}", Sha256::digest(data.as_bytes()))
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TransactionType {
-    Transfer {
-        receiver: String,
-        amount: u64,
-    },
-    GovernanceProposal {
-        title: String,
-        description: String,
-        ends_at: String,
-    },
-    Vote {
-        proposal_id: String,
-        approve: bool,
-    },
-    FederationOperation(FederationOperation),
-    ResourceAllocation {
-        resource_type: String,
-        amount: u64,
-        recipient: String,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum FederationOperation {
-    InitiateFederation {
-        federation_type: FederationType,
-        partner_id: String,
-        terms: FederationTerms,
-    },
-    JoinFederation {
-        federation_id: String,
-        commitment: Vec<String>,
-    },
-    LeaveFederation {
-        federation_id: String,
-        reason: String,
-    },
-    ProposeAction {
-        federation_id: String,
-        action_type: String,
-        description: String,
-        resources: HashMap<String, u64>,
-    },
-    VoteOnProposal {
-        federation_id: String,
-        proposal_id: String,
-        approve: bool,
-        notes: Option<String>,
-    },
-    ShareResources {
-        federation_id: String,
-        resource_type: String,
-        amount: u64,
-        recipient_id: String,
-    },
-    UpdateFederationTerms {
-        federation_id: String,
-        new_terms: FederationTerms,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum FederationType {
-    Cooperative,
-    Mutual,
-    Association,
-    Custom(String),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FederationTerms {
-    pub minimum_reputation: u64,
-    pub resource_sharing_policies: String,
-    pub governance_rules: String,
-    pub duration: String,
-}
-
-impl Default for FederationTerms {
-    fn default() -> Self {
-        Self {
-            minimum_reputation: 0,
-            resource_sharing_policies: "Equal".to_string(),
-            governance_rules: "Majority".to_string(),
-            duration: "2025-12-31T23:59:59Z".to_string(),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum BlockError {
-    InvalidHash,
-    InvalidPreviousHash,
-    InvalidTransaction,
-    InvalidSignature,
-    ValidationFailed,
-}
-
-impl Error for BlockError {}
-
-impl fmt::Display for BlockError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BlockError::InvalidHash => write!(f, "Invalid block hash"),
-            BlockError::InvalidPreviousHash => write!(f, "Invalid previous hash"),
-            BlockError::InvalidTransaction => write!(f, "Invalid transaction in block"),
-            BlockError::InvalidSignature => write!(f, "Invalid signature in block"),
-            BlockError::ValidationFailed => write!(f, "Block validation failed"),
-        }
-    }
+#[async_trait::async_trait]
+pub trait RuntimeInterface: Send + Sync {
+    async fn execute_transaction(&self, transaction: &Transaction) -> Result<(), RuntimeError>;
+    async fn execute_block(&self, block: &Block) -> Result<(), RuntimeError>;
+    async fn execute_contract(&self, input: ContractInput) -> Result<Vec<u8>, ExecutionError>;
+    async fn get_contract_state(&self, contract_id: &str) -> Result<Vec<u8>, ExecutionError>;
 }

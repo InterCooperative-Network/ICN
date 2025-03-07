@@ -3,6 +3,7 @@ use icn_types::RuntimeError;
 use icn_core::vm::{OpCode, Contract, CooperativeMetadata, VM as CoreVM};
 use std::error::Error;
 use std::collections::HashMap;
+use icn_core::vm::{VM, VMConfig};
 
 pub mod opcode {
     #[derive(Debug, PartialEq, Clone)]
@@ -109,138 +110,19 @@ pub mod cooperative_metadata {
     }
 }
 
-pub struct VM {
-    pub code: Vec<opcode::OpCode>,
-    pub stack: Vec<i32>,
-    pub memory: HashMap<String, i32>,
-    pub ip: usize,
-    pub metadata: cooperative_metadata::CooperativeMetadata,
+pub struct BackendVM {
+    inner: VM
 }
 
-impl VM {
-    pub fn new(code: Vec<opcode::OpCode>, metadata: cooperative_metadata::CooperativeMetadata) -> Self {
+impl BackendVM {
+    pub fn new(config: VMConfig) -> Self {
         Self {
-            code,
-            stack: Vec::new(),
-            memory: HashMap::new(),
-            ip: 0,
-            metadata,
+            inner: VM::new(config)
         }
     }
-    
-    pub fn execute(&mut self) -> Result<i32, Box<dyn Error>> {
-        while self.ip < self.code.len() {
-            match &self.code[self.ip].clone() {
-                opcode::OpCode::Push(val) => {
-                    self.stack.push(*val);
-                },
-                opcode::OpCode::Pop => {
-                    self.stack.pop().ok_or("Stack underflow")?;
-                },
-                opcode::OpCode::Dup => {
-                    let val = *self.stack.last().ok_or("Stack underflow")?;
-                    self.stack.push(val);
-                },
-                opcode::OpCode::Swap => {
-                    let len = self.stack.len();
-                    if len < 2 {
-                        return Err("Stack underflow".into());
-                    }
-                    self.stack.swap(len - 1, len - 2);
-                },
-                opcode::OpCode::Add => {
-                    let b = self.stack.pop().ok_or("Stack underflow")?;
-                    let a = self.stack.pop().ok_or("Stack underflow")?;
-                    self.stack.push(a + b);
-                },
-                opcode::OpCode::Sub => {
-                    let b = self.stack.pop().ok_or("Stack underflow")?;
-                    let a = self.stack.pop().ok_or("Stack underflow")?;
-                    self.stack.push(a - b);
-                },
-                opcode::OpCode::Mul => {
-                    let b = self.stack.pop().ok_or("Stack underflow")?;
-                    let a = self.stack.pop().ok_or("Stack underflow")?;
-                    self.stack.push(a * b);
-                },
-                opcode::OpCode::Div => {
-                    let b = self.stack.pop().ok_or("Stack underflow")?;
-                    if b == 0 {
-                        return Err("Division by zero".into());
-                    }
-                    let a = self.stack.pop().ok_or("Stack underflow")?;
-                    self.stack.push(a / b);
-                },
-                opcode::OpCode::Load(var) => {
-                    let val = *self.memory.get(var).unwrap_or(&0);
-                    self.stack.push(val);
-                },
-                opcode::OpCode::Store(var) => {
-                    let val = self.stack.pop().ok_or("Stack underflow")?;
-                    self.memory.insert(var.clone(), val);
-                },
-                opcode::OpCode::Jump(pos) => {
-                    self.ip = *pos;
-                    continue; // Skip the ip increment at the end
-                },
-                opcode::OpCode::JumpIf(pos) => {
-                    let condition = self.stack.pop().ok_or("Stack underflow")?;
-                    if condition != 0 {
-                        self.ip = *pos;
-                        continue; // Skip the ip increment at the end
-                    }
-                },
-                opcode::OpCode::Call(_) => {
-                    // In a real VM, this would call another program
-                    // For this implementation, we just do nothing
-                },
-                opcode::OpCode::Return => {
-                    break;
-                },
-                opcode::OpCode::ShareResource(_) => {
-                    // In a real VM, this would actually share resources
-                    // For this implementation, we just do nothing
-                },
-                opcode::OpCode::RequestResource(_) => {
-                    // In a real VM, this would request resources
-                    // For this implementation, we just do nothing
-                },
-                opcode::OpCode::ReleaseResource(_) => {
-                    // In a real VM, this would release resources
-                    // For this implementation, we just do nothing
-                },
-                opcode::OpCode::JoinFederation(_) => {
-                    // In a real VM, this would join a federation
-                    // For this implementation, we just do nothing
-                },
-                opcode::OpCode::LeaveFederation(_) => {
-                    // In a real VM, this would leave a federation
-                    // For this implementation, we just do nothing
-                },
-                opcode::OpCode::VoteOnProposal(_) => {
-                    // In a real VM, this would vote on a proposal
-                    // For this implementation, we just do nothing
-                },
-                opcode::OpCode::GetReputation(_) => {
-                    // In a real VM, this would get the reputation
-                    // For this implementation, we just push 0
-                    self.stack.push(0);
-                },
-                opcode::OpCode::IncreaseReputation(_, _) => {
-                    // In a real VM, this would increase reputation
-                    // For this implementation, we just do nothing
-                },
-                opcode::OpCode::DecreaseReputation(_, _) => {
-                    // In a real VM, this would decrease reputation
-                    // For this implementation, we just do nothing
-                },
-            }
-            
-            self.ip += 1;
-        }
-        
-        // Return the top of the stack, or 0 if empty
-        Ok(self.stack.last().copied().unwrap_or(0))
+
+    pub fn execute(&mut self, contract_id: &str, method: &str, args: Vec<Vec<u8>>) -> Result<Vec<u8>, String> {
+        self.inner.execute(contract_id, method, args)
     }
 }
 
@@ -269,11 +151,11 @@ mod tests {
             OpCode::Mul,     // Stack now contains [16]
         ];
         
-        let mut vm = VM::new(program, metadata);
-        let result = vm.execute();
+        let mut vm = BackendVM::new(VMConfig { code: program, metadata });
+        let result = vm.execute("contract_id", "method", vec![]);
         
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 16);
+        assert_eq!(result.unwrap(), vec![16]);
     }
     
     #[test]
@@ -294,11 +176,11 @@ mod tests {
             OpCode::Load("answer".to_string()),   // Load "answer" (42)
         ];
         
-        let mut vm = VM::new(program, metadata);
-        let result = vm.execute();
+        let mut vm = BackendVM::new(VMConfig { code: program, metadata });
+        let result = vm.execute("contract_id", "method", vec![]);
         
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 42);
+        assert_eq!(result.unwrap(), vec![42]);
     }
     
     #[test]
@@ -322,10 +204,10 @@ mod tests {
             OpCode::Push(100),                // This should be executed
         ];
         
-        let mut vm = VM::new(program, metadata);
-        let result = vm.execute();
+        let mut vm = BackendVM::new(VMConfig { code: program, metadata });
+        let result = vm.execute("contract_id", "method", vec![]);
         
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 100);
+        assert_eq!(result.unwrap(), vec![100]);
     }
 }

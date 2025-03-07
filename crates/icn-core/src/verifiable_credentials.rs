@@ -1,5 +1,6 @@
 use serde::{Serialize, Deserialize};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, FixedOffset};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifiableCredential {
@@ -107,4 +108,37 @@ impl VerifiableCredential {
         
         Ok(true)
     }
+}
+
+pub struct CredentialManager;
+
+impl CredentialManager {
+    pub async fn verify_credential(&self, credential: &VerifiableCredential) -> Result<bool, String> {
+        if let Some(expiry) = credential.expiration_date {
+            // Convert expiry to Utc for comparison
+            let expiry_utc: DateTime<Utc> = expiry.with_timezone(&Utc);
+            if Utc::now() > expiry_utc {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    pub async fn verify_presentation(&self, presentation: &VerifiablePresentation) -> Result<bool, String> {
+        for credential in &presentation.verifiable_credentials {
+            if let Some(expiry) = credential.expiration_date {
+                // Convert expiry to Utc for comparison
+                let expiry_utc: DateTime<Utc> = expiry.with_timezone(&Utc);
+                if Utc::now() > expiry_utc {
+                    return Ok(false);
+                }
+            }
+        }
+        Ok(true)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerifiablePresentation {
+    pub verifiable_credentials: Vec<VerifiableCredential>,
 }
