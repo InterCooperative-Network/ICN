@@ -1,6 +1,15 @@
 mod runtime;
+pub mod opcode;
+pub mod cooperative_metadata;
+pub mod contract;
+pub mod vm;
 
 pub use runtime::{RuntimeInterface, RuntimeManager};
+pub use opcode::OpCode;
+pub use cooperative_metadata::{CooperativeMetadata, ResourceImpact};
+pub use contract::Contract;
+pub use vm::VM;
+
 use std::collections::HashMap;
 use icn_types::{RuntimeError, ExecutionContext};
 

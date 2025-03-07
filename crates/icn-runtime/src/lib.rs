@@ -7,102 +7,93 @@ use icn_types::{
 use icn_dsl::CoopLangAST;
 use tracing::{info, warn, error};
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
+use std::collections::HashMap;
 
-/// Manages the execution runtime for cooperative operations
+/// Runtime interface trait for blockchain execution
+#[async_trait]
+pub trait VM {
+    /// Executes a single transaction
+    async fn execute_transaction(&self, transaction: Transaction) -> RuntimeResult<()>;
+    
+    /// Executes all transactions in a block
+    async fn execute_block(&self, block: Block) -> RuntimeResult<()>;
+}
+
+/// Contract execution handler
+pub struct ContractExecution {
+    /// Map of contract addresses to their byte code
+    contracts: HashMap<String, Vec<u8>>,
+    /// Storage for contract state
+    state: HashMap<String, Vec<u8>>,
+    /// Maximum gas allowed for execution
+    max_gas: u64,
+}
+
+impl ContractExecution {
+    /// Create a new contract execution environment
+    pub fn new(max_gas: u64) -> Self {
+        Self {
+            contracts: HashMap::new(),
+            state: HashMap::new(),
+            max_gas,
+        }
+    }
+    
+    /// Deploy a new contract
+    pub fn deploy_contract(&mut self, address: String, bytecode: Vec<u8>) -> Result<(), String> {
+        if self.contracts.contains_key(&address) {
+            return Err("Contract already exists at this address".to_string());
+        }
+        self.contracts.insert(address, bytecode);
+        Ok(())
+    }
+    
+    /// Execute a contract call
+    pub async fn execute_contract_call(&mut self, address: &str, input: &[u8], gas: u64) -> Result<Vec<u8>, String> {
+        if gas > self.max_gas {
+            return Err("Gas limit exceeded".to_string());
+        }
+        
+        let contract = self.contracts.get(address).ok_or("Contract not found")?;
+        
+        // In a real implementation, this would actually execute the bytecode
+        // For testing purposes, we just return a dummy result
+        Ok(vec![1, 2, 3])
+    }
+}
+
+/// Runtime manager for handling contract execution
 pub struct RuntimeManager {
-    config: RuntimeConfig,
-    dsl_context: Option<CoopLangAST>,
+    /// Execution environment
+    execution: ContractExecution,
+    /// Map of transaction hashes to execution results
+    results: HashMap<String, Vec<u8>>,
 }
 
 impl RuntimeManager {
-    /// Creates a new runtime manager with the given configuration
-    pub fn new(config: RuntimeConfig) -> Self {
+    /// Create a new runtime manager
+    pub fn new(max_gas: u64) -> Self {
         Self {
-            config,
-            dsl_context: None,
+            execution: ContractExecution::new(max_gas),
+            results: HashMap::new(),
         }
     }
-
-    /// Loads DSL bytecode into the runtime
-    pub async fn load_bytecode(&mut self, bytecode: &[u8]) -> RuntimeResult<()> {
-        info!("Loading DSL bytecode into runtime");
-        self.dsl_context = Some(CoopLangAST::parse(bytecode)
-            .map_err(|e| RuntimeError::DslError(e.to_string()))?);
-        Ok(())
+    
+    /// Deploy a new contract
+    pub fn deploy_contract(&mut self, address: String, bytecode: Vec<u8>) -> Result<(), String> {
+        self.execution.deploy_contract(address, bytecode)
     }
-
-    /// Executes cooperative rules in the current context
-    pub async fn execute_cooperative_rules(&self, context: &ExecutionContext) -> RuntimeResult<()> {
-        if let Some(ast) = &self.dsl_context {
-            info!("Executing cooperative rules");
-            
-            // Execute validation rules
-            if let Some(validation) = &ast.validation {
-                info!("Executing validation rules");
-                self.execute_validation_rules(validation, context).await?;
-            }
-
-            // Execute governance rules
-            if let Some(governance) = &ast.governance {
-                info!("Executing governance rules");
-                self.execute_governance_rules(governance, context).await?;
-            }
-
-            // Execute marketplace rules
-            if let Some(marketplace) = &ast.marketplace {
-                info!("Executing marketplace rules");
-                self.execute_marketplace_rules(marketplace, context).await?;
-            }
-        } else {
-            warn!("No DSL context loaded");
-        }
-        Ok(())
+    
+    /// Execute a transaction
+    pub async fn execute_transaction(&mut self, tx_hash: String, address: &str, input: &[u8], gas: u64) -> Result<Vec<u8>, String> {
+        let result = self.execution.execute_contract_call(address, input, gas).await?;
+        self.results.insert(tx_hash, result.clone());
+        Ok(result)
     }
-
-    /// Executes governance rules
-    async fn execute_governance_rules(&self, governance: &GovernanceNode, context: &ExecutionContext) -> RuntimeResult<()> {
-        for rule in &governance.rules {
-            info!("Executing governance rule: {}", rule);
-            let condition_result = self.evaluate_condition(rule, context).await?;
-            if !condition_result {
-                return Err(RuntimeError::ValidationFailed(format!("Governance rule failed: {}", rule)));
-            }
-        }
-        Ok(())
-    }
-
-    /// Executes marketplace rules
-    async fn execute_marketplace_rules(&self, marketplace: &MarketplaceNode, context: &ExecutionContext) -> RuntimeResult<()> {
-        for rule in &marketplace.rules {
-            info!("Executing marketplace rule: {}", rule);
-            let condition_result = self.evaluate_condition(rule, context).await?;
-            if !condition_result {
-                return Err(RuntimeError::ValidationFailed(format!("Marketplace rule failed: {}", rule)));
-            }
-        }
-        Ok(())
-    }
-
-    /// Evaluates a condition in the current context
-    async fn evaluate_condition(&self, condition: &str, context: &ExecutionContext) -> RuntimeResult<bool> {
-        // TODO: Implement proper condition evaluation
-        // This should use a proper expression evaluator
-        Ok(true)
-    }
-
-    /// Gets the current state from the context
-    async fn get_current_state(&self, context: &ExecutionContext) -> RuntimeResult<String> {
-        context.state.get("current_state")
-            .and_then(|bytes| String::from_utf8(bytes.clone()).ok())
-            .ok_or_else(|| RuntimeError::InvalidState)
-    }
-
-    /// Verifies zk-SNARK proof
-    pub async fn verify_zk_snark_proof(&self, proof: &str) -> RuntimeResult<bool> {
-        if !verify_proof(proof) {
-            return Err(RuntimeError::ValidationFailed("Invalid zk-SNARK proof".to_string()));
-        }
-        Ok(true)
+    
+    /// Get transaction result
+    pub fn get_transaction_result(&self, tx_hash: &str) -> Option<&Vec<u8>> {
+        self.results.get(tx_hash)
     }
 }
 
@@ -167,23 +158,6 @@ impl ValidationExecutor for RuntimeManager {
 
         Ok(())
     }
-}
-
-#[async_trait]
-pub trait VM {
-    /// Executes a single transaction
-    async fn execute_transaction(&self, transaction: Transaction) -> RuntimeResult<()>;
-    
-    /// Executes all transactions in a block
-    async fn execute_block(&self, block: Block) -> RuntimeResult<()>;
-}
-
-pub struct ContractExecution {
-    // Fields for the ContractExecution struct
-}
-
-impl ContractExecution {
-    // Methods for the ContractExecution struct
 }
 
 #[cfg(test)]

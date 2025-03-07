@@ -106,6 +106,108 @@ pub mod helpers {
     }
 }
 
+pub mod test_utils {
+    use crate::identity::{IdentitySystem, DID, Algorithm};
+    use crate::reputation::ReputationSystem;
+    use crate::blockchain::Blockchain;
+    use crate::governance::ProposalHistory;
+    use crate::federation::FederationManager;
+    use std::sync::{Arc, Mutex};
+    use std::collections::HashMap;
+
+    /// Set up a test environment with basic components
+    pub fn setup_test_environment() -> (
+        Arc<Mutex<IdentitySystem>>, 
+        Arc<Mutex<ReputationSystem>>,
+        Arc<Mutex<Blockchain>>,
+        Arc<Mutex<ProposalHistory>>,
+        Arc<Mutex<FederationManager>>
+    ) {
+        // Create the identity system
+        let identity_system = Arc::new(Mutex::new(IdentitySystem::new()));
+        
+        // Create the reputation system
+        let reputation_system = Arc::new(Mutex::new(ReputationSystem::new()));
+        
+        // Create the blockchain
+        let blockchain = Arc::new(Mutex::new(
+            Blockchain::new(identity_system.clone(), reputation_system.clone())
+        ));
+        
+        // Create proposal history
+        let proposal_history = Arc::new(Mutex::new(ProposalHistory::new()));
+        
+        // Create federation manager
+        let federation_manager = Arc::new(Mutex::new(FederationManager::new()));
+        
+        // Return all components
+        (identity_system, reputation_system, blockchain, proposal_history, federation_manager)
+    }
+
+    /// Create DIDs for testing
+    pub fn create_test_dids(count: usize) -> Vec<DID> {
+        let mut dids = Vec::with_capacity(count);
+        
+        for i in 0..count {
+            let did = DID::new(
+                format!("did:icn:test{}", i),
+                Algorithm::Ed25519
+            );
+            dids.push(did);
+        }
+        
+        dids
+    }
+
+    /// Register DIDs with permissions
+    pub fn register_dids_with_permissions(
+        identity_system: &mut IdentitySystem,
+        dids: Vec<DID>,
+        permissions: &[&str]
+    ) {
+        for did in dids {
+            identity_system.register_did(
+                did,
+                permissions.iter().map(|&p| p.to_string()).collect()
+            );
+        }
+    }
+
+    /// Set up reputation scores for DIDs
+    pub fn setup_reputations(
+        reputation_system: &mut ReputationSystem,
+        dids: &[&str],
+        scores: &[i32]
+    ) {
+        for (did, &score) in dids.iter().zip(scores.iter()) {
+            reputation_system.increase_reputation(did, score);
+        }
+    }
+
+    /// Create a test blockchain with genesis block
+    pub fn create_test_blockchain(
+        identity_system: Arc<Mutex<IdentitySystem>>,
+        reputation_system: Arc<Mutex<ReputationSystem>>
+    ) -> Blockchain {
+        Blockchain::new(identity_system, reputation_system)
+    }
+
+    /// Sample helper to verify transaction validity
+    pub fn verify_transaction_validity(
+        blockchain: &Blockchain,
+        sender: &str,
+        transaction_type: &str
+    ) -> bool {
+        let identity_system = blockchain.identity_system.lock().unwrap();
+        match transaction_type {
+            "transfer" => identity_system.has_permission(sender, "transfer"),
+            "governance" => identity_system.has_permission(sender, "governance"),
+            "resource" => identity_system.has_permission(sender, "resource"),
+            _ => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,4 +238,4 @@ mod tests {
             .unwrap();
         assert_eq!(count.0, 0);
     }
-} 
+}
