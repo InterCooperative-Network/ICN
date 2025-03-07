@@ -12,6 +12,7 @@ use zk_snarks::verify_proof; // Import zk-SNARK verification function
 use icn_identity::ledger::{get_identity_from_ledger}; // Import icn-identity ledger function
 use std::collections::HashMap;
 use log::{info, error};
+use crate::networking::p2p::P2PManager;
 
 pub trait CoreOperations {
     fn start(&self) -> Result<(), String>;
@@ -32,6 +33,7 @@ pub struct Core {
     pub blockchain_service: Arc<BlockchainService>,
     pub identity_service: Arc<IdentityService>,
     pub governance_service: Arc<GovernanceService>,
+    pub p2p_manager: Arc<Mutex<P2PManager>>,
 }
 
 impl Core {
@@ -52,11 +54,13 @@ impl Core {
         let blockchain_service = Arc::new(BlockchainService::new(blockchain));
         let identity_service = Arc::new(IdentityService::new(identity_system));
         let governance_service = Arc::new(GovernanceService::new(proposal_history));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
         
         Self {
             blockchain_service,
             identity_service,
             governance_service,
+            p2p_manager,
         }
     }
     

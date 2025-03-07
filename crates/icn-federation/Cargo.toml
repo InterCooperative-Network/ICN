@@ -13,5 +13,6 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4"] }
 icn-types = { workspace = true }
 icn-governance = { path = "../icn-governance" }
-icn-zkp = { path = "../icn-zk" }
+icn-zk = { path = "../icn-zk" }
 icn-networking = { path = "../networking" }
+sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "postgres"] }
