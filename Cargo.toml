@@ -6,7 +6,8 @@ members = [
   "crates/icn-governance",
   "crates/icn-zk",
   "crates/networking",
-  "backend"
+  "backend",
+  "contracts"
 ]
 
 [workspace.dependencies]
@@ -16,21 +17,22 @@ icn-core = { path = "crates/icn-core" }
 icn-runtime = { path = "crates/icn-runtime" }
 
 # External dependencies
-tokio = { version = "1.25", features = ["full"] }  # Further downgraded
-serde = { version = "1.0.130", features = ["derive"] }
-warp = "=0.3.3"  # Pinned to older version compatible with Rust 1.71.1
-sqlx = { version = "0.7.0", features = ["runtime-tokio-native-tls", "postgres"] }  # Major downgrade
-thiserror = "1.0.30"
-chrono = { version = "0.4.23", features = ["serde"] }
-async-trait = "0.1.64"  # Downgraded
-futures = "0.3.25"  # Downgraded
-tracing = "0.1.37"
-sha2 = "0.10.6"
-rayon = "1.6.1"
-lazy_static = "1.4.0"
-serde_json = "1.0.94"
-log = "0.4"
-env_logger = "0.10"
+tokio = { version = "1.44.0", features = ["full"] }  # Further downgraded
+serde = { version = "1.0.218", features = ["derive"] }
+warp = "0.3.7"  # Pinned to older version compatible with Rust 1.71.1
+sqlx = { version = "0.8.3", features = ["runtime-tokio-native-tls", "postgres"] }  # Major downgrade
+thiserror = "2.0.12"
+chrono = { version = "0.4.40", features = ["serde"] }
+async-trait = "0.1.87"  # Downgraded
+futures = "0.3.31"  # Downgraded
+tracing = "0.1.41"
+sha2 = "0.10.8"
+rayon = "1.10.0"
+lazy_static = "1.5.0"
+serde_json = "1.0.140"
+log = "0.4.26"
+env_logger = "0.11.6"
+x25519-dalek = "2.0.1"
 
 [package]
 name = "icn"
@@ -50,16 +52,19 @@ icn-types = { workspace = true }
 tokio = { workspace = true, optional = true }  # Added optional = true
 warp = { workspace = true }
 async-trait = { workspace = true, optional = true }
-parity-scale-codec = { version = "2.3", optional = true }
-prometheus = { version = "0.12", optional = true }
+parity-scale-codec = { version = "3.7.4", optional = true }
+prometheus = { version = "0.13.4", optional = true }
 serde = { workspace = true }
 icn-core = { workspace = true }
 log = { workspace = true }
 env_logger = { workspace = true }
-pest = "2.5"
-pest_derive = "2.5"
+pest = "2.7.15"
+pest_derive = "2.7.15"
 serde_json = { workspace = true }
 chrono = { workspace = true }
+futures = { workspace = true }
+tokio-tungstenite = "0.26.2"
+icn-p2p = { path = "crates/icn-p2p" }
 
 [lib]
 name = "icn_lib"
@@ -68,3 +73,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "icn_bin"
 path = "src/main.rs"
+
+[[example]]
+name = "sdp_federation_example"
+path = "examples/sdp_federation_example.rs"

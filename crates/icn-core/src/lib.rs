@@ -20,6 +20,8 @@ pub use self::{
     reputation::ReputationInterface,
     telemetry::TelemetryManager,
     models::{ResourceAllocationSystem, FederationManager},
+    vm::runtime::RuntimeManager,
 };
+pub use icn_types::RuntimeInterface;
 
 pub mod governance;

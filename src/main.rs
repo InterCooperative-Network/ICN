@@ -1,20 +1,14 @@
 use std::sync::Arc;
-use log::{info, error, debug};
-use icn_types::StorageBackend;
+use log::{info, error};
 use icn_core::{
-    Core, 
-    TelemetryManager, 
-    PrometheusMetrics,
-    Logger, 
-    TracingSystem,
-    RuntimeManager,
-    StorageManager,
-    NetworkManager,
-    IdentityManager,
-    ReputationManager,
-    FederationManager,
-    ResourceAllocationSystem,
-    storage::InMemoryStorageBackend
+    core::Core,
+    telemetry::{TelemetryManager, PrometheusMetrics, Logger, TracingSystem},
+    storage::{StorageInterface, MemoryStorage},
+    networking::{NetworkInterface, NetworkManager},
+    identity::{IdentityInterface, IdentityManager},
+    reputation::{ReputationInterface, ReputationSystem},
+    models::{ResourceAllocationSystem, FederationManager},
+    RuntimeManager, RuntimeInterface
 };
 
 #[tokio::main]
@@ -24,35 +18,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting ICN node initialization...");
 
     // Initialize core components
-    let storage_manager = StorageManager::new(Box::new(create_storage_backend()));
+    let storage_manager = MemoryStorage::new();
     let network_manager = NetworkManager::new();
-    let runtime_manager = RuntimeManager::new();
     let prometheus = PrometheusMetrics::new();
     let logger = Logger::new();
     let tracing = TracingSystem::new();
     let telemetry_manager = TelemetryManager::new(prometheus, logger, tracing);
     let identity_manager = IdentityManager::new();
-    let reputation_manager = ReputationManager::new();
+    let reputation_manager = ReputationSystem::new();
+    let runtime_manager = RuntimeManager::new();
     let resource_system = Arc::new(ResourceAllocationSystem::new());
     let federation_manager = Arc::new(FederationManager::new(resource_system.clone()));
 
     // Wrap components in Arc for shared ownership
-    let storage = Arc::new(storage_manager);
-    let network = Arc::new(network_manager);
-    let runtime = Arc::new(runtime_manager);
-    let telemetry = Arc::new(telemetry_manager);
-    let identity = Arc::new(identity_manager);
-    let reputation = Arc::new(reputation_manager);
+    let storage: Arc<dyn StorageInterface> = Arc::new(storage_manager);
+    let network: Arc<dyn NetworkInterface> = Arc::new(network_manager);
+    let identity: Arc<dyn IdentityInterface> = Arc::new(identity_manager);
+    let reputation: Arc<dyn ReputationInterface> = Arc::new(reputation_manager);
+    let runtime: Arc<dyn RuntimeInterface> = Arc::new(runtime_manager);
+    let _telemetry = Arc::new(telemetry_manager);
 
-    // Create core system
-    let core = Core::new(
+    // Create core system with the components it needs
+    let core = Arc::new(Core::new(
         storage.clone(),
         network.clone(),
-        runtime.clone(),
-        telemetry.clone(),
         identity.clone(),
-        reputation.clone()
-    );
+        reputation.clone(),
+        runtime.clone()
+    ));
 
     // Start the core system
     info!("Starting core system components...");
@@ -115,10 +108,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
-
-    Ok(())
-}
-
-fn create_storage_backend() -> impl StorageBackend {
-    InMemoryStorageBackend::new()
 }

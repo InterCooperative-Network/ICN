@@ -1,12 +1,6 @@
 use std::collections::HashMap;
 use async_trait::async_trait;
-use icn_types::{Block, Transaction, RuntimeError, ExecutionContext};
-
-#[async_trait]
-pub trait RuntimeInterface {
-    async fn execute_transaction(&self, transaction: &Transaction) -> Result<(), RuntimeError>;
-    async fn execute_block(&self, block: &Block) -> Result<(), RuntimeError>;
-}
+use icn_types::{Block, Transaction, RuntimeError, ExecutionError, RuntimeInterface, ContractInput, ExecutionContext};
 
 pub struct RuntimeManager {
     max_instructions: u64,
@@ -42,5 +36,15 @@ impl RuntimeInterface for RuntimeManager {
     async fn execute_block(&self, _block: &Block) -> Result<(), RuntimeError> {
         // Placeholder implementation
         Ok(())
+    }
+
+    async fn execute_contract(&self, _input: ContractInput) -> Result<Vec<u8>, ExecutionError> {
+        // Placeholder implementation
+        Ok(Vec::new())
+    }
+
+    async fn get_contract_state(&self, _contract_id: &str) -> Result<Vec<u8>, ExecutionError> {
+        // Placeholder implementation  
+        Ok(Vec::new())
     }
 }

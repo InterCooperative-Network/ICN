@@ -9,6 +9,10 @@ use icn_zkp::RollupBatch;
 use thiserror::Error;
 use icn_networking::p2p::{P2PManager, FederationEvent}; // Import P2PManager and FederationEvent
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
+use std::time::{SystemTime, Duration};
+
+// Add SDP support
+use icn_p2p::sdp::{SDPManager, SDPPacket, SDPHeader, PublicKey};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Federation {
@@ -26,6 +30,329 @@ pub struct Federation {
     pub cross_federation_disputes: HashMap<String, Vec<FederationDispute>>,
     pub audit_log: Vec<AuditEntry>,
     pub p2p_manager: Arc<tokio::sync::Mutex<P2PManager>>, // Changed to tokio::sync::Mutex
+    // Add secure communication fields
+    pub sdp_peers: HashMap<String, Vec<String>>, // federation_id -> [peer_addresses]
+    pub federation_public_keys: HashMap<String, String>, // federation_id -> public_key (base58 encoded)
+}
+
+// Add an SDPConfig struct to handle SDP configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SDPConfig {
+    pub bind_address: String,
+    pub enable_multipath: bool,
+    pub enable_onion_routing: bool,
+    pub message_priority: HashMap<String, u8>, // message_type -> priority
+}
+
+impl Default for SDPConfig {
+    fn default() -> Self {
+        let mut message_priority = HashMap::new();
+        message_priority.insert("governance_vote".to_string(), 8);
+        message_priority.insert("dispute_resolution".to_string(), 9);
+        message_priority.insert("resource_allocation".to_string(), 6);
+        message_priority.insert("member_update".to_string(), 5);
+        
+        Self {
+            bind_address: "0.0.0.0:0".to_string(), // Random port by default
+            enable_multipath: true,
+            enable_onion_routing: false, // Optional advanced feature
+            message_priority,
+        }
+    }
+}
+
+// Add a struct for federation manager with SDP support
+pub struct FederationManager {
+    federations: Arc<RwLock<HashMap<String, Federation>>>,
+    resource_manager: Arc<dyn ResourceManager>,
+    // Add SDP manager
+    sdp_manager: Option<Arc<RwLock<SDPManager>>>,
+    sdp_config: SDPConfig,
+}
+
+impl FederationManager {
+    pub fn new(resource_manager: Arc<dyn ResourceManager>) -> Self {
+        Self {
+            federations: Arc::new(RwLock::new(HashMap::new())),
+            resource_manager,
+            sdp_manager: None,
+            sdp_config: SDPConfig::default(),
+        }
+    }
+
+    // Initialize SDP for secure federation communications
+    pub async fn init_sdp(&mut self, config: SDPConfig) -> Result<(), FederationError> {
+        match SDPManager::new(&config.bind_address) {
+            Ok(manager) => {
+                self.sdp_manager = Some(Arc::new(RwLock::new(manager)));
+                self.sdp_config = config;
+                
+                // Start receiver for handling incoming messages
+                self.start_sdp_receiver().await?;
+                
+                Ok(())
+            },
+            Err(e) => Err(FederationError::CommunicationError(format!("Failed to initialize SDP: {}", e))),
+        }
+    }
+
+    // Start SDP receiver to handle incoming messages
+    async fn start_sdp_receiver(&self) -> Result<(), FederationError> {
+        if let Some(sdp) = &self.sdp_manager {
+            let sdp_clone = sdp.clone();
+            let federations_clone = self.federations.clone();
+            
+            let handler = move |data: Vec<u8>, src| {
+                let federations = federations_clone.clone();
+                
+                tokio::spawn(async move {
+                    // Handle incoming SDP messages
+                    if let Ok(message) = serde_json::from_slice::<FederationMessage>(&data) {
+                        // Process message based on type
+                        match message.message_type {
+                            FederationMessageType::ProposalSubmission => {
+                                if let Ok(proposal) = serde_json::from_value(message.payload) {
+                                    let mut federations_lock = federations.write().await;
+                                    if let Some(federation) = federations_lock.get_mut(&message.target_federation) {
+                                        // Add signature verification here
+                                        let _ = federation.submit_proposal(proposal);
+                                    }
+                                }
+                            },
+                            FederationMessageType::Vote => {
+                                if let Ok(vote) = serde_json::from_value(message.payload) {
+                                    let mut federations_lock = federations.write().await;
+                                    if let Some(federation) = federations_lock.get_mut(&message.target_federation) {
+                                        let _ = federation.vote(vote);
+                                    }
+                                }
+                            },
+                            FederationMessageType::DisputeInitiation => {
+                                if let Ok(dispute) = serde_json::from_value(message.payload) {
+                                    let mut federations_lock = federations.write().await;
+                                    if let Some(federation) = federations_lock.get_mut(&message.target_federation) {
+                                        let _ = federation.submit_dissolution_dispute(dispute);
+                                    }
+                                }
+                            },
+                            FederationMessageType::ResourceAllocation => {
+                                // Handle resource allocation messages
+                            },
+                            FederationMessageType::MembershipUpdate => {
+                                // Handle membership updates
+                            },
+                        }
+                    }
+                });
+            };
+            
+            sdp_clone.lock().await.start_receiver(handler).await
+                .map_err(|e| FederationError::CommunicationError(format!("Failed to start SDP receiver: {}", e)))
+        } else {
+            Err(FederationError::CommunicationError("SDP manager not initialized".to_string()))
+        }
+    }
+
+    // Send a federation message via SDP
+    pub async fn send_federation_message(
+        &self,
+        source_federation: &str,
+        target_federation: &str,
+        message_type: FederationMessageType,
+        payload: serde_json::Value,
+        signature: &str,
+    ) -> Result<(), FederationError> {
+        let federations = self.federations.read().await;
+        
+        let source_fed = federations.get(source_federation)
+            .ok_or(FederationError::FederationNotFound(source_federation.to_string()))?;
+            
+        let target_fed = federations.get(target_federation)
+            .ok_or(FederationError::FederationNotFound(target_federation.to_string()))?;
+            
+        // Check if we have SDP peer info for the target
+        if !source_fed.sdp_peers.contains_key(target_federation) {
+            return Err(FederationError::CommunicationError(
+                format!("No SDP routing information for federation {}", target_federation)
+            ));
+        }
+        
+        // Create federation message
+        let message = FederationMessage {
+            source_federation: source_federation.to_string(),
+            target_federation: target_federation.to_string(),
+            message_type,
+            payload,
+            timestamp: SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            signature: signature.to_string(),
+        };
+        
+        // Serialize message
+        let serialized = serde_json::to_vec(&message)
+            .map_err(|e| FederationError::CommunicationError(format!("Serialization error: {}", e)))?;
+            
+        // Get message priority
+        let priority = self.sdp_config.message_priority
+            .get(message.message_type.to_string().as_str())
+            .cloned()
+            .unwrap_or(5); // Default priority
+            
+        if let Some(sdp_manager) = &self.sdp_manager {
+            let manager = sdp_manager.lock().await;
+            manager.send_message(target_federation, &serialized, priority).await
+                .map_err(|e| FederationError::CommunicationError(format!("Failed to send SDP message: {}", e)))
+        } else {
+            Err(FederationError::CommunicationError("SDP manager not initialized".to_string()))
+        }
+    }
+
+    pub async fn create_federation(
+        &self,
+        name: String,
+        federation_type: FederationType,
+        initial_terms: FederationTerms,
+        founding_member: String,
+    ) -> Result<String, FederationError> {
+        let federation_id = format!("fed_{}", uuid::Uuid::new_v4());
+        let federation = Federation {
+            id: federation_id.clone(),
+            name,
+            federation_type,
+            members: vec![founding_member].into_iter().map(|m| (m, MemberStatus::Active)).collect(),
+            member_roles: HashMap::new(),
+            terms: initial_terms,
+            resources: HashMap::new(),
+            proposals: Vec::new(),
+            created_at: chrono::Utc::now().timestamp() as u64,
+            status: FederationStatus::Active,
+            disputes: HashMap::new(),
+            cross_federation_disputes: HashMap::new(),
+            audit_log: Vec::new(),
+            p2p_manager: Arc::new(tokio::sync::Mutex::new(P2PManager::new())), // Initialize p2p_manager
+            // Initialize SDP communication fields
+            sdp_peers: HashMap::new(),
+            federation_public_keys: HashMap::new(),
+        };
+
+        let mut federations = self.federations.write().await;
+        federations.insert(federation_id.clone(), federation);
+
+        Ok(federation_id)
+    }
+
+    pub async fn join_federation(
+        &self,
+        federation_id: &str,
+        member_did: &str,
+        commitment: Vec<String>,
+    ) -> Result<(), FederationError> {
+        let mut federations = self.federations.write().await;
+        
+        if let Some(federation) = federations.get_mut(federation_id) {
+            if federation.members.contains_key(member_did) {
+                return Err(FederationError::AlreadyMember(member_did.to_string()));
+            }
+
+            // Verify commitments against federation terms
+            if !self.verify_commitments(&federation.terms, &commitment).await {
+                return Err(FederationError::InvalidCommitment(member_did.to_string()));
+            }
+
+            federation.members.insert(member_did.to_string(), MemberStatus::Active);
+            Ok(())
+        } else {
+            Err(FederationError::FederationNotFound(federation_id.to_string()))
+        }
+
+        // Add SDP peer information if available
+        if let Some(sdp) = &self.sdp_manager {
+            let manager = sdp.lock().await;
+            let public_key = manager.keypair.1;
+            
+            // Update the federation with this node's SDP information
+            let mut federations = self.federations.write().await;
+            if let Some(federation) = federations.get_mut(federation_id) {
+                // Add public key in base58 encoding for interoperability
+                federation.federation_public_keys.insert(
+                    member_did.to_string(),
+                    bs58::encode(public_key.as_bytes()).into_string()
+                );
+            }
+        }
+        
+        Ok(())
+    }
+
+    async fn verify_commitments(&self, terms: &FederationTerms, commitment: &[String]) -> bool {
+        // Add commitment verification logic here
+        true // Placeholder
+    }
+
+    pub async fn submit_proposal(
+        &self,
+        federation_id: &str,
+        proposal: FederationProposal,
+    ) -> Result<(), FederationError> {
+        let mut federations = self.federations.write().await;
+
+        if let Some(federation) = federations.get_mut(federation_id) {
+            federation.submit_proposal(proposal)?;
+            Ok(())
+        } else {
+            Err(FederationError::FederationNotFound(federation_id.to_string()))
+        }
+    }
+
+    pub async fn vote(
+        &self,
+        federation_id: &str,
+        vote: Vote,
+    ) -> Result<(), FederationError> {
+        let mut federations = self.federations.write().await;
+
+        if let Some(federation) = federations.get_mut(federation_id) {
+            federation.vote(vote)?;
+            Ok(())
+        } else {
+            Err(FederationError::FederationNotFound(federation_id.to_string()))
+        }
+    }
+}
+
+// Add FederationMessage struct for secure communication
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationMessage {
+    pub source_federation: String,
+    pub target_federation: String,
+    pub message_type: FederationMessageType,
+    pub payload: serde_json::Value,
+    pub timestamp: u64,
+    pub signature: String,
+}
+
+// Define message types for federation communication
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FederationMessageType {
+    ProposalSubmission,
+    Vote,
+    DisputeInitiation,
+    ResourceAllocation,
+    MembershipUpdate,
+}
+
+impl ToString for FederationMessageType {
+    fn to_string(&self) -> String {
+        match self {
+            FederationMessageType::ProposalSubmission => "governance_proposal".to_string(),
+            FederationMessageType::Vote => "governance_vote".to_string(),
+            FederationMessageType::DisputeInitiation => "dispute_resolution".to_string(),
+            FederationMessageType::ResourceAllocation => "resource_allocation".to_string(),
+            FederationMessageType::MembershipUpdate => "member_update".to_string(),
+        }
+    }
 }
 
 impl Federation {
@@ -700,6 +1027,9 @@ pub enum FederationError {
     
     #[error("Event subscribe error: {0}")]
     EventSubscribeError(String),
+
+    #[error("Communication error: {0}")]
+    CommunicationError(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
