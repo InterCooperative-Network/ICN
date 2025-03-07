@@ -16,6 +16,8 @@ lazy_static = { workspace = true }
 async-trait = { workspace = true }
 serde_json = { workspace = true }
 bincode = "1.3"
+log = "0.4"
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres"], optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }
@@ -23,3 +25,4 @@ tokio = { workspace = true, features = ["full", "test-util"] }
 [features]
 default = []
 testing = []
+database = ["dep:sqlx"]

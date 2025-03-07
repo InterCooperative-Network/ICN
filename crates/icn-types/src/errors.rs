@@ -1,4 +1,6 @@
 use thiserror::Error;
+use std::fmt;
+use log::{error, warn};
 
 #[derive(Debug, Error)]
 pub enum IcnError {
@@ -50,22 +52,18 @@ pub enum IcnError {
     #[error("System error: {0}")]
     SystemError(String),
     
+    #[error("Block error: {0}")]
+    BlockError(#[from] super::BlockError),
+    
     #[error("Unknown error: {0}")]
     Unknown(String),
 }
 
-// Implement From traits for specific error types to enable ? operator
-impl From<sqlx::Error> for IcnError {
-    fn from(error: sqlx::Error) -> Self {
-        IcnError::DatabaseError(error.to_string())
-    }
-}
+/// Result type alias for ICN operations
+pub type IcnResult<T> = Result<T, IcnError>;
 
-// Add a helper function for unified error logging
+/// Add a helper function for unified error logging
 pub fn log_error(error: &IcnError, module: &str) {
-    use log::{error, warn};
-    
-    // Log with appropriate level based on error type
     match error {
         IcnError::ValidationError(_) | 
         IcnError::RateLimitError(_) |
@@ -77,6 +75,3 @@ pub fn log_error(error: &IcnError, module: &str) {
         }
     }
 }
-
-// Result type alias for ICN operations
-pub type IcnResult<T> = Result<T, IcnError>;

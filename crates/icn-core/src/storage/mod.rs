@@ -1,42 +1,75 @@
-use std::collections::HashMap;
 use async_trait::async_trait;
-use icn_types::{StorageError, StorageReference, StorageStatus, StorageType, Block};
+use icn_types::{Block, Transaction, StorageError};
+use std::collections::HashMap;
+use std::sync::RwLock;
 
 #[async_trait]
 pub trait StorageInterface: Send + Sync {
-    async fn store_block(&self, block: Block) -> Result<(), StorageError>;
-    async fn get_block(&self, hash: &str) -> Result<Block, StorageError>;
-    async fn store(&self, key: &str, data: &[u8]) -> Result<(), StorageError>;
-    async fn retrieve(&self, key: &str) -> Result<Vec<u8>, StorageError>;
+    async fn store_block(&self, block: &Block) -> Result<(), StorageError>;
+    async fn get_block(&self, block_id: &str) -> Result<Block, StorageError>;
+    async fn store_transaction(&self, transaction: &Transaction) -> Result<(), StorageError>;
+    async fn get_transaction(&self, transaction_id: &str) -> Result<Transaction, StorageError>;
 }
 
-pub struct StorageManager {
-    references: HashMap<String, StorageReference>,
+pub struct MemoryStorage {
+    blocks: RwLock<HashMap<String, Block>>,
+    transactions: RwLock<HashMap<String, Transaction>>,
 }
 
-impl StorageManager {
+impl MemoryStorage {
     pub fn new() -> Self {
         Self {
-            references: HashMap::new()
+            blocks: RwLock::new(HashMap::new()),
+            transactions: RwLock::new(HashMap::new()),
         }
     }
 }
 
 #[async_trait]
-impl StorageInterface for StorageManager {
-    async fn store_block(&self, _block: Block) -> Result<(), StorageError> {
+impl StorageInterface for MemoryStorage {
+    async fn store_block(&self, block: &Block) -> Result<(), StorageError> {
+        let mut blocks = self.blocks.write().map_err(|_| StorageError::Internal("Lock error".into()))?;
+        blocks.insert(block.block_id.clone(), block.clone());
         Ok(())
     }
 
-    async fn get_block(&self, _hash: &str) -> Result<Block, StorageError> {
-        unimplemented!()
+    async fn get_block(&self, block_id: &str) -> Result<Block, StorageError> {
+        let blocks = self.blocks.read().map_err(|_| StorageError::Internal("Lock error".into()))?;
+        blocks.get(block_id)
+            .cloned()
+            .ok_or_else(|| StorageError::NotFound("Block not found".into()))
     }
 
-    async fn store(&self, _key: &str, _data: &[u8]) -> Result<(), StorageError> {
+    async fn store_transaction(&self, transaction: &Transaction) -> Result<(), StorageError> {
+        let mut transactions = self.transactions.write().map_err(|_| StorageError::Internal("Lock error".into()))?;
+        transactions.insert(transaction.transaction_id.clone(), transaction.clone());
         Ok(())
     }
 
-    async fn retrieve(&self, _key: &str) -> Result<Vec<u8>, StorageError> {
-        unimplemented!()
+    async fn get_transaction(&self, transaction_id: &str) -> Result<Transaction, StorageError> {
+        let transactions = self.transactions.read().map_err(|_| StorageError::Internal("Lock error".into()))?;
+        transactions.get(transaction_id)
+            .cloned()
+            .ok_or_else(|| StorageError::NotFound("Transaction not found".into()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_memory_storage() {
+        let storage = MemoryStorage::new();
+        
+        let block = Block::default(); // Assuming Block has Default implementation
+        storage.store_block(&block).await.unwrap();
+        let retrieved = storage.get_block(&block.block_id).await.unwrap();
+        assert_eq!(block.block_id, retrieved.block_id);
+
+        let tx = Transaction::default(); // Assuming Transaction has Default implementation
+        storage.store_transaction(&tx).await.unwrap();
+        let retrieved = storage.get_transaction(&tx.transaction_id).await.unwrap();
+        assert_eq!(tx.transaction_id, retrieved.transaction_id);
     }
 }
