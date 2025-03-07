@@ -12,6 +12,7 @@
     ],
     "postCreateCommand": "cargo build --release",
     "tasks": {
-      "build": "cargo build"
+      "build": "cargo build",
+      "launch": "cargo run"
     }
 }

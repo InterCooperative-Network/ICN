@@ -6,6 +6,7 @@ use icn_types::{
 };
 use icn_dsl::CoopLangAST;
 use tracing::{info, warn, error};
+use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 /// Manages the execution runtime for cooperative operations
 pub struct RuntimeManager {
@@ -94,6 +95,14 @@ impl RuntimeManager {
         context.state.get("current_state")
             .and_then(|bytes| String::from_utf8(bytes.clone()).ok())
             .ok_or_else(|| RuntimeError::InvalidState)
+    }
+
+    /// Verifies zk-SNARK proof
+    pub async fn verify_zk_snark_proof(&self, proof: &str) -> RuntimeResult<bool> {
+        if !verify_proof(proof) {
+            return Err(RuntimeError::ValidationFailed("Invalid zk-SNARK proof".to_string()));
+        }
+        Ok(true)
     }
 }
 
