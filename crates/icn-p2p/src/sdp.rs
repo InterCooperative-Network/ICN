@@ -11,11 +11,11 @@ use tokio::sync::Mutex;
 use x25519_dalek::{PublicKey, SharedSecret};
 
 #[derive(Clone)]
-struct CloneableSecret(x25519_dalek::StaticSecret);
+struct CloneableSecret(x25519_dalek::SharedSecret);
 
 impl CloneableSecret {
     fn new() -> Self {
-        Self(x25519_dalek::StaticSecret::random_from_rng(rand::thread_rng()))
+        Self(x25519_dalek::SharedSecret::new(rand::thread_rng()))
     }
     
     fn diffie_hellman(&self, peer_public: &PublicKey) -> [u8; 32] {
