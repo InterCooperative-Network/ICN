@@ -1123,3 +1123,119 @@ pub struct CrossFederationTerms {
     pub resource_sharing_terms: String,
     pub governance_terms: String,
 }
+
+// Federation system for resource sharing and governance across cooperatives
+mod federation;
+mod resource_sharing;
+mod resource_manager;
+
+pub use federation::{
+    Federation, 
+    FederationError, 
+    FederationType, 
+    FederationTerms, 
+    FederationManager,
+    FederationProposal,
+    FederationRole,
+    FederationMember,
+    Vote
+};
+
+pub use resource_sharing::{
+    ResourceSharingAgreement,
+    ResourceAllocation,
+    ResourceUsageMetrics,
+    SharingAgreementStatus
+};
+
+pub use resource_manager::{
+    FederationResourceManager,
+    ResourceProvider,
+    ResourceError
+};
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
+
+/// Federation resource pool that can be shared with other federations
+#[derive(Clone, Debug)]
+pub struct FederationResourcePool {
+    /// ID of the federation that owns this resource pool
+    pub federation_id: String,
+    
+    /// Available resources in this pool
+    pub resources: HashMap<String, Resource>,
+    
+    /// Access control for this resource pool
+    pub access_control: FederationAccessControl,
+}
+
+/// Access control settings for federation resource pools
+#[derive(Clone, Debug)]
+pub struct FederationAccessControl {
+    /// List of federation IDs allowed to access this pool
+    pub allowed_federations: Vec<String>,
+    
+    /// Minimum reputation required to access resources
+    pub min_reputation: i64,
+    
+    /// Maximum allocation per federation
+    pub max_allocation_per_federation: u64,
+}
+
+/// A generic resource that can be shared between federations
+#[derive(Clone, Debug)]
+pub struct Resource {
+    /// Unique identifier for this resource
+    pub id: String,
+    
+    /// Type of resource (e.g., "compute", "storage", "bandwidth")
+    pub resource_type: String,
+    
+    /// Total amount of this resource
+    pub total_amount: u64,
+    
+    /// Currently available (unallocated) amount
+    pub available_amount: u64,
+    
+    /// ID of the federation that owns this resource
+    pub owner_federation_id: String,
+    
+    /// Metadata about this resource
+    pub metadata: HashMap<String, String>,
+}
+
+/// Creates a new resource sharing agreement between federations
+/// 
+/// # Arguments
+/// * `source_federation_id` - ID of the federation providing resources
+/// * `target_federation_id` - ID of the federation receiving resources
+/// * `resource_type` - Type of resource being shared
+/// * `amount` - Amount of resource to share
+/// * `duration_seconds` - Optional duration for the agreement
+/// * `terms` - Terms of the sharing agreement
+/// * `min_reputation_score` - Minimum reputation score required for the target
+/// 
+/// # Returns
+/// Agreement ID if successful, error otherwise
+pub async fn create_resource_sharing_agreement(
+    federation_resource_manager: &FederationResourceManager,
+    source_federation_id: String,
+    target_federation_id: String,
+    resource_type: String,
+    amount: u64,
+    duration_seconds: Option<u64>,
+    terms: String,
+    min_reputation_score: i64,
+) -> Result<String, ResourceError> {
+    federation_resource_manager.propose_agreement(
+        source_federation_id,
+        target_federation_id,
+        resource_type,
+        amount,
+        duration_seconds,
+        terms,
+        min_reputation_score,
+    ).await
+}

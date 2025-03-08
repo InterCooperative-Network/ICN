@@ -8,18 +8,27 @@ use serde::{Serialize, Deserialize};
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use x25519_dalek::{PublicKey, SharedSecret};
+use x25519_dalek::{PublicKey, EphemeralSecret};
 
+/// Represents a Cloneable X25519 EphemeralSecret
 #[derive(Clone)]
-struct CloneableSecret(x25519_dalek::StaticSecret);
+struct CloneableSecret(EphemeralSecret);
 
 impl CloneableSecret {
+    /// Creates a new random EphemeralSecret
     fn new() -> Self {
-        Self(x25519_dalek::StaticSecret::random_from_rng(rand::thread_rng()))
+        Self(EphemeralSecret::random_from_rng(rand::thread_rng()))
     }
     
+    /// Performs Diffie-Hellman key exchange using the EphemeralSecret
     fn diffie_hellman(&self, peer_public: &PublicKey) -> [u8; 32] {
-        self.0.diffie_hellman(peer_public).as_bytes()
+        let shared_secret = self.0.diffie_hellman(peer_public);
+        *shared_secret.as_bytes()
+    }
+    
+    /// Derives the public key from this secret
+    fn public_key(&self) -> PublicKey {
+        PublicKey::from(&self.0)
     }
 }
 
@@ -82,7 +91,7 @@ impl SDPManager {
         socket.set_nonblocking(true)?;
         
         let secret = CloneableSecret::new();
-        let public = PublicKey::from(&secret.0);
+        let public = secret.public_key();
         
         Ok(Self {
             socket: Arc::new(Mutex::new(socket)),
@@ -137,7 +146,8 @@ impl SDPManager {
             
         // Get routes for this peer
         let routes = self.routes.get(peer_id)
-            .ok_or_else(|| format!("No routes for peer: {}", peer_id))?;
+            .ok_or_else(|| format!("No routes for peer: {}", peer_id))?
+            .clone(); // Clone routes so we don't need to keep the borrow
             
         if routes.is_empty() {
             return Err("No routes available for peer".to_string());
@@ -175,21 +185,52 @@ impl SDPManager {
         let serialized = bincode::serialize(&packet)
             .map_err(|e| format!("Serialization failed: {}", e))?;
             
-        // Send to appropriate routes based on routing strategy
-        let socket = self.socket.lock().await;
+        // Send to appropriate routes based on routing strategy using non-blocking operations
+        let socket = self.socket.clone();
         
         match packet.header.routing {
             RoutingType::Direct => {
-                // Send to first route
-                socket.send_to(&serialized, routes[0])
-                    .map_err(|e| format!("Failed to send: {}", e))?;
+                // Send to first route using spawn_blocking to prevent blocking the async runtime
+                let route = routes[0];
+                let serialized_clone = serialized.clone();
+                
+                tokio::task::spawn_blocking(move || {
+                    let socket_guard = socket.blocking_lock();
+                    socket_guard.send_to(&serialized_clone, route)
+                        .map_err(|e| format!("Failed to send: {}", e))
+                }).await
+                .map_err(|e| format!("Task join error: {}", e))?
+                .map(|_| ())?;
             },
             RoutingType::Multipath => {
-                // Send to all routes for resilience
-                for route in routes {
-                    socket.send_to(&serialized, *route)
-                        .map_err(|e| format!("Failed to send to {}: {}", route, e))?;
-                }
+                // Send to all routes for resilience using spawn_blocking
+                let serialized_clone = serialized.clone();
+                
+                tokio::task::spawn_blocking(move || {
+                    let socket_guard = socket.blocking_lock();
+                    let mut last_error = None;
+                    let mut success = false;
+                    
+                    for route in routes {
+                        match socket_guard.send_to(&serialized_clone, route) {
+                            Ok(_) => {
+                                success = true;
+                            },
+                            Err(e) => {
+                                last_error = Some(format!("Failed to send to {}: {}", route, e));
+                            }
+                        }
+                    }
+                    
+                    if success {
+                        Ok(())
+                    } else if let Some(err) = last_error {
+                        Err(err)
+                    } else {
+                        Err("No routes available".to_string())
+                    }
+                }).await
+                .map_err(|e| format!("Task join error: {}", e))??;
             },
             RoutingType::OnionRouted => {
                 // Implement onion routing for enhanced privacy
@@ -203,30 +244,77 @@ impl SDPManager {
     
     /// Get the public key associated with this SDP manager
     pub async fn get_public_key(&self) -> PublicKey {
-        self.keypair.1
+        self.keypair.1.clone()
     }
-
+    
     /// Start listening for incoming SDP messages
-    pub async fn start_receiver(&self, handler: impl Fn(Vec<u8>, SocketAddr) + Send + Sync + 'static) -> Result<(), String> {
+    pub async fn start_receiver(&self, handler: impl Fn(Result<(Vec<u8>, SocketAddr, String), String>) + Send + Sync + 'static) -> Result<(), String> {
         let socket_clone = self.socket.clone();
+        let peer_keys = self.peer_keys.clone();
+        let sdp_manager = self.clone();
         
         tokio::spawn(async move {
-            let mut buffer = [0u8; 4096]; // Buffer for incoming packets
+            let mut buffer = [0u8; 8192]; // Larger buffer for incoming packets
             
             loop {
                 match socket_clone.lock().await.recv_from(&mut buffer) {
                     Ok((size, src)) => {
-                        // Deserialize packet
-                        if let Ok(packet) = bincode::deserialize::<SDPPacket>(&buffer[..size]) {
-                            // Verify HMAC
-                            let hash = blake3::hash(&packet.payload);
-                            let hash_bytes = hash.as_bytes();
-                            
-                            if hash_bytes == packet.hmac.as_slice() {
-                                // Process packet based on type
-                                handler(packet.payload.clone(), src);
+                        // Process the packet in a separate task to avoid blocking the receiver
+                        let buffer_slice = buffer[..size].to_vec();
+                        let peer_keys_clone = peer_keys.clone();
+                        let sdp_manager_clone = sdp_manager.clone();
+                        
+                        tokio::spawn(async move {
+                            // Deserialize packet
+                            match bincode::deserialize::<SDPPacket>(&buffer_slice) {
+                                Ok(packet) => {
+                                    // Verify HMAC
+                                    let hash = blake3::hash(&packet.payload);
+                                    let hash_bytes = hash.as_bytes();
+                                    
+                                    if hash_bytes == packet.hmac.as_slice() {
+                                        // Find the peer ID associated with this source address
+                                        let mut sender_id = String::from("unknown");
+                                        
+                                        // Try to identify the peer by socket address
+                                        for (id, addresses) in &sdp_manager_clone.routes {
+                                            if addresses.contains(&src) {
+                                                sender_id = id.clone();
+                                                break;
+                                            }
+                                        }
+                                        
+                                        match packet.header.encryption {
+                                            EncryptionType::None => {
+                                                // Unencrypted packet, just pass the payload
+                                                handler(Ok((packet.payload, src, sender_id)));
+                                            },
+                                            EncryptionType::XChaCha20Poly1305 => {
+                                                // Get the peer's public key
+                                                if let Some(peer_id) = peer_keys_clone.get(&sender_id) {
+                                                    // Decrypt the message
+                                                    match sdp_manager_clone.decrypt_message_from_peer(&packet.payload, peer_id, &packet.header.nonce) {
+                                                        Ok(decrypted) => {
+                                                            handler(Ok((decrypted, src, sender_id)));
+                                                        },
+                                                        Err(e) => {
+                                                            handler(Err(format!("Decryption error: {}", e)));
+                                                        }
+                                                    }
+                                                } else {
+                                                    handler(Err(format!("Unknown peer: {}", sender_id)));
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        handler(Err("HMAC verification failed".to_string()));
+                                    }
+                                },
+                                Err(e) => {
+                                    handler(Err(format!("Failed to deserialize packet: {}", e)));
+                                }
                             }
-                        }
+                        });
                     },
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         // Non-blocking operation, just continue
@@ -240,5 +328,29 @@ impl SDPManager {
         });
         
         Ok(())
+    }
+    
+    /// Decrypt a message from a specific peer
+    pub fn decrypt_message_from_peer(&self, encrypted: &[u8], peer_public_key: &PublicKey, nonce: &[u8; 24]) -> Result<Vec<u8>, String> {
+        // Derive the shared key with this peer
+        let shared_key = self.derive_shared_secret(peer_public_key);
+        
+        // Decrypt the message
+        Self::decrypt_message(encrypted, &shared_key, nonce)
+    }
+    
+    /// Clone implementation for SDPManager
+    pub fn clone(&self) -> Self {
+        let socket_clone = self.socket.clone();
+        let keypair_clone = (self.keypair.0.clone(), self.keypair.1);
+        let peer_keys_clone = self.peer_keys.clone();
+        let routes_clone = self.routes.clone();
+        
+        Self {
+            socket: socket_clone,
+            keypair: keypair_clone,
+            peer_keys: peer_keys_clone,
+            routes: routes_clone,
+        }
     }
 }
