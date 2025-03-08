@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: icn-bootstrap
+    environment:
+      - NODE_TYPE=bootstrap
+      - NODE_PORT=9000
+      - API_PORT=3000
+      - BOOTSTRAP_NODES=[]
+      - COOPERATIVE_ID=icn-prototype
+      - COOPERATIVE_TIER=provider
+      - LOG_LEVEL=info
+    ports:
+      - "9000:9000"
+      - "3000:3000"
+    volumes:
+      - bootstrap-data:/app/data
+      - bootstrap-logs:/app/logs
+    networks:
+      - icn-network
+    restart: unless-stopped
+
+  node1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: icn-node1
+    environment:
+      - NODE_TYPE=regular
+      - NODE_PORT=9001
+      - API_PORT=3001
+      - BOOTSTRAP_NODES=["ws://bootstrap:9000"]
+      - COOPERATIVE_ID=icn-prototype
+      - COOPERATIVE_TIER=contributor
+      - LOG_LEVEL=info
+    ports:
+      - "9001:9001"
+      - "3001:3001"
+    volumes:
+      - node1-data:/app/data
+      - node1-logs:/app/logs
+    networks:
+      - icn-network
+    depends_on:
+      - bootstrap
+    restart: unless-stopped
+
+  node2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: icn-node2
+    environment:
+      - NODE_TYPE=regular
+      - NODE_PORT=9002
+      - API_PORT=3002
+      - BOOTSTRAP_NODES=["ws://bootstrap:9000"]
+      - COOPERATIVE_ID=icn-prototype
+      - COOPERATIVE_TIER=contributor
+      - LOG_LEVEL=info
+    ports:
+      - "9002:9002"
+      - "3002:3002"
+    volumes:
+      - node2-data:/app/data
+      - node2-logs:/app/logs
+    networks:
+      - icn-network
+    depends_on:
+      - bootstrap
+    restart: unless-stopped
+
+  dashboard:
+    image: nginx:alpine
+    container_name: icn-dashboard
+    volumes:
+      - ./dashboard:/usr/share/nginx/html
+    ports:
+      - "8080:80"
+    networks:
+      - icn-network
+    depends_on:
+      - bootstrap
+      - node1
+      - node2
+
+volumes:
+  bootstrap-data:
+  bootstrap-logs:
+  node1-data:
+  node1-logs:
+  node2-data:
+  node2-logs:
+
+networks:
+  icn-network:
+    driver: bridge
