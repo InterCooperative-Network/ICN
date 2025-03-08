@@ -8,20 +8,26 @@ use serde::{Serialize, Deserialize};
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use x25519_dalek::{PublicKey, EphemeralSecret};
+use x25519_dalek::{PublicKey, EphemeralSecret, SharedSecret};
 
 #[derive(Clone)]
-struct CloneableSecret(x25519_dalek::StaticSecret);
+struct CloneableSecret(x25519_dalek::EphemeralSecret);
 
 impl CloneableSecret {
     /// Creates a new random EphemeralSecret
     fn new() -> Self {
-        Self(x25519_dalek::StaticSecret::random_from_rng(rand::thread_rng()))
+        Self(x25519_dalek::EphemeralSecret::new(rand::thread_rng()))
     }
     
     /// Performs Diffie-Hellman key exchange using the EphemeralSecret
     fn diffie_hellman(&self, peer_public: &PublicKey) -> [u8; 32] {
-        self.0.diffie_hellman(peer_public).as_bytes()
+        let shared_secret = SharedSecret::new(peer_public, &self.0);
+        shared_secret.as_bytes().clone()
+    }
+
+    /// Returns the public key associated with this secret
+    fn public_key(&self) -> PublicKey {
+        PublicKey::from(&self.0)
     }
 }
 
