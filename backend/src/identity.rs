@@ -82,7 +82,7 @@ impl DID {
         }
     }
     
-    pub fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, DIDError> {
+    pub fn sign_message(&self, _message: &[u8]) -> Result<Vec<u8>, DIDError> {
         if self.is_revoked {
             return Err(DIDError::RevocationError("Key has been revoked".to_string()));
         }
@@ -91,7 +91,7 @@ impl DID {
         // For testing, we'll just simulate a signature
         let mut signature = Vec::with_capacity(64);
         signature.extend_from_slice(&self.private_key);
-        signature.extend_from_slice(message);
+        signature.extend_from_slice(_message);
         
         Ok(signature)
     }

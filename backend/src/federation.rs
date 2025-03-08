@@ -12,12 +12,12 @@ impl FederationManager {
         }
     }
     
-    pub fn create_federation(&mut self, id: String, federation_type: FederationType, terms: FederationTerms, admin: String) -> Result<(), String> {
+    pub fn create_federation(&mut self, id: String, _federation_type: FederationType, terms: FederationTerms, admin: String) -> Result<(), String> {
         if self.federations.contains_key(&id) {
             return Err("Federation already exists".to_string());
         }
         
-        let federation = Federation::new(id.clone(), federation_type, terms, admin);
+        let federation = Federation::new(id.clone(), _federation_type, terms, admin);
         self.federations.insert(id, federation);
         
         Ok(())
