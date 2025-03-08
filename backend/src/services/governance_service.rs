@@ -131,9 +131,9 @@ impl GovernanceService {
         self.create_proposal(proposal).await.map_err(|e| e.to_string())
     }
 
-    pub async fn vote(&self, proposal_id: i64, voter: &str, approve: bool) -> Result<(), String> {
+    pub async fn vote(&self, _proposal_id: i64, voter: &str, approve: bool) -> Result<(), String> {
         let vote = Vote {
-            proposal_id,
+            proposal_id: _proposal_id,
             voter: voter.to_string(),
             approve,
         };

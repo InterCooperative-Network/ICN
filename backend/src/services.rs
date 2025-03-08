@@ -68,9 +68,9 @@ impl GovernanceService {
         Ok(proposal_clone)
     }
     
-    pub fn vote(&self, voter: String, proposal_id: String, approve: bool) -> Result<(), String> {
+    pub fn vote(&self, voter: String, _proposal_id: String, approve: bool) -> Result<(), String> {
         let mut history = self.proposal_history.lock().unwrap();
-        history.vote(voter, proposal_id, approve)
+        history.vote(voter, _proposal_id, approve)
     }
     
     pub fn get_proposal(&self, id: String) -> Option<Proposal> {

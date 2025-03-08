@@ -7,7 +7,7 @@ use icn_crypto::KeyPair; // Import KeyPair for signature verification
 
 #[derive(Debug, Deserialize, Serialize)]
 struct QuerySharedResourcesRequest {
-    resource_type: String,
+    _resource_type: String,
     owner: Option<String>,
 }
 
@@ -96,7 +96,7 @@ async fn query_shared_resources_handler(
     resource_service: Arc<Mutex<ResourceService>>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let query = ResourceQuery {
-        resource_type: request.resource_type,
+        resource_type: request._resource_type,
         owner: request.owner,
     };
 
@@ -106,7 +106,7 @@ async fn query_shared_resources_handler(
             // Use EXPLAIN ANALYZE to verify index usage
             let explain_query = format!(
                 "EXPLAIN ANALYZE SELECT * FROM resources WHERE resource_type = '{}' AND owner = '{}'",
-                request.resource_type,
+                request._resource_type,
                 request.owner.clone().unwrap_or_default()
             );
             let explain_result = sqlx::query(&explain_query)

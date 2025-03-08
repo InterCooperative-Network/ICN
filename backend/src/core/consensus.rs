@@ -14,7 +14,7 @@ pub trait ConsensusEngine {
     async fn get_reputation(&self, did: &str, category: &str) -> Result<i64, String>;
     async fn is_eligible(&self, did: &str, min_reputation: i64, category: &str) -> Result<bool, String>;
     async fn dynamic_adjustment(&self, did: &str, contribution: i64) -> Result<(), String>;
-    async fn apply_decay(&self, did: &str, decay_rate: f64) -> Result<(), String>;
+    async fn apply_decay(&self, _did: &str, decay_rate: f64) -> Result<(), String>;
     async fn reputation_based_access(&self, did: &str, min_reputation: i64) -> Result<bool, String>;
     async fn propose_block(&self, block: tendermint::block::Block) -> Result<(), String>;
     async fn vote_on_block(&self, block: tendermint::block::Block, vote: bool) -> Result<(), String>;
@@ -133,8 +133,8 @@ impl ProofOfCooperation {
         handle_sybil_resistance_in_ledger(did, reputation_score).await.map_err(|e| e.to_string())
     }
 
-    pub async fn apply_reputation_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> { // Pf5c9
-        apply_reputation_decay_in_ledger(did, decay_rate).await.map_err(|e| e.to_string())
+    pub async fn apply_reputation_decay(&self, _did: &str, decay_rate: f64) -> Result<(), String> { // Pf5c9
+        apply_reputation_decay_in_ledger(_did, decay_rate).await.map_err(|e| e.to_string())
     }
 }
 
@@ -162,8 +162,8 @@ impl ConsensusEngine for ProofOfCooperation {
         self.reputation_manager.adjust_reputation(did, contribution, "consensus").await
     }
 
-    async fn apply_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> {
-        self.reputation_manager.apply_decay(did, decay_rate).await
+    async fn apply_decay(&self, _did: &str, decay_rate: f64) -> Result<(), String> {
+        self.reputation_manager.apply_decay(_did, decay_rate).await
     }
 
     async fn reputation_based_access(&self, did: &str, min_reputation: i64) -> Result<bool, String> {
@@ -198,8 +198,8 @@ impl ConsensusEngine for ProofOfCooperation {
         self.handle_sybil_resistance(did, reputation_score).await
     }
 
-    async fn apply_reputation_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> { // Pf5c9
-        self.apply_reputation_decay(did, decay_rate).await
+    async fn apply_reputation_decay(&self, _did: &str, decay_rate: f64) -> Result<(), String> { // Pf5c9
+        self.apply_reputation_decay(_did, decay_rate).await
     }
 }
 
@@ -244,7 +244,7 @@ impl ConsensusEngine for TendermintConsensus {
         Ok(())
     }
 
-    async fn apply_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> {
+    async fn apply_decay(&self, _did: &str, decay_rate: f64) -> Result<(), String> {
         // Placeholder logic for applying decay
         Ok(())
     }
@@ -284,7 +284,7 @@ impl ConsensusEngine for TendermintConsensus {
         Ok(())
     }
 
-    async fn apply_reputation_decay(&self, did: &str, decay_rate: f64) -> Result<(), String> { // Pf5c9
+    async fn apply_reputation_decay(&self, _did: &str, decay_rate: f64) -> Result<(), String> { // Pf5c9
         // Placeholder logic for applying reputation decay
         Ok(())
     }

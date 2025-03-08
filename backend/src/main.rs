@@ -7,7 +7,7 @@ mod reputation;
 mod websocket;
 mod middleware;
 mod api;
-mod networking; // Add networking module
+mod networking;
 
 use crate::config::Config;
 use crate::core::{Core, TelemetryManager, PrometheusMetrics, Logger, TracingSystem, RuntimeManager};
@@ -35,8 +35,8 @@ use warp::cors::Cors;
 use crate::db::create_pool;
 use middleware::rate_limit::with_rate_limit;
 use middleware::rate_limit::with_reputation_rate_limit;
-use networking::p2p::{P2PManager, FederationEvent, GovernanceEvent, IdentityEvent, ReputationEvent}; // Import P2PManager and events
-use icn_crypto::KeyPair; // Import KeyPair for signature verification
+use networking::p2p::{P2PManager, FederationEvent, GovernanceEvent, IdentityEvent, ReputationEvent};
+use icn_crypto::KeyPair;
 use icn_backend::api::ApiServer;
 use icn_backend::core::Core;
 use icn_backend::database::Database;
@@ -69,7 +69,7 @@ struct Proposal {
 
 #[derive(Serialize, Deserialize)]
 struct Vote {
-    proposal_id: String,
+    _proposal_id: String,
     voter: String,
     approve: bool,
 }
