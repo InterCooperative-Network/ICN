@@ -7,7 +7,7 @@ pub mod sharding; // Add sharding module
 pub mod pbft; // Add PBFT module
 
 use async_trait::async_trait;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque, HashSet}; // Added HashSet import
 use std::time::Duration;
 use tokio::time::sleep;
 use tokio::task;
@@ -21,6 +21,14 @@ use federation::{Federation, FederationError};
 use serde::{Serialize, Deserialize};
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
+use log::error;
+
+// Interface for identity services
+#[async_trait]
+pub trait IdentityService: Send + Sync {
+    async fn get_public_key(&self, did: &str) -> Option<Vec<u8>>;
+    async fn verify_identity(&self, did: &str, proof: &str) -> bool;
+}
 
 #[derive(Error, Debug)]
 pub enum ConsensusError {
@@ -48,10 +56,61 @@ pub struct ProofOfCooperation {
     round_start_time: std::time::Instant,
     shard_manager: sharding::ShardManager, // Add shard manager field
     pbft_consensus: Option<pbft::PbftConsensus>, // Add PBFT consensus field
+    identity_did: String, // Add the identity DID of the current node
+    identity_service: Arc<dyn IdentityService>, // Add identity service
+    active_proposals: HashMap<String, Proposal>, // Add active proposals
+    rules: ConsensusRules,
+}
+
+// Define proposal structure
+#[derive(Clone, Debug)]
+pub struct Proposal {
+    pub proposal_id: String,
+    pub proposal_type: ProposalType,
+    pub votes: HashSet<Vote>,
+    pub status: ProposalStatus,
+    pub created_at: std::time::SystemTime,
+}
+
+// Define proposal types
+#[derive(Clone, Debug)]
+pub enum ProposalType {
+    AddValidator(ValidatorInfo),
+    RemoveValidator(String), // DID
+    UpdateRules(ConsensusRules),
+}
+
+// Define validator info
+#[derive(Clone, Debug)]
+pub struct ValidatorInfo {
+    pub did: String,
+    pub reputation: i64,
+    pub voting_power: u32,
+}
+
+// Define consensus rules
+#[derive(Clone, Debug)]
+pub struct ConsensusRules {
+    pub min_reputation: i64,
+    pub quorum_percentage: u8,
+    pub block_time: Duration,
+}
+
+// Define proposal status
+#[derive(Clone, Debug, PartialEq)]
+pub enum ProposalStatus {
+    Pending,
+    Approved,
+    Rejected,
+    Expired,
 }
 
 impl ProofOfCooperation {
-    pub fn new(reputation_manager: Arc<dyn ReputationManager>) -> Self {
+    pub fn new(
+        reputation_manager: Arc<dyn ReputationManager>,
+        identity_service: Arc<dyn IdentityService>,
+        identity_did: String
+    ) -> Self {
         let shard_config = sharding::ShardConfig {
             shard_count: 4,  // Start with 4 shards
             shard_capacity: 1000, // Each shard can hold 1000 transactions
@@ -72,6 +131,14 @@ impl ProofOfCooperation {
             round_start_time: std::time::Instant::now(),
             shard_manager: sharding::ShardManager::new(shard_config),
             pbft_consensus: None,
+            identity_did,
+            identity_service,
+            active_proposals: HashMap::new(),
+            rules: ConsensusRules {
+                min_reputation: 50,
+                quorum_percentage: 67, // 2/3 majority
+                block_time: Duration::from_secs(30),
+            },
         }
     }
 
@@ -407,14 +474,20 @@ impl ProofOfCooperation {
 
     // Add a method to handle transaction sharding
     pub fn add_transaction(&mut self, transaction: Transaction) -> Result<u32, ConsensusError> {
+        // Assign transaction to a shard
         let shard_id = self.shard_manager.assign_transaction(transaction);
         
         // Check if shard is ready for finalization
-        let shard = &self.shard_manager.shards[&shard_id];
+        let shard = self.shard_manager.shards.get(&shard_id).unwrap();
         if shard.len() >= self.shard_manager.config.shard_capacity as usize {
             if let Some(block) = self.shard_manager.finalize_shard(shard_id) {
                 self.propose_block(block);
             }
+        }
+        
+        // Periodically rebalance shards
+        if self.current_round % 10 == 0 {  // Every 10 rounds
+            self.shard_manager.rebalance();
         }
         
         Ok(shard_id)
@@ -426,23 +499,127 @@ impl ProofOfCooperation {
         // ...
         Ok(())
     }
+
+    // Check if a participant is eligible to vote
+    pub fn is_eligible_voter(&self, voter_did: &str) -> bool {
+        // Check if they have enough reputation
+        let reputation = self.reputation_manager.get_reputation(voter_did, "governance");
+        if reputation < self.rules.min_reputation {
+            return false;
+        }
+        
+        // Check if they're a validator
+        self.participants.iter().any(|p| p == voter_did)
+    }
+    
+    // Add a validator to the consensus system
+    pub fn add_validator(&mut self, info: ValidatorInfo) -> Result<(), GovernanceError> {
+        // Verify validator meets minimum reputation requirements
+        if info.reputation < self.rules.min_reputation {
+            return Err(GovernanceError::NotEligibleToVote);
+        }
+        
+        // Add to participant list if not already present
+        if !self.participants.contains(&info.did) {
+            self.participants.push_back(info.did);
+        }
+        
+        Ok(())
+    }
+    
+    // Remove a validator from the consensus system
+    pub fn remove_validator(&mut self, did: &str) -> Result<(), GovernanceError> {
+        // Find and remove from participant list
+        if let Some(index) = self.participants.iter().position(|p| p == did) {
+            self.participants.remove(index);
+            Ok(())
+        } else {
+            Err(GovernanceError::ProposalNotFound)
+        }
+    }
+    
+    // Check proposal status and update if necessary
+    pub fn check_proposal_status(&mut self, proposal_id: &str) -> Result<VoteStatus, GovernanceError> {
+        let proposal = self.active_proposals.get_mut(proposal_id)
+            .ok_or(GovernanceError::ProposalNotFound)?;
+            
+        // Count votes
+        let mut approve_votes = 0;
+        let mut reject_votes = 0;
+        
+        for vote in &proposal.votes {
+            if vote.approve {
+                approve_votes += 1;
+            } else {
+                reject_votes += 1;
+            }
+        }
+        
+        // Check if we have enough votes for a decision
+        let total_participants = self.participants.len();
+        let quorum_threshold = (total_participants * self.rules.quorum_percentage as usize) / 100;
+        
+        if approve_votes + reject_votes < quorum_threshold {
+            // Not enough votes yet
+            proposal.status = ProposalStatus::Pending;
+            return Ok(VoteStatus::Pending);
+        }
+        
+        // We have enough votes to make a decision
+        if approve_votes > reject_votes {
+            proposal.status = ProposalStatus::Approved;
+            Ok(VoteStatus::Accepted)
+        } else {
+            proposal.status = ProposalStatus::Rejected;
+            Ok(VoteStatus::Rejected)
+        }
+    }
+    
+    // Submit a new proposal
+    pub fn submit_proposal(&mut self, proposal_type: ProposalType, submitter: String) -> Result<String, GovernanceError> {
+        // Check if submitter is eligible
+        if !self.is_eligible_voter(&submitter) {
+            return Err(GovernanceError::NotEligibleToVote);
+        }
+        
+        // Generate proposal ID
+        let proposal_id = format!("prop_{}", uuid::Uuid::new_v4());
+        
+        // Create new proposal
+        let proposal = Proposal {
+            proposal_id: proposal_id.clone(),
+            proposal_type,
+            votes: HashSet::new(),
+            status: ProposalStatus::Pending,
+            created_at: std::time::SystemTime::now(),
+        };
+        
+        // Store proposal
+        self.active_proposals.insert(proposal_id.clone(), proposal);
+        
+        Ok(proposal_id)
+    }
 }
 
 #[async_trait]
 impl ConsensusEngine for ProofOfCooperation {
     async fn start(&self) {
         // Start the consensus process
+        // In a real implementation, this would initiate validator rounds
+        // and transaction processing
+        log::info!("Starting Proof of Cooperation consensus engine");
     }
 
     async fn stop(&self) {
         // Stop the consensus process
+        log::info!("Stopping Proof of Cooperation consensus engine");
     }
 
     async fn submit_vote(&mut self, vote: Vote) -> Result<VoteStatus, GovernanceError> {
         let proposal = self.active_proposals.get_mut(&vote.proposal_id)
             .ok_or(GovernanceError::ProposalNotFound)?;
         
-        if !self.is_eligible_voter(&vote.voter_did) {
+        if !self.is_eligible_voter(&vote.voter) {
             return Err(GovernanceError::NotEligibleToVote);
         }
 
