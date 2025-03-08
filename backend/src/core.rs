@@ -12,6 +12,7 @@ use zk_snarks::verify_proof; // Import zk-SNARK verification function
 use icn_identity::ledger::{get_identity_from_ledger}; // Import icn-identity ledger function
 use std::collections::HashMap;
 use log::{info, error};
+use crate::networking::p2p::P2PManager;
 
 pub trait CoreOperations {
     fn start(&self) -> Result<(), String>;
@@ -20,7 +21,7 @@ pub trait CoreOperations {
     fn handle_mutual_credit_transaction(&self, sender: &str, receiver: &str, amount: f64) -> Result<(), String>;
     fn handle_mutual_credit_transaction_with_proof(&self, sender: &str, receiver: &str, amount: f64, proof: &str) -> Result<(), String>;
     fn submit_proposal(&self, title: &str, description: &str, created_by: &str, ends_at: &str) -> Result<i64, String>;
-    fn vote(&self, proposal_id: i64, voter: &str, approve: bool) -> Result<(), String>;
+    fn vote(&self, _proposal_id: i64, voter: &str, approve: bool) -> Result<(), String>;
     fn manage_federation_lifecycle(&self, federation_id: &str, action: &str) -> Result<(), String>;
     fn update_proposal_status(&self, proposal_id: i64, status: &str) -> Result<(), String>;
     fn handle_resource_sharing(&self, resource_id: &str, action: &str) -> Result<(), String>;
@@ -32,6 +33,7 @@ pub struct Core {
     pub blockchain_service: Arc<BlockchainService>,
     pub identity_service: Arc<IdentityService>,
     pub governance_service: Arc<GovernanceService>,
+    pub p2p_manager: Arc<Mutex<P2PManager>>,
 }
 
 impl Core {
@@ -52,11 +54,13 @@ impl Core {
         let blockchain_service = Arc::new(BlockchainService::new(blockchain));
         let identity_service = Arc::new(IdentityService::new(identity_system));
         let governance_service = Arc::new(GovernanceService::new(proposal_history));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
         
         Self {
             blockchain_service,
             identity_service,
             governance_service,
+            p2p_manager,
         }
     }
     

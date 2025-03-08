@@ -39,15 +39,15 @@ fn with_identity_service(
 }
 
 async fn handle_create_identity(
-    identity: String,
+    _identity: String,
     identity_service: Arc<dyn IdentityService>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     // Verify signature using icn-crypto
-    if !verify_signature(&identity, &identity_service).await {
+    if !verify_signature(&_identity, &identity_service).await {
         return Err(warp::reject::custom("Invalid signature"));
     }
 
-    identity_service.create_identity(&identity).await.map_err(|e| {
+    identity_service.create_identity(&_identity).await.map_err(|e| {
         warp::reject::custom(warp::reject::custom(e))
     })?;
 
@@ -55,7 +55,7 @@ async fn handle_create_identity(
     let credential = VerifiableCredential {
         credential_type: "IdentityCredential".to_string(),
         issuer_did: "did:icn:issuer".to_string(),
-        subject_did: identity.clone(),
+        subject_did: _identity.clone(),
         issuance_date: chrono::Utc::now().to_rfc3339(),
         expiration_date: None,
         credential_status: None,

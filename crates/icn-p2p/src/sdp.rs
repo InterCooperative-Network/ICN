@@ -10,25 +10,18 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use x25519_dalek::{PublicKey, EphemeralSecret};
 
-/// Represents a Cloneable X25519 EphemeralSecret
 #[derive(Clone)]
-struct CloneableSecret(EphemeralSecret);
+struct CloneableSecret(x25519_dalek::StaticSecret);
 
 impl CloneableSecret {
     /// Creates a new random EphemeralSecret
     fn new() -> Self {
-        Self(EphemeralSecret::random_from_rng(rand::thread_rng()))
+        Self(x25519_dalek::StaticSecret::random_from_rng(rand::thread_rng()))
     }
     
     /// Performs Diffie-Hellman key exchange using the EphemeralSecret
     fn diffie_hellman(&self, peer_public: &PublicKey) -> [u8; 32] {
-        let shared_secret = self.0.diffie_hellman(peer_public);
-        *shared_secret.as_bytes()
-    }
-    
-    /// Derives the public key from this secret
-    fn public_key(&self) -> PublicKey {
-        PublicKey::from(&self.0)
+        self.0.diffie_hellman(peer_public).as_bytes()
     }
 }
 
@@ -118,8 +111,8 @@ impl SDPManager {
     
     /// Derive shared secret with a peer using X25519
     pub fn derive_shared_secret(&self, peer_public_key: &PublicKey) -> Key {
-        let shared_secret = self.keypair.0.diffie_hellman(peer_public_key);
-        Self::derive_symmetric_key(&shared_secret)
+        let shared_secret_bytes = self.keypair.0.diffie_hellman(peer_public_key);
+        Self::derive_symmetric_key(&shared_secret_bytes)
     }
     
     /// Encrypt a message using XChaCha20-Poly1305
@@ -185,56 +178,23 @@ impl SDPManager {
         let serialized = bincode::serialize(&packet)
             .map_err(|e| format!("Serialization failed: {}", e))?;
             
-        // Send to appropriate routes based on routing strategy using non-blocking operations
-        let socket = self.socket.clone();
+        // Send to appropriate routes based on routing strategy
+        let socket = self.socket.lock().await;
         
         match packet.header.routing {
             RoutingType::Direct => {
-                // Send to first route using spawn_blocking to prevent blocking the async runtime
-                let route = routes[0];
-                let serialized_clone = serialized.clone();
-                
-                tokio::task::spawn_blocking(move || {
-                    let socket_guard = socket.blocking_lock();
-                    socket_guard.send_to(&serialized_clone, route)
-                        .map_err(|e| format!("Failed to send: {}", e))
-                }).await
-                .map_err(|e| format!("Task join error: {}", e))?
-                .map(|_| ())?;
+                // Send to first route
+                socket.send_to(&serialized, routes[0])
+                    .map_err(|e| format!("Failed to send: {}", e))?;
             },
             RoutingType::Multipath => {
-                // Send to all routes for resilience using spawn_blocking
-                let serialized_clone = serialized.clone();
-                
-                tokio::task::spawn_blocking(move || {
-                    let socket_guard = socket.blocking_lock();
-                    let mut last_error = None;
-                    let mut success = false;
-                    
-                    for route in routes {
-                        match socket_guard.send_to(&serialized_clone, route) {
-                            Ok(_) => {
-                                success = true;
-                            },
-                            Err(e) => {
-                                last_error = Some(format!("Failed to send to {}: {}", route, e));
-                            }
-                        }
-                    }
-                    
-                    if success {
-                        Ok(())
-                    } else if let Some(err) = last_error {
-                        Err(err)
-                    } else {
-                        Err("No routes available".to_string())
-                    }
-                }).await
-                .map_err(|e| format!("Task join error: {}", e))??;
+                // Send to all routes for resilience
+                for route in routes {
+                    socket.send_to(&serialized, *route)
+                        .map_err(|e| format!("Failed to send to {}: {}", route, e))?;
+                }
             },
             RoutingType::OnionRouted => {
-                // Implement onion routing for enhanced privacy
-                // This would require additional onion wrapping logic
                 return Err("Onion routing not implemented yet".to_string());
             }
         }

@@ -44,15 +44,15 @@ impl Database {
         })
     }
 
-    pub async fn record_vote(&self, vote: &Vote) -> Result<(), sqlx::Error> {
+    pub async fn record_vote(&self, _vote: &Vote) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
             INSERT INTO votes (proposal_id, voter, approve)
             VALUES ($1, $2, $3)
             "#,
-            vote.proposal_id,
-            vote.voter,
-            vote.approve
+            _vote.proposal_id,
+            _vote.voter,
+            _vote.approve
         )
         .execute(&self.pool)
         .await

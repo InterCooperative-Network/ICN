@@ -9,7 +9,7 @@ use futures::future::join_all; // Import join_all for concurrency
 
 #[derive(Debug, Deserialize, Serialize)]
 struct InitiateFederationRequest {
-    federation_type: String,
+    _federation_type: String,
     partner_id: String,
     terms: String,
     signature: String, // Add signature field

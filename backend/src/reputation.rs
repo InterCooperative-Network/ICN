@@ -28,9 +28,9 @@ impl ReputationManager {
         *reputations.get(did).unwrap_or(&0)
     }
 
-    pub fn adjust_reputation(&self, did: &str, adjustment: i64) {
+    pub fn adjust_reputation(&self, _did: &str, adjustment: i64) {
         let mut reputations = self.reputations.lock().unwrap();
-        let entry = reputations.entry(did.to_string()).or_insert(0);
+        let entry = reputations.entry(_did.to_string()).or_insert(0);
         *entry += adjustment;
     }
 
