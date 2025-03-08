@@ -21,7 +21,7 @@ pub trait CoreOperations {
     fn handle_mutual_credit_transaction(&self, sender: &str, receiver: &str, amount: f64) -> Result<(), String>;
     fn handle_mutual_credit_transaction_with_proof(&self, sender: &str, receiver: &str, amount: f64, proof: &str) -> Result<(), String>;
     fn submit_proposal(&self, title: &str, description: &str, created_by: &str, ends_at: &str) -> Result<i64, String>;
-    fn vote(&self, proposal_id: i64, voter: &str, approve: bool) -> Result<(), String>;
+    fn vote(&self, _proposal_id: i64, voter: &str, approve: bool) -> Result<(), String>;
     fn manage_federation_lifecycle(&self, federation_id: &str, action: &str) -> Result<(), String>;
     fn update_proposal_status(&self, proposal_id: i64, status: &str) -> Result<(), String>;
     fn handle_resource_sharing(&self, resource_id: &str, action: &str) -> Result<(), String>;

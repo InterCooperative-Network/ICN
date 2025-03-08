@@ -1,19 +1,19 @@
 use sqlx::PgPool;
 use crate::database::models::{Proposal, Vote, Contribution, Federation, Resource};
 
-pub async fn create_proposal(pool: &PgPool, proposal: &Proposal) -> Result<i64, sqlx::Error> {
+pub async fn create_proposal(pool: &PgPool, _proposal: &Proposal) -> Result<i64, sqlx::Error> {
     let row = sqlx::query!(
         r#"
         INSERT INTO proposals (title, description, created_by, ends_at, created_at, did)
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id
         "#,
-        proposal.title,
-        proposal.description,
-        proposal.created_by,
-        proposal.ends_at,
-        proposal.created_at,
-        proposal.did
+        _proposal.title,
+        _proposal.description,
+        _proposal.created_by,
+        _proposal.ends_at,
+        _proposal.created_at,
+        _proposal.did
     )
     .fetch_one(pool)
     .await?;

@@ -8,18 +8,30 @@ use serde::{Serialize, Deserialize};
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use x25519_dalek::{PublicKey, SharedSecret};
+use x25519_dalek::{PublicKey, EphemeralSecret};
 
-#[derive(Clone)]
-struct CloneableSecret(x25519_dalek::SharedSecret);
+struct CloneableSecret(x25519_dalek::EphemeralSecret);
+
+impl Clone for CloneableSecret {
+    fn clone(&self) -> Self {
+        let cloned_secret = x25519_dalek::EphemeralSecret::random_from_rng(rand::thread_rng());
+        Self(cloned_secret)
+    }
+}
 
 impl CloneableSecret {
     fn new() -> Self {
-        Self(x25519_dalek::SharedSecret::new(rand::thread_rng()))
+        let ephemeral_secret = x25519_dalek::EphemeralSecret::random_from_rng(rand::thread_rng());
+        Self(ephemeral_secret)
     }
     
     fn diffie_hellman(&self, peer_public: &PublicKey) -> [u8; 32] {
-        self.0.diffie_hellman(peer_public).as_bytes()
+        let shared_secret = self.0.diffie_hellman(peer_public);
+        *shared_secret.as_bytes()
+    }
+
+    fn public_key(&self) -> PublicKey {
+        PublicKey::from(&self.0)
     }
 }
 
@@ -82,7 +94,7 @@ impl SDPManager {
         socket.set_nonblocking(true)?;
         
         let secret = CloneableSecret::new();
-        let public = PublicKey::from(&secret.0);
+        let public = secret.public_key();
         
         Ok(Self {
             socket: Arc::new(Mutex::new(socket)),
@@ -109,8 +121,8 @@ impl SDPManager {
     
     /// Derive shared secret with a peer using X25519
     pub fn derive_shared_secret(&self, peer_public_key: &PublicKey) -> Key {
-        let shared_secret = self.keypair.0.diffie_hellman(peer_public_key);
-        Self::derive_symmetric_key(&shared_secret)
+        let shared_secret_bytes = self.keypair.0.diffie_hellman(peer_public_key);
+        Self::derive_symmetric_key(&shared_secret_bytes)
     }
     
     /// Encrypt a message using XChaCha20-Poly1305
@@ -176,24 +188,25 @@ impl SDPManager {
             .map_err(|e| format!("Serialization failed: {}", e))?;
             
         // Send to appropriate routes based on routing strategy
-        let socket = self.socket.lock().await;
+        let socket = self.socket.clone();
         
         match packet.header.routing {
             RoutingType::Direct => {
-                // Send to first route
-                socket.send_to(&serialized, routes[0])
-                    .map_err(|e| format!("Failed to send: {}", e))?;
+                let route = routes[0];
+                tokio::task::spawn_blocking(move || {
+                    let _ = socket.blocking_lock().send_to(&serialized, route);
+                }).await.unwrap();
             },
             RoutingType::Multipath => {
-                // Send to all routes for resilience
                 for route in routes {
-                    socket.send_to(&serialized, *route)
-                        .map_err(|e| format!("Failed to send to {}: {}", route, e))?;
+                    let socket_clone = socket.clone();
+                    let serialized_clone = serialized.clone();
+                    tokio::task::spawn_blocking(move || {
+                        let _ = socket_clone.blocking_lock().send_to(&serialized_clone, *route);
+                    }).await.unwrap();
                 }
             },
             RoutingType::OnionRouted => {
-                // Implement onion routing for enhanced privacy
-                // This would require additional onion wrapping logic
                 return Err("Onion routing not implemented yet".to_string());
             }
         }

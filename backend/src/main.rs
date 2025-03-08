@@ -69,7 +69,7 @@ struct Proposal {
 
 #[derive(Serialize, Deserialize)]
 struct Vote {
-    proposal_id: String,
+    _proposal_id: String,
     voter: String,
     approve: bool,
 }

@@ -14,7 +14,7 @@ struct CreateProposalRequest {
     description: String,
     created_by: String,
     ends_at: String,
-    did: String, // Add did field for DID-based access control
+    _did: String, // Add did field for DID-based access control
     verifiable_credential: String, // Add verifiable credential field
 }
 
