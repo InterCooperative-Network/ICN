@@ -9,6 +9,15 @@ use crate::{
     ResourcePool, FederationResourcePool, FederationAccessControl
 };
 
+use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
+use thiserror::Error;
+use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
+use icn_types::FederationId;
+use icn_crypto::KeyPair;
+
 /// Represents a cross-federation resource sharing agreement
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceSharingAgreement {
@@ -330,5 +339,357 @@ impl CrossFederationManager {
         };
         
         Ok(pool)
+    }
+}
+
+/// Error types for cross-federation operations
+#[derive(Error, Debug)]
+pub enum CrossFederationError {
+    #[error("Federation not found: {0}")]
+    FederationNotFound(FederationId),
+    #[error("Unauthorized federation access: {0}")]
+    UnauthorizedAccess(FederationId),
+    #[error("Message validation failed: {0}")]
+    MessageValidationFailed(String),
+    #[error("Communication error: {0}")]
+    CommunicationError(String),
+    #[error("Cryptographic error: {0}")]
+    CryptoError(String),
+}
+
+/// Types of cross-federation messages
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MessageType {
+    /// Request to initiate collaboration between federations
+    CollaborationRequest,
+    /// Response to a collaboration request
+    CollaborationResponse,
+    /// Resource sharing proposal between federations
+    ResourceSharingProposal,
+    /// Notification of resource usage
+    ResourceUsageUpdate,
+    /// Dispute raised between federations
+    DisputeNotification,
+    /// Governance proposal that affects multiple federations
+    GovernanceProposal,
+    /// Vote on a cross-federation proposal
+    FederationVote,
+    /// Generic notification or update
+    Notification,
+}
+
+/// A secure message exchanged between federations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrossFederationMessage {
+    /// Unique identifier for this message
+    pub id: String,
+    /// Sender federation ID
+    pub sender: FederationId,
+    /// Recipient federation ID 
+    pub recipient: FederationId,
+    /// Type of message
+    pub message_type: MessageType,
+    /// Message content in encrypted format
+    pub encrypted_content: Vec<u8>,
+    /// Time the message was created
+    pub timestamp: DateTime<Utc>,
+    /// Digital signature of the message content
+    pub signature: String,
+    /// Threshold required for multi-signature messages (optional)
+    pub threshold: Option<u32>,
+    /// Additional signatures for multi-signature messages (optional)
+    pub additional_signatures: Option<HashMap<String, String>>,
+    /// References to related messages
+    pub references: Vec<String>,
+    /// Time-to-live in seconds
+    pub ttl: u64,
+}
+
+/// Status of a message
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MessageStatus {
+    /// Message has been sent but not yet processed
+    Pending,
+    /// Message has been delivered to the recipient
+    Delivered,
+    /// Message has been processed by the recipient
+    Processed,
+    /// Message handling is waiting for additional actions
+    Waiting,
+    /// Message has failed to be delivered or processed
+    Failed,
+    /// Message has expired
+    Expired,
+}
+
+/// Manager for cross-federation communication
+pub struct CrossFederationMessenger {
+    /// Federation ID of this instance
+    federation_id: FederationId,
+    /// Cryptographic key pair for message signing
+    key_pair: KeyPair,
+    /// Message registry
+    message_registry: Arc<RwLock<HashMap<String, MessageStatus>>>,
+    /// Federation registry mapping federation ID to their public keys
+    federation_registry: Arc<RwLock<HashMap<FederationId, Vec<u8>>>>,
+    /// Queue of outgoing messages
+    outgoing_queue: Arc<Mutex<Vec<CrossFederationMessage>>>,
+    /// Queue of incoming messages
+    incoming_queue: Arc<Mutex<Vec<CrossFederationMessage>>>,
+    /// Trusted federation relationships
+    trusted_federations: Arc<RwLock<HashMap<FederationId, TrustLevel>>>,
+}
+
+/// Trust level between federations
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TrustLevel {
+    /// Full trust with all permissions
+    FullTrust,
+    /// Trust for specific operations only
+    LimitedTrust(Vec<String>),
+    /// Trust with approval required for each operation
+    ApprovalRequired,
+    /// No trust established
+    Untrusted,
+}
+
+impl CrossFederationMessenger {
+    /// Create a new cross-federation messenger
+    pub fn new(federation_id: FederationId, key_pair: KeyPair) -> Self {
+        Self {
+            federation_id,
+            key_pair,
+            message_registry: Arc::new(RwLock::new(HashMap::new())),
+            federation_registry: Arc::new(RwLock::new(HashMap::new())),
+            outgoing_queue: Arc::new(Mutex::new(Vec::new())),
+            incoming_queue: Arc::new(Mutex::new(Vec::new())),
+            trusted_federations: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Register a federation and its public key
+    pub async fn register_federation(&self, federation_id: FederationId, public_key: Vec<u8>) {
+        let mut registry = self.federation_registry.write().await;
+        registry.insert(federation_id, public_key);
+    }
+
+    /// Set trust level for a federation
+    pub async fn set_trust_level(&self, federation_id: FederationId, trust_level: TrustLevel) {
+        let mut trusted = self.trusted_federations.write().await;
+        trusted.insert(federation_id, trust_level);
+    }
+
+    /// Check if a federation is trusted for a specific operation
+    pub async fn is_trusted_for_operation(&self, federation_id: &FederationId, operation: &str) -> bool {
+        let trusted = self.trusted_federations.read().await;
+        
+        match trusted.get(federation_id) {
+            Some(TrustLevel::FullTrust) => true,
+            Some(TrustLevel::LimitedTrust(permissions)) => permissions.contains(&operation.to_string()),
+            Some(TrustLevel::ApprovalRequired) => false, // Requires explicit approval
+            Some(TrustLevel::Untrusted) | None => false,
+        }
+    }
+
+    /// Create a new cross-federation message
+    pub fn create_message(
+        &self,
+        recipient: FederationId,
+        message_type: MessageType,
+        content: &[u8],
+        references: Vec<String>,
+        ttl: u64,
+    ) -> Result<CrossFederationMessage, CrossFederationError> {
+        // Encrypt content using recipient's public key
+        let encrypted_content = self.encrypt_for_recipient(&recipient, content)?;
+        
+        // Generate a unique message ID
+        let message_id = Uuid::new_v4().to_string();
+        
+        // Create message timestamp
+        let timestamp = Utc::now();
+        
+        // Create the signature
+        let signature_data = format!(
+            "{}:{}:{}:{}:{}",
+            message_id, self.federation_id, recipient, timestamp, hex::encode(&encrypted_content)
+        );
+        
+        let signature = match self.key_pair.sign(signature_data.as_bytes()) {
+            Ok(sig) => hex::encode(sig),
+            Err(_) => return Err(CrossFederationError::CryptoError("Failed to sign message".to_string())),
+        };
+        
+        Ok(CrossFederationMessage {
+            id: message_id,
+            sender: self.federation_id.clone(),
+            recipient,
+            message_type,
+            encrypted_content,
+            timestamp,
+            signature,
+            threshold: None,
+            additional_signatures: None,
+            references,
+            ttl,
+        })
+    }
+
+    /// Encrypt content for a specific recipient federation
+    fn encrypt_for_recipient(&self, recipient_id: &FederationId, content: &[u8]) -> Result<Vec<u8>, CrossFederationError> {
+        // In a real implementation, this would use the recipient's public key to encrypt
+        // For now, we're using a placeholder implementation
+        let mut encrypted = Vec::new();
+        encrypted.extend_from_slice(b"ENCRYPTED:"); // Prefix to simulate encryption
+        encrypted.extend_from_slice(content);
+        
+        Ok(encrypted)
+    }
+
+    /// Decrypt content meant for this federation
+    fn decrypt_message(&self, encrypted_content: &[u8]) -> Result<Vec<u8>, CrossFederationError> {
+        // In a real implementation, this would use this federation's private key to decrypt
+        // For now, we're using a placeholder implementation
+        if encrypted_content.len() < 10 || &encrypted_content[0..10] != b"ENCRYPTED:" {
+            return Err(CrossFederationError::CryptoError("Invalid encrypted format".to_string()));
+        }
+        
+        Ok(encrypted_content[10..].to_vec())
+    }
+
+    /// Queue a message to be sent
+    pub async fn queue_message(&self, message: CrossFederationMessage) -> Result<(), CrossFederationError> {
+        // Add to outgoing queue
+        let mut queue = self.outgoing_queue.lock().await;
+        queue.push(message.clone());
+        
+        // Update message registry
+        let mut registry = self.message_registry.write().await;
+        registry.insert(message.id, MessageStatus::Pending);
+        
+        Ok(())
+    }
+
+    /// Send all queued outgoing messages
+    pub async fn send_queued_messages(&self) -> Result<usize, CrossFederationError> {
+        let mut queue = self.outgoing_queue.lock().await;
+        let message_count = queue.len();
+        
+        for message in queue.iter() {
+            // In a real implementation, we'd actually send the message over the network
+            // For now, just update the message status
+            let mut registry = self.message_registry.write().await;
+            registry.insert(message.id.clone(), MessageStatus::Delivered);
+        }
+        
+        // Clear the queue
+        queue.clear();
+        
+        Ok(message_count)
+    }
+
+    /// Process a received message
+    pub async fn process_message(&self, message: CrossFederationMessage) -> Result<Vec<u8>, CrossFederationError> {
+        // Verify the message signature
+        self.verify_message_signature(&message).await?;
+        
+        // Check if the sender is trusted
+        if !self.is_trusted_for_operation(&message.sender, "receive_message").await {
+            return Err(CrossFederationError::UnauthorizedAccess(message.sender));
+        }
+        
+        // Decrypt the content
+        let decrypted_content = self.decrypt_message(&message.encrypted_content)?;
+        
+        // Add to registry
+        let mut registry = self.message_registry.write().await;
+        registry.insert(message.id.clone(), MessageStatus::Processed);
+        
+        Ok(decrypted_content)
+    }
+
+    /// Queue a received message for processing
+    pub async fn queue_received_message(&self, message: CrossFederationMessage) -> Result<(), CrossFederationError> {
+        // Basic validation first
+        if message.recipient != self.federation_id {
+            return Err(CrossFederationError::UnauthorizedAccess(message.recipient));
+        }
+        
+        // Add to incoming queue
+        let mut queue = self.incoming_queue.lock().await;
+        queue.push(message.clone());
+        
+        // Update registry
+        let mut registry = self.message_registry.write().await;
+        registry.insert(message.id, MessageStatus::Pending);
+        
+        Ok(())
+    }
+
+    /// Process all queued incoming messages
+    pub async fn process_queued_messages(&self) -> Result<Vec<Vec<u8>>, CrossFederationError> {
+        let mut queue = self.incoming_queue.lock().await;
+        let mut results = Vec::new();
+        
+        for message in std::mem::take(&mut *queue) {
+            match self.process_message(message).await {
+                Ok(content) => results.push(content),
+                Err(err) => {
+                    // Log error but continue processing other messages
+                    eprintln!("Error processing message: {:?}", err);
+                }
+            }
+        }
+        
+        Ok(results)
+    }
+
+    /// Verify a message signature
+    async fn verify_message_signature(&self, message: &CrossFederationMessage) -> Result<bool, CrossFederationError> {
+        // Get the sender's public key
+        let registry = self.federation_registry.read().await;
+        let sender_public_key = registry.get(&message.sender)
+            .ok_or_else(|| CrossFederationError::FederationNotFound(message.sender.clone()))?;
+        
+        // Recreate the signature data
+        let signature_data = format!(
+            "{}:{}:{}:{}:{}",
+            message.id, message.sender, message.recipient, message.timestamp, hex::encode(&message.encrypted_content)
+        );
+        
+        // Verify the signature
+        // In a real implementation, we'd use proper cryptographic verification
+        // For now, just check if it exists and isn't empty
+        if message.signature.is_empty() {
+            return Err(CrossFederationError::MessageValidationFailed("Empty signature".to_string()));
+        }
+        
+        Ok(true)
+    }
+
+    /// Get the status of a message
+    pub async fn get_message_status(&self, message_id: &str) -> Option<MessageStatus> {
+        let registry = self.message_registry.read().await;
+        registry.get(message_id).cloned()
+    }
+
+    /// Start the background message processor
+    pub async fn start_background_processor(messenger: Arc<Self>) {
+        tokio::spawn(async move {
+            loop {
+                // Process incoming messages
+                if let Err(err) = messenger.process_queued_messages().await {
+                    eprintln!("Error processing queued messages: {:?}", err);
+                }
+                
+                // Send outgoing messages
+                if let Err(err) = messenger.send_queued_messages().await {
+                    eprintln!("Error sending queued messages: {:?}", err);
+                }
+                
+                // Sleep for a bit before next cycle
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            }
+        });
     }
 }
