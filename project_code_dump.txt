@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sat Mar  8 10:33:53 UTC 2025
+Project Code Dump - Generated Sat 08 Mar 2025 11:56:37 AM UTC
 ======================================
 
 LLM Context Information
@@ -29,18 +29,10 @@ File Organization:
 Project Tree:
 =============
 .
-├── Cargo.lock
-├── Cargo.toml
-├── DSL_ICN.txt
-├── Dockerfile.test
-├── ICN.code-workspace
-├── MyNewFile.ts
-├── README.md
-├── Technical_Architecture.md
 ├── backend
-│   ├── Cargo.toml
 │   ├── benches
 │   │   └── governance_benchmarks.rs
+│   ├── Cargo.toml
 │   ├── migrations
 │   │   ├── 20240218000000_initial.sql
 │   │   ├── 20240301000000_add_optimized_indexes.sql
@@ -79,6 +71,8 @@ Project Tree:
 ├── bridges
 │   └── cross_chain
 │       └── mod.rs
+├── Cargo.lock
+├── Cargo.toml
 ├── config
 │   ├── feature-flags.json
 │   └── log4rs.yaml
@@ -108,6 +102,7 @@ Project Tree:
 │   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-dsl
+│   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-federation
 │   │   ├── Cargo.toml
@@ -116,6 +111,7 @@ Project Tree:
 │   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-identity
+│   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-mutual-credit
 │   │   ├── Cargo.toml
@@ -127,6 +123,7 @@ Project Tree:
 │   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-resource
+│   │   ├── Cargo.toml
 │   │   └── src
 │   ├── icn-runtime
 │   │   ├── Cargo.toml
@@ -145,6 +142,7 @@ Project Tree:
 │   ├── storage
 │   │   └── Cargo.toml
 │   └── zk_snarks
+│       ├── Cargo.toml
 │       └── src
 ├── create_docs_dump.sh
 ├── docker
@@ -158,12 +156,14 @@ Project Tree:
 │   │   ├── backend
 │   │   ├── docker
 │   │   ├── frontend
-│   │   ├── package-lock.json
 │   │   ├── package.json
+│   │   ├── package-lock.json
 │   │   └── src
 │   ├── frontend.Dockerfile
 │   └── nginx.conf
 ├── docker-compose.test.yml
+├── Dockerfile.test
+├── DSL_ICN.txt
 ├── federation
 │   ├── federation.py
 │   └── signature.py
@@ -183,10 +183,10 @@ Project Tree:
 │   └── tsconfig.json
 ├── fsprovider-sample
 │   ├── CHANGELOG.md
-│   ├── README.md
 │   ├── eslint.config.mjs
-│   ├── package-lock.json
 │   ├── package.json
+│   ├── package-lock.json
+│   ├── README.md
 │   ├── sample.png
 │   ├── src
 │   │   ├── extension.ts
@@ -196,6 +196,7 @@ Project Tree:
 ├── grammar
 │   ├── coop_lang.pest
 │   └── did_grammar.peg
+├── ICN.code-workspace
 ├── icn-consensus
 │   └── src
 │       └── lib.rs
@@ -203,6 +204,7 @@ Project Tree:
 │   └── src
 │       ├── storage.rs
 │       └── transaction.rs
+├── icn_log.txt
 ├── identity
 │   ├── did.rs
 │   ├── identity_system.rs
@@ -213,22 +215,24 @@ Project Tree:
 ├── inventory_nodes.sh
 ├── messaging
 │   └── server.rs
+├── MyNewFile.ts
 ├── poc-zk-snarks-overview.md
 ├── project_code_dump.txt
 ├── project_docs_dump.txt
 ├── prototype
-│   ├── Dockerfile
 │   ├── config
 │   │   └── default-config.json
 │   ├── dashboard
 │   │   └── index.html
 │   ├── docker-compose.yml
+│   ├── Dockerfile
 │   ├── package.json
 │   ├── scripts
 │   │   └── entrypoint.sh
 │   ├── setup.sh
 │   └── src
 │       └── index.js
+├── README.md
 ├── reputation
 │   ├── errors.rs
 │   └── reputation_manager.rs
@@ -256,9 +260,9 @@ Project Tree:
 │   │   └── types.ts
 │   ├── attestation
 │   │   └── mod.rs
-│   ├── block.rs
 │   ├── blockchain
 │   │   └── validation.py
+│   ├── block.rs
 │   ├── cache.js
 │   ├── consensus
 │   │   └── mod.rs
@@ -291,22 +295,23 @@ Project Tree:
 │       ├── event_store.rs
 │       └── mod.rs
 ├── start_docs_server.sh
+├── Technical_Architecture.md
 └── tools
-    ├── README.md
     ├── activate-docs-env.sh
     ├── activate-docs-env.sh.bak
     ├── doctools
-    │   ├── __init__.py
     │   ├── docmanager.py
     │   ├── docsctl
+    │   ├── __init__.py
     │   └── specgen.py
     ├── install_docsctl.sh
+    ├── README.md
     └── requirements.txt
 
 ===================
 File: ./backend/Cargo.toml
-Size: 776 bytes
-Modified: 2025-03-08 04:21:54.336604458 -0500
+Size: 888 bytes
+Modified: 2025-03-08 11:34:58.670661250 +0000
 
 ===================
 ```toml
@@ -316,39 +321,36 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
-warp = "0.3"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-log = "0.4"
-env_logger = "0.11"
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres"] }
-thiserror = "1.0"
+tokio = { workspace = true }
+warp = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+sqlx = { workspace = true, features = ["sqlite", "runtime-tokio-native-tls"] }
+thiserror = { workspace = true }
 dashmap = "5.5"
-futures = "0.3"
-async-trait = "0.1"
-
-[dev-dependencies]
-criterion = { version = "0.5", features = ["async_tokio"] }
-quickcheck = "1.0"
-quickcheck_async = "0.1"
-quickcheck_macros = "1.0"
-tokio-test = "0.4"
-test-log = "0.2"
-pretty_assertions = "1.4"
-fake = { version = "2.8", features = ["derive"] }
-rstest = "0.25"
-mockall = "0.11"
-
-[[bench]]
-name = "governance_benchmarks"
-harness = false
+futures = { workspace = true }
+async-trait = { workspace = true }
+actix-web = "4.0"
+serde_yaml = "0.8"
+uuid = { version = "1", features = ["serde", "v4"] }
+reqwest = { version = "0.11", features = ["json"] }
+tokio-tungstenite = "0.15"
+tracing = { workspace = true }
+tracing-subscriber = "0.3"
+prometheus = "0.13"
+opentelemetry = { version = "0.16", features = ["rt-tokio"] }
+opentelemetry-jaeger = "0.16"
+opentelemetry-prometheus = "0.16"
+opentelemetry-zipkin = "0.16"
+opentelemetry-otlp = "0.16"
 ```
 
 ===================
 File: ./docker/backend/Cargo.toml
 Size: 78 bytes
-Modified: 2025-03-08 04:04:32.877267883 -0500
+Modified: 2025-03-08 09:04:32.877267883 +0000
 
 ===================
 ```toml
@@ -363,7 +365,7 @@ edition = "2024"
 ===================
 File: ./backend/src/lib.rs
 Size: 327 bytes
-Modified: 2025-03-08 04:21:58.944577356 -0500
+Modified: 2025-03-08 09:21:58.944577356 +0000
 Dependencies:
 use thiserror::Error;
 
@@ -390,7 +392,7 @@ pub type Result<T> = std::result::Result<T, AppError>;
 ===================
 File: ./scripts/backend/src/main.rs
 Size: 45 bytes
-Modified: 2025-03-07 04:09:46.468758092 -0500
+Modified: 2025-03-07 09:09:46.468758092 +0000
 Dependencies:
 
 ===================
@@ -402,21 +404,27 @@ fn main() {
 
 ===================
 File: ./backend/src/main.rs
-Size: 744 bytes
-Modified: 2025-03-08 04:21:56.795241033 -0500
+Size: 864 bytes
+Modified: 2025-03-08 11:33:57.740890447 +0000
 Dependencies:
+mod api;
 mod middleware;
+use crate::services::{BlockchainService, IdentityService, GovernanceService};
 use log::info;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use warp::Filter;
 
 ===================
 ```rs
 mod middleware;
+mod api;
 
 use log::info;
 use std::net::SocketAddr;
 use warp::Filter;
+use std::sync::Arc;
+use crate::services::{BlockchainService, IdentityService, GovernanceService};
 
 #[tokio::main]
 async fn main() {
@@ -424,28 +432,25 @@ async fn main() {
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
     info!("Starting ICN backend server...");
 
-    // Basic health check route
-    let health_route = warp::path!("health")
-        .map(|| warp::reply::json(&serde_json::json!({"status": "ok"})));
+    // Initialize services
+    let blockchain_service = Arc::new(BlockchainService::new());
+    let identity_service = Arc::new(IdentityService::new());
+    let governance_service = Arc::new(GovernanceService::new());
 
-    // Combine all routes with CORS
-    let routes = health_route
-        .with(middleware::cors())
-        .with(warp::log("icn_backend"));
+    // Initialize API server
+    let api_server = api::ApiServer::new(8081, blockchain_service, identity_service, governance_service);
 
-    // Start the server
-    let addr: SocketAddr = ([0, 0, 0, 0], 8081).into();
-    info!("Server starting on {}", addr);
-    warp::serve(routes)
-        .run(addr)
-        .await;
+    // Run the API server
+    if let Err(e) = api_server.run().await {
+        eprintln!("Failed to start API server: {}", e);
+    }
 }
 ```
 
 ===================
 File: ./docker/backend/src/main.rs
 Size: 45 bytes
-Modified: 2025-03-08 04:04:32.887265570 -0500
+Modified: 2025-03-08 09:04:32.887265570 +0000
 Dependencies:
 
 ===================
@@ -458,7 +463,7 @@ fn main() {
 ===================
 File: ./frontend/package.json
 Size: 1165 bytes
-Modified: 2025-03-08 04:07:02.351773618 -0500
+Modified: 2025-03-08 09:07:02.351773618 +0000
 
 ===================
 ```json
@@ -518,7 +523,7 @@ Modified: 2025-03-08 04:07:02.351773618 -0500
 ===================
 File: ./docker/frontend/frontend/frontend/package.json
 Size: 648 bytes
-Modified: 2025-03-08 04:12:57.825363814 -0500
+Modified: 2025-03-08 09:12:57.825363814 +0000
 
 ===================
 ```json
@@ -555,7 +560,7 @@ Modified: 2025-03-08 04:12:57.825363814 -0500
 ===================
 File: ./docker/frontend/package.json
 Size: 425 bytes
-Modified: 2025-03-08 04:08:38.665213562 -0500
+Modified: 2025-03-08 09:08:38.665213562 +0000
 
 ===================
 ```json
@@ -584,7 +589,7 @@ Modified: 2025-03-08 04:08:38.665213562 -0500
 ===================
 File: ./frontend/tsconfig.json
 Size: 502 bytes
-Modified: 2025-03-08 04:21:58.382547915 -0500
+Modified: 2025-03-08 09:21:58.382547915 +0000
 
 ===================
 ```json
@@ -612,7 +617,7 @@ Modified: 2025-03-08 04:21:58.382547915 -0500
 ===================
 File: ./contracts/cooperative/src/lib.rs
 Size: 1284 bytes
-Modified: 2025-03-07 04:09:46.438781479 -0500
+Modified: 2025-03-07 09:09:46.438781479 +0000
 Dependencies:
 mod proposals;
 use ethers::prelude::*;
@@ -669,40 +674,38 @@ impl CooperativeContract {
 ===================
 File: ./.devcontainer/docker-compose.yml
 Size: 973 bytes
-Modified: 2025-03-07 04:09:46.428789273 -0500
+Modified: 2025-03-07 09:09:46.428789273 +0000
 
 ===================
 
 ===================
 File: ./prototype/docker-compose.yml
 Size: 2027 bytes
-Modified: 2025-03-08 03:17:19.040708696 -0500
+Modified: 2025-03-08 08:17:19.040708696 +0000
 
 ===================
 
 ===================
 File: ./docker/docker-compose.yml
 Size: 836 bytes
-Modified: 2025-03-08 04:24:18.119473682 -0500
+Modified: 2025-03-08 10:42:25.213307248 +0000
 
 ===================
 
 ===================
 File: ./src/api/handlers.rs
-Size: 1240 bytes
-Modified: 2025-03-07 14:09:53.131549319 -0500
+Size: 1823 bytes
+Modified: 2025-03-08 11:55:12.262784031 +0000
 Dependencies:
 use crate::network::communication::NetworkEvent;
 use crate::network::communication::NetworkLayer;
 use crate::services::event_service::DomainEvent;
 use crate::services::event_service::EventService;
 use crate::storage::event_store::EventStore;
-use icn_types::IcnResult;
 use warp::Reply;
 
 ===================
 ```rs
-use icn_types::IcnResult;
 use crate::network::communication::NetworkLayer;
 use crate::services::event_service::EventService;
 use crate::services::event_service::DomainEvent;
@@ -710,8 +713,8 @@ use crate::storage::event_store::EventStore;
 use crate::network::communication::NetworkEvent;
 use warp::Reply;
 
-pub async fn health_check() -> IcnResult<&'static str> {
-    Ok("OK")
+pub async fn health_check() -> &'static str {
+    "OK"
 }
 
 pub struct ApiHandlers {
@@ -723,7 +726,7 @@ pub struct ApiHandlers {
 impl ApiHandlers {
     pub async fn new() -> Self {
         Self {
-            network: NetworkLayer::new().await,
+            network: NetworkLayer::new(Some("127.0.0.1:8080")).await.expect("Failed to create NetworkLayer"),
             event_service: EventService::new(),
             event_store: EventStore::new(),
         }
@@ -731,18 +734,31 @@ impl ApiHandlers {
 
     pub async fn handle_vote(&self, proposal_id: String, vote: bool) -> impl Reply {
         // Handle vote through all layers
-        self.event_service.publish(DomainEvent::VoteCast {
+        let event = DomainEvent::VoteCast {
             proposal_id: proposal_id.clone(),
             voter: "user".to_string(),
             vote,
-        }).await;
+        };
 
-        self.network.broadcast_event(NetworkEvent::VoteUpdate {
+        // Publish event
+        self.event_service.publish(event.clone()).await;
+
+        // Store the event
+        if let Err(e) = self.event_store.append(&proposal_id, event) {
+            eprintln!("Failed to store vote event: {}", e);
+            return warp::reply::json(&format!("Failed to store vote: {}", e));
+        }
+
+        // Broadcast with error handling
+        if let Err(e) = self.network.broadcast_event(NetworkEvent::VoteUpdate {
             proposal_id,
             votes: 1,
-        }).await;
+        }).await {
+            eprintln!("Failed to broadcast vote update: {}", e);
+            return warp::reply::json(&format!("Vote recorded but broadcast failed: {}", e));
+        }
 
-        warp::reply::json(&"Vote recorded")
+        warp::reply::json(&"Vote recorded and broadcast successfully")
     }
 
     // Add more handlers for other API endpoints
@@ -752,7 +768,7 @@ impl ApiHandlers {
 ===================
 File: ./src/api/routes.rs
 Size: 213 bytes
-Modified: 2025-03-07 04:09:46.498734708 -0500
+Modified: 2025-03-07 09:09:46.498734708 +0000
 Dependencies:
 use warp::Filter;
 
@@ -770,7 +786,7 @@ pub fn icn_routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rej
 ===================
 File: ./src/api/mod.rs
 Size: 160 bytes
-Modified: 2025-03-07 04:09:46.498734708 -0500
+Modified: 2025-03-07 09:09:46.498734708 +0000
 Dependencies:
 use crate::icn_types::IcnResult;
 
@@ -789,7 +805,7 @@ pub async fn initialize() -> IcnResult<()> {
 ===================
 File: ./src/lib.rs
 Size: 301 bytes
-Modified: 2025-03-07 14:09:57.353450421 -0500
+Modified: 2025-03-07 19:09:57.353450421 +0000
 Dependencies:
 mod tests {
 
@@ -818,7 +834,7 @@ mod tests {
 ===================
 File: ./src/main.rs
 Size: 4057 bytes
-Modified: 2025-03-07 15:24:31.169756834 -0500
+Modified: 2025-03-07 20:24:31.169756834 +0000
 Dependencies:
 use icn_core::{
 use log::{info, error};
@@ -941,7 +957,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ===================
 File: ./scripts/backend/src/main.rs
 Size: 45 bytes
-Modified: 2025-03-07 04:09:46.468758092 -0500
+Modified: 2025-03-07 09:09:46.468758092 +0000
 Dependencies:
 
 ===================
@@ -954,7 +970,7 @@ fn main() {
 ===================
 File: ./backend/src/api/resources.rs
 Size: 10501 bytes
-Modified: 2025-03-07 23:51:05.669077567 -0500
+Modified: 2025-03-08 04:51:05.669077567 +0000
 Dependencies:
 mod tests {
 use crate::services::resource_service::{ResourceService, ResourceQuery};
@@ -1281,9 +1297,10 @@ mod tests {
 
 ===================
 File: ./backend/src/api/federation_resource_sharing.rs
-Size: 11915 bytes
-Modified: 2025-03-07 23:42:32.603683868 -0500
+Size: 15287 bytes
+Modified: 2025-03-08 11:33:57.740890447 +0000
 Dependencies:
+mod tests {
 use crate::errors::IcnError;
 use crate::services::federation_service::FederationService;
 use crate::services::p2p::P2PManager;
@@ -1614,12 +1631,110 @@ pub enum FederationEvent {
         allocation_id: String,
         amount: u64,
     },
-}```
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::Filter;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    use crate::services::federation_service::FederationService;
+    use crate::services::p2p::P2PManager;
+
+    #[tokio::test]
+    async fn test_share_federation_resources_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_resource_sharing_routes(federation_service, p2p_manager);
+
+        let request = FederationResourceSharingRequest {
+            source_federation_id: "source_federation".to_string(),
+            target_federation_id: "target_federation".to_string(),
+            resource_type: "resource_type".to_string(),
+            amount: 100,
+            duration_seconds: Some(3600),
+            terms: "terms".to_string(),
+            min_reputation_score: 50,
+            signature: "signature".to_string(),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/resources/share")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_allocate_shared_resource_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_resource_sharing_routes(federation_service, p2p_manager);
+
+        let request = AllocateSharedResourceRequest {
+            agreement_id: "agreement_id".to_string(),
+            amount: 50,
+            requester_did: "requester_did".to_string(),
+            signature: "signature".to_string(),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/resources/shared/allocate")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_release_shared_resource_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_resource_sharing_routes(federation_service, p2p_manager);
+
+        let request = ReleaseSharedResourceRequest {
+            agreement_id: "agreement_id".to_string(),
+            allocation_id: "allocation_id".to_string(),
+            amount: 50,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/resources/shared/release")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_list_federation_sharing_agreements_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_resource_sharing_routes(federation_service, p2p_manager);
+
+        let resp = warp::test::request()
+            .method("GET")
+            .path("/api/v1/federation/source_federation/sharing-agreements")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+}
+```
 
 ===================
 File: ./backend/src/api/mod.rs
 Size: 148 bytes
-Modified: 2025-03-07 23:46:35.904964718 -0500
+Modified: 2025-03-08 04:46:35.904964718 +0000
 Dependencies:
 
 ===================
@@ -1635,7 +1750,7 @@ pub mod reputation;```
 ===================
 File: ./backend/src/api/identity.rs
 Size: 6473 bytes
-Modified: 2025-03-07 23:51:05.669077567 -0500
+Modified: 2025-03-08 04:51:05.669077567 +0000
 Dependencies:
 mod tests {
 use crate::services::identity_service::{IdentityService, IdentityServiceImpl};
@@ -1836,9 +1951,10 @@ mod tests {
 
 ===================
 File: ./backend/src/api/federation.rs
-Size: 25290 bytes
-Modified: 2025-03-07 23:51:05.669077567 -0500
+Size: 36864 bytes
+Modified: 2025-03-08 11:33:57.740890447 +0000
 Dependencies:
+mod tests {
 use futures::future::join_all; // Import join_all for concurrency
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
 use icn_federation::{FederationService, FederationOperation};
@@ -2499,12 +2615,363 @@ async fn verify_signature(did: &str, signature: &str, message: &str) -> bool {
     };
     key_pair.verify(message.as_bytes(), signature.as_bytes())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::Filter;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    use icn_federation::FederationService;
+    use icn_p2p::P2PManager;
+
+    #[tokio::test]
+    async fn test_initiate_federation_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = InitiateFederationRequest {
+            federation_type: "type".to_string(),
+            partner_id: "partner".to_string(),
+            terms: "terms".to_string(),
+            signature: "signature".to_string(),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/initiate")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_join_federation_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = JoinFederationRequest {
+            federation_id: "federation_id".to_string(),
+            commitment: "commitment".to_string(),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/join")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_initiate_federation_dissolution_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = DissolutionRequest {
+            initiator_id: "initiator".to_string(),
+            reason: "reason".to_string(),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/federation_id/dissolve")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_get_dissolution_status_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let resp = warp::test::request()
+            .method("GET")
+            .path("/api/v1/federation/federation_id/dissolution/status")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_cancel_federation_dissolution_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/federation_id/dissolution/cancel")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_get_asset_distribution_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let resp = warp::test::request()
+            .method("GET")
+            .path("/api/v1/federation/federation_id/dissolution/assets")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_get_debt_settlements_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let resp = warp::test::request()
+            .method("GET")
+            .path("/api/v1/federation/federation_id/dissolution/debts")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_submit_proposal_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = SubmitProposalRequest {
+            title: "title".to_string(),
+            description: "description".to_string(),
+            created_by: "creator".to_string(),
+            ends_at: "2024-12-31T23:59:59Z".to_string(),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/proposals/submit")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_vote_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = VoteRequest {
+            proposal_id: "proposal_id".to_string(),
+            voter: "voter".to_string(),
+            approve: true,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/proposals/vote")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_sybil_resistance_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = SybilResistanceRequest {
+            did: "did:example:123".to_string(),
+            reputation_score: 100,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/sybil_resistance")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_reputation_decay_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = ReputationDecayRequest {
+            did: "did:example:123".to_string(),
+            decay_rate: 0.1,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/reputation_decay")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_submit_dissolution_dispute_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = SubmitDisputeRequest {
+            federation_id: "federation_id".to_string(),
+            reason: "reason".to_string(),
+            evidence: Some("evidence".to_string()),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/federation_id/dissolution/dispute")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_vote_on_dispute_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = DisputeVoteRequest {
+            dispute_id: "dispute_id".to_string(),
+            support: true,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/disputes/dispute_id/vote")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_federation_lifecycle_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = FederationLifecycleRequest {
+            federation_id: "federation_id".to_string(),
+            action: "action".to_string(),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/lifecycle")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_transfer_resource_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = TransferResourceRequest {
+            resource_id: "resource_id".to_string(),
+            recipient_id: "recipient_id".to_string(),
+            amount: 100,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/resources/transfer")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_allocate_resource_shares_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = AllocateResourceSharesRequest {
+            resource_id: "resource_id".to_string(),
+            shares: 10,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/resources/allocate")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_create_local_cluster_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = CreateLocalClusterRequest {
+            cluster_name: "cluster_name".to_string(),
+            region: "region".to_string(),
+            members: vec!["member1".to_string(), "member2".to_string()],
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/local_cluster/create")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+}
 ```
 
 ===================
 File: ./backend/src/api/reputation.rs
 Size: 10381 bytes
-Modified: 2025-03-07 04:09:46.428789273 -0500
+Modified: 2025-03-07 09:09:46.428789273 +0000
 Dependencies:
 mod tests {
 use crate::services::reputation_service::{get_reputation, adjust_reputation, verify_contribution, handle_sybil_resistance, apply_reputation_decay, batch_reputation_updates};
@@ -2796,7 +3263,7 @@ mod tests {
 ===================
 File: ./backend/src/api/governance.rs
 Size: 15527 bytes
-Modified: 2025-03-07 23:51:05.669077567 -0500
+Modified: 2025-03-08 04:51:05.669077567 +0000
 Dependencies:
 use crate::services::governance_service::{GovernanceService, Proposal, Vote};
 use crate::services::identity_service::IdentityService; // Import IdentityService
@@ -3214,7 +3681,7 @@ async fn delegated_governance_handler(
 ===================
 File: ./backend/src/lib.rs
 Size: 327 bytes
-Modified: 2025-03-08 04:21:58.944577356 -0500
+Modified: 2025-03-08 09:21:58.944577356 +0000
 Dependencies:
 use thiserror::Error;
 
@@ -3240,21 +3707,27 @@ pub type Result<T> = std::result::Result<T, AppError>;
 
 ===================
 File: ./backend/src/main.rs
-Size: 744 bytes
-Modified: 2025-03-08 04:21:56.795241033 -0500
+Size: 864 bytes
+Modified: 2025-03-08 11:33:57.740890447 +0000
 Dependencies:
+mod api;
 mod middleware;
+use crate::services::{BlockchainService, IdentityService, GovernanceService};
 use log::info;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use warp::Filter;
 
 ===================
 ```rs
 mod middleware;
+mod api;
 
 use log::info;
 use std::net::SocketAddr;
 use warp::Filter;
+use std::sync::Arc;
+use crate::services::{BlockchainService, IdentityService, GovernanceService};
 
 #[tokio::main]
 async fn main() {
@@ -3262,28 +3735,25 @@ async fn main() {
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
     info!("Starting ICN backend server...");
 
-    // Basic health check route
-    let health_route = warp::path!("health")
-        .map(|| warp::reply::json(&serde_json::json!({"status": "ok"})));
+    // Initialize services
+    let blockchain_service = Arc::new(BlockchainService::new());
+    let identity_service = Arc::new(IdentityService::new());
+    let governance_service = Arc::new(GovernanceService::new());
 
-    // Combine all routes with CORS
-    let routes = health_route
-        .with(middleware::cors())
-        .with(warp::log("icn_backend"));
+    // Initialize API server
+    let api_server = api::ApiServer::new(8081, blockchain_service, identity_service, governance_service);
 
-    // Start the server
-    let addr: SocketAddr = ([0, 0, 0, 0], 8081).into();
-    info!("Server starting on {}", addr);
-    warp::serve(routes)
-        .run(addr)
-        .await;
+    // Run the API server
+    if let Err(e) = api_server.run().await {
+        eprintln!("Failed to start API server: {}", e);
+    }
 }
 ```
 
 ===================
 File: ./icn-consensus/src/lib.rs
 Size: 1234 bytes
-Modified: 2025-03-07 04:09:46.468758092 -0500
+Modified: 2025-03-07 09:09:46.468758092 +0000
 Dependencies:
 
 ===================
@@ -3337,7 +3807,7 @@ fn elect_validators(current_validators: &Vec<Validator>, candidates: &Vec<Valida
 ===================
 File: ./docker/frontend/frontend/frontend/node_modules/workbox-core/src/models/messages/messages.ts
 Size: 11191 bytes
-Modified: 2025-03-08 04:11:17.830229302 -0500
+Modified: 2025-03-08 09:11:17.830229302 +0000
 Dependencies:
 import '../../_version.js';
 
@@ -3730,10 +4200,10 @@ export const messages: MessageMap = {
 ===================
 File: ./docker/frontend/frontend/frontend/node_modules/workbox-core/src/models/messages/messageGenerator.ts
 Size: 731 bytes
-Modified: 2025-03-08 04:11:17.660840774 -0500
+Modified: 2025-03-08 09:11:17.660840774 +0000
 Dependencies:
-import '../../_version.js';
 import {messages} from './messages.js';
+import '../../_version.js';
 
 ===================
 ```ts
@@ -3772,7 +4242,7 @@ export const messageGenerator =
 ===================
 File: ./docker/frontend/frontend/frontend/node_modules/workbox-core/src/models/quotaErrorCallbacks.ts
 Size: 452 bytes
-Modified: 2025-03-08 04:11:18.438008605 -0500
+Modified: 2025-03-08 09:11:18.438008605 +0000
 Dependencies:
 import '../_version.js';
 
@@ -3799,7 +4269,7 @@ export {quotaErrorCallbacks};
 ===================
 File: ./docker/frontend/frontend/frontend/node_modules/workbox-core/src/models/pluginEvents.ts
 Size: 553 bytes
-Modified: 2025-03-08 04:11:18.119179722 -0500
+Modified: 2025-03-08 09:11:18.119179722 +0000
 Dependencies:
 import '../_version.js';
 
@@ -3829,7 +4299,7 @@ export const enum pluginEvents {
 ===================
 File: ./docker/frontend/frontend/frontend/node_modules/@apideck/better-ajv-errors/src/types/ValidationError.ts
 Size: 232 bytes
-Modified: 2025-03-08 04:11:12.279100695 -0500
+Modified: 2025-03-08 09:11:12.279100695 +0000
 Dependencies:
 import { DefinedError } from 'ajv';
 
@@ -3851,10 +4321,10 @@ export interface ValidationError {
 ===================
 File: ./docker/frontend/frontend/frontend/node_modules/workbox-expiration/src/models/CacheTimestampsModel.ts
 Size: 6348 bytes
-Modified: 2025-03-08 04:11:12.378788215 -0500
+Modified: 2025-03-08 09:11:12.378788215 +0000
 Dependencies:
-import '../_version.js';
 import {openDB, DBSchema, IDBPDatabase, deleteDB} from 'idb';
+import '../_version.js';
 
 ===================
 ```ts
@@ -4087,7 +4557,7 @@ export {CacheTimestampsModel};
 ===================
 File: ./docker/frontend/frontend/frontend/node_modules/immer/src/types/types-external.ts
 Size: 8393 bytes
-Modified: 2025-03-08 04:11:21.885059479 -0500
+Modified: 2025-03-08 09:11:21.885059479 +0000
 Dependencies:
 import {Nothing} from "../internal"
 
@@ -4360,7 +4830,7 @@ export function never_used() {}
 ===================
 File: ./docker/frontend/frontend/frontend/node_modules/immer/src/types/globals.d.ts
 Size: 31 bytes
-Modified: 2025-03-08 04:11:19.992244978 -0500
+Modified: 2025-03-08 09:11:19.992244978 +0000
 Dependencies:
 
 ===================
@@ -4371,7 +4841,7 @@ declare const __DEV__: boolean
 ===================
 File: ./docker/frontend/frontend/frontend/node_modules/immer/src/types/types-internal.ts
 Size: 1028 bytes
-Modified: 2025-03-08 04:11:21.994640932 -0500
+Modified: 2025-03-08 09:11:21.994640932 +0000
 Dependencies:
 import {
 
@@ -4437,7 +4907,7 @@ export type Drafted<Base = any, T extends ImmerState = ImmerState> = {
 ===================
 File: ./docker/backend/src/main.rs
 Size: 45 bytes
-Modified: 2025-03-08 04:04:32.887265570 -0500
+Modified: 2025-03-08 09:04:32.887265570 +0000
 Dependencies:
 
 ===================
@@ -4450,7 +4920,7 @@ fn main() {
 ===================
 File: ./contracts/cooperative/src/lib.rs
 Size: 1284 bytes
-Modified: 2025-03-07 04:09:46.438781479 -0500
+Modified: 2025-03-07 09:09:46.438781479 +0000
 Dependencies:
 mod proposals;
 use ethers::prelude::*;
@@ -4507,7 +4977,7 @@ impl CooperativeContract {
 ===================
 File: ./crates/icn-runtime/src/lib.rs
 Size: 7207 bytes
-Modified: 2025-03-07 04:37:25.309018331 -0500
+Modified: 2025-03-07 09:37:25.309018331 +0000
 Dependencies:
 mod tests {
 use async_trait::async_trait;
@@ -4738,7 +5208,7 @@ mod tests {
 ===================
 File: ./crates/icn-reputation/src/lib.rs
 Size: 2471 bytes
-Modified: 2025-03-07 06:34:43.196692022 -0500
+Modified: 2025-03-07 11:34:43.196692022 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_storage::StorageInterface;
@@ -4823,7 +5293,7 @@ impl ReputationInterface for ReputationManager {
 ===================
 File: ./crates/icn-governance/src/lib.rs
 Size: 10971 bytes
-Modified: 2025-03-08 03:28:50.265170496 -0500
+Modified: 2025-03-08 08:28:50.265170496 +0000
 Dependencies:
 mod tests {
 use chrono::{DateTime, Utc};
@@ -5208,7 +5678,7 @@ mod tests {
 ===================
 File: ./crates/zk_snarks/src/lib.rs
 Size: 446 bytes
-Modified: 2025-03-07 04:37:24.429897252 -0500
+Modified: 2025-03-07 09:37:24.429897252 +0000
 Dependencies:
 
 ===================
@@ -5232,7 +5702,7 @@ pub fn generate_test_proof() -> String {
 ===================
 File: ./crates/icn-zk/src/lib.rs
 Size: 1853 bytes
-Modified: 2025-03-08 03:29:09.948697496 -0500
+Modified: 2025-03-08 08:29:09.948697496 +0000
 Dependencies:
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
@@ -5320,7 +5790,7 @@ impl LinearCombination {
 ===================
 File: ./crates/icn-types/src/lib.rs
 Size: 33812 bytes
-Modified: 2025-03-07 09:27:57.248652728 -0500
+Modified: 2025-03-07 14:27:57.248652728 +0000
 Dependencies:
 mod errors;
 use async_trait::async_trait;
@@ -6425,7 +6895,7 @@ pub trait RuntimeInterface: Send + Sync {
 ===================
 File: ./crates/icn-p2p/src/lib.rs
 Size: 168 bytes
-Modified: 2025-03-07 15:33:06.873522794 -0500
+Modified: 2025-03-08 11:43:07.684119847 +0000
 Dependencies:
 
 ===================
@@ -6444,7 +6914,7 @@ pub use sdp::SDPManager;
 ===================
 File: ./crates/icn-common/src/lib.rs
 Size: 1095 bytes
-Modified: 2025-03-07 04:09:46.438781479 -0500
+Modified: 2025-03-07 09:09:46.438781479 +0000
 Dependencies:
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
@@ -6497,7 +6967,7 @@ pub trait ConsensusEngine {
 ===================
 File: ./crates/icn-storage/src/lib.rs
 Size: 6298 bytes
-Modified: 2025-03-07 04:09:46.448773684 -0500
+Modified: 2025-03-07 09:09:46.448773684 +0000
 Dependencies:
 mod cache;
 mod tests {
@@ -6711,7 +7181,7 @@ mod tests {
 ===================
 File: ./crates/icn-consensus/src/lib.rs
 Size: 19357 bytes
-Modified: 2025-03-07 04:09:46.438781479 -0500
+Modified: 2025-03-07 09:09:46.438781479 +0000
 Dependencies:
 use async_trait::async_trait;
 use bit_set::BitSet;
@@ -7278,7 +7748,7 @@ pub enum GovernanceError {
 ===================
 File: ./crates/icn-dsl/src/lib.rs
 Size: 5568 bytes
-Modified: 2025-03-07 04:09:46.448773684 -0500
+Modified: 2025-03-07 09:09:46.448773684 +0000
 Dependencies:
 use nom::{
 
@@ -7465,7 +7935,7 @@ fn compile_state_validation(bytecode: &mut Vec<u8>, validation: &StateValidation
 ===================
 File: ./crates/icn-core/src/lib.rs
 Size: 609 bytes
-Modified: 2025-03-07 15:20:28.965849379 -0500
+Modified: 2025-03-07 20:20:28.965849379 +0000
 Dependencies:
 
 ===================
@@ -7502,7 +7972,7 @@ pub mod governance;
 ===================
 File: ./crates/icn-identity/src/lib.rs
 Size: 1952 bytes
-Modified: 2025-03-07 04:33:03.302936920 -0500
+Modified: 2025-03-07 09:33:03.302936920 +0000
 Dependencies:
 
 ===================
@@ -7571,7 +8041,7 @@ pub struct Proof {
 ===================
 File: ./crates/icn-mutual-credit/src/lib.rs
 Size: 2294 bytes
-Modified: 2025-03-07 04:09:46.448773684 -0500
+Modified: 2025-03-07 09:09:46.448773684 +0000
 Dependencies:
 use chrono::Utc;
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
@@ -7652,7 +8122,7 @@ impl MutualCreditLedger {
 ===================
 File: ./crates/icn-resource/src/lib.rs
 Size: 6916 bytes
-Modified: 2025-03-07 04:09:46.448773684 -0500
+Modified: 2025-03-07 09:09:46.448773684 +0000
 Dependencies:
 use async_trait::async_trait;
 use icn_federation::ResourceManager;
@@ -7885,7 +8355,7 @@ pub enum ResourceError {
 ===================
 File: ./crates/icn-federation/src/lib.rs
 Size: 43020 bytes
-Modified: 2025-03-07 23:44:46.168508036 -0500
+Modified: 2025-03-08 04:44:46.168508036 +0000
 Dependencies:
 mod federation;
 mod resource_manager;
@@ -7901,8 +8371,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, Duration};
 use thiserror::Error;
-use tokio::sync::RwLock;
 use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
 
 ===================
@@ -9153,7 +9623,7 @@ pub async fn create_resource_sharing_agreement(
 ===================
 File: ./crates/icn-crypto/src/lib.rs
 Size: 5761 bytes
-Modified: 2025-03-07 04:09:46.448773684 -0500
+Modified: 2025-03-07 09:09:46.448773684 +0000
 Dependencies:
 use dilithium::keypair as dilithium_keypair;
 use dilithium::sign as dilithium_sign;

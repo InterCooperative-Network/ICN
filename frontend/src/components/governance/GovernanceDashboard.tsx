@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
+import { Button } from '../../components/ui/button'
+import { Alert, AlertDescription } from '../../components/ui/alert'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Progress } from '@/components/ui/progress'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs'
+import { Progress } from '../../components/ui/progress'
 import { AlertCircle, ChevronRight, Users, TrendingUp } from 'lucide-react'
 import { Dialog, DialogOverlay, DialogContent } from '@reach/dialog'
 import '@reach/dialog/styles.css'
 import { FixedSizeList as List } from 'react-window'
+import ProposalCard from './ProposalCard'
 
 type Proposal = {
   id: string
@@ -43,7 +44,7 @@ type WebSocketMessage = {
   data: Proposal | ReputationUpdate
 }
 
-const ProposalRow = ({ index, style, data }) => {
+const ProposalRow = ({ index, style, data }: { index: number, style: React.CSSProperties, data: Proposal[] }) => {
   const proposal = data[index]
   return (
     <div style={style}>
@@ -213,53 +214,6 @@ const GovernanceDashboard = () => {
     const total = votesFor + votesAgainst
     return total > 0 ? (votesFor / total) * 100 : 0
   }
-
-  const ProposalCard = ({ proposal }: { proposal: Proposal }) => (
-    <Card className="p-4">
-      <div className="flex justify-between items-start mb-4">
-        <div>
-          <h3 className="text-lg font-semibold">{proposal.title}</h3>
-          <p className="text-sm text-gray-600">{proposal.description}</p>
-        </div>
-        <span className={`px-2 py-1 rounded text-sm ${
-          proposal.status === 'active' ? 'bg-blue-100 text-blue-800' :
-          proposal.status === 'passed' ? 'bg-green-100 text-green-800' :
-          'bg-red-100 text-red-800'
-        }`}>
-          {proposal.status.charAt(0).toUpperCase() + proposal.status.slice(1)}
-        </span>
-      </div>
-
-      <div className="space-y-2">
-        <div className="flex justify-between text-sm">
-          <span>Progress</span>
-          <span>{calculateProgress(proposal.votesFor, proposal.votesAgainst).toFixed(1)}%</span>
-        </div>
-        <Progress 
-          value={calculateProgress(proposal.votesFor, proposal.votesAgainst)} 
-          className="h-2"
-        />
-        
-        <div className="flex justify-between text-sm text-gray-600">
-          <span>For: {proposal.votesFor}</span>
-          <span>Against: {proposal.votesAgainst}</span>
-        </div>
-
-        <div className="flex justify-between items-center mt-4">
-          <div className="text-sm text-gray-600">
-            <p>Created by: {proposal.createdBy}</p>
-            <p>Ends: {new Date(proposal.endsAt).toLocaleDateString()}</p>
-          </div>
-          {proposal.status === 'active' && (
-            <div className="space-x-2">
-              <Button onClick={() => handleVote(proposal.id, true)}>Approve</Button>
-              <Button onClick={() => handleVote(proposal.id, false)}>Reject</Button>
-            </div>
-          )}
-        </div>
-      </div>
-    </Card>
-  )
 
   const ReputationUpdateCard = ({ update }: { update: ReputationUpdate }) => (
     <Card className="p-4">
@@ -434,7 +388,7 @@ const GovernanceDashboard = () => {
           <CardContent>
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={proposalData}>
+                <LineChart data={votingStats.monthlyVotes}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
                   <YAxis />
@@ -451,7 +405,7 @@ const GovernanceDashboard = () => {
           <CardHeader>
             <CardTitle>Dispute Resolution Status</CardTitle>
           </CardHeader>
-          <CardContent></CardContent>
+          <CardContent>
             {/* Add dispute resolution UI components */}
           </CardContent>
         </Card>
@@ -471,32 +425,21 @@ const GovernanceDashboard = () => {
             </TabsList>
 
             <TabsContent value="active" className="space-y-4">
-              <List
-                ref={listRef}
-                height={getListHeight()}
-                itemCount={proposals.filter(p => p.status === 'active').length}
-                itemSize={200}
-                width="100%"
-                itemData={proposals.filter(p => p.status === 'active')}
-              >
-                {ProposalRow}
-              </List>
+              {proposals.filter(p => p.status === 'active').map(proposal => (
+                <ProposalCard key={proposal.id} proposal={proposal} />
+              ))}
             </TabsContent>
 
             <TabsContent value="passed" className="space-y-4">
-              {proposals
-                .filter(p => p.status === 'passed')
-                .map(proposal => (
-                  <ProposalCard key={proposal.id} proposal={proposal} />
-                ))}
+              {proposals.filter(p => p.status === 'passed').map(proposal => (
+                <ProposalCard key={proposal.id} proposal={proposal} />
+              ))}
             </TabsContent>
 
             <TabsContent value="rejected" className="space-y-4">
-              {proposals
-                .filter(p => p.status === 'rejected')
-                .map(proposal => (
-                  <ProposalCard key={proposal.id} proposal={proposal} />
-                ))}
+              {proposals.filter(p => p.status === 'rejected').map(proposal => (
+                <ProposalCard key={proposal.id} proposal={proposal} />
+              ))}
             </TabsContent>
           </Tabs>
         </CardContent>
@@ -520,9 +463,9 @@ const GovernanceDashboard = () => {
         </AlertDescription>
       </Alert>
 
-      <Dialog isOpen={isModalOpen} onDismiss={() => setIsModalOpen(false)} aria-label="Create Proposal">
-        <DialogOverlay />
-        <DialogContent>
+      <Dialog as="div" isOpen={isModalOpen} onDismiss={() => setIsModalOpen(false)} aria-label="Create Proposal">
+        <DialogOverlay as="div" />
+        <DialogContent as="div">
           <h2 className="text-xl font-bold mb-4">Create Proposal</h2>
           <form onSubmit={handleSubmit}>
             <div className="mb-4">

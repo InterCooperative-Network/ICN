@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@reach/dialog": "^0.18.0",
+    "lucide-react": "^0.479.0",
+    "react-window": "^1.8.11",
+    "recharts": "^2.15.1"
+  }
+}

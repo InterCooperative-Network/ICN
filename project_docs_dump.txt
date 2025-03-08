@@ -1,11 +1,9 @@
-Project Docs Dump - Generated Sat Mar  8 05:33:59 EST 2025
+Project Docs Dump - Generated Sat 08 Mar 2025 11:56:42 AM UTC
 ======================================
 
 Docs Tree:
 =============
 ./docs
-├── INDEX.md
-├── README.md
 ├── api
 │   ├── federation.md
 │   ├── governance.md
@@ -25,8 +23,8 @@ Docs Tree:
 │   │   ├── contributing.md
 │   │   ├── documentation-standards.md
 │   │   ├── frontend-integration.md
-│   │   ├── test-strategy.md
-│   │   └── testing.md
+│   │   ├── testing.md
+│   │   └── test-strategy.md
 │   ├── plans
 │   │   ├── ci_cd-pipeline.md
 │   │   ├── development-roadmap.md
@@ -40,8 +38,10 @@ Docs Tree:
 │   ├── getting-started.md
 │   ├── governance-guide.md
 │   └── reputation-management.md
+├── INDEX.md
 ├── mkdocs.yml
 ├── on_chain_vs_off_chain.md
+├── README.md
 ├── requirements.txt
 ├── specifications
 │   ├── api
@@ -71,7 +71,7 @@ Docs Tree:
         ├── onboarding-guide.md
         └── resource-management.md
 
-18 directories, 49 files
+17 directories, 49 files
 
 
 ===================
