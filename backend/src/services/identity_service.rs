@@ -11,7 +11,7 @@ pub trait IdentityService: Send + Sync {
     async fn get_identity(&self, identity: &str) -> Result<String, String>;
     async fn rotate_key(&self, identity: &str) -> Result<(), String>;
     async fn revoke_key(&self, identity: &str) -> Result<(), String>;
-    async fn verify_did(&self, did: &str) -> Result<bool, String>; // Add verify_did method
+    async fn verify_did(&self, _did: &str) -> Result<bool, String>; // Add verify_did method
     async fn verify_credential(&self, credential: &str) -> Result<bool, String>; // Add verify_credential method
     async fn get_public_key(&self, did: &str) -> Result<Option<Vec<u8>>, String>; // Add get_public_key method
 }
@@ -61,7 +61,7 @@ impl IdentityService for IdentityServiceImpl {
         revoke_key_in_ledger(identity).await.map_err(|e| e.to_string())
     }
 
-    async fn verify_did(&self, did: &str) -> Result<bool, String> {
+    async fn verify_did(&self, _did: &str) -> Result<bool, String> {
         // Placeholder logic for verifying DID
         Ok(true)
     }
