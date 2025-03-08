@@ -19,7 +19,7 @@ impl Database {
         })
     }
     
-    pub async fn create_proposal(&self, proposal: &Proposal) -> Result<i64, sqlx::Error> {
+    pub async fn create_proposal(&self, _proposal: &Proposal) -> Result<i64, sqlx::Error> {
         // This is a mock implementation for testing
         Ok(1) // Return a dummy proposal ID
     }

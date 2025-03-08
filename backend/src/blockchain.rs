@@ -54,14 +54,14 @@ impl Blockchain {
         }
     }
 
-    pub async fn add_transaction(&mut self, transaction: Transaction) -> Result<(), String> {
+    pub async fn add_transaction(&mut self, _transaction: Transaction) -> Result<(), String> {
         // Validate transaction
-        let sender = &transaction.sender;
+        let sender = &_transaction.sender;
         
         // Check if sender has permission
         {
             let identity_system = self.identity_system.lock().unwrap();
-            match transaction.transaction_type {
+            match _transaction.transaction_type {
                 icn_types::TransactionType::Transfer { .. } => {
                     if !identity_system.has_permission(sender, "transfer") {
                         return Err("Sender does not have transfer permission".to_string());
@@ -74,7 +74,7 @@ impl Blockchain {
         }
         
         // Add to pending transactions
-        self.pending_transactions.push(transaction);
+        self.pending_transactions.push(_transaction);
         Ok(())
     }
 
