@@ -2,11 +2,11 @@ use futures::StreamExt;
 use tokio::sync::mpsc;
 use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 use serde::{Serialize, Deserialize};
-use std::net::SocketAddr;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use icn_p2p::{SDPManager, PublicKey};
+use icn_p2p::{SDPManager, PublicKey};  // Use re-exported PublicKey
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum NetworkEvent {
@@ -38,51 +38,86 @@ pub struct NetworkLayer {
 }
 
 impl NetworkLayer {
-    pub async fn new() -> Self {
+    pub async fn new(bind_addr: Option<&str>) -> Result<Self, String> {
         let (tx, _rx) = mpsc::channel(100);
-        Self {
+        let mut layer = Self {
             gossip_peers: Vec::new(),
             event_tx: tx,
             sdp_manager: None,
             peers: HashMap::new(),
-        }
-    }
-
-    pub async fn init_sdp(&mut self, bind_addr: &str) -> Result<(), String> {
-        match SDPManager::new(bind_addr) {
-            Ok(manager) => {
-                let manager = Arc::new(Mutex::new(manager));
-                let manager_clone = manager.clone();
-                let event_tx = self.event_tx.clone();
-                
-                let handler = move |data: Vec<u8>, _src: SocketAddr| {
-                    if let Ok(event) = serde_json::from_slice::<NetworkEvent>(&data) {
-                        let _ = event_tx.clone().try_send(event);
-                    }
-                };
-                
-                manager_clone.lock().await.start_receiver(handler).await?;
-                self.sdp_manager = Some(manager);
-                Ok(())
-            },
-            Err(e) => Err(format!("Failed to initialize SDP: {}", e)),
-        }
-    }
-
-    pub async fn add_sdp_peer(&mut self, peer_id: String, public_key: PublicKey, addresses: Vec<SocketAddr>) {
-        let peer = PeerInfo {
-            id: peer_id.clone(),
-            addresses: addresses.clone(),
-            public_key: Some(public_key),
-            transport: NetworkTransport::SDP,
         };
-        
-        self.peers.insert(peer_id.clone(), peer);
-        
-        if let Some(sdp) = &self.sdp_manager {
-            let mut manager = sdp.lock().await;
-            manager.register_peer(peer_id, public_key, addresses);
+
+        if let Some(addr) = bind_addr {
+            layer.initialize(addr).await?;
         }
+
+        Ok(layer)
+    }
+
+    pub async fn initialize(&mut self, bind_addr: &str) -> Result<(), String> {
+        let addr = bind_addr.to_socket_addrs()
+            .map_err(|e| format!("Invalid address: {}", e))?
+            .next()
+            .ok_or_else(|| "Failed to resolve address".to_string())?;
+
+        match SDPManager::new(addr) {
+            Ok(manager) => {
+                self.sdp_manager = Some(Arc::new(Mutex::new(manager)));
+                
+                let manager_clone = self.sdp_manager.as_ref().unwrap().clone();
+                tokio::spawn(async move {
+                    let handler = |result: Result<(Vec<u8>, SocketAddr, String), String>| {
+                        match result {
+                            Ok((payload, _addr, sender)) => {  // Prefix unused addr with _
+                                println!("Received message from {}: {:?}", sender, payload);
+                            }
+                            Err(e) => {
+                                println!("Error handling message: {}", e);
+                            }
+                        }
+                    };
+                    
+                    if let Err(e) = manager_clone.lock().await.start(handler).await {
+                        eprintln!("SDP manager error: {}", e);
+                    }
+                });
+                
+                Ok(())
+            }
+            Err(e) => Err(format!("Failed to initialize SDP manager: {}", e))
+        }
+    }
+
+    pub async fn register_peer(&mut self, peer_id: String, public_key: PublicKey, addrs: Vec<SocketAddr>) -> Result<(), String> {
+        if let Some(manager) = &self.sdp_manager {
+            let manager = manager.lock().await;
+            for addr in addrs.clone() {
+                manager.register(peer_id.clone(), addr, public_key).await;
+            }
+            self.peers.insert(peer_id.clone(), PeerInfo {
+                id: peer_id,
+                addresses: addrs,
+                public_key: Some(public_key),
+                transport: NetworkTransport::SDP,
+            });
+            Ok(())
+        } else {
+            Err("SDP manager not initialized".to_string())
+        }
+    }
+
+    pub async fn send_message(&self, peer_id: &str, data: Vec<u8>, priority: u8) -> Result<(), String> {
+        if let Some(manager) = &self.sdp_manager {
+            manager.lock().await.send_message(peer_id, data, priority).await?;
+        }
+        Ok(())
+    }
+
+    pub fn get_public_key(&self) -> Option<PublicKey> {
+        self.sdp_manager.as_ref().map(|sdp| {
+            let guard = futures::executor::block_on(sdp.lock());
+            guard.get_public_key()
+        })
     }
 
     pub async fn broadcast_event(&self, event: NetworkEvent) -> Result<(), String> {
@@ -101,7 +136,7 @@ impl NetworkLayer {
                         _ => 4,
                     };
                     
-                    if let Err(e) = manager.send_message(peer_id, bytes, priority).await {
+                    if let Err(e) = manager.send_message(peer_id, bytes.to_vec(), priority).await {
                         eprintln!("Failed to send SDP message to {}: {}", peer_id, e);
                     }
                 }
@@ -129,14 +164,6 @@ impl NetworkLayer {
                     }
                 }
             }
-        }
-    }
-    
-    pub async fn get_public_key(&self) -> Option<PublicKey> {
-        if let Some(sdp) = &self.sdp_manager {
-            Some(sdp.lock().await.get_public_key().await)
-        } else {
-            None
         }
     }
 }
