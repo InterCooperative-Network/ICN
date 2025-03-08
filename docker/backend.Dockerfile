@@ -1,4 +1,4 @@
-FROM rust:1.75-slim as builder
+FROM rust:latest as builder
 
 WORKDIR /usr/src/app
 
@@ -7,19 +7,13 @@ RUN apt-get update && \
     apt-get install -y pkg-config libssl-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy only dependency files first to cache dependencies
-COPY backend/Cargo.toml ./
-
-# Create dummy main.rs to build dependencies
-RUN mkdir src && \
-    echo "fn main() {}" > src/main.rs && \
-    cargo build --release && \
-    rm -rf src/
-
-# Copy actual source code
-COPY backend/src ./src/
+# Copy the entire workspace
+COPY Cargo.toml Cargo.lock ./
+COPY backend ./backend
+COPY crates ./crates
 
 # Build the application
+WORKDIR /usr/src/app/backend
 RUN cargo build --release
 
 FROM debian:bookworm-slim
@@ -32,7 +26,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from builder
-COPY --from=builder /usr/src/app/target/release/icn-backend .
+COPY --from=builder /usr/src/app/backend/target/release/icn-backend .
 
 EXPOSE 8081
 
