@@ -319,3 +319,100 @@ pub enum FederationEvent {
         amount: u64,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::Filter;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    use crate::services::federation_service::FederationService;
+    use crate::services::p2p::P2PManager;
+
+    #[tokio::test]
+    async fn test_share_federation_resources_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_resource_sharing_routes(federation_service, p2p_manager);
+
+        let request = FederationResourceSharingRequest {
+            source_federation_id: "source_federation".to_string(),
+            target_federation_id: "target_federation".to_string(),
+            resource_type: "resource_type".to_string(),
+            amount: 100,
+            duration_seconds: Some(3600),
+            terms: "terms".to_string(),
+            min_reputation_score: 50,
+            signature: "signature".to_string(),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/resources/share")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_allocate_shared_resource_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_resource_sharing_routes(federation_service, p2p_manager);
+
+        let request = AllocateSharedResourceRequest {
+            agreement_id: "agreement_id".to_string(),
+            amount: 50,
+            requester_did: "requester_did".to_string(),
+            signature: "signature".to_string(),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/resources/shared/allocate")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_release_shared_resource_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_resource_sharing_routes(federation_service, p2p_manager);
+
+        let request = ReleaseSharedResourceRequest {
+            agreement_id: "agreement_id".to_string(),
+            allocation_id: "allocation_id".to_string(),
+            amount: 50,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/resources/shared/release")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_list_federation_sharing_agreements_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_resource_sharing_routes(federation_service, p2p_manager);
+
+        let resp = warp::test::request()
+            .method("GET")
+            .path("/api/v1/federation/source_federation/sharing-agreements")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+}
