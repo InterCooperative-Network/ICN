@@ -1,4 +1,4 @@
-version: "3.8"
+version: "3.3"
 
 services:
   backend:
@@ -9,9 +9,9 @@ services:
       - "8081:8081"
     environment:
       - DATABASE_URL=postgres://icnuser:icnpass@db:5432/icndb
+      - RUST_LOG=info
     depends_on:
-      db:
-        condition: service_healthy  # Ensures DB is ready before backend starts
+      - db
     networks:
       - icn-network
 
@@ -35,29 +35,13 @@ services:
       POSTGRES_DB: icndb
     ports:
       - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U icnuser -d icndb"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - icn-network
     volumes:
-      - db_data:/var/lib/postgresql/data  # Persist DB data
-
-  docs:
-    image: squidfunk/mkdocs-material:7.1.0
-    volumes:
-      - ../docs:/docs
-    ports:
-      - "8000:8000"
-    working_dir: /docs
-    command: /bin/sh -c "pip install mkdocs-mermaid2-plugin && mkdocs serve -a 0.0.0.0:8000"
+      - db_data:/var/lib/postgresql/data
     networks:
       - icn-network
 
 volumes:
-  db_data:  # Persistent storage for database
+  db_data:
 
 networks:
   icn-network:

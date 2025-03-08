@@ -15,4 +15,5 @@ bit-set = "0.5"
 trie-rs = "0.1"
 rand = "0.8"
 icn-types = { path = "../icn-types" }
+icn-zk = { path = "../icn-zk" }
 sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "postgres"] }

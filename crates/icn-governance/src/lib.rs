@@ -2,7 +2,8 @@ use thiserror::Error;
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
-use zk_snarks::verify_proof; // Import zk-SNARK verification function
+use icn_types::{DecisionType, Federation, ExecutionEvent, EvidenceItem};
+use icn_zk::verify_proof; // Import zk-SNARK verification function
 
 #[derive(Error, Debug)]
 pub enum GovernanceError {
@@ -38,6 +39,7 @@ pub struct Proposal {
     pub dispute_resolution: Option<DisputeResolution>,
     pub timeout_timestamp: u64,
     pub zk_snark_proof: Option<String>, // Added zk-SNARK proof field
+    pub voting_model: VotingModel,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -65,6 +67,9 @@ pub struct Vote {
     pub approve: bool,
     pub reputation: i64,
     pub timestamp: DateTime<Utc>,
+    pub voter_id: String,
+    pub proposal_id: String,
+    pub decision: DecisionType,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,6 +165,9 @@ pub enum VotingModel {
         governance_model: Box<VotingModel>,
         resource_model: Box<VotingModel>,
     },
+    Simple,
+    Weighted { weight_factor: f64 },
+    Hybrid { governance_model: f64, resource_model: f64 },
 }
 
 impl VotingModel {
@@ -173,6 +181,15 @@ impl VotingModel {
             VotingModel::Hybrid { governance_model, resource_model } => {
                 // Use different models based on proposal type
                 // ...existing code...
+            }
+            VotingModel::Simple => 1.0,
+            VotingModel::Weighted { weight_factor } => {
+                // Implement weighted voting calculation
+                weight_factor * 1.0
+            }
+            VotingModel::Hybrid { governance_model, resource_model } => {
+                // Implement hybrid voting calculation
+                governance_model * 0.5 + resource_model * 0.5
             }
         }
     }
@@ -196,7 +213,10 @@ impl ReputationManager {
         }
     }
     
-    // ...existing code...
+    pub fn calculate_average_reputation(&self) -> f64 {
+        // Implement actual calculation
+        0.0
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -217,19 +237,27 @@ pub struct DisputeResolution {
     pub resolution: Option<String>,
     pub votes: HashMap<String, bool>,
     pub evidence: Vec<EvidenceItem>,
+    pub id: String,
+    pub proposal_id: String,
+    pub timestamp: i64,
 }
 
 impl Proposal {
     pub fn transition_state(&mut self, new_state: ProposalState) -> Result<(), String> {
-        match (&self.state, &new_state) {
-            (ProposalState::Draft, ProposalState::UnderReview) => Ok(()),
-            (ProposalState::UnderReview, ProposalState::Voting) => Ok(()),
-            (ProposalState::Voting, ProposalState::DisputeResolution) => Ok(()),
-            (ProposalState::DisputeResolution, ProposalState::Finalized) => Ok(()),
-            _ => Err("Invalid state transition".to_string())
+        let valid = match (&self.state, &new_state) {
+            (ProposalState::Draft, ProposalState::UnderReview) => true,
+            (ProposalState::UnderReview, ProposalState::Voting) => true,
+            (ProposalState::Voting, ProposalState::DisputeResolution) => true,
+            (ProposalState::DisputeResolution, ProposalState::Finalized) => true,
+            _ => false,
+        };
+
+        if valid {
+            self.state = new_state;
+            Ok(())
+        } else {
+            Err("Invalid state transition".to_string())
         }
-        self.state = new_state;
-        Ok(())
     }
     
     pub fn initiate_dispute(&mut self, initiator: String, reason: String) -> Result<(), String> {
@@ -250,6 +278,9 @@ impl Proposal {
             resolution: None,
             votes: HashMap::new(),
             evidence: vec![],
+            id: String::new(),
+            proposal_id: String::new(),
+            timestamp: 0,
         });
         
         self.transition_state(ProposalState::DisputeResolution)
@@ -263,6 +294,28 @@ impl Proposal {
             }
         }
         false
+    }
+
+    pub fn calculate_voting_power(&self, federation: &Federation, cooperative_id: &str) -> f64 {
+        match &self.voting_model {
+            VotingModel::Simple => 1.0,
+            VotingModel::Weighted { weight_factor } => {
+                // Implement weighted voting calculation
+                weight_factor * 1.0
+            }
+            VotingModel::Hybrid { governance_model, resource_model } => {
+                // Implement hybrid voting calculation
+                governance_model * 0.5 + resource_model * 0.5
+            }
+        }
+    }
+
+    pub fn validate_vote(&self, vote: &Vote) -> bool {
+        if self.state != ProposalState::Voting {
+            return false;
+        }
+        // Add more validation logic
+        true
     }
 }
 

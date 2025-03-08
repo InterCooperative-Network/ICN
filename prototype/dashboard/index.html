@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICN Network Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 20px;
+            background-color: #f8f9fa;
+        }
+        .node-card {
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .card-header {
+            font-weight: bold;
+        }
+        .peer-badge {
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        .resource-bar {
+            height: 20px;
+            margin-bottom: 10px;
+        }
+        .workload-item {
+            padding: 8px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+        }
+        .status-pending {
+            background-color: #ffeeba;
+        }
+        .status-running {
+            background-color: #b8daff;
+        }
+        .status-completed {
+            background-color: #c3e6cb;
+        }
+        .status-failed {
+            background-color: #f5c6cb;
+        }
+        #network-graph {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            height: 400px;
+            background-color: #fff;
+        }
+        .node-tooltip {
+            position: absolute;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            pointer-events: none;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="mb-4">
+            <h1 class="text-center">ICN P2P Cloud Computing Network</h1>
+            <p class="text-center text-muted">Intercooperative Network Prototype</p>
+        </header>
+
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        Network Overview
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <h5>Network Status</h5>
+                                <ul class="list-group">
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        Active Nodes
+                                        <span id="active-nodes-count" class="badge bg-primary rounded-pill">0</span>
+                                    </li>
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        Active Workloads
+                                        <span id="active-workloads-count" class="badge bg-info rounded-pill">0</span>
+                                    </li>
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        Completed Workloads
+                                        <span id="completed-workloads-count" class="badge bg-success rounded-pill">0</span>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="col-md-8">
+                                <h5>Network Visualization</h5>
+                                <div id="network-graph"></div>
+                                <div class="node-tooltip"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="mb-3">Node Details</h2>
+        <div class="row" id="nodes-container">
+            <!-- Node cards will be inserted here dynamically -->
+        </div>
+
+        <h2 class="mb-3">Workload Management</h2>
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        Submit New Workload
+                    </div>
+                    <div class="card-body">
+                        <form id="workload-form">
+                            <div class="mb-3">
+                                <label for="workload-type" class="form-label">Type</label>
+                                <select class="form-select" id="workload-type">
+                                    <option value="container">Container</option>
+                                    <option value="function">Function</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="workload-command" class="form-label">Command</label>
+                                <input type="text" class="form-control" id="workload-command" placeholder='["echo", "Hello ICN"]'>
+                            </div>
+                            <div class="mb-3">
+                                <label for="workload-cpu" class="form-label">CPU Cores</label>
+                                <input type="number" class="form-control" id="workload-cpu" min="1" value="1">
+                            </div>
+                            <div class="mb-3">
+                                <label for="workload-memory" class="form-label">Memory (MB)</label>
+                                <input type="number" class="form-control" id="workload-memory" min="64" value="256">
+                            </div>
+                            <div class="mb-3">
+                                <label for="workload-node" class="form-label">Target Node</label>
+                                <select class="form-select" id="workload-node">
+                                    <option value="">Auto-select</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Submit Workload</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        Recent Workloads
+                    </div>
+                    <div class="card-body">
+                        <div id="recent-workloads">
+                            <!-- Workload items will be inserted here dynamically -->
+                            <div class="text-center text-muted">No workloads yet</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+        // Configuration
+        const nodes = [
+            { id: 'bootstrap', apiPort: 3000 },
+            { id: 'node1', apiPort: 3001 },
+            { id: 'node2', apiPort: 3002 }
+        ];
+        
+        // Global state
+        const state = {
+            nodes: {},
+            workloads: {},
+            updateInterval: 5000
+        };
+        
+        // DOM references
+        const nodesContainer = document.getElementById('nodes-container');
+        const workloadNodeSelect = document.getElementById('workload-node');
+        const recentWorkloads = document.getElementById('recent-workloads');
+        const workloadForm = document.getElementById('workload-form');
+        const nodeTooltip = document.querySelector('.node-tooltip');
+        
+        // Initialize the dashboard
+        async function initializeDashboard() {
+            // Add node options to the workload form
+            nodes.forEach(node => {
+                const option = document.createElement('option');
+                option.value = `http://${node.id}:${node.apiPort}`;
+                option.textContent = node.id;
+                workloadNodeSelect.appendChild(option);
+            });
+            
+            // Set up workload submission
+            workloadForm.addEventListener('submit', submitWorkload);
+            
+            // Initial data fetch
+            await fetchAllNodeData();
+            
+            // Set up periodic updates
+            setInterval(fetchAllNodeData, state.updateInterval);
+            
+            // Initialize network graph
+            initializeNetworkGraph();
+        }
+        
+        // Fetch data from all nodes
+        async function fetchAllNodeData() {
+            try {
+                // Fetch status from all nodes
+                for (const node of nodes) {
+                    await fetchNodeStatus(node);
+                    await fetchNodeWorkloads(node);
+                }
+                
+                // Update UI
+                updateNodeCards();
+                updateWorkloadsList();
+                updateNetworkCounts();
+                updateNetworkGraph();
+            } catch (error) {
+                console.error('Error fetching node data:', error);
+            }
+        }
+        
+        // Fetch status from a specific node
+        async function fetchNodeStatus(node) {
+            try {
+                const response = await fetch(`http://${window.location.hostname}:${node.apiPort}/api/status`);
+                if (response.ok) {
+                    const data = await response.json();
+                    state.nodes[node.id] = {
+                        ...data,
+                        lastUpdate: Date.now()
+                    };
+                    
+                    // Also fetch peers
+                    const peersResponse = await fetch(`http://${window.location.hostname}:${node.apiPort}/api/peers`);
+                    if (peersResponse.ok) {
+                        state.nodes[node.id].peers = await peersResponse.json();
+                    }
+                    
+                    // Also fetch resources
+                    const resourcesResponse = await fetch(`http://${window.location.hostname}:${node.apiPort}/api/resources`);
+                    if (resourcesResponse.ok) {
+                        state.nodes[node.id].resources = await resourcesResponse.json();
+                    }
+                }
+            } catch (error) {
+                console.warn(`Error fetching status from ${node.id}:`, error);
+                // Mark node as offline if we can't reach it
+                if (state.nodes[node.id]) {
+                    state.nodes[node.id].status = 'offline';
+                } else {
+                    state.nodes[node.id] = { id: node.id, status: 'offline' };
+                }
+            }
+        }
+        
+        // Fetch workloads from a specific node
+        async function fetchNodeWorkloads(node) {
+            try {
+                const response = await fetch(`http://${window.location.hostname}:${node.apiPort}/api/workloads`);
+                if (response.ok) {
+                    const workloads = await response.json();
+                    workloads.forEach(workload => {
+                        state.workloads[workload.id] = {
+                            ...workload,
+                            nodeId: node.id
+                        };
+                    });
+                }
+            } catch (error) {
+                console.warn(`Error fetching workloads from ${node.id}:`, error);
+            }
+        }
+        
+        // Update node cards in the UI
+        function updateNodeCards() {
+            nodesContainer.innerHTML = '';
+            
+            nodes.forEach(nodeConfig => {
+                const node = state.nodes[nodeConfig.id] || { id: nodeConfig.id, status: 'unknown' };
+                
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'col-md-4';
+                
+                let statusClass;
+                switch (node.status) {
+                    case 'online': statusClass = 'bg-success'; break;
+                    case 'offline': statusClass = 'bg-danger'; break;
+                    default: statusClass = 'bg-secondary';
+                }
+                
+                const peersList = (node.peers || []).map(peer => 
+                    `<span class="badge bg-info peer-badge">${peer.id.substring(0, 8)}</span>`
+                ).join('');
+                
+                const cpuUsage = node.resources ? 
+                    Math.floor(Math.random() * 30) + 10 : 0;  // Mock usage for demo
+                
+                const memoryTotal = node.resources ? 
+                    Math.round((node.resources.memory.total / 1024 / 1024 / 1024) * 100) / 100 : 0;
+                const memoryFree = node.resources ? 
+                    Math.round((node.resources.memory.free / 1024 / 1024 / 1024) * 100) / 100 : 0;
+                const memoryUsed = memoryTotal - memoryFree;
+                const memoryPercent = memoryTotal > 0 ? 
+                    Math.round((memoryUsed / memoryTotal) * 100) : 0;
+                
+                cardDiv.innerHTML = `
+                    <div class="card node-card">
+                        <div class="card-header ${statusClass} text-white d-flex justify-content-between">
+                            <span>${nodeConfig.id}</span>
+                            <span>${node.status}</span>
+                        </div>
+                        <div class="card-body">
+                            <h6>Node Type: ${node.type || 'Unknown'}</h6>
+                            <p class="text-muted">ID: ${node.id || 'Unknown'}</p>
+                            
+                            <h6>Resources</h6>
+                            <div>
+                                <label>CPU Usage:</label>
+                                <div class="progress resource-bar">
+                                    <div class="progress-bar" role="progressbar" style="width: ${cpuUsage}%" 
+                                        aria-valuenow="${cpuUsage}" aria-valuemin="0" aria-valuemax="100">
+                                        ${cpuUsage}%
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label>Memory Usage:</label>
+                                <div class="progress resource-bar">
+                                    <div class="progress-bar" role="progressbar" style="width: ${memoryPercent}%" 
+                                        aria-valuenow="${memoryPercent}" aria-valuemin="0" aria-valuemax="100">
+                                        ${memoryPercent}%
+                                    </div>
+                                </div>
+                                <small class="text-muted">${memoryUsed.toFixed(1)} GB / ${memoryTotal.toFixed(1)} GB</small>
+                            </div>
+                            
+                            <h6 class="mt-3">Connected Peers</h6>
+                            <div>
+                                ${peersList || '<span class="text-muted">No peers connected</span>'}
+                            </div>
+                            
+                            <div class="d-grid gap-2 mt-3">
+                                <a href="http://${window.location.hostname}:${nodeConfig.apiPort}/api/status" class="btn btn-sm btn-outline-primary" target="_blank">
+                                    View API
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                nodesContainer.appendChild(cardDiv);
+            });
+        }
+        
+        // Update workloads list in the UI
+        function updateWorkloadsList() {
+            const workloadsArray = Object.values(state.workloads);
+            workloadsArray.sort((a, b) => b.submittedAt - a.submittedAt);
+            
+            if (workloadsArray.length === 0) {
+                recentWorkloads.innerHTML = '<div class="text-center text-muted">No workloads yet</div>';
+                return;
+            }
+            
+            recentWorkloads.innerHTML = '';
+            
+            workloadsArray.slice(0, 5).forEach(workload => {
+                const workloadDiv = document.createElement('div');
+                
+                let statusClass;
+                switch (workload.status) {
+                    case 'pending': statusClass = 'status-pending'; break;
+                    case 'running': statusClass = 'status-running'; break;
+                    case 'completed': statusClass = 'status-completed'; break;
+                    case 'failed': statusClass = 'status-failed'; break;
+                    default: statusClass = '';
+                }
+                
+                workloadDiv.className = `workload-item ${statusClass}`;
+                
+                workloadDiv.innerHTML = `
+                    <div class="d-flex justify-content-between">
+                        <strong>${workload.type}</strong>
+                        <span class="badge bg-${getStatusBadgeColor(workload.status)}">${workload.status}</span>
+                    </div>
+                    <div class="small">ID: ${workload.id.substring(0, 8)}</div>
+                    <div class="small">Node: ${workload.nodeId}</div>
+                    <div class="small">Submitted: ${new Date(workload.submittedAt).toLocaleString()}</div>
+                `;
+                
+                recentWorkloads.appendChild(workloadDiv);
+            });
+        }
+        
+        // Update network counts in the UI
+        function updateNetworkCounts() {
+            const activeNodes = Object.values(state.nodes).filter(node => node.status === 'online').length;
+            document.getElementById('active-nodes-count').textContent = activeNodes;
+            
+            const workloads = Object.values(state.workloads);
+            const activeWorkloads = workloads.filter(w => w.status === 'running' || w.status === 'pending').length;
+            document.getElementById('active-workloads-count').textContent = activeWorkloads;
+            
+            const completedWorkloads = workloads.filter(w => w.status === 'completed').length;
+            document.getElementById('completed-workloads-count').textContent = completedWorkloads;
+        }
+        
+        // Handle workload submission
+        async function submitWorkload(event) {
+            event.preventDefault();
+            
+            const workloadType = document.getElementById('workload-type').value;
+            const commandStr = document.getElementById('workload-command').value;
+            let command;
+            try {
+                command = JSON.parse(commandStr);
+            } catch (error) {
+                command = commandStr.split(' ');
+            }
+            
+            const cpuCores = parseInt(document.getElementById('workload-cpu').value, 10);
+            const memoryMB = parseInt(document.getElementById('workload-memory').value, 10);
+            
+            const selectedNode = document.getElementById('workload-node').value;
+            
+            // Prepare workload data
+            const workloadData = {
+                type: workloadType,
+                command: command,
+                requirements: {
+                    cpu: { cores: cpuCores },
+                    memory: { required: `${memoryMB}MB` }
+                }
+            };
+            
+            try {
+                // Determine which API endpoint to use
+                const apiEndpoint = selectedNode || `http://${window.location.hostname}:${nodes[0].apiPort}`;
+                
+                // Submit the workload
+                const response = await fetch(`${apiEndpoint}/api/workloads`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(workloadData)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(`Workload submitted successfully! ID: ${result.id}`);
+                    // Refresh workload data
+                    await fetchAllNodeData();
+                } else {
+                    const error = await response.text();
+                    alert(`Failed to submit workload: ${error}`);
+                }
+            } catch (error) {
+                console.error('Error submitting workload:', error);
+                alert(`Error submitting workload: ${error.message}`);
+            }
+        }
+        
+        // Initialize network graph visualization
+        function initializeNetworkGraph() {
+            const svg = d3.select('#network-graph')
+                .append('svg')
+                .attr('width', '100%')
+                .attr('height', '100%');
+                
+            // Will be populated in updateNetworkGraph
+        }
+        
+        // Update network graph visualization
+        function updateNetworkGraph() {
+            const container = document.getElementById('network-graph');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            
+            const svg = d3.select('#network-graph svg')
+                .attr('width', width)
+                .attr('height', height);
+            
+            // Clear previous graph
+            svg.selectAll('*').remove();
+            
+            // Prepare nodes and links data
+            const nodesData = [];
+            const linksData = [];
+            
+            // Add nodes
+            nodes.forEach(nodeConfig => {
+                const node = state.nodes[nodeConfig.id] || { id: nodeConfig.id, status: 'unknown' };
+                nodesData.push({
+                    id: nodeConfig.id,
+                    status: node.status,
+                    type: node.type || 'unknown',
+                    peers: node.peers || []
+                });
+            });
+            
+            // Add links based on peer connections
+            nodesData.forEach(node => {
+                if (node.peers) {
+                    node.peers.forEach(peer => {
+                        // Find the target node in our known nodes
+                        const targetNode = nodesData.find(n => 
+                            n.id === peer.id || nodes.some(configNode => 
+                                configNode.id === peer.id
+                            )
+                        );
+                        
+                        if (targetNode) {
+                            linksData.push({
+                                source: node.id,
+                                target: targetNode.id
+                            });
+                        }
+                    });
+                }
+            });
+            
+            // Create a force simulation
+            const simulation = d3.forceSimulation(nodesData)
+                .force('link', d3.forceLink(linksData).id(d => d.id).distance(100))
+                .force('charge', d3.forceManyBody().strength(-300))
+                .force('center', d3.forceCenter(width / 2, height / 2));
+            
+            // Add links
+            const link = svg.append('g')
+                .selectAll('line')
+                .data(linksData)
+                .enter()
+                .append('line')
+                .attr('stroke', '#999')
+                .attr('stroke-width', 2);
+            
+            // Add nodes
+            const node = svg.append('g')
+                .selectAll('circle')
+                .data(nodesData)
+                .enter()
+                .append('circle')
+                .attr('r', 15)
+                .attr('fill', d => {
+                    switch (d.status) {
+                        case 'online': return '#28a745';
+                        case 'offline': return '#dc3545';
+                        default: return '#6c757d';
+                    }
+                })
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended));
+            
+            // Add node labels
+            const nodeLabels = svg.append('g')
+                .selectAll('text')
+                .data(nodesData)
+                .enter()
+                .append('text')
+                .text(d => d.id)
+                .attr('font-size', '12px')
+                .attr('text-anchor', 'middle')
+                .attr('dy', 30);
+            
+            // Add tooltips
+            node.on('mouseover', function(event, d) {
+                    d3.select(this).attr('r', 18);
+                    
+                    const tooltip = d3.select('.node-tooltip')
+                        .style('display', 'block')
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                    
+                    tooltip.html(`
+                        <strong>${d.id}</strong><br>
+                        Type: ${d.type}<br>
+                        Status: ${d.status}<br>
+                        Peers: ${d.peers.length}
+                    `);
+                })
+                .on('mouseout', function() {
+                    d3.select(this).attr('r', 15);
+                    d3.select('.node-tooltip').style('display', 'none');
+                });
+            
+            // Update positions on each simulation tick
+            simulation.on('tick', () => {
+                link
+                    .attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
+                
+                node
+                    .attr('cx', d => d.x)
+                    .attr('cy', d => d.y);
+                
+                nodeLabels
+                    .attr('x', d => d.x)
+                    .attr('y', d => d.y);
+            });
+            
+            // Drag functions
+            function dragstarted(event) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                event.subject.fx = event.subject.x;
+                event.subject.fy = event.subject.y;
+            }
+            
+            function dragged(event) {
+                event.subject.fx = event.x;
+                event.subject.fy = event.y;
+            }
+            
+            function dragended(event) {
+                if (!event.active) simulation.alphaTarget(0);
+                event.subject.fx = null;
+                event.subject.fy = null;
+            }
+        }
+        
+        // Helper function to get badge color based on workload status
+        function getStatusBadgeColor(status) {
+            switch (status) {
+                case 'pending': return 'warning';
+                case 'running': return 'info';
+                case 'completed': return 'success';
+                case 'failed': return 'danger';
+                default: return 'secondary';
+            }
+        }
+        
+        // Start the dashboard
+        document.addEventListener('DOMContentLoaded', initializeDashboard);
+    </script>
+</body>
+</html>

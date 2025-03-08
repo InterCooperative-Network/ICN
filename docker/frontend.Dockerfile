@@ -1,20 +1,32 @@
-# Use Node.js base image
-FROM node:23-slim
+FROM node:18-slim as builder
 
-# Set working directory
-WORKDIR /usr/src/app
+WORKDIR /app
 
-# Copy everything from frontend directory
-COPY frontend/package.json frontend/package-lock.json ./
+# Copy package files
+COPY frontend/package*.json ./
 
 # Install dependencies
 RUN npm install
 
-# Copy the rest of the frontend source code
-COPY frontend/. ./
+# Copy source code
+COPY frontend/tsconfig.json ./
+COPY frontend/tailwind.config.js ./
+COPY frontend/postcss.config.js ./
+COPY frontend/public ./public
+COPY frontend/src ./src
 
-# Expose the frontend port
+# Build the application
+RUN npm run build
+
+# Production stage
+FROM nginx:alpine
+
+# Copy built assets from builder stage
+COPY --from=builder /app/build /usr/share/nginx/html
+
+# Copy nginx config
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+
 EXPOSE 3000
 
-# Start the frontend app
-CMD ["npm", "start"]
+CMD ["nginx", "-g", "daemon off;"]

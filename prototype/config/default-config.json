@@ -1,0 +1,41 @@
+{
+  "nodeType": "regular",
+  "network": {
+    "listenAddresses": ["/ip4/0.0.0.0/tcp/9000"],
+    "bootstrapNodes": []
+  },
+  "api": {
+    "port": 3000
+  },
+  "resources": {
+    "cpu": {
+      "cores": "auto",
+      "speed": "auto"
+    },
+    "memory": {
+      "total": "auto",
+      "available": "auto"
+    },
+    "storage": {
+      "total": "auto",
+      "available": "auto"
+    },
+    "network": {
+      "uplink": "auto",
+      "downlink": "auto",
+      "latency": "auto"
+    }
+  },
+  "cooperative": {
+    "id": "icn-prototype",
+    "tier": "contributor"
+  },
+  "security": {
+    "allowAnonymousWorkloads": true,
+    "trustLevel": "prototype"
+  },
+  "logging": {
+    "level": "info",
+    "file": "logs/icn-node.log"
+  }
+}
