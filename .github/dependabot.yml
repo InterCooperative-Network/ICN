@@ -40,3 +40,28 @@ updates:
     directory: "/crates/icn-types"
     schedule:
       interval: "weekly"
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      dependencies:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "security"
+    versioning-strategy:
+      increase: "patch"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "ci-cd"
+      - "dependencies"
+    groups:
+      actions:
+        patterns:
+          - "*"

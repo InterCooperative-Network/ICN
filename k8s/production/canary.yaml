@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: icn-backend-canary
+  namespace: production
+  labels:
+    app: icn-backend
+    version: canary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: icn-backend
+      version: canary
+  template:
+    metadata:
+      labels:
+        app: icn-backend
+        version: canary
+    spec:
+      containers:
+      - name: icn-backend
+        image: icn-backend:latest
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: icn-backend
+  namespace: production
+spec:
+  hosts:
+  - icn.example.com
+  gateways:
+  - icn-gateway
+  http:
+  - route:
+    - destination:
+        host: icn-backend
+        subset: stable
+      weight: 90
+    - destination:
+        host: icn-backend
+        subset: canary
+      weight: 10
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: icn-backend
+  namespace: production
+spec:
+  host: icn-backend
+  subsets:
+  - name: stable
+    labels:
+      version: stable
+  - name: canary
+    labels:
+      version: canary

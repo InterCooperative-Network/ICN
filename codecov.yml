@@ -1,0 +1,32 @@
+coverage:
+  status:
+    project:
+      default:
+        # Basic overall project coverage requirement
+        target: 80%
+        threshold: 1%
+    patch:
+      default:
+        # Higher coverage requirement for new code
+        target: 90%
+        threshold: 1%
+    # Critical modules require higher coverage
+    critical:
+      paths:
+        - "crates/icn-consensus/**"
+        - "crates/icn-core/**"
+        - "crates/icn-governance/**"
+      target: 95%
+      threshold: 0%
+
+# Ignore test files and generated code
+ignore:
+  - "tests/**/*"
+  - "**/generated/**"
+  - "**/mock/**"
+
+# Configuration for PR comments
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: true

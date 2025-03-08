@@ -13,6 +13,36 @@ env:
   RUST_LOG: debug
 
 jobs:
+  quality-gates:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install tools
+      run: |
+        rustup component add rustfmt clippy
+        cargo install cargo-audit cargo-deny cargo-tarpaulin
+        
+    - name: Check code formatting
+      run: cargo fmt -- --check
+      
+    - name: Run clippy with strict settings
+      run: cargo clippy -- -D warnings -W clippy::pedantic
+      
+    - name: Check documentation coverage
+      run: |
+        RUSTDOCFLAGS="-D missing_docs" cargo doc --no-deps
+        
+    - name: Check for outdated dependencies
+      run: cargo outdated --exit-code 1
+      
+    - name: Enforce minimum test coverage
+      run: |
+        cargo tarpaulin --verbose --all-features --workspace --out Xml --minimum-coverage 80
+      env:
+        TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/icndb_test
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -94,6 +124,14 @@ jobs:
     - name: Check for banned dependencies
       run: cargo deny check bans
 
+    - name: Container vulnerability scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'icn-backend:latest'
+        format: 'table'
+        exit-code: '1'
+        severity: 'CRITICAL,HIGH'
+
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
@@ -145,6 +183,7 @@ jobs:
   benchmark:
     name: Performance Benchmarks
     runs-on: ubuntu-latest
+    needs: [test]
     services:
       postgres:
         image: postgres:13
@@ -184,6 +223,7 @@ jobs:
   load-test:
     name: Load Testing
     runs-on: ubuntu-latest
+    needs: [test]
     services:
       postgres:
         image: postgres:13
@@ -232,7 +272,7 @@ jobs:
   performance:
     name: Performance testing
     runs-on: ubuntu-latest
-    needs: [build, test]
+    needs: [test]
     
     steps:
       - uses: actions/checkout@v2
@@ -273,12 +313,19 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    needs: [test, security-audit]
 
     steps:
     - uses: actions/checkout@v3
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v1
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v1
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Cache Docker layers
       uses: actions/cache@v3
@@ -289,18 +336,25 @@ jobs:
           ${{ runner.os }}-buildx-
 
     - name: Build Docker image
-      run: docker build --cache-from=type=local,src=/tmp/.buildx-cache --cache-to=type=local,dest=/tmp/.buildx-cache --tag icn-backend:latest .
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: icn-backend:latest
+        cache-from: type=local,src=/tmp/.buildx-cache
+        cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
 
-    - name: Push Docker image
-      run: docker push icn-backend:latest
-      env:
-        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+    # Temp fix for https://github.com/docker/build-push-action/issues/252
+    - name: Move cache
+      run: |
+        rm -rf /tmp/.buildx-cache
+        mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
-  deploy:
-    name: Deploy
+  deploy-staging:
+    name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build]
+    if: github.ref == 'refs/heads/main'
 
     steps:
     - uses: actions/checkout@v3
@@ -308,7 +362,211 @@ jobs:
     - name: Set up Kubernetes
       uses: azure/setup-kubectl@v1
 
-    - name: Deploy to Kubernetes
-      run: kubectl apply -f k8s/deployment.yaml
+    - name: Create Kubernetes config directory
+      run: mkdir -p $HOME/.kube
+
+    - name: Set Kubernetes config
+      run: echo "${{ secrets.KUBECONFIG }}" > $HOME/.kube/config
+
+    - name: Deploy to staging environment
+      run: kubectl apply -f k8s/staging/deployment.yaml
+
+    - name: Verify deployment
+      run: |
+        kubectl rollout status deployment/icn-backend -n staging
+        echo "Deployment to staging complete!"
+
+    - name: Wait for service to be ready
+      run: sleep 30
+
+    - name: Run smoke tests
+      run: |
+        # Health check
+        curl -f https://staging.icn.example.com/health || exit 1
+        # Basic API tests
+        cargo test --test smoke_tests -- --test-threads=1
       env:
-        KUBECONFIG: ${{ secrets.KUBECONFIG }}
+        TEST_API_URL: https://staging.icn.example.com
+        TEST_API_KEY: ${{ secrets.STAGING_API_KEY }}
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://icn.example.com
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Kubernetes
+      uses: azure/setup-kubectl@v1
+    - name: Create Kubernetes config directory
+      run: mkdir -p $HOME/.kube
+    - name: Set Kubernetes config
+      run: echo "${{ secrets.KUBECONFIG }}" > $HOME/.kube/config
+    
+    # Start canary deployment
+    - name: Deploy canary
+      run: |
+        # Deploy 10% of traffic to new version
+        kubectl apply -f k8s/production/canary.yaml
+        echo "Canary deployment started"
+    
+    - name: Monitor canary health
+      run: |
+        # Monitor error rates and latency for 5 minutes
+        for i in {1..30}; do
+          # Check error rate
+          ERROR_RATE=$(kubectl exec -n monitoring prometheus-0 -- \
+            curl -s 'http://localhost:9090/api/v1/query' \
+            --data-urlencode 'query=rate(http_requests_total{job="icn-backend",status=~"5.."}[5m])' \
+            | jq '.data.result[0].value[1]' \
+            || echo "1")
+          
+          if (( $(echo "$ERROR_RATE > 0.01" | bc -l) )); then
+            echo "Error rate too high: $ERROR_RATE"
+            exit 1
+          fi
+          
+          sleep 10
+        done
+    
+    # If canary is healthy, proceed with full deployment
+    - name: Deploy to production
+      if: success()
+      run: |
+        kubectl apply -f k8s/production/deployment.yaml
+        kubectl rollout status deployment/icn-backend -n production
+    
+    # If anything fails, rollback
+    - name: Rollback on failure
+      if: failure()
+      run: |
+        kubectl rollout undo deployment/icn-backend -n production
+        # Remove canary
+        kubectl delete -f k8s/production/canary.yaml
+        echo "Deployment rolled back due to errors"
+        
+    - name: Verify full deployment
+      if: success()
+      run: |
+        # Final health check
+        curl -f https://icn.example.com/health || exit 1
+        echo "Production deployment complete and healthy!"
+
+  monitor-deployment:
+    name: Monitor Deployment Health
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - name: Set up monitoring tools
+      run: |
+        curl -Lo promtool https://github.com/prometheus/prometheus/releases/download/v2.45.0/promtool-2.45.0.linux-amd64
+        chmod +x promtool
+        
+    - name: Check service health
+      run: |
+        # Monitor key metrics for 10 minutes post-deployment
+        for i in {1..20}; do
+          # Check error rates
+          ERROR_RATE=$(curl -s 'https://prometheus.icn.example.com/api/v1/query' \
+            --data-urlencode 'query=rate(http_requests_total{job="icn-backend",status=~"5.."}[5m])' \
+            | jq '.data.result[0].value[1]' \
+            || echo "0")
+            
+          # Check latency
+          P95_LATENCY=$(curl -s 'https://prometheus.icn.example.com/api/v1/query' \
+            --data-urlencode 'query=histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="icn-backend"}[5m]))' \
+            | jq '.data.result[0].value[1]' \
+            || echo "0")
+            
+          # Check memory usage
+          MEMORY_USAGE=$(curl -s 'https://prometheus.icn.example.com/api/v1/query' \
+            --data-urlencode 'query=container_memory_usage_bytes{container="icn-backend"}' \
+            | jq '.data.result[0].value[1]' \
+            || echo "0")
+            
+          # Alert if thresholds exceeded
+          if (( $(echo "$ERROR_RATE > 0.01" | bc -l) )); then
+            echo "::warning::High error rate detected: $ERROR_RATE"
+          fi
+          
+          if (( $(echo "$P95_LATENCY > 2.0" | bc -l) )); then
+            echo "::warning::High latency detected: $P95_LATENCY seconds"
+          fi
+          
+          if (( $(echo "$MEMORY_USAGE > 1073741824" | bc -l) )); then  # 1GB
+            echo "::warning::High memory usage detected: $MEMORY_USAGE bytes"
+          fi
+          
+          sleep 30
+        done
+        
+    - name: Send deployment summary
+      if: always()
+      uses: slackapi/slack-github-action@v1.24.0
+      with:
+        channel-id: 'deployments'
+        slack-message: |
+          Deployment Status: ${{ job.status }}
+          Branch: ${{ github.ref }}
+          Commit: ${{ github.sha }}
+          See details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      env:
+        SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+
+  visual-regression:
+    name: Visual Regression Tests
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        cd frontend
+        npm install
+        
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+        
+    - name: Percy Test
+      run: npx percy snapshot frontend/build
+      env:
+        PERCY_TOKEN: ${{ secrets.PERCY_TOKEN }}
+
+  accessibility:
+    name: Accessibility Testing
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        npm install
+        npx playwright install
+        npm install @axe-core/playwright
+        
+    - name: Start test server
+      run: |
+        cargo run &
+        sleep 5  # Wait for server to start
+      env:
+        TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/icndb_test
+        
+    - name: Run accessibility tests
+      run: npx playwright test tests/a11y/
+      env:
+        TEST_API_URL: http://localhost:8080
+        
+    - name: Store accessibility report
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: accessibility-report
+        path: playwright-report/
