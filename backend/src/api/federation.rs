@@ -647,3 +647,354 @@ async fn verify_signature(did: &str, signature: &str, message: &str) -> bool {
     };
     key_pair.verify(message.as_bytes(), signature.as_bytes())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::Filter;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    use icn_federation::FederationService;
+    use icn_p2p::P2PManager;
+
+    #[tokio::test]
+    async fn test_initiate_federation_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = InitiateFederationRequest {
+            federation_type: "type".to_string(),
+            partner_id: "partner".to_string(),
+            terms: "terms".to_string(),
+            signature: "signature".to_string(),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/initiate")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_join_federation_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = JoinFederationRequest {
+            federation_id: "federation_id".to_string(),
+            commitment: "commitment".to_string(),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/join")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_initiate_federation_dissolution_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = DissolutionRequest {
+            initiator_id: "initiator".to_string(),
+            reason: "reason".to_string(),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/federation_id/dissolve")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_get_dissolution_status_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let resp = warp::test::request()
+            .method("GET")
+            .path("/api/v1/federation/federation_id/dissolution/status")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_cancel_federation_dissolution_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/federation_id/dissolution/cancel")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_get_asset_distribution_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let resp = warp::test::request()
+            .method("GET")
+            .path("/api/v1/federation/federation_id/dissolution/assets")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_get_debt_settlements_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let resp = warp::test::request()
+            .method("GET")
+            .path("/api/v1/federation/federation_id/dissolution/debts")
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_submit_proposal_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = SubmitProposalRequest {
+            title: "title".to_string(),
+            description: "description".to_string(),
+            created_by: "creator".to_string(),
+            ends_at: "2024-12-31T23:59:59Z".to_string(),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/proposals/submit")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_vote_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = VoteRequest {
+            proposal_id: "proposal_id".to_string(),
+            voter: "voter".to_string(),
+            approve: true,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/proposals/vote")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_sybil_resistance_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = SybilResistanceRequest {
+            did: "did:example:123".to_string(),
+            reputation_score: 100,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/sybil_resistance")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_reputation_decay_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = ReputationDecayRequest {
+            did: "did:example:123".to_string(),
+            decay_rate: 0.1,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/reputation_decay")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_submit_dissolution_dispute_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = SubmitDisputeRequest {
+            federation_id: "federation_id".to_string(),
+            reason: "reason".to_string(),
+            evidence: Some("evidence".to_string()),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/federation_id/dissolution/dispute")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_vote_on_dispute_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = DisputeVoteRequest {
+            dispute_id: "dispute_id".to_string(),
+            support: true,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/disputes/dispute_id/vote")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_federation_lifecycle_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = FederationLifecycleRequest {
+            federation_id: "federation_id".to_string(),
+            action: "action".to_string(),
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/lifecycle")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_transfer_resource_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = TransferResourceRequest {
+            resource_id: "resource_id".to_string(),
+            recipient_id: "recipient_id".to_string(),
+            amount: 100,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/resources/transfer")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_allocate_resource_shares_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = AllocateResourceSharesRequest {
+            resource_id: "resource_id".to_string(),
+            shares: 10,
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/resources/allocate")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn test_create_local_cluster_handler() {
+        let federation_service = Arc::new(Mutex::new(FederationService::new()));
+        let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+        let api = federation_routes(federation_service, p2p_manager);
+
+        let request = CreateLocalClusterRequest {
+            cluster_name: "cluster_name".to_string(),
+            region: "region".to_string(),
+            members: vec!["member1".to_string(), "member2".to_string()],
+        };
+
+        let resp = warp::test::request()
+            .method("POST")
+            .path("/api/v1/federation/local_cluster/create")
+            .json(&request)
+            .reply(&api)
+            .await;
+
+        assert_eq!(resp.status(), 200);
+    }
+}

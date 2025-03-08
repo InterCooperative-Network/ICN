@@ -2,6 +2,10 @@ use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use serde::{Serialize, Deserialize};
 use crate::services::{BlockchainService, IdentityService, GovernanceService};
 use std::sync::Arc;
+use crate::api::federation_resource_sharing::federation_resource_sharing_routes;
+use crate::api::federation::federation_routes;
+use crate::api::governance::governance_routes;
+use crate::api::identity::identity_routes;
 
 pub struct ApiServer {
     port: u16,
@@ -39,9 +43,23 @@ impl ApiServer {
         
         println!("Starting API server on port {}", self.port);
 
-        // This is a placeholder implementation - in a real system this would start an HTTP server
-        // For testing purposes, we consider it running immediately
-        Ok(())
+        HttpServer::new(move || {
+            App::new()
+                .app_data(web::Data::new(blockchain_service.clone()))
+                .app_data(web::Data::new(identity_service.clone()))
+                .app_data(web::Data::new(governance_service.clone()))
+                .service(web::scope("/api/v1")
+                    .configure(federation_resource_sharing_routes)
+                    .configure(federation_routes)
+                    .configure(governance_routes)
+                    .configure(identity_routes)
+                )
+                .route("/health", web::get().to(health_check))
+                .route("/blocks", web::get().to(get_blocks))
+        })
+        .bind(("0.0.0.0", self.port))?
+        .run()
+        .await
     }
 }
 
