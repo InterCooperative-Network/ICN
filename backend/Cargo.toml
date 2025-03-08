@@ -26,7 +26,7 @@ test-log = "0.2"
 pretty_assertions = "1.4"
 fake = { version = "2.8", features = ["derive"] }
 rstest = "0.25"
-mockall = "0.11"
+mockall = "0.13"
 
 [[bench]]
 name = "governance_benchmarks"
