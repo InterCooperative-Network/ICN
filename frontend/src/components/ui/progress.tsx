@@ -1,28 +1,47 @@
-import * as React from "react";
+import * as React from "react"
+import { cn } from "@/lib/utils"
 
 interface ProgressProps extends React.HTMLAttributes<HTMLDivElement> {
   value: number;
   max?: number;
+  color?: "default" | "success" | "warning" | "danger";
 }
 
-const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
-  ({ className, value, max = 100, ...props }, ref) => {
-    const percentage = (value / max) * 100;
-    
-    return (
-      <div
-        ref={ref}
-        className={`relative h-4 w-full overflow-hidden rounded-full bg-secondary ${className || ""}`}
-        {...props}
-      >
-        <div
-          className="h-full w-full flex-1 bg-primary transition-all"
-          style={{ transform: `translateX(-${100 - percentage}%)` }}
-        />
-      </div>
-    );
-  }
-);
-Progress.displayName = "Progress";
+export function Progress({ 
+  value, 
+  max = 100, 
+  color = "default",
+  className,
+  ...props 
+}: ProgressProps) {
+  const percentage = Math.min(Math.max((value / max) * 100, 0), 100);
 
-export { Progress };
+  const colorVariants = {
+    default: "bg-blue-500",
+    success: "bg-green-500",
+    warning: "bg-yellow-500",
+    danger: "bg-red-500"
+  };
+
+  return (
+    <div
+      className={cn(
+        "relative w-full overflow-hidden rounded-full bg-gray-200 h-2",
+        className
+      )}
+      {...props}
+    >
+      <div
+        className={cn(
+          "h-full transition-all duration-300 ease-in-out",
+          colorVariants[color]
+        )}
+        style={{ width: `${percentage}%` }}
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={max}
+        aria-valuenow={value}
+      />
+    </div>
+  );
+}
