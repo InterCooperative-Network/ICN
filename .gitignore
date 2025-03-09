@@ -126,3 +126,6 @@ tools/.env/
 project_code_dump.txt
 project_docs_dump.txt
 project_code_dump.txt
+node_modules
+node_modules
+node_modules
