@@ -12,24 +12,24 @@ members = [
 icn-types = { path = "crates/icn-types" }
 icn-common = { path = "crates/icn-common" }
 icn-core = { path = "crates/icn-core" }
-icn-runtime = { path = "crates/icn-runtime" }
+icn-p2p = { path = "crates/icn-p2p" }
 
 # External dependencies
 tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 warp = "0.3"
-sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "postgres", "sqlite"] }
+sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "postgres"] }
 thiserror = "1.0"
 chrono = { version = "0.4.40", features = ["serde"] }
 async-trait = "0.1"
-futures = "0.3.31"  # Downgraded
+futures = "0.3.31"
 tracing = "0.1.41"
+log = "0.4"
+env_logger = "0.11.6"
 sha2 = "0.10.8"
 rayon = "1.10.0"
 lazy_static = "1.5.0"
-serde_json = "1.0.140"
-log = "0.4"
-env_logger = "0.11.6"
 x25519-dalek = "2.0.1"
 libsqlite3-sys = "0.30.1"
 

@@ -1,13 +1,9 @@
 use std::net::SocketAddr;
-use warp::Filter;
+use warp::{Filter, Reply};
 use log::info;
 use sqlx::postgres::PgPoolOptions;
-use std::{env, sync::Arc};
-
-mod api;
-mod middleware;
-mod services;
-mod core;
+use std::env;
+use icn_types::{IcnError, IcnResult};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -17,44 +13,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize database connection
     let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+        .map_err(|_| IcnError::ConfigError("DATABASE_URL must be set".to_string()))?;
     
-    let db_pool = PgPoolOptions::new()
+    let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
-        .await?;
-    let db_pool = Arc::new(db_pool);
+        .await
+        .map_err(|e| IcnError::DatabaseError(e.to_string()))?;
 
-    // Set up routes
-    let health_routes = api::health::health_routes(Arc::clone(&db_pool));
-    
-    // Combine routes with middleware
-    let routes = health_routes
+    // Health check route that verifies database connectivity
+    let health_route = warp::path("api")
+        .and(warp::path("v1"))
+        .and(warp::path("health"))
+        .and(warp::get())
+        .and(with_db(pool.clone()))
+        .and_then(health_handler);
+
+    let routes = health_route
         .with(warp::cors().allow_any_origin())
         .with(warp::log("icn_backend"));
 
     // Configure server address
     let addr = SocketAddr::from(([0, 0, 0, 0], 8081));
+    info!("Server starting on http://{}", addr);
     
-    // Set up graceful shutdown
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    let server = warp::serve(routes);
-    let (addr, server) = server.bind_with_graceful_shutdown(addr, async {
-        rx.await.ok();
-        info!("Shutdown signal received, stopping server...");
-    });
+    warp::serve(routes)
+        .run(addr)
+        .await;
 
-    info!("Server running on http://{}", addr);
-
-    // Handle Ctrl+C
-    tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.expect("Failed to listen for ctrl+c");
-        info!("Ctrl+C received, initiating graceful shutdown...");
-        let _ = tx.send(());
-    });
-
-    // Run the server
-    server.await;
-    info!("Server shutdown complete");
     Ok(())
+}
+
+fn with_db(pool: sqlx::PgPool) -> impl Filter<Extract = (sqlx::PgPool,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || pool.clone())
+}
+
+async fn health_handler(pool: sqlx::PgPool) -> Result<impl Reply, warp::Rejection> {
+    // Test database connectivity
+    let db_healthy = sqlx::query("SELECT 1")
+        .fetch_one(&pool)
+        .await
+        .is_ok();
+
+    let status = if db_healthy {
+        warp::http::StatusCode::OK
+    } else {
+        warp::http::StatusCode::SERVICE_UNAVAILABLE
+    };
+
+    Ok(warp::reply::with_status(
+        warp::reply::json(&serde_json::json!({
+            "status": if db_healthy { "healthy" } else { "unhealthy" },
+            "version": env!("CARGO_PKG_VERSION"),
+            "database": db_healthy
+        })),
+        status
+    ))
 }

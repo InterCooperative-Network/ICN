@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sun Mar  9 02:18:09 UTC 2025
+Project Code Dump - Generated Sun Mar  9 02:24:54 UTC 2025
 ======================================
 
 LLM Context Information
@@ -333,8 +333,8 @@ Project Tree:
 
 ===================
 File: ./backend/Cargo.toml
-Size: 646 bytes
-Modified: 2025-03-08 21:05:36.669939796 -0500
+Size: 609 bytes
+Modified: 2025-03-08 21:19:16.432000827 -0500
 
 ===================
 ```toml
@@ -344,24 +344,22 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.0", features = ["full"] }
-warp = "0.3"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-log = "0.4"
-env_logger = "0.10"
-sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "postgres"] }
-thiserror = "1.0"
-futures = "0.3"
-async-trait = "0.1"
-uuid = { version = "1.0", features = ["serde", "v4"] }
-tracing = "0.1"
+tokio = { workspace = true, features = ["full"] }
+warp = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres"] }
+thiserror = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
 
 # Internal crates
-icn-types = { path = "../crates/icn-types" }
-icn-common = { path = "../crates/icn-common" }
-icn-core = { path = "../crates/icn-core" }
-icn-p2p = { path = "../crates/icn-p2p" }
+icn-types = { workspace = true }
+icn-common = { workspace = true }
+icn-core = { workspace = true }
+icn-p2p = { workspace = true }
 ```
 
 ===================
@@ -421,74 +419,59 @@ fn main() {
 
 ===================
 File: ./backend/src/main.rs
-Size: 2103 bytes
-Modified: 2025-03-08 21:14:10.138176632 -0500
+Size: 1709 bytes
+Modified: 2025-03-08 21:22:15.857792858 -0500
 Dependencies:
 mod api;
 mod core;
 mod middleware;
 mod services;
-use crate::api::routes;
-use crate::services::{
 use log::info;
+use sqlx::postgres::PgPoolOptions;
 use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::{env, sync::Arc};
 use warp::Filter;
 
 ===================
 ```rs
 use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use warp::Filter;
 use log::info;
+use sqlx::postgres::PgPoolOptions;
+use std::{env, sync::Arc};
 
 mod api;
 mod middleware;
 mod services;
 mod core;
 
-use crate::api::routes;
-use crate::services::{
-    BlockchainService,
-    IdentityService,
-    GovernanceService,
-    ResourceService,
-    FederationService,
-    ReputationService,
-    p2p::P2PManager
-};
-
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
     info!("Starting ICN backend server...");
 
-    // Initialize core services
-    let blockchain_service = Arc::new(BlockchainService::new());
-    let identity_service = Arc::new(Mutex::new(IdentityService::new()));
-    let governance_service = Arc::new(Mutex::new(GovernanceService::new()));
-    let resource_service = Arc::new(Mutex::new(ResourceService::new()));
-    let federation_service = Arc::new(Mutex::new(FederationService::new()));
-    let reputation_service = Arc::new(Mutex::new(ReputationService::new()));
-    let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+    // Initialize database connection
+    let database_url = env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set");
+    
+    let db_pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&database_url)
+        .await?;
+    let db_pool = Arc::new(db_pool);
 
     // Set up routes
-    let routes = routes(
-        identity_service,
-        governance_service,
-        resource_service,
-        federation_service,
-        reputation_service,
-        p2p_manager
-    ).with(middleware::cors());
+    let health_routes = api::health::health_routes(Arc::clone(&db_pool));
+    
+    // Combine routes with middleware
+    let routes = health_routes
+        .with(warp::cors().allow_any_origin())
+        .with(warp::log("icn_backend"));
 
-    // Define server address
+    // Configure server address
     let addr = SocketAddr::from(([0, 0, 0, 0], 8081));
-    info!("Server starting on {}", addr);
-
+    
     // Set up graceful shutdown
     let (tx, rx) = tokio::sync::oneshot::channel();
     let server = warp::serve(routes);
@@ -509,6 +492,7 @@ async fn main() {
     // Run the server
     server.await;
     info!("Server shutdown complete");
+    Ok(())
 }
 ```
 
@@ -1411,8 +1395,8 @@ mod tests {
 
 ===================
 File: ./backend/src/api/health.rs
-Size: 343 bytes
-Modified: 2025-03-08 20:59:18.409401047 -0500
+Size: 1059 bytes
+Modified: 2025-03-08 21:22:13.688617679 -0500
 Dependencies:
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -1424,12 +1408,32 @@ use warp::Filter;
 use sqlx::PgPool;
 use std::sync::Arc;
 
-pub fn health_routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    let api_health = warp::path!("api" / "v1" / "health")
+pub fn health_routes(db: Arc<PgPool>) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    let db = Arc::clone(&db);
+    warp::path!("api" / "v1" / "health")
         .and(warp::get())
-        .map(|| warp::reply::json(&serde_json::json!({ "status": "ok" })));
-        
-    api_health
+        .and(with_db(db))
+        .and_then(health_handler)
+}
+
+fn with_db(db: Arc<PgPool>) -> impl Filter<Extract = (Arc<PgPool>,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || db.clone())
+}
+
+async fn health_handler(db: Arc<PgPool>) -> Result<impl warp::Reply, warp::Rejection> {
+    match sqlx::query("SELECT 1").execute(db.as_ref()).await {
+        Ok(_) => Ok(warp::reply::json(&serde_json::json!({
+            "status": "ok",
+            "database": "connected",
+            "version": env!("CARGO_PKG_VERSION")
+        }))),
+        Err(e) => Ok(warp::reply::json(&serde_json::json!({
+            "status": "degraded",
+            "database": "error",
+            "error": e.to_string(),
+            "version": env!("CARGO_PKG_VERSION")
+        })))
+    }
 }```
 
 ===================
@@ -3882,74 +3886,59 @@ pub type Result<T> = std::result::Result<T, AppError>;
 
 ===================
 File: ./backend/src/main.rs
-Size: 2103 bytes
-Modified: 2025-03-08 21:14:10.138176632 -0500
+Size: 1709 bytes
+Modified: 2025-03-08 21:22:15.857792858 -0500
 Dependencies:
 mod api;
 mod core;
 mod middleware;
 mod services;
-use crate::api::routes;
-use crate::services::{
 use log::info;
+use sqlx::postgres::PgPoolOptions;
 use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::{env, sync::Arc};
 use warp::Filter;
 
 ===================
 ```rs
 use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use warp::Filter;
 use log::info;
+use sqlx::postgres::PgPoolOptions;
+use std::{env, sync::Arc};
 
 mod api;
 mod middleware;
 mod services;
 mod core;
 
-use crate::api::routes;
-use crate::services::{
-    BlockchainService,
-    IdentityService,
-    GovernanceService,
-    ResourceService,
-    FederationService,
-    ReputationService,
-    p2p::P2PManager
-};
-
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
     info!("Starting ICN backend server...");
 
-    // Initialize core services
-    let blockchain_service = Arc::new(BlockchainService::new());
-    let identity_service = Arc::new(Mutex::new(IdentityService::new()));
-    let governance_service = Arc::new(Mutex::new(GovernanceService::new()));
-    let resource_service = Arc::new(Mutex::new(ResourceService::new()));
-    let federation_service = Arc::new(Mutex::new(FederationService::new()));
-    let reputation_service = Arc::new(Mutex::new(ReputationService::new()));
-    let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
+    // Initialize database connection
+    let database_url = env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set");
+    
+    let db_pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&database_url)
+        .await?;
+    let db_pool = Arc::new(db_pool);
 
     // Set up routes
-    let routes = routes(
-        identity_service,
-        governance_service,
-        resource_service,
-        federation_service,
-        reputation_service,
-        p2p_manager
-    ).with(middleware::cors());
+    let health_routes = api::health::health_routes(Arc::clone(&db_pool));
+    
+    // Combine routes with middleware
+    let routes = health_routes
+        .with(warp::cors().allow_any_origin())
+        .with(warp::log("icn_backend"));
 
-    // Define server address
+    // Configure server address
     let addr = SocketAddr::from(([0, 0, 0, 0], 8081));
-    info!("Server starting on {}", addr);
-
+    
     // Set up graceful shutdown
     let (tx, rx) = tokio::sync::oneshot::channel();
     let server = warp::serve(routes);
@@ -3970,6 +3959,7 @@ async fn main() {
     // Run the server
     server.await;
     info!("Server shutdown complete");
+    Ok(())
 }
 ```
 
