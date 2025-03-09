@@ -7,17 +7,9 @@ license = "MIT"
 
 [dependencies]
 serde = { workspace = true }
-chrono = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
-rayon = { workspace = true }
-sha2 = { workspace = true }
-lazy_static = { workspace = true }
 async-trait = { workspace = true }
-serde_json = { workspace = true }
-bincode = "1.3"
-log = "0.4"
-sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "postgres"], optional = true }
+sqlx = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }

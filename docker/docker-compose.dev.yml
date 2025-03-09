@@ -1,0 +1,80 @@
+version: "3.8"
+
+services:
+  # PostgreSQL database service
+  db:
+    image: postgres:14-alpine
+    restart: unless-stopped
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-icnuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-icnpass}
+      POSTGRES_DB: ${POSTGRES_DB:-icndb}
+    ports:
+      - "5432:5432"
+    networks:
+      - icn-network
+
+  # Backend service - Development mode with hot reloading
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/backend.dev.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "8081:8081"
+      - "9229:9229"  # For debugging
+    volumes:
+      - ../backend:/usr/src/app/backend
+      - ../crates:/usr/src/app/crates
+      - cargo_cache:/usr/local/cargo/registry
+      - target_cache:/usr/src/app/target
+      - backend_logs:/logs
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER:-icnuser}:${POSTGRES_PASSWORD:-icnpass}@db:5432/${POSTGRES_DB:-icndb}
+      - RUST_LOG=${RUST_LOG:-debug}
+      - RUST_BACKTRACE=1
+      - CARGO_BUILD_TARGET_DIR=/usr/src/app/target
+    command: ["cargo", "watch", "-x", "run --bin icn-backend"]
+    networks:
+      - icn-network
+
+  # Frontend service - Development mode with hot reloading
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/frontend.dev.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+      - "35729:35729"  # For live reload
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    environment:
+      - REACT_APP_API_URL=http://localhost:8081/api
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true  # Enable polling for Windows/WSL
+    command: ["npm", "run", "dev"]
+    networks:
+      - icn-network
+
+volumes:
+  db_data:
+    name: icn_dev_db_data
+  cargo_cache:
+    name: icn_dev_cargo_cache
+  target_cache:
+    name: icn_dev_target_cache
+  backend_logs:
+    name: icn_dev_backend_logs
+
+networks:
+  icn-network:
+    driver: bridge

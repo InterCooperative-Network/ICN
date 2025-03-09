@@ -1,47 +1,90 @@
-version: "3.3"
+version: "3.8"
 
 services:
+  # PostgreSQL database service
+  db:
+    image: postgres:14-alpine
+    restart: unless-stopped
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d:ro
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-icnuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-icnpass}
+      POSTGRES_DB: ${POSTGRES_DB:-icndb}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U icnuser -d icndb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "5432:5432"
+    networks:
+      - icn-network
+
+  # Backend service - Rust application
   backend:
     build:
       context: ..
       dockerfile: docker/backend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "8081:8081"
+    volumes:
+      - backend_data:/data
+      - backend_logs:/logs
+      - backend_config:/config
     environment:
-      - DATABASE_URL=postgres://icnuser:icnpass@db:5432/icndb
-      - RUST_LOG=info
-    depends_on:
-      - db
+      - DATABASE_URL=postgres://${POSTGRES_USER:-icnuser}:${POSTGRES_PASSWORD:-icnpass}@db:5432/${POSTGRES_DB:-icndb}?options=-c%20search_path%3Dicn
+      - RUST_LOG=${RUST_LOG:-info}
+      - RUST_BACKTRACE=${RUST_BACKTRACE:-0}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - icn-network
 
+  # Frontend service - React application
   frontend:
     build:
       context: ..
       dockerfile: docker/frontend.Dockerfile
-    ports:
-      - "3000:3000"
-    depends_on:
-      - backend
-    networks:
-      - icn-network
-
-  db:
-    image: postgres:13.3
+      args:
+        - REACT_APP_API_URL=/api
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: icnuser
-      POSTGRES_PASSWORD: icnpass
-      POSTGRES_DB: icndb
+    depends_on:
+      backend:
+        condition: service_healthy
     ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
+      - "80:80"
+    environment:
+      - API_URL=http://backend:8081/api
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - icn-network
 
 volumes:
   db_data:
+    name: icn_db_data
+  backend_data:
+    name: icn_backend_data
+  backend_logs:
+    name: icn_backend_logs
+  backend_config:
+    name: icn_backend_config
 
 networks:
   icn-network:

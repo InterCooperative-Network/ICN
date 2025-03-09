@@ -6,3 +6,8 @@ pub fn cors() -> warp::cors::Builder {
         .allow_methods(vec!["GET", "POST", "PUT", "DELETE"])
         .allow_headers(vec!["content-type"])
 }
+
+pub mod auth;
+pub mod cors;
+
+pub use cors::cors;

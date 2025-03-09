@@ -1,4 +1,4 @@
-Project Code Dump - Generated Sat Mar  8 18:51:33 UTC 2025
+Project Code Dump - Generated Sun Mar  9 02:18:09 UTC 2025
 ======================================
 
 LLM Context Information
@@ -47,7 +47,6 @@ Project Tree:
 │   │   └── test
 │   └── src
 │       ├── api
-│       ├── api.rs
 │       ├── blockchain.rs
 │       ├── core
 │       ├── core.rs
@@ -79,6 +78,7 @@ Project Tree:
 ├── bridges
 │   └── cross_chain
 │       └── mod.rs
+├── codecov.yml
 ├── config
 │   ├── feature-flags.json
 │   └── log4rs.yaml
@@ -157,15 +157,19 @@ Project Tree:
 │   │   └── src
 │   ├── backend.Dockerfile
 │   ├── backend_new.Dockerfile
+│   ├── docker-compose.dev.yml
 │   ├── docker-compose.yml
 │   ├── frontend
 │   │   ├── backend
 │   │   ├── docker
+│   │   ├── docker-entrypoint.sh
 │   │   ├── frontend
 │   │   ├── package-lock.json
 │   │   ├── package.json
 │   │   └── src
 │   ├── frontend.Dockerfile
+│   ├── init-db
+│   │   └── 01-init.sql
 │   └── nginx.conf
 ├── docker-compose.test.yml
 ├── federation
@@ -201,6 +205,10 @@ Project Tree:
 ├── grammar
 │   ├── coop_lang.pest
 │   └── did_grammar.peg
+├── helm
+│   └── icn-backend
+│       ├── charts
+│       └── templates
 ├── icn-consensus
 │   └── src
 │       └── lib.rs
@@ -217,6 +225,13 @@ Project Tree:
 │   └── service.py
 ├── improved-setup.sh
 ├── inventory_nodes.sh
+├── k8s
+│   ├── production
+│   │   ├── canary.yaml
+│   │   ├── deployment.yaml
+│   │   └── monitoring
+│   └── staging
+│       └── deployment.yaml
 ├── messaging
 │   └── server.rs
 ├── package-lock.json
@@ -318,8 +333,8 @@ Project Tree:
 
 ===================
 File: ./backend/Cargo.toml
-Size: 888 bytes
-Modified: 2025-03-08 06:34:58.670661250 -0500
+Size: 646 bytes
+Modified: 2025-03-08 21:05:36.669939796 -0500
 
 ===================
 ```toml
@@ -329,30 +344,24 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { workspace = true }
-warp = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-log = { workspace = true }
-env_logger = { workspace = true }
-sqlx = { workspace = true, features = ["sqlite", "runtime-tokio-native-tls"] }
-thiserror = { workspace = true }
-dashmap = "5.5"
-futures = { workspace = true }
-async-trait = { workspace = true }
-actix-web = "4.0"
-serde_yaml = "0.8"
-uuid = { version = "1", features = ["serde", "v4"] }
-reqwest = { version = "0.11", features = ["json"] }
-tokio-tungstenite = "0.15"
-tracing = { workspace = true }
-tracing-subscriber = "0.3"
-prometheus = "0.13"
-opentelemetry = { version = "0.16", features = ["rt-tokio"] }
-opentelemetry-jaeger = "0.16"
-opentelemetry-prometheus = "0.16"
-opentelemetry-zipkin = "0.16"
-opentelemetry-otlp = "0.16"
+tokio = { version = "1.0", features = ["full"] }
+warp = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
+env_logger = "0.10"
+sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "postgres"] }
+thiserror = "1.0"
+futures = "0.3"
+async-trait = "0.1"
+uuid = { version = "1.0", features = ["serde", "v4"] }
+tracing = "0.1"
+
+# Internal crates
+icn-types = { path = "../crates/icn-types" }
+icn-common = { path = "../crates/icn-common" }
+icn-core = { path = "../crates/icn-core" }
+icn-p2p = { path = "../crates/icn-p2p" }
 ```
 
 ===================
@@ -412,27 +421,44 @@ fn main() {
 
 ===================
 File: ./backend/src/main.rs
-Size: 864 bytes
-Modified: 2025-03-08 06:33:57.740890447 -0500
+Size: 2103 bytes
+Modified: 2025-03-08 21:14:10.138176632 -0500
 Dependencies:
 mod api;
+mod core;
 mod middleware;
-use crate::services::{BlockchainService, IdentityService, GovernanceService};
+mod services;
+use crate::api::routes;
+use crate::services::{
 use log::info;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use warp::Filter;
 
 ===================
 ```rs
-mod middleware;
-mod api;
-
-use log::info;
 use std::net::SocketAddr;
-use warp::Filter;
 use std::sync::Arc;
-use crate::services::{BlockchainService, IdentityService, GovernanceService};
+use tokio::sync::Mutex;
+use warp::Filter;
+use log::info;
+
+mod api;
+mod middleware;
+mod services;
+mod core;
+
+use crate::api::routes;
+use crate::services::{
+    BlockchainService,
+    IdentityService,
+    GovernanceService,
+    ResourceService,
+    FederationService,
+    ReputationService,
+    p2p::P2PManager
+};
 
 #[tokio::main]
 async fn main() {
@@ -440,18 +466,49 @@ async fn main() {
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
     info!("Starting ICN backend server...");
 
-    // Initialize services
+    // Initialize core services
     let blockchain_service = Arc::new(BlockchainService::new());
-    let identity_service = Arc::new(IdentityService::new());
-    let governance_service = Arc::new(GovernanceService::new());
+    let identity_service = Arc::new(Mutex::new(IdentityService::new()));
+    let governance_service = Arc::new(Mutex::new(GovernanceService::new()));
+    let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+    let federation_service = Arc::new(Mutex::new(FederationService::new()));
+    let reputation_service = Arc::new(Mutex::new(ReputationService::new()));
+    let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
 
-    // Initialize API server
-    let api_server = api::ApiServer::new(8081, blockchain_service, identity_service, governance_service);
+    // Set up routes
+    let routes = routes(
+        identity_service,
+        governance_service,
+        resource_service,
+        federation_service,
+        reputation_service,
+        p2p_manager
+    ).with(middleware::cors());
 
-    // Run the API server
-    if let Err(e) = api_server.run().await {
-        eprintln!("Failed to start API server: {}", e);
-    }
+    // Define server address
+    let addr = SocketAddr::from(([0, 0, 0, 0], 8081));
+    info!("Server starting on {}", addr);
+
+    // Set up graceful shutdown
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let server = warp::serve(routes);
+    let (addr, server) = server.bind_with_graceful_shutdown(addr, async {
+        rx.await.ok();
+        info!("Shutdown signal received, stopping server...");
+    });
+
+    info!("Server running on http://{}", addr);
+
+    // Handle Ctrl+C
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.expect("Failed to listen for ctrl+c");
+        info!("Ctrl+C received, initiating graceful shutdown...");
+        let _ = tx.send(());
+    });
+
+    // Run the server
+    server.await;
+    info!("Server shutdown complete");
 }
 ```
 
@@ -470,8 +527,8 @@ fn main() {
 
 ===================
 File: ./frontend/package.json
-Size: 1165 bytes
-Modified: 2025-03-08 04:07:02.351773618 -0500
+Size: 1136 bytes
+Modified: 2025-03-08 16:44:02.256667858 -0500
 
 ===================
 ```json
@@ -494,16 +551,14 @@ Modified: 2025-03-08 04:07:02.351773618 -0500
     "@types/node": "^16.18.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "autoprefixer": "^10.4.0",
+    "next": "latest",
+    "postcss": "^8.4.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1",
-    "typescript": "^4.9.5",
+    "react-scripts": "^3.0.1",
     "tailwindcss": "^3.3.0",
-    "postcss": "^8.4.0",
-    "autoprefixer": "^10.4.0",
-    "next": "latest"
-  },
-  "devDependencies": {
+    "typescript": "^4.9.5"
   },
   "eslintConfig": {
     "extends": [
@@ -746,8 +801,8 @@ Modified: 2025-03-08 03:17:19.040708696 -0500
 
 ===================
 File: ./docker/docker-compose.yml
-Size: 836 bytes
-Modified: 2025-03-08 05:42:25.213307248 -0500
+Size: 2194 bytes
+Modified: 2025-03-08 20:57:22.765912963 -0500
 
 ===================
 
@@ -1012,1106 +1067,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 }```
-
-===================
-File: ./frontend/node_modules/workbox-core/src/models/messages/messages.ts
-Size: 11191 bytes
-Modified: 2025-03-08 06:59:23.629547442 -0500
-Dependencies:
-import '../../_version.js';
-
-===================
-```ts
-/*
-  Copyright 2018 Google LLC
-
-  Use of this source code is governed by an MIT-style
-  license that can be found in the LICENSE file or at
-  https://opensource.org/licenses/MIT.
-*/
-
-import '../../_version.js';
-
-interface LoggableObject {
-  [key: string]: string | number;
-}
-interface MessageMap {
-  [messageID: string]: (param: LoggableObject) => string;
-}
-
-export const messages: MessageMap = {
-  'invalid-value': ({paramName, validValueDescription, value}) => {
-    if (!paramName || !validValueDescription) {
-      throw new Error(`Unexpected input to 'invalid-value' error.`);
-    }
-    return (
-      `The '${paramName}' parameter was given a value with an ` +
-      `unexpected value. ${validValueDescription} Received a value of ` +
-      `${JSON.stringify(value)}.`
-    );
-  },
-
-  'not-an-array': ({moduleName, className, funcName, paramName}) => {
-    if (!moduleName || !className || !funcName || !paramName) {
-      throw new Error(`Unexpected input to 'not-an-array' error.`);
-    }
-    return (
-      `The parameter '${paramName}' passed into ` +
-      `'${moduleName}.${className}.${funcName}()' must be an array.`
-    );
-  },
-
-  'incorrect-type': ({
-    expectedType,
-    paramName,
-    moduleName,
-    className,
-    funcName,
-  }) => {
-    if (!expectedType || !paramName || !moduleName || !funcName) {
-      throw new Error(`Unexpected input to 'incorrect-type' error.`);
-    }
-    const classNameStr = className ? `${className}.` : '';
-    return (
-      `The parameter '${paramName}' passed into ` +
-      `'${moduleName}.${classNameStr}` +
-      `${funcName}()' must be of type ${expectedType}.`
-    );
-  },
-
-  'incorrect-class': ({
-    expectedClassName,
-    paramName,
-    moduleName,
-    className,
-    funcName,
-    isReturnValueProblem,
-  }) => {
-    if (!expectedClassName || !moduleName || !funcName) {
-      throw new Error(`Unexpected input to 'incorrect-class' error.`);
-    }
-    const classNameStr = className ? `${className}.` : '';
-    if (isReturnValueProblem) {
-      return (
-        `The return value from ` +
-        `'${moduleName}.${classNameStr}${funcName}()' ` +
-        `must be an instance of class ${expectedClassName}.`
-      );
-    }
-
-    return (
-      `The parameter '${paramName}' passed into ` +
-      `'${moduleName}.${classNameStr}${funcName}()' ` +
-      `must be an instance of class ${expectedClassName}.`
-    );
-  },
-
-  'missing-a-method': ({
-    expectedMethod,
-    paramName,
-    moduleName,
-    className,
-    funcName,
-  }) => {
-    if (
-      !expectedMethod ||
-      !paramName ||
-      !moduleName ||
-      !className ||
-      !funcName
-    ) {
-      throw new Error(`Unexpected input to 'missing-a-method' error.`);
-    }
-    return (
-      `${moduleName}.${className}.${funcName}() expected the ` +
-      `'${paramName}' parameter to expose a '${expectedMethod}' method.`
-    );
-  },
-
-  'add-to-cache-list-unexpected-type': ({entry}) => {
-    return (
-      `An unexpected entry was passed to ` +
-      `'workbox-precaching.PrecacheController.addToCacheList()' The entry ` +
-      `'${JSON.stringify(
-        entry,
-      )}' isn't supported. You must supply an array of ` +
-      `strings with one or more characters, objects with a url property or ` +
-      `Request objects.`
-    );
-  },
-
-  'add-to-cache-list-conflicting-entries': ({firstEntry, secondEntry}) => {
-    if (!firstEntry || !secondEntry) {
-      throw new Error(
-        `Unexpected input to ` + `'add-to-cache-list-duplicate-entries' error.`,
-      );
-    }
-
-    return (
-      `Two of the entries passed to ` +
-      `'workbox-precaching.PrecacheController.addToCacheList()' had the URL ` +
-      `${firstEntry} but different revision details. Workbox is ` +
-      `unable to cache and version the asset correctly. Please remove one ` +
-      `of the entries.`
-    );
-  },
-
-  'plugin-error-request-will-fetch': ({thrownErrorMessage}) => {
-    if (!thrownErrorMessage) {
-      throw new Error(
-        `Unexpected input to ` + `'plugin-error-request-will-fetch', error.`,
-      );
-    }
-
-    return (
-      `An error was thrown by a plugins 'requestWillFetch()' method. ` +
-      `The thrown error message was: '${thrownErrorMessage}'.`
-    );
-  },
-
-  'invalid-cache-name': ({cacheNameId, value}) => {
-    if (!cacheNameId) {
-      throw new Error(
-        `Expected a 'cacheNameId' for error 'invalid-cache-name'`,
-      );
-    }
-
-    return (
-      `You must provide a name containing at least one character for ` +
-      `setCacheDetails({${cacheNameId}: '...'}). Received a value of ` +
-      `'${JSON.stringify(value)}'`
-    );
-  },
-
-  'unregister-route-but-not-found-with-method': ({method}) => {
-    if (!method) {
-      throw new Error(
-        `Unexpected input to ` +
-          `'unregister-route-but-not-found-with-method' error.`,
-      );
-    }
-
-    return (
-      `The route you're trying to unregister was not  previously ` +
-      `registered for the method type '${method}'.`
-    );
-  },
-
-  'unregister-route-route-not-registered': () => {
-    return (
-      `The route you're trying to unregister was not previously ` +
-      `registered.`
-    );
-  },
-
-  'queue-replay-failed': ({name}) => {
-    return `Replaying the background sync queue '${name}' failed.`;
-  },
-
-  'duplicate-queue-name': ({name}) => {
-    return (
-      `The Queue name '${name}' is already being used. ` +
-      `All instances of backgroundSync.Queue must be given unique names.`
-    );
-  },
-
-  'expired-test-without-max-age': ({methodName, paramName}) => {
-    return (
-      `The '${methodName}()' method can only be used when the ` +
-      `'${paramName}' is used in the constructor.`
-    );
-  },
-
-  'unsupported-route-type': ({moduleName, className, funcName, paramName}) => {
-    return (
-      `The supplied '${paramName}' parameter was an unsupported type. ` +
-      `Please check the docs for ${moduleName}.${className}.${funcName} for ` +
-      `valid input types.`
-    );
-  },
-
-  'not-array-of-class': ({
-    value,
-    expectedClass,
-    moduleName,
-    className,
-    funcName,
-    paramName,
-  }) => {
-    return (
-      `The supplied '${paramName}' parameter must be an array of ` +
-      `'${expectedClass}' objects. Received '${JSON.stringify(value)},'. ` +
-      `Please check the call to ${moduleName}.${className}.${funcName}() ` +
-      `to fix the issue.`
-    );
-  },
-
-  'max-entries-or-age-required': ({moduleName, className, funcName}) => {
-    return (
-      `You must define either config.maxEntries or config.maxAgeSeconds` +
-      `in ${moduleName}.${className}.${funcName}`
-    );
-  },
-
-  'statuses-or-headers-required': ({moduleName, className, funcName}) => {
-    return (
-      `You must define either config.statuses or config.headers` +
-      `in ${moduleName}.${className}.${funcName}`
-    );
-  },
-
-  'invalid-string': ({moduleName, funcName, paramName}) => {
-    if (!paramName || !moduleName || !funcName) {
-      throw new Error(`Unexpected input to 'invalid-string' error.`);
-    }
-    return (
-      `When using strings, the '${paramName}' parameter must start with ` +
-      `'http' (for cross-origin matches) or '/' (for same-origin matches). ` +
-      `Please see the docs for ${moduleName}.${funcName}() for ` +
-      `more info.`
-    );
-  },
-
-  'channel-name-required': () => {
-    return (
-      `You must provide a channelName to construct a ` +
-      `BroadcastCacheUpdate instance.`
-    );
-  },
-
-  'invalid-responses-are-same-args': () => {
-    return (
-      `The arguments passed into responsesAreSame() appear to be ` +
-      `invalid. Please ensure valid Responses are used.`
-    );
-  },
-
-  'expire-custom-caches-only': () => {
-    return (
-      `You must provide a 'cacheName' property when using the ` +
-      `expiration plugin with a runtime caching strategy.`
-    );
-  },
-
-  'unit-must-be-bytes': ({normalizedRangeHeader}) => {
-    if (!normalizedRangeHeader) {
-      throw new Error(`Unexpected input to 'unit-must-be-bytes' error.`);
-    }
-    return (
-      `The 'unit' portion of the Range header must be set to 'bytes'. ` +
-      `The Range header provided was "${normalizedRangeHeader}"`
-    );
-  },
-
-  'single-range-only': ({normalizedRangeHeader}) => {
-    if (!normalizedRangeHeader) {
-      throw new Error(`Unexpected input to 'single-range-only' error.`);
-    }
-    return (
-      `Multiple ranges are not supported. Please use a  single start ` +
-      `value, and optional end value. The Range header provided was ` +
-      `"${normalizedRangeHeader}"`
-    );
-  },
-
-  'invalid-range-values': ({normalizedRangeHeader}) => {
-    if (!normalizedRangeHeader) {
-      throw new Error(`Unexpected input to 'invalid-range-values' error.`);
-    }
-    return (
-      `The Range header is missing both start and end values. At least ` +
-      `one of those values is needed. The Range header provided was ` +
-      `"${normalizedRangeHeader}"`
-    );
-  },
-
-  'no-range-header': () => {
-    return `No Range header was found in the Request provided.`;
-  },
-
-  'range-not-satisfiable': ({size, start, end}) => {
-    return (
-      `The start (${start}) and end (${end}) values in the Range are ` +
-      `not satisfiable by the cached response, which is ${size} bytes.`
-    );
-  },
-
-  'attempt-to-cache-non-get-request': ({url, method}) => {
-    return (
-      `Unable to cache '${url}' because it is a '${method}' request and ` +
-      `only 'GET' requests can be cached.`
-    );
-  },
-
-  'cache-put-with-no-response': ({url}) => {
-    return (
-      `There was an attempt to cache '${url}' but the response was not ` +
-      `defined.`
-    );
-  },
-
-  'no-response': ({url, error}) => {
-    let message = `The strategy could not generate a response for '${url}'.`;
-    if (error) {
-      message += ` The underlying error is ${error}.`;
-    }
-    return message;
-  },
-
-  'bad-precaching-response': ({url, status}) => {
-    return (
-      `The precaching request for '${url}' failed` +
-      (status ? ` with an HTTP status of ${status}.` : `.`)
-    );
-  },
-
-  'non-precached-url': ({url}) => {
-    return (
-      `createHandlerBoundToURL('${url}') was called, but that URL is ` +
-      `not precached. Please pass in a URL that is precached instead.`
-    );
-  },
-
-  'add-to-cache-list-conflicting-integrities': ({url}) => {
-    return (
-      `Two of the entries passed to ` +
-      `'workbox-precaching.PrecacheController.addToCacheList()' had the URL ` +
-      `${url} with different integrity values. Please remove one of them.`
-    );
-  },
-
-  'missing-precache-entry': ({cacheName, url}) => {
-    return `Unable to find a precached response in ${cacheName} for ${url}.`;
-  },
-
-  'cross-origin-copy-response': ({origin}) => {
-    return (
-      `workbox-core.copyResponse() can only be used with same-origin ` +
-      `responses. It was passed a response with origin ${origin}.`
-    );
-  },
-
-  'opaque-streams-source': ({type}) => {
-    const message =
-      `One of the workbox-streams sources resulted in an ` +
-      `'${type}' response.`;
-    if (type === 'opaqueredirect') {
-      return (
-        `${message} Please do not use a navigation request that results ` +
-        `in a redirect as a source.`
-      );
-    }
-    return `${message} Please ensure your sources are CORS-enabled.`;
-  },
-};
-```
-
-===================
-File: ./frontend/node_modules/workbox-core/src/models/messages/messageGenerator.ts
-Size: 731 bytes
-Modified: 2025-03-08 06:59:23.609598353 -0500
-Dependencies:
-import '../../_version.js';
-import {messages} from './messages.js';
-
-===================
-```ts
-/*
-  Copyright 2018 Google LLC
-
-  Use of this source code is governed by an MIT-style
-  license that can be found in the LICENSE file or at
-  https://opensource.org/licenses/MIT.
-*/
-
-import {messages} from './messages.js';
-import '../../_version.js';
-
-const fallback = (code: string, ...args: any[]) => {
-  let msg = code;
-  if (args.length > 0) {
-    msg += ` :: ${JSON.stringify(args)}`;
-  }
-  return msg;
-};
-
-const generatorFunction = (code: string, details = {}) => {
-  const message = messages[code];
-  if (!message) {
-    throw new Error(`Unable to find message for code '${code}'.`);
-  }
-
-  return message(details);
-};
-
-export const messageGenerator =
-  process.env.NODE_ENV === 'production' ? fallback : generatorFunction;
-```
-
-===================
-File: ./frontend/node_modules/workbox-core/src/models/quotaErrorCallbacks.ts
-Size: 452 bytes
-Modified: 2025-03-08 06:59:23.719318336 -0500
-Dependencies:
-import '../_version.js';
-
-===================
-```ts
-/*
-  Copyright 2018 Google LLC
-
-  Use of this source code is governed by an MIT-style
-  license that can be found in the LICENSE file or at
-  https://opensource.org/licenses/MIT.
-*/
-
-import '../_version.js';
-
-// Callbacks to be executed whenever there's a quota error.
-// Can't change Function type right now.
-// eslint-disable-next-line @typescript-eslint/ban-types
-const quotaErrorCallbacks: Set<Function> = new Set();
-
-export {quotaErrorCallbacks};
-```
-
-===================
-File: ./frontend/node_modules/workbox-core/src/models/pluginEvents.ts
-Size: 553 bytes
-Modified: 2025-03-08 06:59:23.669445616 -0500
-Dependencies:
-import '../_version.js';
-
-===================
-```ts
-/*
-  Copyright 2018 Google LLC
-
-  Use of this source code is governed by an MIT-style
-  license that can be found in the LICENSE file or at
-  https://opensource.org/licenses/MIT.
-*/
-
-import '../_version.js';
-
-export const enum pluginEvents {
-  CACHE_DID_UPDATE = 'cacheDidUpdate',
-  CACHE_KEY_WILL_BE_USED = 'cacheKeyWillBeUsed',
-  CACHE_WILL_UPDATE = 'cacheWillUpdate',
-  CACHED_RESPONSE_WILL_BE_USED = 'cachedResponseWillBeUsed',
-  FETCH_DID_FAIL = 'fetchDidFail',
-  FETCH_DID_SUCCEED = 'fetchDidSucceed',
-  REQUEST_WILL_FETCH = 'requestWillFetch',
-}
-```
-
-===================
-File: ./frontend/node_modules/workbox-build/node_modules/@apideck/better-ajv-errors/src/types/ValidationError.ts
-Size: 232 bytes
-Modified: 2025-03-08 06:59:21.933585931 -0500
-Dependencies:
-import { DefinedError } from 'ajv';
-
-===================
-```ts
-import { DefinedError } from 'ajv';
-
-export interface ValidationError {
-  message: string;
-  path: string;
-  suggestion?: string;
-  context: {
-    errorType: DefinedError['keyword'];
-    [additionalContext: string]: unknown;
-  };
-}
-```
-
-===================
-File: ./frontend/node_modules/workbox-expiration/src/models/CacheTimestampsModel.ts
-Size: 6348 bytes
-Modified: 2025-03-08 06:59:22.103217085 -0500
-Dependencies:
-import '../_version.js';
-import {openDB, DBSchema, IDBPDatabase, deleteDB} from 'idb';
-
-===================
-```ts
-/*
-  Copyright 2018 Google LLC
-
-  Use of this source code is governed by an MIT-style
-  license that can be found in the LICENSE file or at
-  https://opensource.org/licenses/MIT.
-*/
-
-import {openDB, DBSchema, IDBPDatabase, deleteDB} from 'idb';
-import '../_version.js';
-
-const DB_NAME = 'workbox-expiration';
-const CACHE_OBJECT_STORE = 'cache-entries';
-
-const normalizeURL = (unNormalizedUrl: string) => {
-  const url = new URL(unNormalizedUrl, location.href);
-  url.hash = '';
-
-  return url.href;
-};
-
-interface CacheTimestampsModelEntry {
-  id: string;
-  cacheName: string;
-  url: string;
-  timestamp: number;
-}
-
-interface CacheDbSchema extends DBSchema {
-  'cache-entries': {
-    key: string;
-    value: CacheTimestampsModelEntry;
-    indexes: {cacheName: string; timestamp: number};
-  };
-}
-
-/**
- * Returns the timestamp model.
- *
- * @private
- */
-class CacheTimestampsModel {
-  private readonly _cacheName: string;
-  private _db: IDBPDatabase<CacheDbSchema> | null = null;
-
-  /**
-   *
-   * @param {string} cacheName
-   *
-   * @private
-   */
-  constructor(cacheName: string) {
-    this._cacheName = cacheName;
-  }
-
-  /**
-   * Performs an upgrade of indexedDB.
-   *
-   * @param {IDBPDatabase<CacheDbSchema>} db
-   *
-   * @private
-   */
-  private _upgradeDb(db: IDBPDatabase<CacheDbSchema>) {
-    // TODO(philipwalton): EdgeHTML doesn't support arrays as a keyPath, so we
-    // have to use the `id` keyPath here and create our own values (a
-    // concatenation of `url + cacheName`) instead of simply using
-    // `keyPath: ['url', 'cacheName']`, which is supported in other browsers.
-    const objStore = db.createObjectStore(CACHE_OBJECT_STORE, {keyPath: 'id'});
-
-    // TODO(philipwalton): once we don't have to support EdgeHTML, we can
-    // create a single index with the keyPath `['cacheName', 'timestamp']`
-    // instead of doing both these indexes.
-    objStore.createIndex('cacheName', 'cacheName', {unique: false});
-    objStore.createIndex('timestamp', 'timestamp', {unique: false});
-  }
-
-  /**
-   * Performs an upgrade of indexedDB and deletes deprecated DBs.
-   *
-   * @param {IDBPDatabase<CacheDbSchema>} db
-   *
-   * @private
-   */
-  private _upgradeDbAndDeleteOldDbs(db: IDBPDatabase<CacheDbSchema>) {
-    this._upgradeDb(db);
-    if (this._cacheName) {
-      void deleteDB(this._cacheName);
-    }
-  }
-
-  /**
-   * @param {string} url
-   * @param {number} timestamp
-   *
-   * @private
-   */
-  async setTimestamp(url: string, timestamp: number): Promise<void> {
-    url = normalizeURL(url);
-
-    const entry: CacheTimestampsModelEntry = {
-      url,
-      timestamp,
-      cacheName: this._cacheName,
-      // Creating an ID from the URL and cache name won't be necessary once
-      // Edge switches to Chromium and all browsers we support work with
-      // array keyPaths.
-      id: this._getId(url),
-    };
-    const db = await this.getDb();
-    const tx = db.transaction(CACHE_OBJECT_STORE, 'readwrite', {
-      durability: 'relaxed',
-    });
-    await tx.store.put(entry);
-    await tx.done;
-  }
-
-  /**
-   * Returns the timestamp stored for a given URL.
-   *
-   * @param {string} url
-   * @return {number | undefined}
-   *
-   * @private
-   */
-  async getTimestamp(url: string): Promise<number | undefined> {
-    const db = await this.getDb();
-    const entry = await db.get(CACHE_OBJECT_STORE, this._getId(url));
-    return entry?.timestamp;
-  }
-
-  /**
-   * Iterates through all the entries in the object store (from newest to
-   * oldest) and removes entries once either `maxCount` is reached or the
-   * entry's timestamp is less than `minTimestamp`.
-   *
-   * @param {number} minTimestamp
-   * @param {number} maxCount
-   * @return {Array<string>}
-   *
-   * @private
-   */
-  async expireEntries(
-    minTimestamp: number,
-    maxCount?: number,
-  ): Promise<string[]> {
-    const db = await this.getDb();
-    let cursor = await db
-      .transaction(CACHE_OBJECT_STORE)
-      .store.index('timestamp')
-      .openCursor(null, 'prev');
-    const entriesToDelete: CacheTimestampsModelEntry[] = [];
-    let entriesNotDeletedCount = 0;
-    while (cursor) {
-      const result = cursor.value;
-      // TODO(philipwalton): once we can use a multi-key index, we
-      // won't have to check `cacheName` here.
-      if (result.cacheName === this._cacheName) {
-        // Delete an entry if it's older than the max age or
-        // if we already have the max number allowed.
-        if (
-          (minTimestamp && result.timestamp < minTimestamp) ||
-          (maxCount && entriesNotDeletedCount >= maxCount)
-        ) {
-          // TODO(philipwalton): we should be able to delete the
-          // entry right here, but doing so causes an iteration
-          // bug in Safari stable (fixed in TP). Instead we can
-          // store the keys of the entries to delete, and then
-          // delete the separate transactions.
-          // https://github.com/GoogleChrome/workbox/issues/1978
-          // cursor.delete();
-
-          // We only need to return the URL, not the whole entry.
-          entriesToDelete.push(cursor.value);
-        } else {
-          entriesNotDeletedCount++;
-        }
-      }
-      cursor = await cursor.continue();
-    }
-
-    // TODO(philipwalton): once the Safari bug in the following issue is fixed,
-    // we should be able to remove this loop and do the entry deletion in the
-    // cursor loop above:
-    // https://github.com/GoogleChrome/workbox/issues/1978
-    const urlsDeleted: string[] = [];
-    for (const entry of entriesToDelete) {
-      await db.delete(CACHE_OBJECT_STORE, entry.id);
-      urlsDeleted.push(entry.url);
-    }
-
-    return urlsDeleted;
-  }
-
-  /**
-   * Takes a URL and returns an ID that will be unique in the object store.
-   *
-   * @param {string} url
-   * @return {string}
-   *
-   * @private
-   */
-  private _getId(url: string): string {
-    // Creating an ID from the URL and cache name won't be necessary once
-    // Edge switches to Chromium and all browsers we support work with
-    // array keyPaths.
-    return this._cacheName + '|' + normalizeURL(url);
-  }
-
-  /**
-   * Returns an open connection to the database.
-   *
-   * @private
-   */
-  private async getDb() {
-    if (!this._db) {
-      this._db = await openDB(DB_NAME, 1, {
-        upgrade: this._upgradeDbAndDeleteOldDbs.bind(this),
-      });
-    }
-    return this._db;
-  }
-}
-
-export {CacheTimestampsModel};
-```
-
-===================
-File: ./frontend/node_modules/immer/src/types/types-external.ts
-Size: 8393 bytes
-Modified: 2025-03-08 06:59:23.948732841 -0500
-Dependencies:
-import {Nothing} from "../internal"
-
-===================
-```ts
-import {Nothing} from "../internal"
-
-type AnyFunc = (...args: any[]) => any
-
-type PrimitiveType = number | string | boolean
-
-/** Object types that should never be mapped */
-type AtomicObject = Function | Promise<any> | Date | RegExp
-
-/**
- * If the lib "ES2015.Collection" is not included in tsconfig.json,
- * types like ReadonlyArray, WeakMap etc. fall back to `any` (specified nowhere)
- * or `{}` (from the node types), in both cases entering an infinite recursion in
- * pattern matching type mappings
- * This type can be used to cast these types to `void` in these cases.
- */
-export type IfAvailable<T, Fallback = void> =
-	// fallback if any
-	true | false extends (T extends never
-	? true
-	: false)
-		? Fallback // fallback if empty type
-		: keyof T extends never
-		? Fallback // original type
-		: T
-
-/**
- * These should also never be mapped but must be tested after regular Map and
- * Set
- */
-type WeakReferences = IfAvailable<WeakMap<any, any>> | IfAvailable<WeakSet<any>>
-
-export type WritableDraft<T> = {-readonly [K in keyof T]: Draft<T[K]>}
-
-/** Convert a readonly type into a mutable type, if possible */
-export type Draft<T> = T extends PrimitiveType
-	? T
-	: T extends AtomicObject
-	? T
-	: T extends IfAvailable<ReadonlyMap<infer K, infer V>> // Map extends ReadonlyMap
-	? Map<Draft<K>, Draft<V>>
-	: T extends IfAvailable<ReadonlySet<infer V>> // Set extends ReadonlySet
-	? Set<Draft<V>>
-	: T extends WeakReferences
-	? T
-	: T extends object
-	? WritableDraft<T>
-	: T
-
-/** Convert a mutable type into a readonly type */
-export type Immutable<T> = T extends PrimitiveType
-	? T
-	: T extends AtomicObject
-	? T
-	: T extends IfAvailable<ReadonlyMap<infer K, infer V>> // Map extends ReadonlyMap
-	? ReadonlyMap<Immutable<K>, Immutable<V>>
-	: T extends IfAvailable<ReadonlySet<infer V>> // Set extends ReadonlySet
-	? ReadonlySet<Immutable<V>>
-	: T extends WeakReferences
-	? T
-	: T extends object
-	? {readonly [K in keyof T]: Immutable<T[K]>}
-	: T
-
-export interface Patch {
-	op: "replace" | "remove" | "add"
-	path: (string | number)[]
-	value?: any
-}
-
-export type PatchListener = (patches: Patch[], inversePatches: Patch[]) => void
-
-/** Converts `nothing` into `undefined` */
-type FromNothing<T> = T extends Nothing ? undefined : T
-
-/** The inferred return type of `produce` */
-export type Produced<Base, Return> = Return extends void
-	? Base
-	: Return extends Promise<infer Result>
-	? Promise<Result extends void ? Base : FromNothing<Result>>
-	: FromNothing<Return>
-
-/**
- * Utility types
- */
-type PatchesTuple<T> = readonly [T, Patch[], Patch[]]
-
-type ValidRecipeReturnType<State> =
-	| State
-	| void
-	| undefined
-	| (State extends undefined ? Nothing : never)
-
-type ValidRecipeReturnTypePossiblyPromise<State> =
-	| ValidRecipeReturnType<State>
-	| Promise<ValidRecipeReturnType<State>>
-
-type PromisifyReturnIfNeeded<
-	State,
-	Recipe extends AnyFunc,
-	UsePatches extends boolean
-> = ReturnType<Recipe> extends Promise<any>
-	? Promise<UsePatches extends true ? PatchesTuple<State> : State>
-	: UsePatches extends true
-	? PatchesTuple<State>
-	: State
-
-/**
- * Core Producer inference
- */
-type InferRecipeFromCurried<Curried> = Curried extends (
-	base: infer State,
-	...rest: infer Args
-) => any // extra assertion to make sure this is a proper curried function (state, args) => state
-	? ReturnType<Curried> extends State
-		? (
-				draft: Draft<State>,
-				...rest: Args
-		  ) => ValidRecipeReturnType<Draft<State>>
-		: never
-	: never
-
-type InferInitialStateFromCurried<Curried> = Curried extends (
-	base: infer State,
-	...rest: any[]
-) => any // extra assertion to make sure this is a proper curried function (state, args) => state
-	? State
-	: never
-
-type InferCurriedFromRecipe<
-	Recipe,
-	UsePatches extends boolean
-> = Recipe extends (draft: infer DraftState, ...args: infer RestArgs) => any // verify return type
-	? ReturnType<Recipe> extends ValidRecipeReturnTypePossiblyPromise<DraftState>
-		? (
-				base: Immutable<DraftState>,
-				...args: RestArgs
-		  ) => PromisifyReturnIfNeeded<DraftState, Recipe, UsePatches> // N.b. we return mutable draftstate, in case the recipe's first arg isn't read only, and that isn't expected as output either
-		: never // incorrect return type
-	: never // not a function
-
-type InferCurriedFromInitialStateAndRecipe<
-	State,
-	Recipe,
-	UsePatches extends boolean
-> = Recipe extends (
-	draft: Draft<State>,
-	...rest: infer RestArgs
-) => ValidRecipeReturnTypePossiblyPromise<State>
-	? (
-			base?: State | undefined,
-			...args: RestArgs
-	  ) => PromisifyReturnIfNeeded<State, Recipe, UsePatches>
-	: never // recipe doesn't match initial state
-
-/**
- * The `produce` function takes a value and a "recipe function" (whose
- * return value often depends on the base state). The recipe function is
- * free to mutate its first argument however it wants. All mutations are
- * only ever applied to a __copy__ of the base state.
- *
- * Pass only a function to create a "curried producer" which relieves you
- * from passing the recipe function every time.
- *
- * Only plain objects and arrays are made mutable. All other objects are
- * considered uncopyable.
- *
- * Note: This function is __bound__ to its `Immer` instance.
- *
- * @param {any} base - the initial state
- * @param {Function} producer - function that receives a proxy of the base state as first argument and which can be freely modified
- * @param {Function} patchListener - optional function that will be called with all the patches produced here
- * @returns {any} a new state, or the initial state if nothing was modified
- */
-export interface IProduce {
-	/** Curried producer that infers the recipe from the curried output function (e.g. when passing to setState) */
-	<Curried>(
-		recipe: InferRecipeFromCurried<Curried>,
-		initialState?: InferInitialStateFromCurried<Curried>
-	): Curried
-
-	/** Curried producer that infers curried from the recipe  */
-	<Recipe extends AnyFunc>(recipe: Recipe): InferCurriedFromRecipe<
-		Recipe,
-		false
-	>
-
-	/** Curried producer that infers curried from the State generic, which is explicitly passed in.  */
-	<State>(
-		recipe: (
-			state: Draft<State>,
-			initialState: State
-		) => ValidRecipeReturnType<State>
-	): (state?: State) => State
-	<State, Args extends any[]>(
-		recipe: (
-			state: Draft<State>,
-			...args: Args
-		) => ValidRecipeReturnType<State>,
-		initialState: State
-	): (state?: State, ...args: Args) => State
-	<State>(recipe: (state: Draft<State>) => ValidRecipeReturnType<State>): (
-		state: State
-	) => State
-	<State, Args extends any[]>(
-		recipe: (state: Draft<State>, ...args: Args) => ValidRecipeReturnType<State>
-	): (state: State, ...args: Args) => State
-
-	/** Curried producer with initial state, infers recipe from initial state */
-	<State, Recipe extends Function>(
-		recipe: Recipe,
-		initialState: State
-	): InferCurriedFromInitialStateAndRecipe<State, Recipe, false>
-
-	/** Normal producer */
-	<Base, D = Draft<Base>>( // By using a default inferred D, rather than Draft<Base> in the recipe, we can override it.
-		base: Base,
-		recipe: (draft: D) => ValidRecipeReturnType<D>,
-		listener?: PatchListener
-	): Base
-
-	/** Promisified normal producer */
-	<Base, D = Draft<Base>>(
-		base: Base,
-		recipe: (draft: D) => Promise<ValidRecipeReturnType<D>>,
-		listener?: PatchListener
-	): Promise<Base>
-}
-
-/**
- * Like `produce`, but instead of just returning the new state,
- * a tuple is returned with [nextState, patches, inversePatches]
- *
- * Like produce, this function supports currying
- */
-export interface IProduceWithPatches {
-	// Types copied from IProduce, wrapped with PatchesTuple
-	<Recipe extends AnyFunc>(recipe: Recipe): InferCurriedFromRecipe<Recipe, true>
-	<State, Recipe extends Function>(
-		recipe: Recipe,
-		initialState: State
-	): InferCurriedFromInitialStateAndRecipe<State, Recipe, true>
-	<Base, D = Draft<Base>>(
-		base: Base,
-		recipe: (draft: D) => ValidRecipeReturnType<D>,
-		listener?: PatchListener
-	): PatchesTuple<Base>
-	<Base, D = Draft<Base>>(
-		base: Base,
-		recipe: (draft: D) => Promise<ValidRecipeReturnType<D>>,
-		listener?: PatchListener
-	): Promise<PatchesTuple<Base>>
-}
-
-/**
- * The type for `recipe function`
- */
-export type Producer<T> = (draft: Draft<T>) => ValidRecipeReturnType<Draft<T>> | Promise<ValidRecipeReturnType<Draft<T>>>
-
-// Fixes #507: bili doesn't export the types of this file if there is no actual source in it..
-// hopefully it get's tree-shaken away for everyone :)
-export function never_used() {}
-```
-
-===================
-File: ./frontend/node_modules/immer/src/types/globals.d.ts
-Size: 31 bytes
-Modified: 2025-03-08 06:59:23.609598353 -0500
-Dependencies:
-
-===================
-```ts
-declare const __DEV__: boolean
-```
-
-===================
-File: ./frontend/node_modules/immer/src/types/types-internal.ts
-Size: 1028 bytes
-Modified: 2025-03-08 06:59:23.988631016 -0500
-Dependencies:
-import {
-
-===================
-```ts
-import {
-	SetState,
-	ImmerScope,
-	ProxyObjectState,
-	ProxyArrayState,
-	ES5ObjectState,
-	ES5ArrayState,
-	MapState,
-	DRAFT_STATE
-} from "../internal"
-
-export type Objectish = AnyObject | AnyArray | AnyMap | AnySet
-export type ObjectishNoSet = AnyObject | AnyArray | AnyMap
-
-export type AnyObject = {[key: string]: any}
-export type AnyArray = Array<any>
-export type AnySet = Set<any>
-export type AnyMap = Map<any, any>
-
-export const enum Archtype {
-	Object,
-	Array,
-	Map,
-	Set
-}
-
-export const enum ProxyType {
-	ProxyObject,
-	ProxyArray,
-	Map,
-	Set,
-	ES5Object,
-	ES5Array
-}
-
-export interface ImmerBaseState {
-	parent_?: ImmerState
-	scope_: ImmerScope
-	modified_: boolean
-	finalized_: boolean
-	isManual_: boolean
-}
-
-export type ImmerState =
-	| ProxyObjectState
-	| ProxyArrayState
-	| ES5ObjectState
-	| ES5ArrayState
-	| MapState
-	| SetState
-
-// The _internal_ type used for drafts (not to be confused with Draft, which is public facing)
-export type Drafted<Base = any, T extends ImmerState = ImmerState> = {
-	[DRAFT_STATE]: T
-} & Base
-```
 
 ===================
 File: ./scripts/backend/src/main.rs
@@ -2453,6 +1408,29 @@ mod tests {
     }
 }
 ```
+
+===================
+File: ./backend/src/api/health.rs
+Size: 343 bytes
+Modified: 2025-03-08 20:59:18.409401047 -0500
+Dependencies:
+use sqlx::PgPool;
+use std::sync::Arc;
+use warp::Filter;
+
+===================
+```rs
+use warp::Filter;
+use sqlx::PgPool;
+use std::sync::Arc;
+
+pub fn health_routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    let api_health = warp::path!("api" / "v1" / "health")
+        .and(warp::get())
+        .map(|| warp::reply::json(&serde_json::json!({ "status": "ok" })));
+        
+    api_health
+}```
 
 ===================
 File: ./backend/src/api/federation_resource_sharing.rs
@@ -2892,9 +1870,14 @@ mod tests {
 
 ===================
 File: ./backend/src/api/mod.rs
-Size: 148 bytes
-Modified: 2025-03-07 23:46:35.904964718 -0500
+Size: 1433 bytes
+Modified: 2025-03-08 20:59:49.015523108 -0500
 Dependencies:
+use crate::middleware::auth::with_auth;
+use crate::services::{
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use warp::Filter;
 
 ===================
 ```rs
@@ -2904,7 +1887,40 @@ pub mod governance;
 pub mod resource;
 pub mod federation;
 pub mod federation_resource_sharing;
-pub mod reputation;```
+pub mod reputation;
+
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use warp::Filter;
+use crate::services::{
+    IdentityService,
+    GovernanceService,
+    ResourceService,
+    FederationService,
+    ReputationService,
+    p2p::P2PManager
+};
+use crate::middleware::auth::with_auth;
+
+pub fn routes(
+    identity_service: Arc<Mutex<IdentityService>>,
+    governance_service: Arc<Mutex<GovernanceService>>,
+    resource_service: Arc<Mutex<ResourceService>>,
+    federation_service: Arc<Mutex<FederationService>>,
+    reputation_service: Arc<Mutex<ReputationService>>,
+    p2p_manager: Arc<Mutex<P2PManager>>,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    // Routes that require auth
+    let auth_routes = identity::identity_routes(identity_service.clone())
+        .or(governance::governance_routes(governance_service, p2p_manager.clone(), identity_service.clone()))
+        .or(resource::resource_routes(resource_service))
+        .or(federation::federation_routes(federation_service.clone(), p2p_manager.clone()))
+        .or(federation_resource_sharing::federation_resource_sharing_routes(federation_service, p2p_manager.clone()))
+        .or(reputation::reputation_routes(p2p_manager));
+
+    // Apply auth middleware
+    auth_routes.and(with_auth(identity_service))
+}```
 
 ===================
 File: ./backend/src/api/identity.rs
@@ -4866,27 +3882,44 @@ pub type Result<T> = std::result::Result<T, AppError>;
 
 ===================
 File: ./backend/src/main.rs
-Size: 864 bytes
-Modified: 2025-03-08 06:33:57.740890447 -0500
+Size: 2103 bytes
+Modified: 2025-03-08 21:14:10.138176632 -0500
 Dependencies:
 mod api;
+mod core;
 mod middleware;
-use crate::services::{BlockchainService, IdentityService, GovernanceService};
+mod services;
+use crate::api::routes;
+use crate::services::{
 use log::info;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use warp::Filter;
 
 ===================
 ```rs
-mod middleware;
-mod api;
-
-use log::info;
 use std::net::SocketAddr;
-use warp::Filter;
 use std::sync::Arc;
-use crate::services::{BlockchainService, IdentityService, GovernanceService};
+use tokio::sync::Mutex;
+use warp::Filter;
+use log::info;
+
+mod api;
+mod middleware;
+mod services;
+mod core;
+
+use crate::api::routes;
+use crate::services::{
+    BlockchainService,
+    IdentityService,
+    GovernanceService,
+    ResourceService,
+    FederationService,
+    ReputationService,
+    p2p::P2PManager
+};
 
 #[tokio::main]
 async fn main() {
@@ -4894,18 +3927,49 @@ async fn main() {
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
     info!("Starting ICN backend server...");
 
-    // Initialize services
+    // Initialize core services
     let blockchain_service = Arc::new(BlockchainService::new());
-    let identity_service = Arc::new(IdentityService::new());
-    let governance_service = Arc::new(GovernanceService::new());
+    let identity_service = Arc::new(Mutex::new(IdentityService::new()));
+    let governance_service = Arc::new(Mutex::new(GovernanceService::new()));
+    let resource_service = Arc::new(Mutex::new(ResourceService::new()));
+    let federation_service = Arc::new(Mutex::new(FederationService::new()));
+    let reputation_service = Arc::new(Mutex::new(ReputationService::new()));
+    let p2p_manager = Arc::new(Mutex::new(P2PManager::new()));
 
-    // Initialize API server
-    let api_server = api::ApiServer::new(8081, blockchain_service, identity_service, governance_service);
+    // Set up routes
+    let routes = routes(
+        identity_service,
+        governance_service,
+        resource_service,
+        federation_service,
+        reputation_service,
+        p2p_manager
+    ).with(middleware::cors());
 
-    // Run the API server
-    if let Err(e) = api_server.run().await {
-        eprintln!("Failed to start API server: {}", e);
-    }
+    // Define server address
+    let addr = SocketAddr::from(([0, 0, 0, 0], 8081));
+    info!("Server starting on {}", addr);
+
+    // Set up graceful shutdown
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let server = warp::serve(routes);
+    let (addr, server) = server.bind_with_graceful_shutdown(addr, async {
+        rx.await.ok();
+        info!("Shutdown signal received, stopping server...");
+    });
+
+    info!("Server running on http://{}", addr);
+
+    // Handle Ctrl+C
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.expect("Failed to listen for ctrl+c");
+        info!("Ctrl+C received, initiating graceful shutdown...");
+        let _ = tx.send(());
+    });
+
+    // Run the server
+    server.await;
+    info!("Server shutdown complete");
 }
 ```
 
@@ -8339,8 +7403,8 @@ mod tests {
 
 ===================
 File: ./crates/icn-consensus/src/lib.rs
-Size: 19357 bytes
-Modified: 2025-03-07 04:09:46.438781479 -0500
+Size: 25246 bytes
+Modified: 2025-03-08 15:11:57.252163564 -0500
 Dependencies:
 use async_trait::async_trait;
 use bit_set::BitSet;
@@ -8348,8 +7412,9 @@ use federation::{Federation, FederationError};
 use icn_common::{ReputationManager, ConsensusEngine, Vote, VoteStatus, GovernanceError};
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
 use icn_types::{Block, Transaction}; // Import Transaction
+use log::error;
 use serde::{Serialize, Deserialize};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque, HashSet}; // Added HashSet import
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -8369,7 +7434,7 @@ pub mod sharding; // Add sharding module
 pub mod pbft; // Add PBFT module
 
 use async_trait::async_trait;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque, HashSet}; // Added HashSet import
 use std::time::Duration;
 use tokio::time::sleep;
 use tokio::task;
@@ -8383,6 +7448,14 @@ use federation::{Federation, FederationError};
 use serde::{Serialize, Deserialize};
 use zk_snarks::verify_proof; // Import zk-SNARK verification function
 use icn_crypto::KeyPair; // Import KeyPair for signature verification
+use log::error;
+
+// Interface for identity services
+#[async_trait]
+pub trait IdentityService: Send + Sync {
+    async fn get_public_key(&self, did: &str) -> Option<Vec<u8>>;
+    async fn verify_identity(&self, did: &str, proof: &str) -> bool;
+}
 
 #[derive(Error, Debug)]
 pub enum ConsensusError {
@@ -8410,10 +7483,61 @@ pub struct ProofOfCooperation {
     round_start_time: std::time::Instant,
     shard_manager: sharding::ShardManager, // Add shard manager field
     pbft_consensus: Option<pbft::PbftConsensus>, // Add PBFT consensus field
+    identity_did: String, // Add the identity DID of the current node
+    identity_service: Arc<dyn IdentityService>, // Add identity service
+    active_proposals: HashMap<String, Proposal>, // Add active proposals
+    rules: ConsensusRules,
+}
+
+// Define proposal structure
+#[derive(Clone, Debug)]
+pub struct Proposal {
+    pub proposal_id: String,
+    pub proposal_type: ProposalType,
+    pub votes: HashSet<Vote>,
+    pub status: ProposalStatus,
+    pub created_at: std::time::SystemTime,
+}
+
+// Define proposal types
+#[derive(Clone, Debug)]
+pub enum ProposalType {
+    AddValidator(ValidatorInfo),
+    RemoveValidator(String), // DID
+    UpdateRules(ConsensusRules),
+}
+
+// Define validator info
+#[derive(Clone, Debug)]
+pub struct ValidatorInfo {
+    pub did: String,
+    pub reputation: i64,
+    pub voting_power: u32,
+}
+
+// Define consensus rules
+#[derive(Clone, Debug)]
+pub struct ConsensusRules {
+    pub min_reputation: i64,
+    pub quorum_percentage: u8,
+    pub block_time: Duration,
+}
+
+// Define proposal status
+#[derive(Clone, Debug, PartialEq)]
+pub enum ProposalStatus {
+    Pending,
+    Approved,
+    Rejected,
+    Expired,
 }
 
 impl ProofOfCooperation {
-    pub fn new(reputation_manager: Arc<dyn ReputationManager>) -> Self {
+    pub fn new(
+        reputation_manager: Arc<dyn ReputationManager>,
+        identity_service: Arc<dyn IdentityService>,
+        identity_did: String
+    ) -> Self {
         let shard_config = sharding::ShardConfig {
             shard_count: 4,  // Start with 4 shards
             shard_capacity: 1000, // Each shard can hold 1000 transactions
@@ -8434,6 +7558,14 @@ impl ProofOfCooperation {
             round_start_time: std::time::Instant::now(),
             shard_manager: sharding::ShardManager::new(shard_config),
             pbft_consensus: None,
+            identity_did,
+            identity_service,
+            active_proposals: HashMap::new(),
+            rules: ConsensusRules {
+                min_reputation: 50,
+                quorum_percentage: 67, // 2/3 majority
+                block_time: Duration::from_secs(30),
+            },
         }
     }
 
@@ -8769,14 +7901,20 @@ impl ProofOfCooperation {
 
     // Add a method to handle transaction sharding
     pub fn add_transaction(&mut self, transaction: Transaction) -> Result<u32, ConsensusError> {
+        // Assign transaction to a shard
         let shard_id = self.shard_manager.assign_transaction(transaction);
         
         // Check if shard is ready for finalization
-        let shard = &self.shard_manager.shards[&shard_id];
+        let shard = self.shard_manager.shards.get(&shard_id).unwrap();
         if shard.len() >= self.shard_manager.config.shard_capacity as usize {
             if let Some(block) = self.shard_manager.finalize_shard(shard_id) {
                 self.propose_block(block);
             }
+        }
+        
+        // Periodically rebalance shards
+        if self.current_round % 10 == 0 {  // Every 10 rounds
+            self.shard_manager.rebalance();
         }
         
         Ok(shard_id)
@@ -8788,23 +7926,127 @@ impl ProofOfCooperation {
         // ...
         Ok(())
     }
+
+    // Check if a participant is eligible to vote
+    pub fn is_eligible_voter(&self, voter_did: &str) -> bool {
+        // Check if they have enough reputation
+        let reputation = self.reputation_manager.get_reputation(voter_did, "governance");
+        if reputation < self.rules.min_reputation {
+            return false;
+        }
+        
+        // Check if they're a validator
+        self.participants.iter().any(|p| p == voter_did)
+    }
+    
+    // Add a validator to the consensus system
+    pub fn add_validator(&mut self, info: ValidatorInfo) -> Result<(), GovernanceError> {
+        // Verify validator meets minimum reputation requirements
+        if info.reputation < self.rules.min_reputation {
+            return Err(GovernanceError::NotEligibleToVote);
+        }
+        
+        // Add to participant list if not already present
+        if !self.participants.contains(&info.did) {
+            self.participants.push_back(info.did);
+        }
+        
+        Ok(())
+    }
+    
+    // Remove a validator from the consensus system
+    pub fn remove_validator(&mut self, did: &str) -> Result<(), GovernanceError> {
+        // Find and remove from participant list
+        if let Some(index) = self.participants.iter().position(|p| p == did) {
+            self.participants.remove(index);
+            Ok(())
+        } else {
+            Err(GovernanceError::ProposalNotFound)
+        }
+    }
+    
+    // Check proposal status and update if necessary
+    pub fn check_proposal_status(&mut self, proposal_id: &str) -> Result<VoteStatus, GovernanceError> {
+        let proposal = self.active_proposals.get_mut(proposal_id)
+            .ok_or(GovernanceError::ProposalNotFound)?;
+            
+        // Count votes
+        let mut approve_votes = 0;
+        let mut reject_votes = 0;
+        
+        for vote in &proposal.votes {
+            if vote.approve {
+                approve_votes += 1;
+            } else {
+                reject_votes += 1;
+            }
+        }
+        
+        // Check if we have enough votes for a decision
+        let total_participants = self.participants.len();
+        let quorum_threshold = (total_participants * self.rules.quorum_percentage as usize) / 100;
+        
+        if approve_votes + reject_votes < quorum_threshold {
+            // Not enough votes yet
+            proposal.status = ProposalStatus::Pending;
+            return Ok(VoteStatus::Pending);
+        }
+        
+        // We have enough votes to make a decision
+        if approve_votes > reject_votes {
+            proposal.status = ProposalStatus::Approved;
+            Ok(VoteStatus::Accepted)
+        } else {
+            proposal.status = ProposalStatus::Rejected;
+            Ok(VoteStatus::Rejected)
+        }
+    }
+    
+    // Submit a new proposal
+    pub fn submit_proposal(&mut self, proposal_type: ProposalType, submitter: String) -> Result<String, GovernanceError> {
+        // Check if submitter is eligible
+        if !self.is_eligible_voter(&submitter) {
+            return Err(GovernanceError::NotEligibleToVote);
+        }
+        
+        // Generate proposal ID
+        let proposal_id = format!("prop_{}", uuid::Uuid::new_v4());
+        
+        // Create new proposal
+        let proposal = Proposal {
+            proposal_id: proposal_id.clone(),
+            proposal_type,
+            votes: HashSet::new(),
+            status: ProposalStatus::Pending,
+            created_at: std::time::SystemTime::now(),
+        };
+        
+        // Store proposal
+        self.active_proposals.insert(proposal_id.clone(), proposal);
+        
+        Ok(proposal_id)
+    }
 }
 
 #[async_trait]
 impl ConsensusEngine for ProofOfCooperation {
     async fn start(&self) {
         // Start the consensus process
+        // In a real implementation, this would initiate validator rounds
+        // and transaction processing
+        log::info!("Starting Proof of Cooperation consensus engine");
     }
 
     async fn stop(&self) {
         // Stop the consensus process
+        log::info!("Stopping Proof of Cooperation consensus engine");
     }
 
     async fn submit_vote(&mut self, vote: Vote) -> Result<VoteStatus, GovernanceError> {
         let proposal = self.active_proposals.get_mut(&vote.proposal_id)
             .ok_or(GovernanceError::ProposalNotFound)?;
         
-        if !self.is_eligible_voter(&vote.voter_did) {
+        if !self.is_eligible_voter(&vote.voter) {
             return Err(GovernanceError::NotEligibleToVote);
         }
 

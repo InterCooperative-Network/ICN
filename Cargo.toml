@@ -2,20 +2,20 @@
 members = [
     "backend",
     "crates/icn-types",
+    "crates/icn-common",
     "crates/icn-core",
-    "crates/icn-runtime",
-    "crates/icn-p2p",
-    "crates/icn-storage"
+    "crates/icn-p2p"
 ]
 
 [workspace.dependencies]
 # Internal crates
 icn-types = { path = "crates/icn-types" }
+icn-common = { path = "crates/icn-common" }
 icn-core = { path = "crates/icn-core" }
 icn-runtime = { path = "crates/icn-runtime" }
 
 # External dependencies
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 warp = "0.3"
 sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "postgres", "sqlite"] }
