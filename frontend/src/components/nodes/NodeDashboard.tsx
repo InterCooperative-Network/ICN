@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { NodeMonitor } from './NodeMonitor';
 import { NetworkGraph } from './NetworkGraph';
+import { useNodes } from '@/hooks/useNodes';
 
 interface WorkloadSubmission {
   type: string;
@@ -17,6 +18,7 @@ interface WorkloadSubmission {
 }
 
 export const NodeDashboard = () => {
+  const { nodes } = useNodes();
   const [workload, setWorkload] = useState<WorkloadSubmission>({
     type: 'container',
     command: '',
@@ -27,33 +29,40 @@ export const NodeDashboard = () => {
   const handleSubmitWorkload = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:8080/api/workloads', {
+      const response = await fetch('http://localhost:8081/api/workloads', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(workload),
+        body: JSON.stringify({
+          type: workload.type,
+          command: workload.command,
+          requirements: {
+            cpu: { cores: workload.cpuCores },
+            memory: { required: `${workload.memoryMB}MB` }
+          },
+          targetNode: workload.targetNode
+        }),
       });
 
       if (response.ok) {
-        // Clear form and show success message
         setWorkload({
           type: 'container',
           command: '',
           cpuCores: 1,
           memoryMB: 256
         });
-        // You could add a toast notification here
+        // Could add a success notification here
       }
     } catch (error) {
       console.error('Error submitting workload:', error);
-      // You could add an error toast notification here
+      // Could add an error notification here
     }
   };
 
   return (
-    <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6">ICN Network Dashboard</h1>
+    <div className="container mx-auto p-6 space-y-6">
+      <h1 className="text-3xl font-bold">ICN Network Dashboard</h1>
       
       <Tabs defaultValue="monitor" className="space-y-4">
         <TabsList>
@@ -68,10 +77,7 @@ export const NodeDashboard = () => {
 
         <TabsContent value="network">
           <Card>
-            <CardHeader>
-              <CardTitle>Network Topology</CardTitle>
-            </CardHeader>
-            <CardContent className="h-[600px]">
+            <CardContent className="h-[600px] p-0">
               <NetworkGraph />
             </CardContent>
           </Card>
@@ -145,7 +151,11 @@ export const NodeDashboard = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">Auto-select</SelectItem>
-                      {/* Node options will be populated dynamically */}
+                      {nodes.map(node => (
+                        <SelectItem key={node.id} value={node.id}>
+                          {node.id} ({node.metrics.status})
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
+import { useWebSocket } from '@/hooks/useWebSocket';
 
 interface Node {
   id: string;
@@ -21,23 +22,14 @@ export const NetworkGraph: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const fetchNetworkData = async () => {
-      try {
-        const response = await fetch('http://localhost:8080/api/network/topology');
-        if (response.ok) {
-          const data: GraphData = await response.json();
-          renderGraph(data);
-        }
-      } catch (error) {
-        console.error('Error fetching network topology:', error);
-      }
-    };
+  const handleNetworkUpdate = (data: GraphData) => {
+    renderGraph(data);
+  };
 
-    fetchNetworkData();
-    const interval = setInterval(fetchNetworkData, 10000);
-    return () => clearInterval(interval);
-  }, []);
+  const { sendMessage } = useWebSocket({
+    url: 'ws://localhost:8081/ws',
+    onMessage: handleNetworkUpdate
+  });
 
   const renderGraph = (data: GraphData) => {
     if (!svgRef.current) return;
@@ -45,15 +37,11 @@ export const NetworkGraph: React.FC = () => {
     const width = svgRef.current.clientWidth;
     const height = svgRef.current.clientHeight;
 
-    // Clear existing graph
-    d3.select(svgRef.current).selectAll('*').remove();
+    const svg = d3.select(svgRef.current);
+    svg.selectAll('*').remove();
 
-    const svg = d3.select(svgRef.current)
-      .attr('width', width)
-      .attr('height', height);
-
-    const simulation = d3.forceSimulation()
-      .force('link', d3.forceLink().id((d: any) => d.id))
+    const simulation = d3.forceSimulation(data.nodes as any)
+      .force('link', d3.forceLink(data.links).id((d: any) => d.id).distance(100))
       .force('charge', d3.forceManyBody().strength(-400))
       .force('center', d3.forceCenter(width / 2, height / 2));
 
@@ -65,7 +53,6 @@ export const NetworkGraph: React.FC = () => {
       }
     };
 
-    // Create links
     const links = svg.append('g')
       .selectAll('line')
       .data(data.links)
@@ -74,7 +61,6 @@ export const NetworkGraph: React.FC = () => {
       .attr('stroke', '#cbd5e1')
       .attr('stroke-width', 1.5);
 
-    // Create nodes
     const nodes = svg.append('g')
       .selectAll('circle')
       .data(data.nodes)
@@ -87,7 +73,6 @@ export const NetworkGraph: React.FC = () => {
         .on('drag', dragged)
         .on('end', dragended) as any);
 
-    // Add node labels
     const labels = svg.append('g')
       .selectAll('text')
       .data(data.nodes)
@@ -98,7 +83,6 @@ export const NetworkGraph: React.FC = () => {
       .attr('text-anchor', 'middle')
       .attr('dy', 30);
 
-    // Add tooltips
     nodes.on('mouseover', function(event, d: any) {
       if (!tooltipRef.current) return;
       
@@ -118,8 +102,7 @@ export const NetworkGraph: React.FC = () => {
       d3.select(tooltipRef.current).style('display', 'none');
     });
 
-    // Update positions on simulation tick
-    simulation.nodes(data.nodes as any).on('tick', () => {
+    simulation.on('tick', () => {
       links
         .attr('x1', (d: any) => d.source.x)
         .attr('y1', (d: any) => d.source.y)
@@ -135,9 +118,6 @@ export const NetworkGraph: React.FC = () => {
         .attr('y', (d: any) => d.y);
     });
 
-    simulation.force<d3.ForceLink<any, any>>('link')?.links(data.links);
-
-    // Drag functions
     function dragstarted(event: any) {
       if (!event.active) simulation.alphaTarget(0.3).restart();
       event.subject.fx = event.subject.x;

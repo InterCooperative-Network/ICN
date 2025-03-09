@@ -1,6 +1,8 @@
 use std::net::SocketAddr;
 use warp::{Filter, Reply};
-use log::info;
+use log::{info, error};
+use warp::ws::WebSocket;
+use futures::{StreamExt, SinkExt};  // Combined StreamExt and added SinkExt
 
 #[tokio::main]
 async fn main() {
@@ -8,7 +10,14 @@ async fn main() {
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
     info!("Starting ICN backend server...");
 
-    // Define routes
+    // WebSocket handler
+    let ws_route = warp::path("ws")
+        .and(warp::ws())
+        .map(|ws: warp::ws::Ws| {
+            ws.on_upgrade(handle_websocket_connection)
+        });
+
+    // Health check route
     let health_route = warp::path("api")
         .and(warp::path("v1"))
         .and(warp::path("health"))
@@ -21,8 +30,14 @@ async fn main() {
             }))
         });
 
+    // Combine routes and add CORS
     let routes = health_route
-        .with(warp::cors().allow_any_origin())
+        .or(ws_route)
+        .with(warp::cors()
+            .allow_any_origin()
+            .allow_headers(vec!["content-type"])
+            .allow_methods(vec!["GET", "POST", "PUT", "DELETE"])
+        )
         .with(warp::log("icn_backend"));
 
     // Configure server address and start
@@ -32,6 +47,28 @@ async fn main() {
     warp::serve(routes)
         .run(addr)
         .await;
+}
+
+async fn handle_websocket_connection(ws: WebSocket) {
+    let (mut ws_tx, mut ws_rx) = ws.split();
+    
+    // Handle incoming messages
+    while let Some(result) = ws_rx.next().await {
+        match result {
+            Ok(msg) => {
+                info!("Received message: {:?}", msg);
+                // Echo the message back
+                if let Err(e) = ws_tx.send(msg).await {
+                    error!("Error sending ws message: {}", e);
+                    break;
+                }
+            }
+            Err(e) => {
+                error!("Error receiving ws message: {}", e);
+                break;
+            }
+        }
+    }
 }
 
 fn with_db(pool: sqlx::PgPool) -> impl Filter<Extract = (sqlx::PgPool,), Error = std::convert::Infallible> + Clone {

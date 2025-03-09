@@ -42,8 +42,6 @@ export function useWebSocket({
         console.log('WebSocket disconnected, attempting to reconnect...');
         wsRef.current = null;
         onClose?.();
-        
-        // Attempt to reconnect
         reconnectTimeoutRef.current = setTimeout(connect, reconnectDelay);
       };
 
@@ -53,14 +51,12 @@ export function useWebSocket({
       };
     } catch (error) {
       console.error('Failed to establish WebSocket connection:', error);
-      // Attempt to reconnect
       reconnectTimeoutRef.current = setTimeout(connect, reconnectDelay);
     }
   }, [url, onMessage, onOpen, onClose, onError, reconnectDelay]);
 
   useEffect(() => {
     connect();
-
     return () => {
       if (wsRef.current) {
         wsRef.current.close();

@@ -37,6 +37,16 @@ RUN echo 'server { \
         proxy_set_header Connection "upgrade"; \
         proxy_set_header Host $host; \
         proxy_set_header X-Real-IP $remote_addr; \
+        proxy_read_timeout 86400; \
+    } \
+    location /ws { \
+        proxy_pass http://backend:8081/ws; \
+        proxy_http_version 1.1; \
+        proxy_set_header Upgrade $http_upgrade; \
+        proxy_set_header Connection "upgrade"; \
+        proxy_set_header Host $host; \
+        proxy_set_header X-Real-IP $remote_addr; \
+        proxy_read_timeout 86400; \
     } \
     location = /health { \
         access_log off; \

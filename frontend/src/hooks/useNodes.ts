@@ -54,7 +54,7 @@ export function useNodes(): UseNodesResult {
   }, []);
 
   const { sendMessage } = useWebSocket({
-    url: 'ws://localhost:8080/api/nodes/ws',
+    url: 'ws://localhost:8081/ws',
     onMessage: handleWebSocketMessage,
     onOpen: () => setError(null),
     onError: () => setError('WebSocket connection error'),
@@ -65,7 +65,7 @@ export function useNodes(): UseNodesResult {
       setIsLoading(true);
       setError(null);
       
-      const response = await fetch('http://localhost:8080/api/nodes');
+      const response = await fetch('http://localhost:8081/api/nodes');
       if (!response.ok) {
         throw new Error('Failed to fetch nodes');
       }
@@ -73,7 +73,7 @@ export function useNodes(): UseNodesResult {
       const data = await response.json();
       setNodes(data);
       
-      const topologyResponse = await fetch('http://localhost:8080/api/network/topology');
+      const topologyResponse = await fetch('http://localhost:8081/api/network/topology');
       if (topologyResponse.ok) {
         const topologyData = await topologyResponse.json();
         setTopology(topologyData);
@@ -87,10 +87,7 @@ export function useNodes(): UseNodesResult {
 
   useEffect(() => {
     fetchNodes();
-    
-    // Poll for updates every 30 seconds as a fallback
-    const interval = setInterval(fetchNodes, 30000);
-    
+    const interval = setInterval(fetchNodes, 30000); // Fallback polling every 30s
     return () => clearInterval(interval);
   }, [fetchNodes]);
 
