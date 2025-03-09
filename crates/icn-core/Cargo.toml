@@ -12,3 +12,5 @@ futures = { workspace = true }
 log = { workspace = true }
 icn-types = { workspace = true }
 icn-common = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
+rand = "0.8"

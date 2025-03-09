@@ -14,3 +14,5 @@ log = { workspace = true }
 icn-types = { workspace = true }
 icn-common = { workspace = true }
 tokio-tungstenite = { version = "0.21.0", features = ["native-tls"] }
+x25519-dalek = "2.0.0"
+rand = "0.8"
