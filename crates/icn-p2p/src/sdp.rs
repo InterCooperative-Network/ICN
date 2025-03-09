@@ -4,18 +4,45 @@ use std::collections::HashMap;
 use tokio::sync::RwLock;
 use serde::{Serialize, Deserialize};
 use rand::Rng;
-use x25519_dalek::{PublicKey, StaticSecret};
+use rand::rngs::OsRng;
+use x25519_dalek::{PublicKey, EphemeralSecret};
+use std::fmt;
 
-#[derive(Clone)]
-struct CloneableSecret(StaticSecret);
+// Custom SecretWrapper without deriving Debug
+struct SecretWrapper {
+    // EphemeralSecret doesn't implement Debug
+    secret: EphemeralSecret,
+    // But PublicKey does
+    public: PublicKey,
+}
 
-impl CloneableSecret {
-    fn new() -> Self {
-        Self(StaticSecret::random_from_rng(rand::thread_rng()))
+// Manual Debug implementation that only shows the public key
+impl fmt::Debug for SecretWrapper {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SecretWrapper")
+            .field("public", &self.public)
+            .finish()
     }
+}
 
+impl Clone for SecretWrapper {
+    fn clone(&self) -> Self {
+        // We can't clone the EphemeralSecret directly, so create a new one
+        let new_secret = EphemeralSecret::random_from_rng(OsRng);
+        let new_public = PublicKey::from(&new_secret);
+        Self { secret: new_secret, public: new_public }
+    }
+}
+
+impl SecretWrapper {
+    fn new() -> Self {
+        let secret = EphemeralSecret::random_from_rng(OsRng);
+        let public = PublicKey::from(&secret);
+        Self { secret, public }
+    }
+    
     fn public_key(&self) -> PublicKey {
-        PublicKey::from(&self.0)
+        self.public
     }
 }
 
@@ -29,7 +56,7 @@ struct SignalingPacket {
 pub struct SDPManager {
     socket: Arc<UdpSocket>,
     routes: Arc<RwLock<HashMap<String, SocketAddr>>>,
-    secret: CloneableSecret,
+    secret: SecretWrapper,
     peer_keys: Arc<RwLock<HashMap<String, PublicKey>>>,
 }
 
@@ -41,7 +68,7 @@ impl SDPManager {
         Ok(Self {
             socket: Arc::new(socket),
             routes: Arc::new(RwLock::new(HashMap::new())),
-            secret: CloneableSecret::new(),
+            secret: SecretWrapper::new(),
             peer_keys: Arc::new(RwLock::new(HashMap::new())),
         })
     }

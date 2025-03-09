@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ICN Network Dashboard</title>
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAB1UlEQVR4nO2XTU7DMBCF3/hHhQqCBWJXiTUcAk7COTgEa9asWbLmUhyHA7BA3VYI0abxeDwskhYaOyVJg1BX5UmR4oz9vfF4PBYigv/8SG8D+Q+AlwC2AOxE5LrX64VpmrbknIuISMg5b0TkQUR2AKYAXkXkovQL/xURVT4kIn0iQiJyyRhbtw1mjJE0TWm/31PbICJrrU3TNGSMqaPCTpumqRpjlJSS2rZV1toTZGttm2WZ2rYl55yK4zgQkSkATEQkF5GSiHrGmMtBMoUQXJqmZ63VzLyazWbQWp+ICCmlY2Z0XQcpJYgIQgjEGAEAQgjEGAEAxhgwMwAMnXNDrXUpIiMRwcQYN6PRKNrv9yQiICKkaco558QYS0rpoLUeJ0kyIKIBEWWc8xwRGWZuRKRCCCfnnGKM6yRJkuFw2ANQ5HkOYwwAQGuN+XwOIQSstVBKgYigtR5ExJyIKqXU2nu/PB6P1Vo7dM6VAKosy5Tv7BzApW3bvVLqpXhvMxHxzrm1tfajtVYiMhGRVyJaaq0nInIH4IGIPjPzJxFNCGEVQlgAOD8l3Pt7y0XkJiL33vtZSulaa/1ARCsR2RHRSkS2zPyVZdlGRG6UUq/GmCWA223xvz34BqynBI6H3kF/AAAAAElFTkSuQmCC">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
@@ -58,6 +59,18 @@
             pointer-events: none;
             display: none;
         }
+        .federation-card {
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .federation-member {
+            display: inline-block;
+            padding: 3px 8px;
+            margin: 3px;
+            background-color: #e9ecef;
+            border-radius: 12px;
+            font-size: 0.8rem;
+        }
     </style>
 </head>
 <body>
@@ -66,7 +79,8 @@
             <h1 class="text-center">ICN P2P Cloud Computing Network</h1>
             <p class="text-center text-muted">Intercooperative Network Prototype</p>
         </header>
-
+        
+        <!-- Network Overview Section -->
         <div class="row mb-4">
             <div class="col-md-12">
                 <div class="card">
@@ -90,6 +104,10 @@
                                         Completed Workloads
                                         <span id="completed-workloads-count" class="badge bg-success rounded-pill">0</span>
                                     </li>
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        Active Federations
+                                        <span id="active-federations-count" class="badge bg-purple rounded-pill">0</span>
+                                    </li>
                                 </ul>
                             </div>
                             <div class="col-md-8">
@@ -102,12 +120,95 @@
                 </div>
             </div>
         </div>
-
+        
+        <!-- Federation Management Section -->
+        <h2 class="mb-3">Federation Management</h2>
+        <div class="row mb-4">
+            <div class="col-md-5">
+                <div class="card federation-card">
+                    <div class="card-header bg-purple text-white">
+                        Create New Federation
+                    </div>
+                    <div class="card-body">
+                        <form id="federation-form">
+                            <div class="mb-3">
+                                <label for="federation-name" class="form-label">Federation Name</label>
+                                <input type="text" class="form-control" id="federation-name" required 
+                                       placeholder="Enter federation name">
+                            </div>
+                            <div class="mb-3">
+                                <label for="federation-description" class="form-label">Description</label>
+                                <textarea class="form-control" id="federation-description" rows="2"
+                                          placeholder="Describe the purpose of this federation"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Resource Policy</label>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <label for="federation-cpu-min" class="form-label">CPU Min %</label>
+                                        <input type="number" class="form-control" id="federation-cpu-min" min="1" max="100" value="10">
+                                    </div>
+                                    <div class="col-6">
+                                        <label for="federation-cpu-max" class="form-label">CPU Max %</label>
+                                        <input type="number" class="form-control" id="federation-cpu-max" min="1" max="100" value="80">
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-6">
+                                        <label for="federation-memory-min" class="form-label">Memory Min (MB)</label>
+                                        <input type="number" class="form-control" id="federation-memory-min" min="100" value="100">
+                                    </div>
+                                    <div class="col-6">
+                                        <label for="federation-memory-max" class="form-label">Memory Max (MB)</label>
+                                        <input type="number" class="form-control" id="federation-memory-max" min="500" value="1024">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Governance Rules</label>
+                                <div class="row">
+                                    <div class="col-12">
+                                        <label for="federation-voting-threshold" class="form-label">Voting Threshold</label>
+                                        <input type="number" class="form-control" id="federation-voting-threshold" min="0.5" max="1" step="0.01" value="0.66">
+                                        <small class="text-muted">Fraction of members required for a proposal to pass (0.5-1.0)</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="federation-node" class="form-label">Create On Node</label>
+                                <select class="form-select" id="federation-node" required>
+                                    <!-- Options will be populated dynamically -->
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Create Federation</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-7">
+                <div class="card federation-card">
+                    <div class="card-header bg-info text-white d-flex justify-content-between">
+                        <span>Available Federations</span>
+                        <button type="button" class="btn btn-sm btn-light" id="refresh-federations-btn">
+                            Refresh
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="federations-container">
+                            <div class="text-center text-muted">No federations available</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Node Details Section -->
         <h2 class="mb-3">Node Details</h2>
         <div class="row" id="nodes-container">
             <!-- Node cards will be inserted here dynamically -->
         </div>
-
+        
+        <!-- Workload Management Section -->
         <h2 class="mb-3">Workload Management</h2>
         <div class="row mb-4">
             <div class="col-md-6">
@@ -137,9 +238,17 @@
                                 <input type="number" class="form-control" id="workload-memory" min="64" value="256">
                             </div>
                             <div class="mb-3">
+                                <label for="workload-federation" class="form-label">Target Federation <small class="text-muted">(optional)</small></label>
+                                <select class="form-select" id="workload-federation">
+                                    <option value="">None (Direct to Node)</option>
+                                    <!-- Options will be populated dynamically -->
+                                </select>
+                            </div>
+                            <div class="mb-3">
                                 <label for="workload-node" class="form-label">Target Node</label>
                                 <select class="form-select" id="workload-node">
                                     <option value="">Auto-select</option>
+                                    <!-- Options will be populated dynamically -->
                                 </select>
                             </div>
                             <button type="submit" class="btn btn-primary">Submit Workload</button>
@@ -162,7 +271,7 @@
             </div>
         </div>
     </div>
-
+    
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script>
@@ -177,34 +286,52 @@
         const state = {
             nodes: {},
             workloads: {},
+            federations: {},
+            myFederations: new Set(),
             updateInterval: 5000
         };
         
         // DOM references
         const nodesContainer = document.getElementById('nodes-container');
         const workloadNodeSelect = document.getElementById('workload-node');
+        const workloadFederationSelect = document.getElementById('workload-federation');
+        const federationNodeSelect = document.getElementById('federation-node');
         const recentWorkloads = document.getElementById('recent-workloads');
+        const federationsContainer = document.getElementById('federations-container');
         const workloadForm = document.getElementById('workload-form');
+        const federationForm = document.getElementById('federation-form');
+        const refreshFederationsBtn = document.getElementById('refresh-federations-btn');
         const nodeTooltip = document.querySelector('.node-tooltip');
         
         // Initialize the dashboard
         async function initializeDashboard() {
-            // Add node options to the workload form
+            // Add node options to the workload form and federation form
             nodes.forEach(node => {
-                const option = document.createElement('option');
-                option.value = `http://${node.id}:${node.apiPort}`;
-                option.textContent = node.id;
-                workloadNodeSelect.appendChild(option);
+                const workloadOption = document.createElement('option');
+                workloadOption.value = `http://${window.location.hostname}:${node.apiPort}`;
+                workloadOption.textContent = node.id;
+                workloadNodeSelect.appendChild(workloadOption);
+                
+                const federationOption = document.createElement('option');
+                federationOption.value = `http://${window.location.hostname}:${node.apiPort}`;
+                federationOption.textContent = node.id;
+                federationNodeSelect.appendChild(federationOption);
             });
             
-            // Set up workload submission
+            // Set up form submissions
             workloadForm.addEventListener('submit', submitWorkload);
+            federationForm.addEventListener('submit', createFederation);
+            
+            // Set up refresh button
+            refreshFederationsBtn.addEventListener('click', fetchAllFederations);
             
             // Initial data fetch
             await fetchAllNodeData();
+            await fetchAllFederations();
             
             // Set up periodic updates
             setInterval(fetchAllNodeData, state.updateInterval);
+            setInterval(fetchAllFederations, state.updateInterval * 2);
             
             // Initialize network graph
             initializeNetworkGraph();
@@ -278,6 +405,142 @@
                 }
             } catch (error) {
                 console.warn(`Error fetching workloads from ${node.id}:`, error);
+            }
+        }
+        
+        // Fetch federations from all nodes
+        async function fetchAllFederations() {
+            state.federations = {};
+            
+            for (const node of nodes) {
+                try {
+                    const response = await fetch(`http://${window.location.hostname}:${node.apiPort}/api/federations`);
+                    if (response.ok) {
+                        const federations = await response.json();
+                        federations.forEach(federation => {
+                            state.federations[federation.id] = {
+                                ...federation,
+                                sourceNode: node.id
+                            };
+                        });
+                    }
+                } catch (error) {
+                    console.warn(`Error fetching federations from ${node.id}:`, error);
+                }
+            }
+            
+            // Update federation-related UI
+            updateFederationsContainer();
+            updateFederationOptions();
+            updateNetworkCounts();
+        }
+        
+        // Create a new federation
+        async function createFederation(event) {
+            event.preventDefault();
+            
+            const name = document.getElementById('federation-name').value;
+            const description = document.getElementById('federation-description').value;
+            const cpuMin = parseInt(document.getElementById('federation-cpu-min').value, 10);
+            const cpuMax = parseInt(document.getElementById('federation-cpu-max').value, 10);
+            const memoryMin = parseInt(document.getElementById('federation-memory-min').value, 10);
+            const memoryMax = parseInt(document.getElementById('federation-memory-max').value, 10);
+            const votingThreshold = parseFloat(document.getElementById('federation-voting-threshold').value);
+            
+            const selectedNode = document.getElementById('federation-node').value;
+            
+            if (!selectedNode) {
+                alert('Please select a node to create the federation on.');
+                return;
+            }
+            
+            // Prepare federation data
+            const federationData = {
+                name,
+                description,
+                resourcePolicy: {
+                    cpu: { min: cpuMin, max: cpuMax }, // Percentage
+                    memory: { min: memoryMin * 1024 * 1024, max: memoryMax * 1024 * 1024 } // Convert to bytes
+                },
+                governanceRules: {
+                    votingThreshold,
+                    minVotingPeriod: 86400000 // 24 hours in ms
+                }
+            };
+            
+            try {
+                // Submit the federation creation request
+                const response = await fetch(`${selectedNode}/api/federations`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(federationData)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(`Federation "${name}" created successfully! ID: ${result.id}`);
+                    
+                    // Refresh federation data
+                    await fetchAllFederations();
+                    
+                    // Reset form
+                    document.getElementById('federation-name').value = '';
+                    document.getElementById('federation-description').value = '';
+                } else {
+                    const error = await response.text();
+                    alert(`Failed to create federation: ${error}`);
+                }
+            } catch (error) {
+                console.error('Error creating federation:', error);
+                alert(`Error creating federation: ${error.message}`);
+            }
+        }
+        
+        // Join a federation
+        async function joinFederation(federationId, nodeEndpoint) {
+            try {
+                const response = await fetch(`${nodeEndpoint}/api/federations/${federationId}/join`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(`Successfully joined the federation!`);
+                    
+                    // Refresh federation data
+                    await fetchAllFederations();
+                } else {
+                    const error = await response.text();
+                    alert(`Failed to join federation: ${error}`);
+                }
+            } catch (error) {
+                console.error('Error joining federation:', error);
+                alert(`Error joining federation: ${error.message}`);
+            }
+        }
+        
+        // Leave a federation
+        async function leaveFederation(federationId, nodeEndpoint) {
+            try {
+                const response = await fetch(`${nodeEndpoint}/api/federations/${federationId}/leave`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(`Successfully left the federation!`);
+                    
+                    // Refresh federation data
+                    await fetchAllFederations();
+                } else {
+                    const error = await response.text();
+                    alert(`Failed to leave federation: ${error}`);
+                }
+            } catch (error) {
+                console.error('Error leaving federation:', error);
+                alert(`Error leaving federation: ${error.message}`);
             }
         }
         
@@ -402,6 +665,137 @@
             });
         }
         
+        // Update federations container in the UI
+        function updateFederationsContainer() {
+            const federationsList = Object.values(state.federations);
+            
+            if (federationsList.length === 0) {
+                federationsContainer.innerHTML = '<div class="text-center text-muted">No federations available</div>';
+                return;
+            }
+            
+            federationsContainer.innerHTML = '';
+            
+            federationsList.forEach(federation => {
+                const federationDiv = document.createElement('div');
+                federationDiv.className = 'card mb-3';
+                
+                // Format the creation date
+                const creationDate = new Date(federation.createdAt).toLocaleString();
+                
+                // Format memory values for display
+                const minMemoryMB = Math.round(federation.resourcePolicy.memory.min / 1024 / 1024);
+                const maxMemoryMB = Math.round(federation.resourcePolicy.memory.max / 1024 / 1024);
+                
+                // Create HTML for member list
+                const membersList = federation.members.map(memberId => 
+                    `<span class="federation-member">${memberId.substring(0, 8)}</span>`
+                ).join('');
+                
+                let actionButton = '';
+                const apiEndpoint = `http://${window.location.hostname}:${nodes.find(n => n.id === 'bootstrap').apiPort}`;
+                
+                // Check if this node is already a member
+                const isMember = federation.members.some(memberId => {
+                    const node = Object.values(state.nodes).find(n => n.id === memberId);
+                    return node && node.status === 'online';
+                });
+                
+                if (isMember) {
+                    actionButton = `
+                        <button class="btn btn-sm btn-outline-danger leave-federation-btn" 
+                                data-federation-id="${federation.id}" 
+                                data-endpoint="${apiEndpoint}">
+                            Leave Federation
+                        </button>
+                    `;
+                } else {
+                    actionButton = `
+                        <button class="btn btn-sm btn-outline-success join-federation-btn" 
+                                data-federation-id="${federation.id}"
+                                data-endpoint="${apiEndpoint}">
+                            Join Federation
+                        </button>
+                    `;
+                }
+                
+                federationDiv.innerHTML = `
+                    <div class="card-body">
+                        <h5 class="card-title">${federation.name}</h5>
+                        <h6 class="card-subtitle mb-2 text-muted">ID: ${federation.id.substring(0, 8)}</h6>
+                        <p class="card-text small">${federation.description || 'No description provided.'}</p>
+                        
+                        <div class="row mb-2">
+                            <div class="col-md-6">
+                                <div class="card-text small">
+                                    <strong>Resource Policy:</strong><br>
+                                    CPU: ${federation.resourcePolicy.cpu.min}% - ${federation.resourcePolicy.cpu.max}%<br>
+                                    Memory: ${minMemoryMB}MB - ${maxMemoryMB}MB
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card-text small">
+                                    <strong>Governance:</strong><br>
+                                    Voting Threshold: ${Math.round(federation.governanceRules.votingThreshold * 100)}%<br>
+                                    Created: ${creationDate}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-2">
+                            <strong class="small">Members (${federation.members.length}):</strong><br>
+                            <div class="mt-1">
+                                ${membersList || '<span class="text-muted small">No members yet</span>'}
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <span class="text-muted small">Source: ${federation.sourceNode}</span>
+                            ${actionButton}
+                        </div>
+                    </div>
+                `;
+                
+                federationsContainer.appendChild(federationDiv);
+            });
+            
+            // Add event listeners to the buttons
+            const joinButtons = document.querySelectorAll('.join-federation-btn');
+            joinButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const federationId = this.getAttribute('data-federation-id');
+                    const endpoint = this.getAttribute('data-endpoint');
+                    joinFederation(federationId, endpoint);
+                });
+            });
+            
+            const leaveButtons = document.querySelectorAll('.leave-federation-btn');
+            leaveButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const federationId = this.getAttribute('data-federation-id');
+                    const endpoint = this.getAttribute('data-endpoint');
+                    leaveFederation(federationId, endpoint);
+                });
+            });
+        }
+        
+        // Update federation options in the workload form
+        function updateFederationOptions() {
+            // Clear previous options, but keep the default "None" option
+            while (workloadFederationSelect.options.length > 1) {
+                workloadFederationSelect.remove(1);
+            }
+            
+            // Add options for each federation
+            const federations = Object.values(state.federations);
+            federations.forEach(federation => {
+                const option = document.createElement('option');
+                option.value = federation.id;
+                option.textContent = `${federation.name} (${federation.members.length} nodes)`;
+                workloadFederationSelect.appendChild(option);
+            });
+        }
+        
         // Update network counts in the UI
         function updateNetworkCounts() {
             const activeNodes = Object.values(state.nodes).filter(node => node.status === 'online').length;
@@ -413,6 +807,9 @@
             
             const completedWorkloads = workloads.filter(w => w.status === 'completed').length;
             document.getElementById('completed-workloads-count').textContent = completedWorkloads;
+            
+            const federationsCount = Object.keys(state.federations).length;
+            document.getElementById('active-federations-count').textContent = federationsCount;
         }
         
         // Handle workload submission
@@ -431,6 +828,7 @@
             const cpuCores = parseInt(document.getElementById('workload-cpu').value, 10);
             const memoryMB = parseInt(document.getElementById('workload-memory').value, 10);
             
+            const selectedFederation = document.getElementById('workload-federation').value;
             const selectedNode = document.getElementById('workload-node').value;
             
             // Prepare workload data
@@ -442,6 +840,11 @@
                     memory: { required: `${memoryMB}MB` }
                 }
             };
+            
+            // If federation is selected, add it to the workload data
+            if (selectedFederation) {
+                workloadData.federationId = selectedFederation;
+            }
             
             try {
                 // Determine which API endpoint to use

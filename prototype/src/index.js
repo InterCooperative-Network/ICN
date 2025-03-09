@@ -52,7 +52,10 @@ const state = {
   connectedPeers: new Map(),
   resources: JSON.parse(fs.readFileSync(path.join(__dirname, '../data/resources.json'))),
   workloads: new Map(),
-  pendingMessages: new Map()
+  pendingMessages: new Map(),
+  // Add federation management
+  federations: new Map(),
+  myFederations: new Set()
 };
 
 // Initialize Express app
@@ -143,6 +146,151 @@ app.get('/api/resources', (req, res) => {
     },
     platform: state.resources.platform
   });
+});
+
+// Federation Management API Routes
+app.get('/api/federations', (req, res) => {
+  const federationsList = Array.from(state.federations.values());
+  res.json(federationsList);
+});
+
+app.post('/api/federations', (req, res) => {
+  const { name, description, resourcePolicy, governanceRules } = req.body;
+  
+  if (!name) {
+    return res.status(400).json({ error: 'Federation name is required' });
+  }
+  
+  const federationId = uuidv4();
+  const federation = {
+    id: federationId,
+    name,
+    description: description || '',
+    createdAt: Date.now(),
+    createdBy: state.nodeId,
+    members: [state.nodeId],
+    resourcePolicy: resourcePolicy || {
+      cpu: { min: 10, max: 90 }, // Percentage
+      memory: { min: 100 * 1024 * 1024, max: 1024 * 1024 * 1024 } // Bytes
+    },
+    governanceRules: governanceRules || {
+      votingThreshold: 0.66, // 66% majority required
+      minVotingPeriod: 86400000 // 24 hours in ms
+    },
+    status: 'active'
+  };
+  
+  state.federations.set(federationId, federation);
+  state.myFederations.add(federationId);
+  
+  logger.info(`Created new federation: ${name} (${federationId})`);
+  
+  // Announce to all connected peers
+  broadcastToPeers({
+    type: 'FEDERATION_CREATED',
+    nodeId: state.nodeId,
+    federation
+  });
+  
+  res.status(201).json(federation);
+});
+
+app.post('/api/federations/:id/join', (req, res) => {
+  const federationId = req.params.id;
+  
+  if (!state.federations.has(federationId)) {
+    return res.status(404).json({ error: 'Federation not found' });
+  }
+  
+  const federation = state.federations.get(federationId);
+  
+  if (federation.members.includes(state.nodeId)) {
+    return res.status(409).json({ error: 'Already a member of this federation' });
+  }
+  
+  federation.members.push(state.nodeId);
+  state.myFederations.add(federationId);
+  
+  logger.info(`Joined federation: ${federation.name} (${federationId})`);
+  
+  // Announce to all connected peers
+  broadcastToPeers({
+    type: 'FEDERATION_JOIN',
+    nodeId: state.nodeId,
+    federationId
+  });
+  
+  res.json({ success: true, federation });
+});
+
+app.post('/api/federations/:id/leave', (req, res) => {
+  const federationId = req.params.id;
+  
+  if (!state.federations.has(federationId)) {
+    return res.status(404).json({ error: 'Federation not found' });
+  }
+  
+  const federation = state.federations.get(federationId);
+  
+  if (!federation.members.includes(state.nodeId)) {
+    return res.status(409).json({ error: 'Not a member of this federation' });
+  }
+  
+  federation.members = federation.members.filter(id => id !== state.nodeId);
+  state.myFederations.delete(federationId);
+  
+  logger.info(`Left federation: ${federation.name} (${federationId})`);
+  
+  // Announce to all connected peers
+  broadcastToPeers({
+    type: 'FEDERATION_LEAVE',
+    nodeId: state.nodeId,
+    federationId
+  });
+  
+  res.json({ success: true });
+});
+
+app.post('/api/federations/:id/resources', (req, res) => {
+  const federationId = req.params.id;
+  const { cpu, memory } = req.body;
+  
+  if (!state.federations.has(federationId)) {
+    return res.status(404).json({ error: 'Federation not found' });
+  }
+  
+  const federation = state.federations.get(federationId);
+  
+  if (!federation.members.includes(state.nodeId)) {
+    return res.status(403).json({ error: 'Not a member of this federation' });
+  }
+  
+  // Update resource policy
+  if (cpu) {
+    federation.resourcePolicy.cpu = { 
+      ...federation.resourcePolicy.cpu, 
+      ...cpu 
+    };
+  }
+  
+  if (memory) {
+    federation.resourcePolicy.memory = { 
+      ...federation.resourcePolicy.memory, 
+      ...memory 
+    };
+  }
+  
+  logger.info(`Updated resource policy for federation: ${federation.name}`);
+  
+  // Announce to all federation members
+  broadcastToFederation(federationId, {
+    type: 'FEDERATION_RESOURCE_UPDATE',
+    nodeId: state.nodeId,
+    federationId,
+    resourcePolicy: federation.resourcePolicy
+  });
+  
+  res.json({ success: true, resourcePolicy: federation.resourcePolicy });
 });
 
 // P2P Networking
@@ -306,8 +454,76 @@ const handlePeerMessage = (message, connection) => {
       }));
       break;
       
+    // Add federation message handling
+    case 'FEDERATION_CREATED':
+      if (!state.federations.has(message.federation.id)) {
+        state.federations.set(message.federation.id, message.federation);
+        logger.info(`Received new federation: ${message.federation.name} (${message.federation.id})`);
+      }
+      break;
+      
+    case 'FEDERATION_JOIN':
+      if (state.federations.has(message.federationId)) {
+        const federation = state.federations.get(message.federationId);
+        if (!federation.members.includes(message.nodeId)) {
+          federation.members.push(message.nodeId);
+          logger.info(`Node ${message.nodeId} joined federation ${federation.name}`);
+        }
+      }
+      break;
+      
+    case 'FEDERATION_LEAVE':
+      if (state.federations.has(message.federationId)) {
+        const federation = state.federations.get(message.federationId);
+        federation.members = federation.members.filter(id => id !== message.nodeId);
+        logger.info(`Node ${message.nodeId} left federation ${federation.name}`);
+      }
+      break;
+      
+    case 'FEDERATION_RESOURCE_UPDATE':
+      if (state.federations.has(message.federationId)) {
+        const federation = state.federations.get(message.federationId);
+        federation.resourcePolicy = message.resourcePolicy;
+        logger.info(`Federation ${federation.name} resource policy updated`);
+      }
+      break;
+    
     default:
       logger.warn(`Unknown message type: ${message.type}`);
+  }
+};
+
+// Utility to broadcast to all peers
+const broadcastToPeers = (message) => {
+  for (const [peerId, peerInfo] of state.connectedPeers.entries()) {
+    if (peerInfo.connected) {
+      try {
+        peerInfo.connection.send(JSON.stringify(message));
+      } catch (error) {
+        logger.error(`Error broadcasting to peer ${peerId}:`, error);
+        peerInfo.connected = false;
+      }
+    }
+  }
+};
+
+// Utility to broadcast to federation members only
+const broadcastToFederation = (federationId, message) => {
+  if (!state.federations.has(federationId)) {
+    return;
+  }
+  
+  const federation = state.federations.get(federationId);
+  
+  for (const [peerId, peerInfo] of state.connectedPeers.entries()) {
+    if (peerInfo.connected && federation.members.includes(peerId)) {
+      try {
+        peerInfo.connection.send(JSON.stringify(message));
+      } catch (error) {
+        logger.error(`Error broadcasting to federation member ${peerId}:`, error);
+        peerInfo.connected = false;
+      }
+    }
   }
 };
 
