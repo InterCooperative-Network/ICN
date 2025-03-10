@@ -17,8 +17,10 @@ members = [
     "crates/icn-runtime",
     "crates/icn-mutual-credit",
     "crates/icn-zk",
-    "crates/zk_snarks"
-, "icn-server"]
+    "crates/zk_snarks",
+    "icn-server",
+    "icn-consensus"
+]
 
 [workspace.dependencies]
 # Internal crates
