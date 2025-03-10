@@ -318,6 +318,16 @@ impl CrossFederationManager {
         
         Ok(pool)
     }
+
+    /// Get federation resource information
+    pub async fn get_federation_resources(
+        &self,
+        federation_id: &FederationId,
+    ) -> Result<HashMap<String, u64>, FederationError> {
+        // This is a simplified implementation that just returns an empty map
+        // In a real implementation, we would query the resource manager
+        Ok(HashMap::new())
+    }
 }
 
 /// Delete the duplicate CrossFederationError definition and just keep these variants

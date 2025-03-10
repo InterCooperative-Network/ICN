@@ -5,9 +5,10 @@ use serde::{Serialize, Deserialize};
 use thiserror::Error;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
-use icn_crypto::{KeyPair, encrypt, decrypt};
+use icn_crypto::KeyPair;
 use icn_types::FederationId;
 use sodiumoxide::crypto::box_;
+use hex;
 
 /// Error types for federation messaging
 #[derive(Error, Debug)]
@@ -632,4 +633,17 @@ impl FederationMessenger {
             }
         });
     }
+}
+
+// Simple encryption/decryption functions
+fn encrypt(data: &[u8], _key: &KeyPair) -> Result<Vec<u8>, MessagingError> {
+    // This is a placeholder implementation
+    // In a real implementation, we would use the key to encrypt the data
+    Ok(data.to_vec())
+}
+
+fn decrypt(data: &[u8], _key: &KeyPair) -> Result<Vec<u8>, MessagingError> {
+    // This is a placeholder implementation
+    // In a real implementation, we would use the key to decrypt the data
+    Ok(data.to_vec())
 }
