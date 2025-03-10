@@ -1,22 +1,12 @@
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tokio::sync::RwLock;
-use std::sync::Arc;
-use chrono::Utc;
-
-use crate::{
-    Federation, FederationError, ResourceManager,
-    ResourcePool, FederationResourcePool, FederationAccessControl
-};
-
-use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
-use thiserror::Error;
+use std::sync::{Arc, Mutex};
 use serde::{Serialize, Deserialize};
-use chrono::{DateTime, Utc};
-use uuid::Uuid;
+use chrono::Utc;
+use thiserror::Error;
 use icn_types::FederationId;
 use icn_crypto::KeyPair;
+
+use crate::federation::Federation;
 
 /// Represents a cross-federation resource sharing agreement
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,34 +43,26 @@ pub struct ResourceUsageMetrics {
     pub last_activity: u64,
 }
 
-/// Error types specific to cross-federation operations
-#[derive(Debug, thiserror::Error)]
+/// Error types for cross-federation operations
+#[derive(Error, Debug)]
 pub enum CrossFederationError {
     #[error("Federation not found: {0}")]
-    FederationNotFound(String),
-    
-    #[error("Unauthorized federation: {0}")]
-    UnauthorizedFederation(String),
-    
-    #[error("Insufficient reputation: required {required}, actual {actual}")]
-    InsufficientReputation { required: i64, actual: i64 },
-    
-    #[error("Insufficient resources: requested {requested}, available {available}")]
-    InsufficientResources { requested: u64, available: u64 },
-    
-    #[error("Invalid agreement: {0}")]
-    InvalidAgreement(String),
-    
-    #[error("Resource not found: {0}")]
-    ResourceNotFound(String),
-    
-    #[error("Agreement already exists: {0}")]
-    AgreementAlreadyExists(String),
+    FederationNotFound(FederationId),
+    #[error("Unauthorized federation access")]
+    UnauthorizedAccess(UnauthorizedAccessError),
+    #[error("Message validation failed")]
+    MessageValidationFailed(ValidationError),
+    #[error("Communication error")]
+    CommunicationError(CommunicationError),
+    #[error("Cryptographic error")]
+    CryptoError(CryptoError),
+    #[error("Unknown error: {0}")]
+    Other(String),
 }
 
 /// Manages cross-federation resource sharing
 pub struct CrossFederationManager {
-    agreements: RwLock<HashMap<String, ResourceSharingAgreement>>,
+    agreements: Mutex<HashMap<String, ResourceSharingAgreement>>,
     resource_manager: Arc<dyn ResourceManager>,
 }
 
@@ -88,7 +70,7 @@ impl CrossFederationManager {
     /// Create a new CrossFederationManager
     pub fn new(resource_manager: Arc<dyn ResourceManager>) -> Self {
         Self {
-            agreements: RwLock::new(HashMap::new()),
+            agreements: Mutex::new(HashMap::new()),
             resource_manager,
         }
     }
@@ -143,7 +125,7 @@ impl CrossFederationManager {
         };
         
         // Store the agreement
-        let mut agreements = self.agreements.write().await;
+        let mut agreements = self.agreements.lock().unwrap();
         agreements.insert(agreement_id.clone(), agreement);
         
         Ok(agreement_id)
@@ -157,7 +139,7 @@ impl CrossFederationManager {
         signature: String,
         signer_did: &str,
     ) -> Result<(), FederationError> {
-        let mut agreements = self.agreements.write().await;
+        let mut agreements = self.agreements.lock().unwrap();
         
         let agreement = agreements.get_mut(agreement_id)
             .ok_or_else(|| FederationError::NotFound(format!("Agreement not found: {}", agreement_id)))?;
@@ -199,7 +181,7 @@ impl CrossFederationManager {
         amount: u64,
     ) -> Result<String, FederationError> {
         // Find the agreement
-        let mut agreements = self.agreements.write().await;
+        let mut agreements = self.agreements.lock().unwrap();
         let agreement = agreements.get_mut(agreement_id)
             .ok_or_else(|| FederationError::NotFound(format!("Agreement not found: {}", agreement_id)))?;
         
@@ -259,7 +241,7 @@ impl CrossFederationManager {
         allocation_id: &str,
         amount: u64,
     ) -> Result<(), FederationError> {
-        let mut agreements = self.agreements.write().await;
+        let mut agreements = self.agreements.lock().unwrap();
         let agreement = agreements.get_mut(agreement_id)
             .ok_or_else(|| FederationError::NotFound(format!("Agreement not found: {}", agreement_id)))?;
         
@@ -279,7 +261,7 @@ impl CrossFederationManager {
         federation_id: &str,
         reason: &str,
     ) -> Result<(), FederationError> {
-        let mut agreements = self.agreements.write().await;
+        let mut agreements = self.agreements.lock().unwrap();
         let agreement = agreements.get_mut(agreement_id)
             .ok_or_else(|| FederationError::NotFound(format!("Agreement not found: {}", agreement_id)))?;
         
@@ -303,13 +285,13 @@ impl CrossFederationManager {
 
     /// Get a specific sharing agreement
     pub async fn get_sharing_agreement(&self, agreement_id: &str) -> Option<ResourceSharingAgreement> {
-        let agreements = self.agreements.read().await;
+        let agreements = self.agreements.lock().unwrap();
         agreements.get(agreement_id).cloned()
     }
 
     /// Get all sharing agreements for a federation
     pub async fn get_federation_agreements(&self, federation_id: &str) -> Vec<ResourceSharingAgreement> {
-        let agreements = self.agreements.read().await;
+        let agreements = self.agreements.lock().unwrap();
         agreements.values()
             .filter(|a| a.source_federation_id == federation_id || a.target_federation_id == federation_id)
             .cloned()
@@ -342,19 +324,28 @@ impl CrossFederationManager {
     }
 }
 
-/// Error types for cross-federation operations
-#[derive(Error, Debug)]
-pub enum CrossFederationError {
-    #[error("Federation not found: {0}")]
-    FederationNotFound(FederationId),
-    #[error("Unauthorized federation access: {0}")]
-    UnauthorizedAccess(FederationId),
-    #[error("Message validation failed: {0}")]
-    MessageValidationFailed(String),
-    #[error("Communication error: {0}")]
-    CommunicationError(String),
-    #[error("Cryptographic error: {0}")]
-    CryptoError(String),
+/// Delete the duplicate CrossFederationError definition and just keep these variants
+pub enum UnauthorizedAccessError {
+    Federation(FederationId),
+    User(String),
+}
+
+pub enum ValidationError {
+    EmptySignature,
+    InvalidFormat(String),
+    InvalidTimestamp,
+}
+
+pub enum CommunicationError {
+    NetworkError(String),
+    Timeout(String),
+}
+
+pub enum CryptoError {
+    EncryptionFailed(String),
+    DecryptionFailed(String),
+    SigningFailed(String),
+    VerificationFailed(String),
 }
 
 /// Types of cross-federation messages
@@ -429,15 +420,15 @@ pub struct CrossFederationMessenger {
     /// Cryptographic key pair for message signing
     key_pair: KeyPair,
     /// Message registry
-    message_registry: Arc<RwLock<HashMap<String, MessageStatus>>>,
+    message_registry: Arc<Mutex<HashMap<String, MessageStatus>>>,
     /// Federation registry mapping federation ID to their public keys
-    federation_registry: Arc<RwLock<HashMap<FederationId, Vec<u8>>>>,
+    federation_registry: Arc<Mutex<HashMap<FederationId, Vec<u8>>>>,
     /// Queue of outgoing messages
     outgoing_queue: Arc<Mutex<Vec<CrossFederationMessage>>>,
     /// Queue of incoming messages
     incoming_queue: Arc<Mutex<Vec<CrossFederationMessage>>>,
     /// Trusted federation relationships
-    trusted_federations: Arc<RwLock<HashMap<FederationId, TrustLevel>>>,
+    trusted_federations: Arc<Mutex<HashMap<FederationId, TrustLevel>>>,
 }
 
 /// Trust level between federations
@@ -459,29 +450,29 @@ impl CrossFederationMessenger {
         Self {
             federation_id,
             key_pair,
-            message_registry: Arc::new(RwLock::new(HashMap::new())),
-            federation_registry: Arc::new(RwLock::new(HashMap::new())),
+            message_registry: Arc::new(Mutex::new(HashMap::new())),
+            federation_registry: Arc::new(Mutex::new(HashMap::new())),
             outgoing_queue: Arc::new(Mutex::new(Vec::new())),
             incoming_queue: Arc::new(Mutex::new(Vec::new())),
-            trusted_federations: Arc::new(RwLock::new(HashMap::new())),
+            trusted_federations: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
     /// Register a federation and its public key
     pub async fn register_federation(&self, federation_id: FederationId, public_key: Vec<u8>) {
-        let mut registry = self.federation_registry.write().await;
+        let mut registry = self.federation_registry.lock().unwrap();
         registry.insert(federation_id, public_key);
     }
 
     /// Set trust level for a federation
     pub async fn set_trust_level(&self, federation_id: FederationId, trust_level: TrustLevel) {
-        let mut trusted = self.trusted_federations.write().await;
+        let mut trusted = self.trusted_federations.lock().unwrap();
         trusted.insert(federation_id, trust_level);
     }
 
     /// Check if a federation is trusted for a specific operation
     pub async fn is_trusted_for_operation(&self, federation_id: &FederationId, operation: &str) -> bool {
-        let trusted = self.trusted_federations.read().await;
+        let trusted = self.trusted_federations.lock().unwrap();
         
         match trusted.get(federation_id) {
             Some(TrustLevel::FullTrust) => true,
@@ -560,11 +551,11 @@ impl CrossFederationMessenger {
     /// Queue a message to be sent
     pub async fn queue_message(&self, message: CrossFederationMessage) -> Result<(), CrossFederationError> {
         // Add to outgoing queue
-        let mut queue = self.outgoing_queue.lock().await;
+        let mut queue = self.outgoing_queue.lock().unwrap();
         queue.push(message.clone());
         
         // Update message registry
-        let mut registry = self.message_registry.write().await;
+        let mut registry = self.message_registry.lock().unwrap();
         registry.insert(message.id, MessageStatus::Pending);
         
         Ok(())
@@ -572,13 +563,13 @@ impl CrossFederationMessenger {
 
     /// Send all queued outgoing messages
     pub async fn send_queued_messages(&self) -> Result<usize, CrossFederationError> {
-        let mut queue = self.outgoing_queue.lock().await;
+        let mut queue = self.outgoing_queue.lock().unwrap();
         let message_count = queue.len();
         
         for message in queue.iter() {
             // In a real implementation, we'd actually send the message over the network
             // For now, just update the message status
-            let mut registry = self.message_registry.write().await;
+            let mut registry = self.message_registry.lock().unwrap();
             registry.insert(message.id.clone(), MessageStatus::Delivered);
         }
         
@@ -602,7 +593,7 @@ impl CrossFederationMessenger {
         let decrypted_content = self.decrypt_message(&message.encrypted_content)?;
         
         // Add to registry
-        let mut registry = self.message_registry.write().await;
+        let mut registry = self.message_registry.lock().unwrap();
         registry.insert(message.id.clone(), MessageStatus::Processed);
         
         Ok(decrypted_content)
@@ -616,11 +607,11 @@ impl CrossFederationMessenger {
         }
         
         // Add to incoming queue
-        let mut queue = self.incoming_queue.lock().await;
+        let mut queue = self.incoming_queue.lock().unwrap();
         queue.push(message.clone());
         
         // Update registry
-        let mut registry = self.message_registry.write().await;
+        let mut registry = self.message_registry.lock().unwrap();
         registry.insert(message.id, MessageStatus::Pending);
         
         Ok(())
@@ -628,7 +619,7 @@ impl CrossFederationMessenger {
 
     /// Process all queued incoming messages
     pub async fn process_queued_messages(&self) -> Result<Vec<Vec<u8>>, CrossFederationError> {
-        let mut queue = self.incoming_queue.lock().await;
+        let mut queue = self.incoming_queue.lock().unwrap();
         let mut results = Vec::new();
         
         for message in std::mem::take(&mut *queue) {
@@ -647,7 +638,7 @@ impl CrossFederationMessenger {
     /// Verify a message signature
     async fn verify_message_signature(&self, message: &CrossFederationMessage) -> Result<bool, CrossFederationError> {
         // Get the sender's public key
-        let registry = self.federation_registry.read().await;
+        let registry = self.federation_registry.lock().unwrap();
         let sender_public_key = registry.get(&message.sender)
             .ok_or_else(|| CrossFederationError::FederationNotFound(message.sender.clone()))?;
         
@@ -669,7 +660,7 @@ impl CrossFederationMessenger {
 
     /// Get the status of a message
     pub async fn get_message_status(&self, message_id: &str) -> Option<MessageStatus> {
-        let registry = self.message_registry.read().await;
+        let registry = self.message_registry.lock().unwrap();
         registry.get(message_id).cloned()
     }
 

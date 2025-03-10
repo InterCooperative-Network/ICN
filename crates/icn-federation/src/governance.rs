@@ -266,8 +266,9 @@ impl GovernanceManager {
     
     /// Register a federation with the governance manager
     pub async fn register_federation(&self, federation: Federation) -> GovernanceResult<()> {
+        let federation_id = FederationId(federation.id.clone());
         let mut federations = self.federations.write().await;
-        federations.insert(federation.id.clone(), federation);
+        federations.insert(federation_id, federation);
         Ok(())
     }
     
@@ -286,7 +287,7 @@ impl GovernanceManager {
         let federations = self.federations.read().await;
         let federation = federations.get(&federation_id)
             .ok_or_else(|| GovernanceError::FederationError(
-                FederationError::FederationNotFound(federation_id.clone())
+                FederationError::FederationNotFound(federation_id.0.clone())
             ))?;
             
         // Check if proposer is a member
@@ -348,7 +349,7 @@ impl GovernanceManager {
         let federations = self.federations.read().await;
         let federation = federations.get(&proposal.federation_id)
             .ok_or_else(|| GovernanceError::FederationError(
-                FederationError::FederationNotFound(proposal.federation_id.clone())
+                FederationError::FederationNotFound(proposal.federation_id.0.clone())
             ))?;
             
         // Check if voter is a member
@@ -399,7 +400,7 @@ impl GovernanceManager {
         let federations = self.federations.read().await;
         let federation = federations.get(&proposal.federation_id)
             .ok_or_else(|| GovernanceError::FederationError(
-                FederationError::FederationNotFound(proposal.federation_id.clone())
+                FederationError::FederationNotFound(proposal.federation_id.0.clone())
             ))?;
             
         // Count votes
@@ -445,7 +446,7 @@ impl GovernanceManager {
         let mut federations = self.federations.write().await;
         let federation = federations.get_mut(&proposal.federation_id)
             .ok_or_else(|| GovernanceError::FederationError(
-                FederationError::FederationNotFound(proposal.federation_id.clone())
+                FederationError::FederationNotFound(proposal.federation_id.0.clone())
             ))?;
             
         // Execute proposal based on type
@@ -506,7 +507,7 @@ impl GovernanceManager {
         
         let filtered = proposals.values()
             .filter(|p| &p.federation_id == federation_id)
-            .filter(|p| status_filter.map_or(true, |s| p.status == s))
+            .filter(|p| status_filter.as_ref().map_or(true, |s| p.status == *s))
             .cloned()
             .collect();
             
@@ -588,6 +589,15 @@ impl GovernanceManager {
         };
         
         Ok(voting_power.max(0.1).min(100.0)) // Clamp between 0.1 and 100
+    }
+
+    async fn get_federation(&self, federation_id: &FederationId) -> GovernanceResult<Federation> {
+        let federations = self.federations.read().await;
+        federations.get(federation_id)
+            .cloned()
+            .ok_or_else(|| GovernanceError::FederationError(
+                FederationError::FederationNotFound(federation_id.0.clone())
+            ))
     }
 }
 

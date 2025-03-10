@@ -1,22 +1,33 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, Duration};
 use thiserror::Error;
 use uuid::Uuid;
+use std::sync::Arc;
+use chrono::{DateTime, Utc};
+use icn_types::{FederationId, CooperativeId, MemberId};
+use crate::resource_manager::ResourceProvider;
 
+/// A federation representing a network of cooperative organizations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Federation {
-    /// Unique federation ID
-    pub id: String,
-    
-    /// Human-readable name
+    /// Unique Federation ID
+    pub id: FederationId,
+    /// Name of the federation
     pub name: String,
+    /// Description of the federation
+    pub description: String,
+    /// Federation founding date
+    pub founded_date: DateTime<Utc>,
+    /// Set of member IDs 
+    pub members: HashSet<MemberId>,
+    /// Resource manager for this federation
+    pub resource_manager: Option<Arc<dyn ResourceProvider>>,
+    /// Key-value metadata storage
+    pub metadata: HashMap<String, String>,
     
     /// Type of federation
     pub federation_type: FederationType,
-    
-    /// Members of the federation
-    pub members: HashMap<String, MemberInfo>,
     
     /// Member roles
     pub member_roles: HashMap<String, Vec<MemberRole>>,
@@ -586,6 +597,24 @@ pub enum FederationError {
     
     #[error("Insufficient resources: {0}")]
     InsufficientResources(String),
+    
+    #[error("Resource manager error: {0}")]
+    ResourceError(String),
+    
+    #[error("Resource manager not configured")]
+    ResourceManagerNotConfigured,
+    
+    #[error("Governance manager not configured")]
+    GovernanceManagerNotConfigured,
+    
+    #[error("Dispute manager not configured")]
+    DisputeManagerNotConfigured,
+    
+    #[error("Invalid state: {0}")]
+    InvalidState(String),
+    
+    #[error("Not found: {0}")]
+    NotFound(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

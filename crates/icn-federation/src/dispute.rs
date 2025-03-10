@@ -6,6 +6,7 @@ use serde::{Serialize, Deserialize};
 use thiserror::Error;
 use uuid::Uuid;
 use log::{debug, info, warn, error};
+use async_trait::async_trait;
 
 use icn_types::FederationId;
 use icn_reputation::ReputationInterface;
@@ -301,10 +302,27 @@ impl DisputeManager {
         }
     }
     
+    /// Get a federation by ID
+    async fn get_federation(&self, federation_id: &FederationId) -> DisputeResult<Federation> {
+        let federations = self.federations.read().await;
+        federations.get(federation_id)
+            .cloned()
+            .ok_or_else(|| DisputeError::FederationError(
+                FederationError::FederationNotFound(federation_id.0.clone())
+            ))
+    }
+
+    /// Get a mutable reference to a federation
+    /// This uses a separate method for retrieving and updating the federation
+    async fn get_federation_for_update(&self, federation_id: &FederationId) -> DisputeResult<Federation> {
+        self.get_federation(federation_id).await
+    }
+    
     /// Register a federation with the dispute manager
     pub async fn register_federation(&self, federation: Federation) -> DisputeResult<()> {
+        let federation_id = FederationId(federation.id.clone());
         let mut federations = self.federations.write().await;
-        federations.insert(federation.id.clone(), federation);
+        federations.insert(federation_id, federation);
         Ok(())
     }
     
@@ -323,7 +341,7 @@ impl DisputeManager {
         let federations = self.federations.read().await;
         let federation = federations.get(&federation_id)
             .ok_or_else(|| DisputeError::FederationError(
-                FederationError::FederationNotFound(federation_id.clone())
+                FederationError::FederationNotFound(federation_id.0.clone())
             ))?;
             
         // Check if complainant is a member
@@ -566,7 +584,7 @@ impl DisputeManager {
         let federations = self.federations.read().await;
         let federation = federations.get(&dispute.federation_id)
             .ok_or_else(|| DisputeError::FederationError(
-                FederationError::FederationNotFound(dispute.federation_id.clone())
+                FederationError::FederationNotFound(dispute.federation_id.0.clone())
             ))?;
             
         // Check if mediator is a member
