@@ -3,12 +3,18 @@ use warp::{Filter, Reply};
 use log::{info, error};
 use warp::ws::WebSocket;
 use futures::{StreamExt, SinkExt};  // Combined StreamExt and added SinkExt
+use sqlx::PgPool;
+use std::env;
 
 #[tokio::main]
 async fn main() {
     // Initialize logging
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
     info!("Starting ICN backend server...");
+
+    // Database connection
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let pool = PgPool::connect(&database_url).await.expect("Failed to connect to database");
 
     // WebSocket handler
     let ws_route = warp::path("ws")
@@ -22,13 +28,8 @@ async fn main() {
         .and(warp::path("v1"))
         .and(warp::path("health"))
         .and(warp::get())
-        .map(|| {
-            info!("Health check requested");
-            warp::reply::json(&serde_json::json!({
-                "status": "ok",
-                "version": env!("CARGO_PKG_VERSION")
-            }))
-        });
+        .and(with_db(pool.clone()))
+        .and_then(health_handler);
 
     // Combine routes and add CORS
     let routes = health_route
