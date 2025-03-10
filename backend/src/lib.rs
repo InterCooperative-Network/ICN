@@ -1,5 +1,19 @@
 pub mod api;
 pub mod networking;
+pub mod core;
+pub mod db;
 pub mod middleware;
 
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+use thiserror::Error;
+use std::error::Error;
+use std::fmt;
+
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+    #[error("Database error: {0}")]
+    DatabaseError(#[from] sqlx::Error),
+}
+
+pub type Result<T> = std::result::Result<T, AppError>;
