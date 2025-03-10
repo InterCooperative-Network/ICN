@@ -22,23 +22,23 @@ enum NodeType {
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Type of node to run
-    #[arg(short, long, env = "NODE_TYPE", default_value = "validator")]
+    #[arg(short = 't', long, default_value = "validator")]
     node_type: NodeType,
 
     /// Port for P2P networking
-    #[arg(short, long, env = "NODE_PORT", default_value_t = 9000)]
+    #[arg(short = 'p', long, default_value_t = 9000)]
     node_port: u16,
 
     /// Port for API server
-    #[arg(short, long, env = "API_PORT", default_value_t = 8082)]
+    #[arg(short = 'a', long, default_value_t = 8082)]
     api_port: u16,
 
     /// Bootstrap nodes to connect to (comma-separated WebSocket URLs)
-    #[arg(short, long, env = "BOOTSTRAP_NODES", use_value_delimiter = true, value_delimiter = ',')]
+    #[arg(short = 'b', long, value_delimiter = ',')]
     bootstrap_nodes: Vec<String>,
 
     /// Cooperative ID
-    #[arg(long, env = "COOPERATIVE_ID", default_value = "icn-primary")]
+    #[arg(long, default_value = "icn-primary")]
     cooperative_id: String,
 }
 
@@ -72,18 +72,12 @@ async fn main() -> Result<()> {
     info!("ICN node startup complete - running...");
     info!("API available at http://localhost:{}/api/v1/health", api_port);
     
-    // Run the server in a separate task
-    tokio::spawn(async move {
-        if let Err(e) = server.await {
-            error!("Server error: {}", e);
-        }
-    });
-    
-    // Keep the main thread running
-    loop {
-        time::sleep(Duration::from_secs(60)).await;
-        info!("Node still running...");
+    // Run the server
+    if let Err(e) = server.await {
+        error!("Server error: {}", e);
     }
+    
+    Ok(())
 }
 
 async fn handle_request(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {

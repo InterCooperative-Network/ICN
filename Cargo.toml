@@ -5,7 +5,6 @@ members = [
     "crates/icn-common",
     "crates/icn-core",
     "crates/icn-p2p",
-    "crates/icn-cli",
     "crates/icn-crypto",
     "crates/icn-identity",
     "crates/icn-governance",
@@ -18,8 +17,7 @@ members = [
     "crates/icn-mutual-credit",
     "crates/icn-zk",
     "crates/zk_snarks",
-    "icn-server",
-    "icn-consensus"
+    "icn-server"
 ]
 
 [workspace.dependencies]
@@ -28,7 +26,6 @@ icn-types = { path = "crates/icn-types" }
 icn-common = { path = "crates/icn-common" }
 icn-core = { path = "crates/icn-core" }
 icn-p2p = { path = "crates/icn-p2p" }
-icn-cli = { path = "crates/icn-cli" }
 icn-crypto = { path = "crates/icn-crypto" }
 icn-identity = { path = "crates/icn-identity" }
 icn-governance = { path = "crates/icn-governance" }
@@ -96,10 +93,6 @@ tokio-tungstenite = "0.26.2"
 icn-p2p = { path = "crates/icn-p2p" }
 reqwest = { workspace = true, features = ["json"] }
 clap = { workspace = true, features = ["derive"] }
-
-[[bin]]
-name = "icn_cli"
-path = "crates/icn-cli/src/main.rs"
 
 [lib]
 name = "icn_lib"

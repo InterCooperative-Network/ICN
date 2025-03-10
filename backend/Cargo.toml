@@ -3,18 +3,11 @@ name = "icn-backend"
 version = "0.1.0"
 edition = "2021"
 
-# Make it a binary crate only
 [[bin]]
 name = "icn-backend"
 path = "src/main.rs"
 
-# Remove the lib target
-# [lib]
-# name = "icn_backend"
-# path = "src/lib.rs"
-
 [dependencies]
-# External dependencies with specific versions
 tokio = { version = "1.0", features = ["full"] }
 warp = "0.3"
 serde = { version = "1.0", features = ["derive"] }
@@ -22,28 +15,7 @@ serde_json = "1.0"
 log = "0.4"
 env_logger = "0.11.6"
 futures = "0.3.31"
-rand = "0.8"
-chrono = { version = "0.4.40", features = ["serde"] }
 
-# Commented out for now to simplify the build
-# sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "postgres"] }
-# thiserror = "1.0"
-# async-trait = "0.1"
-# icn-types = { path = "../crates/icn-types" }
-# icn-common = { path = "../crates/icn-common" }
-# icn-crypto = { path = "../crates/icn-crypto" }
-# icn-resource = { path = "../crates/icn-resource" }
-
-# Commented out crates that we're not using yet
-# icn-core = { path = "../crates/icn-core" }
-# icn-p2p = { path = "../crates/icn-p2p" }
-# icn-identity = { path = "../crates/icn-identity" }
-# icn-governance = { path = "../crates/icn-governance" }
-# icn-federation = { path = "../crates/icn-federation" }
-# icn-reputation = { path = "../crates/icn-reputation" }
-# icn-consensus = { path = "../crates/icn-consensus" }
-# icn-storage = { path = "../crates/icn-storage" }
-# icn-runtime = { path = "../crates/icn-runtime" }
-# icn-mutual-credit = { path = "../crates/icn-mutual-credit" }
-# icn-zk = { path = "../crates/icn-zk" }
-# zk_snarks = { path = "../crates/zk_snarks" }
+# Core internal dependencies
+icn-types = { path = "../crates/icn-types" }
+icn-common = { path = "../crates/icn-common" }

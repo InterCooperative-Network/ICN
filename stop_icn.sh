@@ -35,7 +35,8 @@ else
   echo -e "${YELLOW}Attempting to find and stop any ICN processes...${NC}"
   pkill -f "icn-server" >/dev/null 2>&1 || true
   pkill -f "react-scripts start" >/dev/null 2>&1 || true
-  pkill -f "icn-bootstrap" >/dev/null 2>&1 || true
+  pkill -f "icn_bin" >/dev/null 2>&1 || true
+  pkill -f "simple_node" >/dev/null 2>&1 || true
   pkill -f "icn-validator" >/dev/null 2>&1 || true
   pkill -f "icn-identity" >/dev/null 2>&1 || true
   pkill -f "icn-messaging" >/dev/null 2>&1 || true

@@ -71,6 +71,7 @@ echo -e "${YELLOW}Checking for existing processes...${NC}"
 pkill -f "icn-server" >/dev/null 2>&1 || true
 pkill -f "react-scripts start" >/dev/null 2>&1 || true
 pkill -f "icn_bin" >/dev/null 2>&1 || true
+pkill -f "simple_node" >/dev/null 2>&1 || true
 pkill -f "icn-validator" >/dev/null 2>&1 || true
 pkill -f "icn-identity" >/dev/null 2>&1 || true
 pkill -f "icn-messaging" >/dev/null 2>&1 || true
@@ -181,15 +182,15 @@ cd "${PROJECT_ROOT}"
 # Build consensus binaries if needed
 if [ -d "${PROJECT_ROOT}/icn-consensus" ] && [ -f "${PROJECT_ROOT}/icn-consensus/Cargo.toml" ]; then
   echo -e "${YELLOW}Building consensus binaries...${NC}"
-  cargo build --bin icn_bin
-  if [ ! -f "${PROJECT_ROOT}/target/debug/icn_bin" ]; then
+  cargo build -p icn-consensus-bin --bin simple_node
+  if [ ! -f "${PROJECT_ROOT}/target/debug/simple_node" ]; then
     echo -e "${RED}Failed to build consensus binaries. Skipping consensus nodes...${NC}"
   else
     # Start Bootstrap Node
     echo -e "${YELLOW}Starting Bootstrap Node on port ${BOOTSTRAP_NODE_PORT}...${NC}"
-    ${PROJECT_ROOT}/target/debug/icn_bin --node-type bootstrap \
-      --node-port ${BOOTSTRAP_NODE_PORT} \
-      --api-port ${BOOTSTRAP_API_PORT} \
+    ${PROJECT_ROOT}/target/debug/simple_node -t bootstrap \
+      -p ${BOOTSTRAP_NODE_PORT} \
+      -a ${BOOTSTRAP_API_PORT} \
       > "${PROJECT_ROOT}/logs/bootstrap.log" 2>&1 &
     BOOTSTRAP_PID=$!
     echo -e "${GREEN}Bootstrap Node started with PID ${BOOTSTRAP_PID}${NC}"
@@ -204,10 +205,10 @@ if [ -d "${PROJECT_ROOT}/icn-consensus" ] && [ -f "${PROJECT_ROOT}/icn-consensus
     
     # Start Validator 1
     echo -e "${YELLOW}Starting Validator Node 1 on port ${VALIDATOR1_NODE_PORT}...${NC}"
-    ${PROJECT_ROOT}/target/debug/icn_bin --node-type validator \
-      --node-port ${VALIDATOR1_NODE_PORT} \
-      --api-port ${VALIDATOR1_API_PORT} \
-      --bootstrap-nodes "ws://localhost:${BOOTSTRAP_NODE_PORT}" \
+    ${PROJECT_ROOT}/target/debug/simple_node -t validator \
+      -p ${VALIDATOR1_NODE_PORT} \
+      -a ${VALIDATOR1_API_PORT} \
+      -b "ws://localhost:${BOOTSTRAP_NODE_PORT}" \
       > "${PROJECT_ROOT}/logs/validator1.log" 2>&1 &
     VALIDATOR1_PID=$!
     echo -e "${GREEN}Validator Node 1 started with PID ${VALIDATOR1_PID}${NC}"
@@ -222,10 +223,10 @@ if [ -d "${PROJECT_ROOT}/icn-consensus" ] && [ -f "${PROJECT_ROOT}/icn-consensus
     
     # Start Validator 2
     echo -e "${YELLOW}Starting Validator Node 2 on port ${VALIDATOR2_NODE_PORT}...${NC}"
-    ${PROJECT_ROOT}/target/debug/icn_bin --node-type validator \
-      --node-port ${VALIDATOR2_NODE_PORT} \
-      --api-port ${VALIDATOR2_API_PORT} \
-      --bootstrap-nodes "ws://localhost:${BOOTSTRAP_NODE_PORT}" \
+    ${PROJECT_ROOT}/target/debug/simple_node -t validator \
+      -p ${VALIDATOR2_NODE_PORT} \
+      -a ${VALIDATOR2_API_PORT} \
+      -b "ws://localhost:${BOOTSTRAP_NODE_PORT}" \
       > "${PROJECT_ROOT}/logs/validator2.log" 2>&1 &
     VALIDATOR2_PID=$!
     echo -e "${GREEN}Validator Node 2 started with PID ${VALIDATOR2_PID}${NC}"
@@ -356,7 +357,7 @@ echo -e "${GREEN}Resources:${NC} http://${ICN_SERVER_HOST}:${ICN_SERVER_PORT}/ap
 echo -e "${GREEN}Identities:${NC} http://${ICN_SERVER_HOST}:${ICN_SERVER_PORT}/api/v1/identities"
 echo -e "${GREEN}Cooperatives:${NC} http://${ICN_SERVER_HOST}:${ICN_SERVER_PORT}/api/v1/cooperatives"
 
-if [ -f "${PROJECT_ROOT}/target/debug/icn_bin" ]; then
+if [ -f "${PROJECT_ROOT}/target/debug/simple_node" ]; then
   echo -e "${GREEN}Bootstrap Node:${NC} http://localhost:${BOOTSTRAP_API_PORT}/api/v1/health"
   echo -e "${GREEN}Validator 1:${NC} http://localhost:${VALIDATOR1_API_PORT}/api/v1/health"
   echo -e "${GREEN}Validator 2:${NC} http://localhost:${VALIDATOR2_API_PORT}/api/v1/health"
