@@ -1,0 +1,34 @@
+Project Code Dump - 09_relationship - Generated Mon Mar 10 03:54:11 UTC 2025
+=========================================================
+
+LLM Context Information
+======================
+This is a distributed cooperative network system with the following key components:
+
+Core Components:
+- Backend: Rust-based node implementation
+- Frontend: TypeScript/React web interface
+- Contracts: Smart contracts for cooperative governance
+
+Architecture Overview:
+- Blockchain: Handles consensus and state management
+- Identity: DID-based identity management
+- Relationship: Tracks member interactions and relationships
+- Reputation: Manages trust and reputation scores
+- Governance: Handles proposals and voting
+- WebSocket: Real-time communication layer
+
+Note: This is file 09 of a multi-file dump.
+All dependency directories are excluded from these dumps.
+======================
+
+===================
+Summary for 09_relationship
+===================
+Total size of dump: 869 bytes
+Patterns included:
+- relationship/*.rs
+- relationship/*/*.rs
+
+Files processed: 0
+===================

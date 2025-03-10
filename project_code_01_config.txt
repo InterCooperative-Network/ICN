@@ -1,0 +1,1992 @@
+Project Code Dump - 01_config - Generated Mon Mar 10 03:54:21 UTC 2025
+=========================================================
+
+LLM Context Information
+======================
+This is a distributed cooperative network system with the following key components:
+
+Core Components:
+- Backend: Rust-based node implementation
+- Frontend: TypeScript/React web interface
+- Contracts: Smart contracts for cooperative governance
+
+Architecture Overview:
+- Blockchain: Handles consensus and state management
+- Identity: DID-based identity management
+- Relationship: Tracks member interactions and relationships
+- Reputation: Manages trust and reputation scores
+- Governance: Handles proposals and voting
+- WebSocket: Real-time communication layer
+
+Note: This is file 01 of a multi-file dump.
+All dependency directories are excluded from these dumps.
+======================
+
+===================
+File: ./.devcontainer/docker-compose.yml
+Size: 973 bytes
+===================
+```yml
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ../backend                        
+      dockerfile: ../docker/backend.Dockerfile   
+    ports:
+      - "8081:8081"  
+    environment:
+      - DATABASE_URL=postgres://icnuser:icnpass@db:5432/icndb
+    networks:
+      - icn-network
+
+  frontend:
+    build:
+      context: ../frontend                       
+      dockerfile: ../docker/frontend.Dockerfile  
+    ports:
+      - "3000:3000"
+    networks:
+      - icn-network
+
+  db:
+    image: postgres:13.3
+    environment:
+      POSTGRES_USER: icnuser
+      POSTGRES_PASSWORD: icnpass
+      POSTGRES_DB: icndb
+    ports:
+      - "5432:5432"
+    networks:
+      - icn-network
+
+  docs:
+    image: squidfunk/mkdocs-material:7.1.0
+    volumes:
+      - ../docs:/docs          
+    ports:
+      - "8000:8000"
+    working_dir: /docs
+    command: /bin/sh -c "pip install mkdocs-mermaid2-plugin && mkdocs serve -a 0.0.0.0:8000"
+
+networks:
+  icn-network:
+    driver: bridge
+```
+
+===================
+File: ./Cargo.toml
+Size: 2244 bytes
+===================
+```toml
+[workspace]
+members = [
+    "backend",
+    "crates/icn-types",
+    "crates/icn-common",
+    "crates/icn-core",
+    "crates/icn-p2p",
+    "crates/icn-cli"
+]
+
+[workspace.dependencies]
+# Internal crates
+icn-types = { path = "crates/icn-types" }
+icn-common = { path = "crates/icn-common" }
+icn-core = { path = "crates/icn-core" }
+icn-p2p = { path = "crates/icn-p2p" }
+icn-cli = { path = "crates/icn-cli" }
+
+# External dependencies
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+warp = "0.3"
+sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "postgres"] }
+thiserror = "1.0"
+chrono = { version = "0.4.40", features = ["serde"] }
+async-trait = "0.1"
+futures = "0.3.31"
+tracing = "0.1.41"
+log = "0.4"
+env_logger = "0.11.6"
+sha2 = "0.10.8"
+rayon = "1.10.0"
+lazy_static = "1.5.0"
+x25519-dalek = "2.0.1"
+libsqlite3-sys = "0.30.1"
+
+[package]
+name = "icn"
+version = "0.1.0"
+description = "Inter-Cooperative Network - A platform for cooperative resource sharing and governance"
+edition = "2021"
+
+[features]
+default = ["basic", "federation"]
+basic = []
+federation = ["dep:tokio", "dep:async-trait"]
+advanced-governance = ["dep:parity-scale-codec"]
+monitoring = ["dep:prometheus"]
+
+[dependencies]
+icn-types = { workspace = true }
+tokio = { workspace = true, optional = true }
+warp = { workspace = true }
+async-trait = { workspace = true, optional = true }
+parity-scale-codec = { version = "3.7.4", optional = true }
+prometheus = { version = "0.13.4", optional = true }
+serde = { workspace = true }
+icn-core = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+pest = "2.7.15"
+pest_derive = "2.7.15"
+serde_json = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+tokio-tungstenite = "0.26.2"
+icn-p2p = { path = "crates/icn-p2p" }
+
+[[bin]]
+name = "icn_cli"
+path = "crates/icn-cli/src/main.rs"
+
+[lib]
+name = "icn_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "icn_bin"
+path = "src/main.rs"
+
+[[example]]
+name = "sdp_federation_example"
+path = "examples/sdp_federation_example.rs"
+
+[dev-dependencies]
+reqwest = { version = "0.11", features = ["json"] }
+tokio = { version = "1.0", features = ["full"] }
+serde_json = "1.0"
+```
+
+===================
+File: ./README.md
+Size: 4383 bytes
+===================
+```md
+# Internet of Cooperative Networks (ICN)
+
+A federated blockchain platform for cooperative resource sharing and governance.
+
+## Table of Contents
+- [Core Components](#core-components)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Project Structure](#project-structure)
+- [Key Features](#key-features)
+- [Usage](#usage)
+- [Contributing](#contributing)
+- [Testing](#testing)
+- [Documentation](#documentation)
+- [License](#license)
+
+## Core Components
+
+- **Consensus Engine**: Proof of Cooperation based consensus with democratic validator selection
+- **Federated Ledger**: Distributed transaction processing with cooperative governance
+- **DID Authentication**: Identity management using decentralized identifiers
+- **Hybrid Storage**: Combined on-chain/off-chain storage model
+
+## Architecture
+
+```mermaid
+graph TD
+    A[Consensus Layer] --> B[Governance Engine]
+    B --> C[Transaction Processing]
+    C --> D[Storage Manager]
+    D --> E[IPFS/Filecoin]
+    D --> F[On-Chain Storage]
+```
+
+## Quick Start
+
+```bash
+# Build the project
+cargo build
+
+# Run tests
+cargo test
+
+# Start a local testnet
+cargo run --bin icn-node -- --testnet
+```
+
+## Project Structure
+The ICN project is organized into several directories, each serving a specific purpose:
+
+- **backend**: Contains the Rust code for the backend services.
+- **frontend**: Contains the JavaScript code for the frontend application.
+- **contracts**: Contains the smart contracts for governance and cooperative operations.
+- **crates**:
+  - **core**: Contains core libraries (icn-core, icn-crypto, icn-dsl, icn-types).
+  - **consensus**: Contains the consensus mechanism (icn-consensus).
+  - **networking**: Contains networking libraries (icn-p2p, icn-federation).
+  - **storage**: Contains persistence and storage management (icn-storage).
+  - **runtime**: Contains runtime support (icn-runtime).
+  - **resources**: Contains resource management (icn-resource).
+  - **finance**: Contains the mutual credit system (icn-mutual-credit).
+- **docker**: Contains Dockerfiles and Docker Compose configurations for containerizing the services.
+- **docs**: Contains the project documentation, including setup guides, contribution guides, and API documentation.
+- **scripts**: Contains various scripts for setup, deployment, and management of the project.
+- **config**: Contains configuration files for different environments and services.
+
+## Key Features
+- **Decentralized Identity Management**: Secure and verifiable identities using DIDs.
+- **Reputation System**: Track and manage reputation across cooperatives.
+- **Governance**: Democratic decision-making through proposals and voting.
+- **Resource Sharing**: Efficient allocation and management of resources.
+- **Consensus Mechanism**: Proof of Cooperation (PoC) for transaction validation.
+- **Telemetry and Logging**: Integrated metrics and logging for monitoring and debugging.
+
+## Usage
+To run the ICN project locally, follow the instructions in the [Getting Started](#getting-started) section. For detailed usage instructions, refer to the [User Guides](docs/user/guides/index.md).
+
+### Starting the Backend
+```bash
+# Navigate to the backend directory
+cd backend
+
+# Run the backend services
+cargo run --bin icn-backend
+```
+
+### Starting the Frontend
+```bash
+# Navigate to the frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+
+# Run the frontend application
+npm start
+```
+
+## Contributing
+We welcome contributions from the community! To get started, please read the [ICN Contribution Guide](docs/development/guides/contributing.md) for guidelines on how to contribute to the project.
+
+## Testing
+The ICN project uses a comprehensive testing strategy to ensure the quality and reliability of the codebase. For detailed information on the testing strategy and how to run tests, refer to the [ICN Testing Strategy Guide](docs/development/guides/test-strategy.md).
+
+## Documentation
+For detailed documentation, including the Development Setup Guide, ICN Contribution Guide, and other relevant documents, refer to the [Documentation Index](docs/INDEX.md).
+
+- [Consensus Engine](./crates/icn-consensus/README.md)
+- [Core Architecture](./crates/icn-core/README.md)
+- [API Reference](./docs/api.md)
+- [Governance Model](./docs/governance.md)
+
+## License
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+```
+
+===================
+File: ./backend/Cargo.toml
+Size: 639 bytes
+===================
+```toml
+[package]
+name = "icn-backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true, features = ["full"] }
+warp = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres"] }
+thiserror = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+
+# Internal crates
+icn-types = { workspace = true }
+icn-common = { workspace = true }
+icn-core = { workspace = true }
+icn-p2p = { workspace = true }
+```
+
+===================
+File: ./contracts/Cargo.toml
+Size: 277 bytes
+===================
+```toml
+[package]
+name = "contracts"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tendermint = "0.23"
+tokio = { version = "1", features = ["full"] }
+
+[lib]
+name = "contracts"
+path = "src/lib.rs"
+```
+
+===================
+File: ./crates/consensus/Cargo.toml
+Size: 207 bytes
+===================
+```toml
+[package]
+name = "consensus"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+tendermint = "0.23.0"
+tokio = { version = "1", features = ["full"] }
+
+[lib]
+name = "consensus"
+path = "src/lib.rs"
+```
+
+===================
+File: ./crates/core/Cargo.toml
+Size: 195 bytes
+===================
+```toml
+[package]
+name = "core"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+tendermint = "0.23"
+tokio = { version = "1", features = ["full"] }
+
+[lib]
+name = "core"
+path = "src/lib.rs"
+```
+
+===================
+File: ./crates/icn-cli/Cargo.toml
+Size: 333 bytes
+===================
+```toml
+[package]
+name = "icn-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = "2.33"
+tokio = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+icn-types = { path = "../icn-types" }
+thiserror = "1.0"
+anyhow = "1.0"```
+
+===================
+File: ./crates/icn-common/Cargo.toml
+Size: 242 bytes
+===================
+```toml
+[package]
+name = "icn-common"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+icn-types = { workspace = true }
+```
+
+===================
+File: ./crates/icn-consensus/Cargo.toml
+Size: 416 bytes
+===================
+```toml
+[package]
+name = "icn-consensus"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+log = "0.4"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+chrono = "0.4"
+uuid = { version = "1.0", features = ["v4"] }
+bit-set = "0.5"
+trie-rs = "0.1"
+rand = "0.8"
+icn-types = { path = "../icn-types" }
+icn-common = { path = "../icn-common" }
+```
+
+===================
+File: ./crates/icn-consensus/README.md
+Size: 790 bytes
+===================
+```md
+# ICN Consensus Engine
+
+Implements the Proof of Cooperation consensus mechanism with democratic validator governance.
+
+## Validator Selection
+
+Validators are selected through a democratic process:
+- Each cooperative can propose validators
+- Proposals require majority approval
+- Maximum validators per cooperative is enforced
+- Minimum stake requirements apply
+
+## Governance Rules
+
+```rust
+ValidatorRules {
+    max_validators_per_coop: 2,
+    min_stake_requirement: 100_000,
+    election_period_blocks: 40320, // ~7 days
+}
+```
+
+## Usage Example
+
+```rust
+let rules = ValidatorRules::default();
+let engine = GovernanceEngine::new(rules);
+
+// Submit validator proposal
+let proposal = VoteProposal::new(
+    ProposalType::AddValidator(validator_info)
+);
+engine.submit_proposal(proposal)?;
+```
+```
+
+===================
+File: ./crates/icn-core/Cargo.toml
+Size: 394 bytes
+===================
+```toml
+[package]
+name = "icn-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+log = { workspace = true }
+icn-types = { workspace = true }
+icn-common = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
+rand = "0.8"
+```
+
+===================
+File: ./crates/icn-crypto/Cargo.toml
+Size: 65 bytes
+===================
+```toml
+[package]
+name = "icn-crypto"
+version = "0.1.0"
+edition = "2021"
+```
+
+===================
+File: ./crates/icn-dsl/Cargo.toml
+Size: 534 bytes
+===================
+```toml
+[package]
+name = "icn-dsl"
+version = "0.1.0"
+edition = "2021"
+description = "Domain-specific language implementation for the Inter-Cooperative Network (ICN) system"
+license = "MIT"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+nom = "7.1"
+log = { workspace = true }
+thiserror = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+bincode = "1.3"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+
+[features]
+default = []
+testing = []```
+
+===================
+File: ./crates/icn-federation/Cargo.toml
+Size: 576 bytes
+===================
+```toml
+[package]
+name = "icn-federation"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+tokio = { version = "1.30", features = ["full"] }
+tendermint = "0.23"
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4"] }
+icn-types = { workspace = true }
+icn-governance = { path = "../icn-governance" }
+icn-zk = { path = "../icn-zk" }
+icn-networking = { path = "../networking" }
+sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "postgres"] }
+```
+
+===================
+File: ./crates/icn-governance/Cargo.toml
+Size: 487 bytes
+===================
+```toml
+[package]
+name = "icn-governance"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+log = "0.4"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+chrono = "0.4"
+uuid = { version = "1.0", features = ["v4"] }
+bit-set = "0.5"
+trie-rs = "0.1"
+rand = "0.8"
+icn-types = { path = "../icn-types" }
+icn-zk = { path = "../icn-zk" }
+sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "postgres"] }
+```
+
+===================
+File: ./crates/icn-identity/Cargo.toml
+Size: 699 bytes
+===================
+```toml
+[package]
+name = "icn-identity"
+version = "0.1.0"
+edition = "2021"
+description = "Identity management for the Inter-Cooperative Network (ICN) system"
+license = "MIT"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+icn-types = { workspace = true }
+sha2 = { workspace = true }
+sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "postgres"], optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+
+[features]
+default = []
+testing = []
+database = ["dep:sqlx"]```
+
+===================
+File: ./crates/icn-mutual-credit/Cargo.toml
+Size: 420 bytes
+===================
+```toml
+[package]
+name = "icn-mutual-credit"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+log = "0.4"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+chrono = "0.4"
+uuid = { version = "1.0", features = ["v4"] }
+bit-set = "0.5"
+trie-rs = "0.1"
+rand = "0.8"
+icn-types = { path = "../icn-types" }
+icn-common = { path = "../icn-common" }
+```
+
+===================
+File: ./crates/icn-p2p/Cargo.toml
+Size: 487 bytes
+===================
+```toml
+[package]
+name = "icn-p2p"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+log = { workspace = true }
+icn-types = { workspace = true }
+icn-common = { workspace = true }
+tokio-tungstenite = { version = "0.21.0", features = ["native-tls"] }
+x25519-dalek = "2.0.0"
+rand = "0.8"
+```
+
+===================
+File: ./crates/icn-reputation/Cargo.toml
+Size: 337 bytes
+===================
+```toml
+[package]
+name = "icn-reputation"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+async-trait = "0.1"
+icn-zkp = { path = "../icn-zk" }
+icn-types = { path = "../icn-types" }
+icn-storage = { path = "../icn-storage" }
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["full"] }```
+
+===================
+File: ./crates/icn-resource/Cargo.toml
+Size: 702 bytes
+===================
+```toml
+[package]
+name = "icn-resource"
+version = "0.1.0"
+edition = "2021"
+description = "Resource management for the Inter-Cooperative Network (ICN) system"
+license = "MIT"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+icn-types = { workspace = true }
+futures = { workspace = true }
+sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "postgres"], optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+
+[features]
+default = []
+testing = []
+database = ["dep:sqlx"]```
+
+===================
+File: ./crates/icn-runtime/Cargo.toml
+Size: 482 bytes
+===================
+```toml
+[package]
+name = "icn-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Runtime implementation for the Inter-Cooperative Network"
+
+[dependencies]
+icn-types = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+tracing-test = "0.2"
+```
+
+===================
+File: ./crates/icn-storage/Cargo.toml
+Size: 503 bytes
+===================
+```toml
+[package]
+name = "icn-storage"
+version = "0.1.0"
+edition = "2021"
+description = "Storage implementation for the Inter-Cooperative Network"
+
+[dependencies]
+icn-types = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+async-trait = "0.1"
+ipfs-api-backend-actix = "0.6"
+futures = "0.3"
+serde_json = "1.0"
+bincode = "1.3"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = "3.8"
+```
+
+===================
+File: ./crates/icn-types/Cargo.toml
+Size: 641 bytes
+===================
+```toml
+[package]
+name = "icn-types"
+version = "0.1.0"
+edition = "2021"
+description = "Core types for the Inter-Cooperative Network (ICN) system"
+license = "MIT"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+sqlx = { workspace = true, optional = true }
+sha2 = "0.10.7"
+chrono = { version = "0.4", features = ["serde"] }
+tokio = { workspace = true, features = ["full"] }
+lazy_static = "1.4"
+log = "0.4"
+bincode = "1.3"
+serde_json = "1.0"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+
+[features]
+default = []
+testing = []
+database = ["dep:sqlx"]
+```
+
+===================
+File: ./crates/icn-zk/Cargo.toml
+Size: 314 bytes
+===================
+```toml
+[package]
+name = "icn-zk"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+bellman = "0.9"
+rand = "0.8"
+ff = "0.9"
+group = "0.9"
+pairing = "0.20"
+sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "postgres"] }
+```
+
+===================
+File: ./crates/networking/Cargo.toml
+Size: 215 bytes
+===================
+```toml
+[package]
+name = "icn-networking"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+tendermint = "0.23"
+
+[lib]
+name = "icn_networking"
+path = "src/lib.rs"
+```
+
+===================
+File: ./crates/storage/Cargo.toml
+Size: 232 bytes
+===================
+```toml
+[package]
+name = "storage"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+
+[lib]
+name = "storage"
+path = "src/lib.rs"
+```
+
+===================
+File: ./crates/zk_snarks/Cargo.toml
+Size: 543 bytes
+===================
+```toml
+[package]
+name = "zk_snarks"
+version = "0.1.0"
+edition = "2021"
+description = "Zero-knowledge proofs implementation for the Inter-Cooperative Network (ICN) system"
+license = "MIT"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+bellman = "0.17.0"
+ff = "0.13.0" 
+rand = "0.8"
+sha2 = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+
+[features]
+default = []
+testing = []```
+
+===================
+File: ./docker/backend/Cargo.toml
+Size: 78 bytes
+===================
+```toml
+[package]
+name = "backend"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+```
+
+===================
+File: ./docker/docker-compose.yml
+Size: 4778 bytes
+===================
+```yml
+version: "3.8"
+
+services:
+  # PostgreSQL database service
+  db:
+    image: postgres:14-alpine
+    restart: unless-stopped
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d:ro
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-icnuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-icnpass}
+      POSTGRES_DB: ${POSTGRES_DB:-icndb}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U icnuser -d icndb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "5432:5432"
+    networks:
+      - icn-network
+
+  # Backend service - Rust application
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    volumes:
+      - backend_data:/data
+      - backend_logs:/logs
+      - backend_config:/config
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER:-icnuser}:${POSTGRES_PASSWORD:-icnpass}@db:5432/${POSTGRES_DB:-icndb}?options=-c%20search_path%3Dicn
+      - RUST_LOG=${RUST_LOG:-info}
+      - RUST_BACKTRACE=${RUST_BACKTRACE:-0}
+    healthcheck:
+      test: ["CMD", "curl", "-X", "GET", "http://localhost:8081/api/v1/health", "||", "exit", "1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - icn-network
+
+  # Frontend service - React application
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        - REACT_APP_API_URL=/api
+    restart: unless-stopped
+    depends_on:
+      - backend  # Changed from condition: service_healthy to just the service name
+    ports:
+      - "80:80"
+    environment:
+      - API_URL=http://backend:8081/api
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - icn-network
+
+  # ICN Bootstrap Node
+  bootstrap:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    container_name: icn-bootstrap
+    environment:
+      - NODE_TYPE=bootstrap
+      - NODE_PORT=9000
+      - API_PORT=8082
+      - BOOTSTRAP_NODES=[]
+      - COOPERATIVE_ID=${COOPERATIVE_ID:-icn-primary}
+      - COOPERATIVE_TIER=provider
+      - LOG_LEVEL=${RUST_LOG:-info}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-icnuser}:${POSTGRES_PASSWORD:-icnpass}@db:5432/${POSTGRES_DB:-icndb}
+    ports:
+      - "9000:9000"
+      - "8082:8082"
+    volumes:
+      - bootstrap_data:/data
+      - bootstrap_logs:/logs
+    depends_on:
+      - db
+    networks:
+      - icn-network
+    restart: unless-stopped
+
+  # ICN Validator Node 1
+  validator1:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    container_name: icn-validator1
+    environment:
+      - NODE_TYPE=validator
+      - NODE_PORT=9001
+      - API_PORT=8083
+      - BOOTSTRAP_NODES=["ws://bootstrap:9000"]
+      - COOPERATIVE_ID=${COOPERATIVE_ID:-icn-primary}
+      - COOPERATIVE_TIER=validator
+      - LOG_LEVEL=${RUST_LOG:-info}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-icnuser}:${POSTGRES_PASSWORD:-icnpass}@db:5432/${POSTGRES_DB:-icndb}
+    ports:
+      - "9001:9001"
+      - "8083:8083"
+    volumes:
+      - validator1_data:/data
+      - validator1_logs:/logs
+    depends_on:
+      - bootstrap
+      - db
+    networks:
+      - icn-network
+    restart: unless-stopped
+
+  # ICN Validator Node 2
+  validator2:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    container_name: icn-validator2
+    environment:
+      - NODE_TYPE=validator
+      - NODE_PORT=9002
+      - API_PORT=8084
+      - BOOTSTRAP_NODES=["ws://bootstrap:9000"]
+      - COOPERATIVE_ID=${COOPERATIVE_ID:-icn-primary}
+      - COOPERATIVE_TIER=validator
+      - LOG_LEVEL=${RUST_LOG:-info}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-icnuser}:${POSTGRES_PASSWORD:-icnpass}@db:5432/${POSTGRES_DB:-icndb}
+    ports:
+      - "9002:9002"
+      - "8084:8084"
+    volumes:
+      - validator2_data:/data
+      - validator2_logs:/logs
+    depends_on:
+      - bootstrap
+      - db
+    networks:
+      - icn-network
+    restart: unless-stopped
+
+volumes:
+  db_data:
+    name: icn_db_data
+  backend_data:
+    name: icn_backend_data
+  backend_logs:
+    name: icn_backend_logs
+  backend_config:
+    name: icn_backend_config
+  bootstrap_data:
+    name: icn_bootstrap_data
+  bootstrap_logs:
+    name: icn_bootstrap_logs
+  validator1_data:
+    name: icn_validator1_data
+  validator1_logs:
+    name: icn_validator1_logs
+  validator2_data:
+    name: icn_validator2_data
+  validator2_logs:
+    name: icn_validator2_logs
+
+networks:
+  icn-network:
+    driver: bridge
+```
+
+===================
+File: ./docker/frontend/frontend/frontend/package.json
+Size: 648 bytes
+===================
+```json
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^4.9.5"
+  },
+  "description": "",
+  "devDependencies": {
+    "@babel/core": "^7.26.9",
+    "@babel/preset-react": "^7.26.3",
+    "@babel/preset-typescript": "^7.26.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.3",
+    "react-scripts": "^5.0.1",
+    "tailwindcss": "^4.0.12"
+  }
+}
+```
+
+===================
+File: ./docker/frontend/package.json
+Size: 425 bytes
+===================
+```json
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.8.2"
+  }
+}
+```
+
+===================
+File: ./frontend/Cargo.toml
+Size: 318 bytes
+===================
+```toml
+[package]
+name = "frontend"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+tokio = { version = "1.30", features = ["full"] }
+tendermint = "0.23"
+serde = { version = "1.0", features = ["derive"] }
+
+[lib]
+name = "frontend_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "frontend_bin"
+path = "src/main.rs"
+```
+
+===================
+File: ./frontend/package.json
+Size: 1445 bytes
+===================
+```json
+{
+  "name": "icn-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Frontend for the Inter-Cooperative Network",
+  "main": "index.js",
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "dev": "next dev",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "dependencies": {
+    "@types/d3": "^7.4.3",
+    "@types/node": "^16.18.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/react-window": "^1.8.8",
+    "autoprefixer": "^10.4.0",
+    "clsx": "^2.1.1",
+    "d3": "^7.9.0",
+    "lucide-react": "^0.290.0",
+    "next": "latest",
+    "postcss": "^8.4.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-grid-heatmap": "^1.3.0",
+    "react-router-dom": "^6.21.0",
+    "react-scripts": "^5.0.1",
+    "react-window": "^1.8.11",
+    "recharts": "^2.15.1",
+    "tailwind-merge": "^2.2.0",
+    "tailwindcss": "^3.3.0",
+    "typescript": "^4.9.5"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
+```
+
+===================
+File: ./frontend/tsconfig.json
+Size: 630 bytes
+===================
+```json
+{
+  "compilerOptions": {
+    "target": "es5",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": false,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "module": "NodeNext",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "baseUrl": "src",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "noImplicitAny": false,
+    "strictNullChecks": false
+  },
+  "include": ["src"]
+}
+```
+
+===================
+File: ./fsprovider-sample/README.md
+Size: 1206 bytes
+===================
+```md
+# MemFS
+
+This extension implements an in-memory file system to show-case the [filesystem provider api](https://github.com/Microsoft/vscode/blob/51a880315fd0ec2cafb511a17de48ec31802ba6d/src/vs/vscode.d.ts#L4968). It serves two purposes:
+
+* Be a sample/reference for extension authors that want to implement a filesystem provider
+* Be a test for other extensions that *falsely* assume text document always live on disk.
+
+To *get started* you need this:
+
+* install this extension
+* when *not* having a workspace opened, select 'F1 > [MemFS] Setup Workspace' (optionally save the workspace now)
+* select 'F1 > [MemFs] Create Files' and notice how the explorer is now populated
+* ... try things out, e.g. IntelliSense in memfs-files, create new files, save them, etc
+* open `file.txt` and make changes
+* 'F1 > [MemFS] Delete "file.txt', observe that the editor is now indicating that the file is deleted
+* 'F1 > [MemFS] Add "file.txt', observe that the editor content is reset and the '(delete)' annotation disappeared
+* select 'F1 > [MemFs] Delete Files' or reload to restart
+
+![sample screenshot](https://github.com/Microsoft/vscode-extension-samples/raw/main/fsprovider-sample/sample.png)
+```
+
+===================
+File: ./fsprovider-sample/package.json
+Size: 2043 bytes
+===================
+```json
+{
+	"name": "vscode-memfs",
+	"displayName": "MemFS - a file system provider sample",
+	"description": "Showcase for the file system provider API, also useful for testing again document that are not on disk.",
+	"version": "0.0.3",
+	"publisher": "vscode-samples",
+	"private": true,
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Microsoft/vscode-extension-samples"
+	},
+	"engines": {
+		"vscode": "^1.74.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"activationEvents": [
+		"onFileSystem:memfs"
+	],
+	"main": "./out/src/extension",
+	"contributes": {
+		"commands": [
+			{
+				"command": "memfs.workspaceInit",
+				"title": "Setup Workspace",
+				"category": "MemFS"
+			},
+			{
+				"command": "memfs.init",
+				"title": "Create Files",
+				"category": "MemFS"
+			},
+			{
+				"command": "memfs.reset",
+				"title": "Delete Files",
+				"category": "MemFS"
+			},
+			{
+				"command": "memfs.deleteFile",
+				"title": "Delete \"file.txt\"",
+				"category": "MemFS"
+			},
+			{
+				"command": "memfs.addFile",
+				"title": "Add \"file.txt\"",
+				"category": "MemFS"
+			}
+		],
+		"menus": {
+			"commandPalette": [
+				{
+					"command": "memfs.init",
+					"when": "workbenchState == workspace"
+				},
+				{
+					"command": "memfs.reset",
+					"when": "workbenchState == workspace"
+				},
+				{
+					"command": "memfs.deleteFile",
+					"when": "workbenchState == workspace"
+				},
+				{
+					"command": "memfs.addFile",
+					"when": "workbenchState == workspace"
+				},
+				{
+					"command": "memfs.workspaceInit",
+					"when": "workbenchState != workspace"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"lint": "eslint",
+		"watch": "tsc -watch -p ./"
+	},
+	"devDependencies": {
+		"@eslint/js": "^9.13.0",
+		"@stylistic/eslint-plugin": "^2.9.0",
+		"@types/node": "^20",
+		"@types/vscode": "^1.73.0",
+		"eslint": "^9.13.0",
+		"typescript": "^5.7.2",
+		"typescript-eslint": "^8.16.0"
+	}
+}
+```
+
+===================
+File: ./fsprovider-sample/tsconfig.json
+Size: 258 bytes
+===================
+```json
+{
+	"compilerOptions": {
+		"strictNullChecks": true,
+		"module": "commonjs",
+		"target": "es2020",
+		"lib": ["es2020"],
+		"outDir": "out",
+		"sourceMap": true,
+		"strict": true,
+		"rootDir": "."
+	},
+	"exclude": ["node_modules", ".vscode-test"]
+}
+```
+
+===================
+File: ./package.json
+Size: 544 bytes
+===================
+```json
+{
+  "dependencies": {
+    "@reach/dialog": "^0.18.0",
+    "lucide-react": "^0.479.0",
+    "react-window": "^1.8.11",
+    "recharts": "^2.15.1"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.8.1",
+    "@percy/cli": "^1.27.4",
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^20.10.0",
+    "playwright": "^1.40.0",
+    "typescript": "^5.3.0"
+  },
+  "scripts": {
+    "test:a11y": "playwright test tests/a11y/",
+    "test:visual": "percy snapshot frontend/build",
+    "test:ci": "npm run test:a11y && npm run test:visual"
+  }
+}
+```
+
+===================
+File: ./prototype/docker-compose.yml
+Size: 2027 bytes
+===================
+```yml
+version: '3.8'
+
+services:
+  bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: icn-bootstrap
+    environment:
+      - NODE_TYPE=bootstrap
+      - NODE_PORT=9000
+      - API_PORT=3000
+      - BOOTSTRAP_NODES=[]
+      - COOPERATIVE_ID=icn-prototype
+      - COOPERATIVE_TIER=provider
+      - LOG_LEVEL=info
+    ports:
+      - "9000:9000"
+      - "3000:3000"
+    volumes:
+      - bootstrap-data:/app/data
+      - bootstrap-logs:/app/logs
+    networks:
+      - icn-network
+    restart: unless-stopped
+
+  node1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: icn-node1
+    environment:
+      - NODE_TYPE=regular
+      - NODE_PORT=9001
+      - API_PORT=3001
+      - BOOTSTRAP_NODES=["ws://bootstrap:9000"]
+      - COOPERATIVE_ID=icn-prototype
+      - COOPERATIVE_TIER=contributor
+      - LOG_LEVEL=info
+    ports:
+      - "9001:9001"
+      - "3001:3001"
+    volumes:
+      - node1-data:/app/data
+      - node1-logs:/app/logs
+    networks:
+      - icn-network
+    depends_on:
+      - bootstrap
+    restart: unless-stopped
+
+  node2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: icn-node2
+    environment:
+      - NODE_TYPE=regular
+      - NODE_PORT=9002
+      - API_PORT=3002
+      - BOOTSTRAP_NODES=["ws://bootstrap:9000"]
+      - COOPERATIVE_ID=icn-prototype
+      - COOPERATIVE_TIER=contributor
+      - LOG_LEVEL=info
+    ports:
+      - "9002:9002"
+      - "3002:3002"
+    volumes:
+      - node2-data:/app/data
+      - node2-logs:/app/logs
+    networks:
+      - icn-network
+    depends_on:
+      - bootstrap
+    restart: unless-stopped
+
+  dashboard:
+    image: nginx:alpine
+    container_name: icn-dashboard
+    volumes:
+      - ./dashboard:/usr/share/nginx/html
+    ports:
+      - "8080:80"
+    networks:
+      - icn-network
+    depends_on:
+      - bootstrap
+      - node1
+      - node2
+
+volumes:
+  bootstrap-data:
+  bootstrap-logs:
+  node1-data:
+  node1-logs:
+  node2-data:
+  node2-logs:
+
+networks:
+  icn-network:
+    driver: bridge```
+
+===================
+File: ./prototype/package.json
+Size: 907 bytes
+===================
+```json
+{
+  "name": "icn-prototype",
+  "version": "0.1.0",
+  "description": "ICN (Internet of Cooperative Networks) Prototype Implementation",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  },
+  "dependencies": {
+    "express": "^4.17.1",
+    "cors": "^2.8.5",
+    "body-parser": "^1.19.0",
+    "ws": "^8.2.3",
+    "node-fetch": "^2.6.12",
+    "uuid": "^8.3.2",
+    "better-sqlite3": "^8.5.0",
+    "winston": "^3.3.3",
+    "dockerode": "^3.3.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "jest": "^27.0.6",
+    "supertest": "^6.1.6"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "license": "MIT",
+  "jest": {
+    "testEnvironment": "node",
+    "coverageDirectory": "./coverage",
+    "collectCoverageFrom": [
+      "src/**/*.js"
+    ]
+  }
+}```
+
+===================
+File: ./rust-toolchain.toml
+Size: 31 bytes
+===================
+```toml
+[toolchain]
+channel = "1.85.0"
+```
+
+===================
+File: ./scripts/frontend/package.json
+Size: 239 bytes
+===================
+```json
+{
+  "dependencies": {
+    "@reach/dialog": "^0.18.0",
+    "lucide-react": "^0.479.0",
+    "react-grid-heatmap": "^1.3.0",
+    "react-window": "^1.8.11",
+    "recharts": "^2.15.1"
+  },
+  "devDependencies": {
+    "shadcn-ui": "^0.9.5"
+  }
+}
+```
+
+===================
+File: ./scripts/frontend/tsconfig.json
+Size: 541 bytes
+===================
+```json
+{
+  "extends": "./tsconfig.paths.json",
+  "compilerOptions": {
+    "target": "es5",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "module": "esnext",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "noEmit": true
+  },
+  "include": ["src"]
+}
+```
+
+===================
+File: ./tools/README.md
+Size: 561 bytes
+===================
+```md
+# ICN Documentation Tools
+
+This directory contains tools for managing ICN project documentation.
+
+## Setup
+
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Add tools to your PATH:
+   ```bash
+   export PATH=$PATH:$(pwd)/tools/doctools
+   ```
+
+## Usage
+
+Generate a new specification:
+```bash
+specgen.py --title "Component Name" --type "specification" --component "core-component"
+```
+
+List all documents:
+```bash
+docmanager.py list
+```
+
+Create documentation index:
+```bash
+docmanager.py index
+```
+```
+
+===================
+File: Cargo.toml
+Size: 2244 bytes
+===================
+```toml
+[workspace]
+members = [
+    "backend",
+    "crates/icn-types",
+    "crates/icn-common",
+    "crates/icn-core",
+    "crates/icn-p2p",
+    "crates/icn-cli"
+]
+
+[workspace.dependencies]
+# Internal crates
+icn-types = { path = "crates/icn-types" }
+icn-common = { path = "crates/icn-common" }
+icn-core = { path = "crates/icn-core" }
+icn-p2p = { path = "crates/icn-p2p" }
+icn-cli = { path = "crates/icn-cli" }
+
+# External dependencies
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+warp = "0.3"
+sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "postgres"] }
+thiserror = "1.0"
+chrono = { version = "0.4.40", features = ["serde"] }
+async-trait = "0.1"
+futures = "0.3.31"
+tracing = "0.1.41"
+log = "0.4"
+env_logger = "0.11.6"
+sha2 = "0.10.8"
+rayon = "1.10.0"
+lazy_static = "1.5.0"
+x25519-dalek = "2.0.1"
+libsqlite3-sys = "0.30.1"
+
+[package]
+name = "icn"
+version = "0.1.0"
+description = "Inter-Cooperative Network - A platform for cooperative resource sharing and governance"
+edition = "2021"
+
+[features]
+default = ["basic", "federation"]
+basic = []
+federation = ["dep:tokio", "dep:async-trait"]
+advanced-governance = ["dep:parity-scale-codec"]
+monitoring = ["dep:prometheus"]
+
+[dependencies]
+icn-types = { workspace = true }
+tokio = { workspace = true, optional = true }
+warp = { workspace = true }
+async-trait = { workspace = true, optional = true }
+parity-scale-codec = { version = "3.7.4", optional = true }
+prometheus = { version = "0.13.4", optional = true }
+serde = { workspace = true }
+icn-core = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+pest = "2.7.15"
+pest_derive = "2.7.15"
+serde_json = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+tokio-tungstenite = "0.26.2"
+icn-p2p = { path = "crates/icn-p2p" }
+
+[[bin]]
+name = "icn_cli"
+path = "crates/icn-cli/src/main.rs"
+
+[lib]
+name = "icn_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "icn_bin"
+path = "src/main.rs"
+
+[[example]]
+name = "sdp_federation_example"
+path = "examples/sdp_federation_example.rs"
+
+[dev-dependencies]
+reqwest = { version = "0.11", features = ["json"] }
+tokio = { version = "1.0", features = ["full"] }
+serde_json = "1.0"
+```
+
+===================
+File: README.md
+Size: 4383 bytes
+===================
+```md
+# Internet of Cooperative Networks (ICN)
+
+A federated blockchain platform for cooperative resource sharing and governance.
+
+## Table of Contents
+- [Core Components](#core-components)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Project Structure](#project-structure)
+- [Key Features](#key-features)
+- [Usage](#usage)
+- [Contributing](#contributing)
+- [Testing](#testing)
+- [Documentation](#documentation)
+- [License](#license)
+
+## Core Components
+
+- **Consensus Engine**: Proof of Cooperation based consensus with democratic validator selection
+- **Federated Ledger**: Distributed transaction processing with cooperative governance
+- **DID Authentication**: Identity management using decentralized identifiers
+- **Hybrid Storage**: Combined on-chain/off-chain storage model
+
+## Architecture
+
+```mermaid
+graph TD
+    A[Consensus Layer] --> B[Governance Engine]
+    B --> C[Transaction Processing]
+    C --> D[Storage Manager]
+    D --> E[IPFS/Filecoin]
+    D --> F[On-Chain Storage]
+```
+
+## Quick Start
+
+```bash
+# Build the project
+cargo build
+
+# Run tests
+cargo test
+
+# Start a local testnet
+cargo run --bin icn-node -- --testnet
+```
+
+## Project Structure
+The ICN project is organized into several directories, each serving a specific purpose:
+
+- **backend**: Contains the Rust code for the backend services.
+- **frontend**: Contains the JavaScript code for the frontend application.
+- **contracts**: Contains the smart contracts for governance and cooperative operations.
+- **crates**:
+  - **core**: Contains core libraries (icn-core, icn-crypto, icn-dsl, icn-types).
+  - **consensus**: Contains the consensus mechanism (icn-consensus).
+  - **networking**: Contains networking libraries (icn-p2p, icn-federation).
+  - **storage**: Contains persistence and storage management (icn-storage).
+  - **runtime**: Contains runtime support (icn-runtime).
+  - **resources**: Contains resource management (icn-resource).
+  - **finance**: Contains the mutual credit system (icn-mutual-credit).
+- **docker**: Contains Dockerfiles and Docker Compose configurations for containerizing the services.
+- **docs**: Contains the project documentation, including setup guides, contribution guides, and API documentation.
+- **scripts**: Contains various scripts for setup, deployment, and management of the project.
+- **config**: Contains configuration files for different environments and services.
+
+## Key Features
+- **Decentralized Identity Management**: Secure and verifiable identities using DIDs.
+- **Reputation System**: Track and manage reputation across cooperatives.
+- **Governance**: Democratic decision-making through proposals and voting.
+- **Resource Sharing**: Efficient allocation and management of resources.
+- **Consensus Mechanism**: Proof of Cooperation (PoC) for transaction validation.
+- **Telemetry and Logging**: Integrated metrics and logging for monitoring and debugging.
+
+## Usage
+To run the ICN project locally, follow the instructions in the [Getting Started](#getting-started) section. For detailed usage instructions, refer to the [User Guides](docs/user/guides/index.md).
+
+### Starting the Backend
+```bash
+# Navigate to the backend directory
+cd backend
+
+# Run the backend services
+cargo run --bin icn-backend
+```
+
+### Starting the Frontend
+```bash
+# Navigate to the frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+
+# Run the frontend application
+npm start
+```
+
+## Contributing
+We welcome contributions from the community! To get started, please read the [ICN Contribution Guide](docs/development/guides/contributing.md) for guidelines on how to contribute to the project.
+
+## Testing
+The ICN project uses a comprehensive testing strategy to ensure the quality and reliability of the codebase. For detailed information on the testing strategy and how to run tests, refer to the [ICN Testing Strategy Guide](docs/development/guides/test-strategy.md).
+
+## Documentation
+For detailed documentation, including the Development Setup Guide, ICN Contribution Guide, and other relevant documents, refer to the [Documentation Index](docs/INDEX.md).
+
+- [Consensus Engine](./crates/icn-consensus/README.md)
+- [Core Architecture](./crates/icn-core/README.md)
+- [API Reference](./docs/api.md)
+- [Governance Model](./docs/governance.md)
+
+## License
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+```
+
+===================
+File: package.json
+Size: 544 bytes
+===================
+```json
+{
+  "dependencies": {
+    "@reach/dialog": "^0.18.0",
+    "lucide-react": "^0.479.0",
+    "react-window": "^1.8.11",
+    "recharts": "^2.15.1"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.8.1",
+    "@percy/cli": "^1.27.4",
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^20.10.0",
+    "playwright": "^1.40.0",
+    "typescript": "^5.3.0"
+  },
+  "scripts": {
+    "test:a11y": "playwright test tests/a11y/",
+    "test:visual": "percy snapshot frontend/build",
+    "test:ci": "npm run test:a11y && npm run test:visual"
+  }
+}
+```
+
+===================
+File: rust-toolchain.toml
+Size: 31 bytes
+===================
+```toml
+[toolchain]
+channel = "1.85.0"
+```
+
+===================
+Summary for 01_config
+===================
+Total size of dump: 21115 bytes
+Patterns included:
+- Cargo.toml
+- package.json
+- tsconfig.json
+- docker-compose.yml
+- .env.example
+- Makefile
+- README.md
+- rust-toolchain.toml
+
+Files processed: 50
+===================

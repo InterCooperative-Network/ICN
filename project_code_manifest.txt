@@ -1,0 +1,18 @@
+Project Code Dump Manifest - Generated Mon Mar 10 03:54:52 UTC 2025
+==========================================================
+
+This project has been split into multiple files to stay within size limits.
+Use these files in the following order:
+
+- 09_relationship: project_code_09_relationship.txt (1.05KiB)
+- 04_contracts: project_code_04_contracts.txt (6.85KiB)
+- 03_frontend: project_code_03_frontend.txt (120.01KiB)
+- 01_config: project_code_01_config.txt (47.25KiB)
+- 06_governance: project_code_06_governance.txt (4.67KiB)
+- 10_scripts: project_code_10_scripts.txt (70.97KiB)
+- 07_consensus: project_code_07_consensus.txt (1.32KiB)
+- 05_identity: project_code_05_identity.txt (44.67KiB)
+- 02_backend: project_code_02_backend.txt (512.05KiB)
+- 08_reputation: project_code_08_reputation.txt (14.11KiB)
+
+Total components: 10

@@ -1,0 +1,2730 @@
+Project Code Dump - 10_scripts - Generated Mon Mar 10 03:54:24 UTC 2025
+=========================================================
+
+LLM Context Information
+======================
+This is a distributed cooperative network system with the following key components:
+
+Core Components:
+- Backend: Rust-based node implementation
+- Frontend: TypeScript/React web interface
+- Contracts: Smart contracts for cooperative governance
+
+Architecture Overview:
+- Blockchain: Handles consensus and state management
+- Identity: DID-based identity management
+- Relationship: Tracks member interactions and relationships
+- Reputation: Manages trust and reputation scores
+- Governance: Handles proposals and voting
+- WebSocket: Real-time communication layer
+
+Note: This is file 10 of a multi-file dump.
+All dependency directories are excluded from these dumps.
+======================
+
+===================
+File: ./build-and-run.sh
+Size: 392 bytes
+===================
+```sh
+#!/bin/bash
+set -e
+
+# Build the CLI
+echo "Building ICN CLI..."
+cargo build -p icn-cli
+
+# Find and execute the CLI binary
+CLI_PATH=$(find target/debug -type f -executable -name "icn-cli" | head -n 1)
+
+if [ -z "$CLI_PATH" ]; then
+    echo "Error: icn-cli binary not found after build"
+    exit 1
+fi
+
+echo "Found CLI binary at: $CLI_PATH"
+echo "Running CLI command: $CLI_PATH $@"
+$CLI_PATH "$@"
+```
+
+===================
+File: ./create_docs_dump.sh
+Size: 1572 bytes
+===================
+```sh
+#!/bin/bash
+
+# Output file (default to "project_docs_dump.txt" if not provided)
+OUTPUT_FILE="${1:-project_docs_dump.txt}"
+
+# Directories to exclude
+EXCLUDE_DIRS="target|node_modules|dist|.git|coverage"
+
+# Ensure required commands are available
+for cmd in tree find cat; do
+    if ! command -v $cmd &> /dev/null; then
+        echo "Error: $cmd command is required but not installed." >&2
+        exit 1
+    fi
+done
+
+# Create or clear the output file
+echo "Project Docs Dump - Generated $(date)" > $OUTPUT_FILE
+echo "======================================" >> $OUTPUT_FILE
+echo "" >> $OUTPUT_FILE
+
+# Add docs tree
+echo "Docs Tree:" >> $OUTPUT_FILE
+echo "=============" >> $OUTPUT_FILE
+tree -L 5 --prune -I "$EXCLUDE_DIRS" ./docs >> $OUTPUT_FILE  # Relative path to docs
+echo "" >> $OUTPUT_FILE
+echo "" >> $OUTPUT_FILE
+
+# Function to add a file to the dump, including empty files
+add_file() {
+    local file=$1
+    echo "===================" >> $OUTPUT_FILE
+    echo "File: $file" >> $OUTPUT_FILE
+    echo "===================" >> $OUTPUT_FILE
+
+    if [ -s "$file" ]; then
+        # If the file is not empty, add its content
+        cat "$file" >> $OUTPUT_FILE
+    else
+        # If the file is empty, add a placeholder message
+        echo "<EMPTY FILE>" >> $OUTPUT_FILE
+    fi
+
+    echo "" >> $OUTPUT_FILE
+    echo "" >> $OUTPUT_FILE
+}
+
+# Documentation files
+echo "Adding documentation files..."
+find ./docs -type f -not -path "*/.git/*" | while read file; do  # Relative path to docs
+    add_file "$file"
+done
+
+# Summarize output
+echo "Docs dump generated in $OUTPUT_FILE"```
+
+===================
+File: ./generate_code_dump.sh
+Size: 8563 bytes
+===================
+```sh
+#!/bin/bash
+
+# Base output filename prefix (will be used as prefix for multiple files)
+OUTPUT_PREFIX="${1:-project_code}"
+
+# Target output size for each file (approximate in bytes)
+TARGET_SIZE=1500000  # ~1.5MB per file
+
+# Exclude patterns - be very aggressive with dependencies and generated files
+EXCLUDE_PATTERNS=(
+    "*/node_modules/*"
+    "*/target/*"
+    "*/dist/*"
+    "*/.git/*"
+    "*/coverage/*"
+    "*/.vscode/*"
+    "*/build/*"
+    "*/docs/*"
+    "*/__tests__/*"
+    "*/tests/*"
+    "*/test/*"
+    "*/examples/*"
+    "*/.cache/*"
+    "*/vendor/*"
+)
+
+# Dump file structure - define components and their patterns
+declare -A COMPONENT_PATTERNS
+# Core config files
+COMPONENT_PATTERNS["01_config"]="Cargo.toml package.json tsconfig.json docker-compose.yml .env.example Makefile README.md rust-toolchain.toml"
+# Backend (Rust) files
+COMPONENT_PATTERNS["02_backend"]="backend/src/*.rs backend/src/*/*.rs src/*.rs src/*/*.rs src/*/*/*.rs"
+# Frontend files
+COMPONENT_PATTERNS["03_frontend"]="frontend/src/*.ts frontend/src/*.tsx frontend/src/*/*.ts frontend/src/*/*.tsx frontend/src/*/*/*.ts frontend/src/*/*/*.tsx"
+# Contracts
+COMPONENT_PATTERNS["04_contracts"]="contracts/*/src/*.rs"
+# Core services
+COMPONENT_PATTERNS["05_identity"]="identity/*.rs identity/*/*.rs"
+COMPONENT_PATTERNS["06_governance"]="governance/*.rs governance/*/*.rs"
+COMPONENT_PATTERNS["07_consensus"]="consensus/*.rs consensus/*/*.rs"
+COMPONENT_PATTERNS["08_reputation"]="reputation/*.rs reputation/*/*.rs"
+COMPONENT_PATTERNS["09_relationship"]="relationship/*.rs relationship/*/*.rs"
+# Scripts and utilities
+COMPONENT_PATTERNS["10_scripts"]="scripts/*.sh *.sh"
+
+# Build the exclude args for find command
+build_exclude_args() {
+    local exclude_args=""
+    for pattern in "${EXCLUDE_PATTERNS[@]}"; do
+        exclude_args="$exclude_args -not -path \"$pattern\""
+    done
+    echo "$exclude_args"
+}
+
+# Ensure required commands are available
+for cmd in find cat wc; do
+    if ! command -v $cmd &> /dev/null; then
+        echo "Error: $cmd command is required but not installed." >&2
+        exit 1
+    fi
+done
+
+# Generate common header for all files
+generate_header() {
+    local component="$1"
+    local output_file="$2"
+    
+    cat << EOF > "$output_file"
+Project Code Dump - $component - Generated $(date -u)
+=========================================================
+
+LLM Context Information
+======================
+This is a distributed cooperative network system with the following key components:
+
+Core Components:
+- Backend: Rust-based node implementation
+- Frontend: TypeScript/React web interface
+- Contracts: Smart contracts for cooperative governance
+
+Architecture Overview:
+- Blockchain: Handles consensus and state management
+- Identity: DID-based identity management
+- Relationship: Tracks member interactions and relationships
+- Reputation: Manages trust and reputation scores
+- Governance: Handles proposals and voting
+- WebSocket: Real-time communication layer
+
+Note: This is file $(echo "$component" | cut -d'_' -f1) of a multi-file dump.
+All dependency directories are excluded from these dumps.
+======================
+
+EOF
+}
+
+# Function to format and add a file to the dump, with size tracking
+add_file() {
+    local filepath="$1"
+    local output_file="$2"
+    local current_size="$3"
+    local max_size="$4"  # Optional max size for individual files
+    
+    # Get file extension
+    local ext="${filepath##*.}"
+    
+    # Skip binary files like .png, .jpg, etc.
+    if [[ "$ext" == "png" || "$ext" == "jpg" || "$ext" == "jpeg" || 
+          "$ext" == "gif" || "$ext" == "woff" || "$ext" == "woff2" || 
+          "$ext" == "ttf" || "$ext" == "eot" || "$ext" == "ico" ]]; then
+        return "$current_size"
+    fi
+    
+    # Get file size
+    local filesize=$(wc -c < "$filepath" 2>/dev/null || echo 0)
+    
+    # Skip if filesize is 0 or exceeds max_size
+    if [[ $filesize -eq 0 || ($max_size -gt 0 && $filesize -gt $max_size) ]]; then
+        return "$current_size"
+    fi
+    
+    # Guess if it's a binary file using the 'file' command
+    if file "$filepath" | grep -q "binary"; then
+        return "$current_size"
+    fi
+    
+    # Calculate the size this entry would add to output
+    # Include metadata (headers) + file content + markdown formatting
+    local entry_size=$(( 100 + filesize + 10 ))
+    
+    # Check if adding this file would exceed our target size
+    if [[ $(( current_size + entry_size )) -gt $TARGET_SIZE ]]; then
+        return "$current_size"  # Return unchanged size if we'd exceed the limit
+    fi
+    
+    # Add file to output
+    {
+        echo "==================="
+        echo "File: $filepath"
+        echo "Size: $filesize bytes"
+        echo "==================="
+        
+        # Format code based on extension
+        if [[ -n "$ext" ]]; then
+            echo "\`\`\`$ext"
+            cat "$filepath"
+            echo "\`\`\`"
+        else
+            # Handle files without extension
+            echo "\`\`\`"
+            cat "$filepath"
+            echo "\`\`\`"
+        fi
+        echo ""
+    } >> "$output_file"
+    
+    # Return updated size
+    echo $(( current_size + entry_size ))
+}
+
+# Process each component and create separate dump files
+for component in "${!COMPONENT_PATTERNS[@]}"; do
+    patterns="${COMPONENT_PATTERNS[$component]}"
+    output_file="${OUTPUT_PREFIX}_${component}.txt"
+    
+    echo "Processing component: $component"
+    echo "Output file: $output_file"
+    
+    # Generate header
+    generate_header "$component" "$output_file"
+    current_size=$(wc -c < "$output_file")
+    
+    # Process file patterns for this component
+    file_list=()
+    
+    # Build a list of matching files
+    for pattern in $patterns; do
+        # Get exclude args
+        exclude_args=$(build_exclude_args)
+        
+        # Build and execute find command
+        find_cmd="find . -type f -path \"*/$pattern\" $exclude_args 2>/dev/null"
+        while read -r file; do
+            if [[ -n "$file" ]]; then
+                file_list+=("$file")
+            fi
+        done < <(eval "$find_cmd")
+        
+        # Also try direct match for files in root directory
+        if [[ "$pattern" != *"/"* ]]; then
+            if [[ -f "$pattern" ]]; then
+                file_list+=("$pattern")
+            fi
+        fi
+    done
+    
+    # Remove duplicates
+    unique_files=($(echo "${file_list[@]}" | tr ' ' '\n' | sort -u))
+    
+    echo "Found ${#unique_files[@]} files for component $component"
+    
+    # Process each file
+    for file in "${unique_files[@]}"; do
+        # Check if file still exists and is not a directory
+        if [[ -f "$file" ]]; then
+            # Skip if this file belongs to an excluded pattern
+            skip_file=0
+            for exclude in "${EXCLUDE_PATTERNS[@]}"; do
+                if [[ "$file" == $exclude ]]; then
+                    skip_file=1
+                    break
+                fi
+            done
+            
+            if [[ $skip_file -eq 0 ]]; then
+                new_size=$(add_file "$file" "$output_file" "$current_size" 50000)
+                current_size=$new_size
+            fi
+        fi
+    done
+    
+    # Add summary
+    {
+        echo "==================="
+        echo "Summary for $component"
+        echo "==================="
+        echo "Total size of dump: $current_size bytes"
+        echo "Patterns included:"
+        for pattern in $patterns; do
+            echo "- $pattern"
+        done
+        echo ""
+        echo "Files processed: ${#unique_files[@]}"
+        echo "==================="
+    } >> "$output_file"
+    
+    echo "Component $component dump complete. Size: $current_size bytes"
+    echo ""
+done
+
+# Generate a manifest file listing all components
+manifest_file="${OUTPUT_PREFIX}_manifest.txt"
+echo "Project Code Dump Manifest - Generated $(date -u)" > "$manifest_file"
+echo "==========================================================" >> "$manifest_file"
+echo "" >> "$manifest_file"
+echo "This project has been split into multiple files to stay within size limits." >> "$manifest_file"
+echo "Use these files in the following order:" >> "$manifest_file"
+echo "" >> "$manifest_file"
+
+for component in "${!COMPONENT_PATTERNS[@]}"; do
+    output_file="${OUTPUT_PREFIX}_${component}.txt"
+    file_size=$(wc -c < "$output_file")
+    echo "- ${component}: ${output_file} ($(numfmt --to=iec-i --suffix=B --format="%.2f" $file_size))" >> "$manifest_file"
+done
+
+echo "" >> "$manifest_file"
+echo "Total components: ${#COMPONENT_PATTERNS[@]}" >> "$manifest_file"
+
+echo "Multi-file code dump complete. See $manifest_file for details."```
+
+===================
+File: ./improved-setup.sh
+Size: 2862 bytes
+===================
+```sh
+#!/bin/bash
+# ICN Project Setup Script
+# Version: 1.0.0
+
+# Set error handling
+set -e
+
+# Define colors for output
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Function definitions
+check_requirement() {
+    local cmd=$1
+    local msg=$2
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo -e "${RED}Error: $msg is required but not installed.${NC}"
+        return 1
+    fi
+    echo -e "${GREEN}Found: $msg${NC}"
+    return 0
+}
+
+create_directory() {
+    local dir=$1
+    if [ ! -d "$dir" ]; then
+        mkdir -p "$dir"
+        echo -e "${GREEN}Created directory: $dir${NC}"
+    else
+        echo -e "${GREEN}Directory exists: $dir${NC}"
+    fi
+}
+
+# Main setup process
+echo -e "${GREEN}🚀 Starting ICN Development Environment Setup...${NC}"
+
+# 1. Check prerequisites
+echo "Checking prerequisites..."
+check_requirement "docker" "Docker" || exit 1
+check_requirement "cargo" "Rust/Cargo" || exit 1
+check_requirement "npm" "Node.js/npm" || exit 1
+
+# 2. Create required directories
+echo "Creating project directories..."
+create_directory ".logs"
+create_directory ".data"
+create_directory "tools/doctools"
+
+# 3. Backend setup
+if [ -d "backend" ]; then
+    echo "Setting up backend..."
+    cd backend
+    if [ -f "Cargo.toml" ]; then
+        echo "Running cargo check..."
+        cargo check || {
+            echo -e "${RED}Cargo check failed${NC}"
+            exit 1
+        }
+        echo "Running cargo test..."
+        cargo test || {
+            echo -e "${RED}Tests failed${NC}"
+            exit 1
+        }
+    else
+        echo -e "${RED}Error: Cargo.toml not found in backend directory${NC}"
+        exit 1
+    fi
+    cd ..
+else
+    echo -e "${RED}Error: Backend directory not found${NC}"
+    exit 1
+fi
+
+# 4. Frontend setup
+if [ -d "frontend" ]; then
+    echo "Setting up frontend..."
+    cd frontend
+    if [ -f "package.json" ]; then
+        npm install || {
+            echo -e "${RED}npm install failed${NC}"
+            exit 1
+        }
+    else
+        echo -e "${RED}Warning: No package.json found in frontend directory${NC}"
+    fi
+    cd ..
+fi
+
+# 5. Docker environment setup
+if [ -f "docker/docker-compose.yml" ]; then
+    echo "Starting Docker services..."
+    cd docker
+    docker-compose up -d || {
+        echo -e "${RED}Docker Compose failed${NC}"
+        exit 1
+    }
+    cd ..
+else
+    echo -e "${RED}Warning: docker-compose.yml not found${NC}"
+fi
+
+# Setup complete
+echo -e "${GREEN}✅ Setup completed successfully!${NC}"
+echo "
+Available Services:
+------------------
+Backend API: http://localhost:8081
+WebSocket:   ws://localhost:8088
+
+Development Resources:
+--------------------
+Logs: .logs/
+Data: .data/
+
+Next Steps:
+----------
+1. Check service status:
+   docker-compose -f docker/docker-compose.yml ps
+
+2. View logs:
+   docker-compose -f docker/docker-compose.yml logs -f
+
+3. Run backend tests:
+   cd backend && cargo test
+"```
+
+===================
+File: ./inventory_nodes.sh
+Size: 1357 bytes
+===================
+```sh
+#!/bin/bash
+
+# List of Proxmox node IPs or hostnames
+NODES=("10.8.10.250" "10.8.10.251" "10.8.10.252" "10.8.10.253" "10.8.10.254")
+SSH_USER="root"
+OUTPUT_DIR="./node_inventory"
+
+# Ensure output directory exists
+mkdir -p $OUTPUT_DIR
+
+echo "Starting inventory of nodes..."
+for NODE in "${NODES[@]}"; do
+    echo "Collecting inventory from $NODE..."
+
+    # Collect CPU, Memory, Disk, and Network Information
+    ssh $SSH_USER@$NODE "bash -s" <<-'EOSSH' > "$NODE-inventory.log"
+        echo "========== Node Information =========="
+        echo "Hostname: $(hostname)"
+        echo "IP Address: $(hostname -I | awk '{print $1}')"
+        echo
+        echo "========== CPU Information =========="
+        lscpu
+        echo
+        echo "========== Memory Information =========="
+        free -h
+        echo
+        echo "========== Storage Information =========="
+        lsblk -o NAME,SIZE,TYPE,MOUNTPOINT
+        echo
+        echo "========== Disk Usage =========="
+        df -h
+        echo
+        echo "========== Network Interfaces =========="
+        ip -br addr show
+EOSSH
+
+    # Save inventory to file
+    mv "$NODE-inventory.log" "$OUTPUT_DIR/$NODE-inventory.log"
+    echo "Inventory for $NODE saved to $OUTPUT_DIR/$NODE-inventory.log"
+done
+
+echo "Inventory collection complete! Files saved in $OUTPUT_DIR"
+```
+
+===================
+File: ./scripts/make_front_end.sh
+Size: 11136 bytes
+===================
+```sh
+#!/bin/bash
+# Navigate to the frontend directory
+cd frontend
+
+# Install required dependencies
+npm install --save lucide-react recharts react-window react-grid-heatmap @reach/dialog
+
+# Install shadcn/ui components
+# First, make sure we have the necessary tooling
+npm install --save-dev shadcn-ui
+
+# Create directories for UI components if they don't exist
+mkdir -p src/components/ui
+
+# Create a tsconfig paths config to support @/ imports
+cat > tsconfig.paths.json << EOL
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}
+EOL
+
+# Update the main tsconfig.json to extend the paths config
+cat > tsconfig.json << EOL
+{
+  "extends": "./tsconfig.paths.json",
+  "compilerOptions": {
+    "target": "es5",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "module": "esnext",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "noEmit": true
+  },
+  "include": ["src"]
+}
+EOL
+
+# Create basic UI components that are missing
+
+# Progress component
+mkdir -p src/components/ui/progress
+cat > src/components/ui/progress/index.tsx << EOL
+import * as React from "react"
+
+export interface ProgressProps extends React.HTMLAttributes<HTMLDivElement> {
+  value?: number
+  max?: number
+}
+
+export const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
+  ({ value = 0, max = 100, className, ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={\`w-full h-2 bg-gray-200 rounded-full overflow-hidden \${className}\`}
+        {...props}
+      >
+        <div
+          className="h-full bg-blue-500 transition-all duration-300 ease-in-out"
+          style={{ width: \`\${(value / max) * 100}%\` }}
+        />
+      </div>
+    )
+  }
+)
+
+Progress.displayName = "Progress"
+EOL
+
+# Card components
+mkdir -p src/components/ui/card
+cat > src/components/ui/card/index.tsx << EOL
+import * as React from "react"
+
+export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {}
+
+export const Card = React.forwardRef<HTMLDivElement, CardProps>(
+  ({ className, ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={\`rounded-lg border bg-white shadow-sm \${className || ""}\`}
+        {...props}
+      />
+    )
+  }
+)
+Card.displayName = "Card"
+
+export interface CardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {}
+
+export const CardHeader = React.forwardRef<HTMLDivElement, CardHeaderProps>(
+  ({ className, ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={\`flex flex-col space-y-1.5 p-6 \${className || ""}\`}
+        {...props}
+      />
+    )
+  }
+)
+CardHeader.displayName = "CardHeader"
+
+export interface CardTitleProps extends React.HTMLAttributes<HTMLHeadingElement> {}
+
+export const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(
+  ({ className, ...props }, ref) => {
+    return (
+      <h3
+        ref={ref}
+        className={\`text-lg font-semibold \${className || ""}\`}
+        {...props}
+      />
+    )
+  }
+)
+CardTitle.displayName = "CardTitle"
+
+export interface CardContentProps extends React.HTMLAttributes<HTMLDivElement> {}
+
+export const CardContent = React.forwardRef<HTMLDivElement, CardContentProps>(
+  ({ className, ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={\`p-6 pt-0 \${className || ""}\`}
+        {...props}
+      />
+    )
+  }
+)
+CardContent.displayName = "CardContent"
+EOL
+
+# Tabs components
+mkdir -p src/components/ui/tabs
+cat > src/components/ui/tabs/index.tsx << EOL
+import * as React from "react"
+
+export interface TabsProps extends React.HTMLAttributes<HTMLDivElement> {
+  value?: string
+  onValueChange?: (value: string) => void
+}
+
+export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
+  ({ value, onValueChange, className, children, ...props }, ref) => {
+    const [selectedTab, setSelectedTab] = React.useState(value || "")
+
+    const handleValueChange = (newValue: string) => {
+      setSelectedTab(newValue)
+      onValueChange?.(newValue)
+    }
+
+    return (
+      <div
+        ref={ref}
+        className={\`\${className || ""}\`}
+        {...props}
+        data-selected-tab={selectedTab}
+      >
+        {React.Children.map(children, (child) => {
+          if (React.isValidElement(child)) {
+            return React.cloneElement(child as React.ReactElement<any>, {
+              selectedTab,
+              onValueChange: handleValueChange,
+            })
+          }
+          return child
+        })}
+      </div>
+    )
+  }
+)
+Tabs.displayName = "Tabs"
+
+export interface TabsListProps extends React.HTMLAttributes<HTMLDivElement> {
+  selectedTab?: string
+  onValueChange?: (value: string) => void
+}
+
+export const TabsList = React.forwardRef<HTMLDivElement, TabsListProps>(
+  ({ className, children, ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={\`flex space-x-1 bg-gray-100 p-1 rounded-md \${className || ""}\`}
+        {...props}
+      >
+        {children}
+      </div>
+    )
+  }
+)
+TabsList.displayName = "TabsList"
+
+export interface TabsTriggerProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  value: string
+  selectedTab?: string
+  onValueChange?: (value: string) => void
+}
+
+export const TabsTrigger = React.forwardRef<HTMLButtonElement, TabsTriggerProps>(
+  ({ className, value, selectedTab, onValueChange, ...props }, ref) => {
+    const isSelected = selectedTab === value
+    
+    return (
+      <button
+        ref={ref}
+        className={\`px-3 py-1.5 text-sm font-medium transition-all rounded-md
+          \${isSelected ? "bg-white shadow-sm" : "text-gray-600 hover:text-gray-900"}
+          \${className || ""}\`}
+        onClick={() => onValueChange?.(value)}
+        data-selected={isSelected}
+        {...props}
+      />
+    )
+  }
+)
+TabsTrigger.displayName = "TabsTrigger"
+
+export interface TabsContentProps extends React.HTMLAttributes<HTMLDivElement> {
+  value: string
+  selectedTab?: string
+}
+
+export const TabsContent = React.forwardRef<HTMLDivElement, TabsContentProps>(
+  ({ className, value, selectedTab, ...props }, ref) => {
+    const isSelected = selectedTab === value
+
+    if (!isSelected) return null
+
+    return (
+      <div
+        ref={ref}
+        className={\`mt-2 \${className || ""}\`}
+        {...props}
+      />
+    )
+  }
+)
+TabsContent.displayName = "TabsContent"
+EOL
+
+# Alert components
+mkdir -p src/components/ui/alert
+cat > src/components/ui/alert/index.tsx << EOL
+import * as React from "react"
+
+export interface AlertProps extends React.HTMLAttributes<HTMLDivElement> {}
+
+export const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
+  ({ className, ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={\`relative w-full rounded-lg border p-4 \${className || ""}\`}
+        {...props}
+      />
+    )
+  }
+)
+Alert.displayName = "Alert"
+
+export interface AlertDescriptionProps extends React.HTMLAttributes<HTMLParagraphElement> {}
+
+export const AlertDescription = React.forwardRef<HTMLParagraphElement, AlertDescriptionProps>(
+  ({ className, ...props }, ref) => {
+    return (
+      <p
+        ref={ref}
+        className={\`text-sm \${className || ""}\`}
+        {...props}
+      />
+    )
+  }
+)
+AlertDescription.displayName = "AlertDescription"
+EOL
+
+# Button component
+mkdir -p src/components/ui/button
+cat > src/components/ui/button/index.tsx << EOL
+import * as React from "react"
+
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: "default" | "outline" | "ghost"
+  size?: "sm" | "md" | "lg"
+}
+
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant = "default", size = "md", ...props }, ref) => {
+    const variantStyles = {
+      default: "bg-blue-500 text-white hover:bg-blue-600",
+      outline: "border border-gray-300 hover:bg-gray-50",
+      ghost: "hover:bg-gray-100",
+    }
+
+    const sizeStyles = {
+      sm: "px-3 py-1 text-sm",
+      md: "px-4 py-2",
+      lg: "px-6 py-3 text-lg",
+    }
+
+    return (
+      <button
+        ref={ref}
+        className={\`inline-flex items-center justify-center rounded-md font-medium transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none
+        \${variantStyles[variant]} \${sizeStyles[size]} \${className || ""}\`}
+        {...props}
+      />
+    )
+  }
+)
+Button.displayName = "Button"
+EOL
+
+# Badge component
+mkdir -p src/components/ui/badge
+cat > src/components/ui/badge/index.tsx << EOL
+import * as React from "react"
+
+export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
+  variant?: "default" | "secondary" | "success" | "warning" | "danger"
+}
+
+export const Badge = React.forwardRef<HTMLDivElement, BadgeProps>(
+  ({ className, variant = "default", ...props }, ref) => {
+    const variantStyles = {
+      default: "bg-blue-100 text-blue-800",
+      secondary: "bg-gray-100 text-gray-800",
+      success: "bg-green-100 text-green-800",
+      warning: "bg-yellow-100 text-yellow-800",
+      danger: "bg-red-100 text-red-800",
+    }
+
+    return (
+      <div
+        ref={ref}
+        className={\`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium \${variantStyles[variant]} \${className || ""}\`}
+        {...props}
+      />
+    )
+  }
+)
+Badge.displayName = "Badge"
+EOL
+
+# Tooltip component
+mkdir -p src/components/ui/tooltip
+cat > src/components/ui/tooltip/index.tsx << EOL
+import * as React from "react"
+
+export interface TooltipProps {
+  children: React.ReactNode
+}
+
+export const Tooltip = ({ children }: TooltipProps) => {
+  return (
+    <div className="relative inline-block">{children}</div>
+  )
+}
+
+export interface TooltipTriggerProps extends React.HTMLAttributes<HTMLDivElement> {}
+
+export const TooltipTrigger = React.forwardRef<HTMLDivElement, TooltipTriggerProps>(
+  ({ className, ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={\`inline-block cursor-pointer \${className || ""}\`}
+        {...props}
+      />
+    )
+  }
+)
+TooltipTrigger.displayName = "TooltipTrigger"
+
+export interface TooltipContentProps extends React.HTMLAttributes<HTMLDivElement> {
+  side?: "top" | "right" | "bottom" | "left"
+}
+
+export const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
+  ({ className, side = "top", ...props }, ref) => {
+    const sidePositions = {
+      top: "bottom-full mb-1",
+      right: "left-full ml-1",
+      bottom: "top-full mt-1",
+      left: "right-full mr-1",
+    }
+
+    return (
+      <div
+        ref={ref}
+        className={\`absolute z-50 px-3 py-2 text-sm bg-black text-white rounded shadow-md \${sidePositions[side]} \${className || ""}\`}
+        {...props}
+      />
+    )
+  }
+)
+TooltipContent.displayName = "TooltipContent"
+
+export const TooltipProvider = ({ children }: { children: React.ReactNode }) => {
+  return <>{children}</>
+}```
+
+===================
+File: ./scripts/make_scripts_executable.sh
+Size: 49 bytes
+===================
+```sh
+#!/bin/bash
+chmod +x ./scripts/run_load_tests.sh
+```
+
+===================
+File: ./scripts/run_load_tests.sh
+Size: 2632 bytes
+===================
+```sh
+#!/bin/bash
+
+# Set default parameters
+BASE_URL=${BASE_URL:-"http://localhost:8081"}
+LOAD_LEVEL=${LOAD_LEVEL:-"low"}
+OUTPUT_DIR="./load_test_results"
+
+# Create output directory if it doesn't exist
+mkdir -p $OUTPUT_DIR
+
+# Function to display help
+show_help() {
+    echo "Usage: $0 [options]"
+    echo ""
+    echo "Options:"
+    echo "  --url URL       Base URL for the ICN API (default: http://localhost:8081)"
+    echo "  --level LEVEL   Load test level: low, medium, high, stress (default: low)"
+    echo "  --test TEST     Specific test to run: governance, resource, all (default: all)"
+    echo "  --help          Display this help message"
+    echo ""
+}
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    key="$1"
+    case $key in
+        --url)
+            BASE_URL="$2"
+            shift
+            shift
+            ;;
+        --level)
+            LOAD_LEVEL="$2"
+            shift
+            shift
+            ;;
+        --test)
+            TEST_TYPE="$2"
+            shift
+            shift
+            ;;
+        --help)
+            show_help
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
+# Validate load level
+if [[ ! "$LOAD_LEVEL" =~ ^(low|medium|high|stress)$ ]]; then
+    echo "Invalid load level: $LOAD_LEVEL"
+    echo "Valid options are: low, medium, high, stress"
+    exit 1
+fi
+
+# Timestamp for results
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+
+echo "=== Running ICN Load Tests ==="
+echo "Base URL: $BASE_URL"
+echo "Load Level: $LOAD_LEVEL"
+echo "Timestamp: $TIMESTAMP"
+echo "============================"
+
+# Function to run a specific test
+run_test() {
+    test_script="$1"
+    test_name=$(basename "$test_script" .js)
+    
+    echo ""
+    echo "Running $test_name test..."
+    
+    # Run the test with k6
+    BASE_URL=$BASE_URL LOAD_LEVEL=$LOAD_LEVEL k6 run \
+        --out json="$OUTPUT_DIR/${test_name}_${LOAD_LEVEL}_${TIMESTAMP}.json" \
+        --out summary="$OUTPUT_DIR/${test_name}_${LOAD_LEVEL}_${TIMESTAMP}_summary.txt" \
+        "$test_script"
+        
+    echo "$test_name test completed."
+}
+
+# Determine which tests to run
+if [[ -z "$TEST_TYPE" || "$TEST_TYPE" == "all" ]]; then
+    # Run all tests
+    for test_file in ./tests/load_tests/*_test.js; do
+        run_test "$test_file"
+    done
+else
+    # Run specific test
+    test_file="./tests/load_tests/${TEST_TYPE}_test.js"
+    if [[ -f "$test_file" ]]; then
+        run_test "$test_file"
+    else
+        echo "Test file not found: $test_file"
+        exit 1
+    fi
+fi
+
+echo ""
+echo "All tests completed. Results saved to $OUTPUT_DIR"
+```
+
+===================
+File: ./scripts/run_tests.sh
+Size: 1727 bytes
+===================
+```sh
+#!/bin/bash
+set -e
+
+# Source environment variables
+source scripts/setup_test_env.sh
+
+echo "Running all tests..."
+
+# Run format check
+echo "Checking code formatting..."
+cargo fmt -- --check
+
+# Run clippy
+echo "Running clippy..."
+cargo clippy -- -D warnings
+
+# Run unit tests
+echo "Running unit tests..."
+cargo test --lib --all-features --workspace
+
+# Run integration tests
+echo "Running integration tests..."
+cargo test --test '*' --all-features
+
+# Run property tests
+echo "Running property tests..."
+cargo test --test property_tests --all-features
+
+# Run end-to-end tests
+echo "Running end-to-end tests..."
+cargo test --test e2e_tests --all-features
+
+# Generate coverage report
+echo "Generating coverage report..."
+cargo tarpaulin --verbose --workspace --timeout 120 --out Xml --out Html --output-dir test-results/coverage
+
+# Run security audit
+echo "Running security audit..."
+cargo audit
+cargo deny check licenses
+cargo deny check bans
+
+# Start test server for load tests
+echo "Starting test server for load tests..."
+cargo run &
+SERVER_PID=$!
+sleep 5  # Wait for server to start
+
+# Run load tests
+echo "Running load tests..."
+k6 run tests/load_tests/federation_test.js -o json=test-results/k6/federation.json
+k6 run tests/load_tests/governance_test.js -o json=test-results/k6/governance.json
+k6 run tests/load_tests/resource_test.js -o json=test-results/k6/resource.json
+
+# Stop test server
+kill $SERVER_PID
+
+# Run benchmarks
+echo "Running benchmarks..."
+cargo bench --all-features
+
+echo "All tests completed!"
+
+# Print summary
+echo "Test Summary:"
+echo "============"
+echo "Coverage report: test-results/coverage/tarpaulin-report.html"
+echo "Load test results: test-results/k6/"
+echo "Benchmark results: target/criterion/" ```
+
+===================
+File: ./scripts/setup.sh
+Size: 3201 bytes
+===================
+```sh
+#!/bin/bash
+
+# Source Rust environment if available
+if [ -f "$HOME/.cargo/env" ]; then
+    source "$HOME/.cargo/env"
+fi
+
+# Auto-install docker if not installed
+if ! command -v docker >/dev/null 2>&1; then
+    echo "Docker not found. Attempting to install docker..."
+    if command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get update && sudo apt-get install -y docker.io || { echo "Docker installation failed."; exit 1; }
+    else
+        echo "Error: docker not installed, please install docker manually." && exit 1
+    fi
+fi
+
+# Auto-install docker-compose if not installed
+if ! command -v docker-compose >/dev/null 2>&1; then
+    echo "docker-compose not found. Attempting to install docker-compose..."
+    if command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get update && sudo apt-get install -y docker-compose || { echo "docker-compose installation failed."; exit 1; }
+    else
+        echo "Error: docker-compose not installed, please install docker-compose manually." && exit 1
+    fi
+fi
+
+# Wait for docker daemon to be active (timeout: 30 seconds)
+timeout=30
+interval=2
+elapsed=0
+check_docker_running() {
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl is-active --quiet docker
+    elif command -v service >/dev/null 2>&1; then
+        service docker status 2>&1 | grep -iq "running"
+    else
+        return 1
+    fi
+}
+while ! check_docker_running; do
+    if [ $elapsed -ge $timeout ]; then
+        echo "Error: Docker daemon is not running after waiting for $timeout seconds. Please start it properly and try again."
+        exit 1
+    fi
+    sleep $interval
+    elapsed=$(( elapsed + interval ))
+done
+
+# Create necessary directories
+mkdir -p backend/src
+mkdir -p frontend/src
+mkdir -p contracts
+mkdir -p crates
+
+# Initialize backend only if Cargo.toml doesn't exist
+cd backend
+if [ ! -f Cargo.toml ]; then
+    if command -v cargo >/dev/null 2>&1; then
+        cargo init
+    else
+        echo "cargo not installed, using Docker to initialize backend"
+        docker run --rm -v "$(pwd)":/usr/src/app -w /usr/src/app rust:1.75-slim cargo init
+    fi
+else
+    echo "Backend already initialized. Skipping cargo init."
+fi
+cd ..
+
+# Initialize frontend only if package.json doesn't exist
+cd frontend
+if [ ! -f package.json ]; then
+    if command -v npm >/dev/null 2>&1; then
+        npm init -y
+        npm install react react-dom @types/react @types/react-dom typescript
+    else
+        echo "npm not installed, using Docker to initialize frontend"
+        docker run --rm -v "$(pwd)":/usr/src/app -w /usr/src/app node:16-slim npm init -y
+        docker run --rm -v "$(pwd)":/usr/src/app -w /usr/src/app node:16-slim npm install react react-dom @types/react @types/react-dom typescript
+    fi
+else
+    echo "Frontend already initialized. Skipping npm init."
+fi
+cd ..
+
+# Create docker network (ignore if exists)
+docker network create icn-network 2>/dev/null || true
+
+# Build and start services (fail gracefully if config is missing)
+if [ -f docker/docker-compose.yml ]; then
+    docker-compose -f docker/docker-compose.yml build
+    docker-compose -f docker/docker-compose.yml up -d
+else
+    echo "Warning: docker-compose.yml not found in docker directory"
+fi
+```
+
+===================
+File: ./scripts/setup_test_env.sh
+Size: 3510 bytes
+===================
+```sh
+#!/bin/bash
+set -e
+
+# Function to install system dependencies
+install_system_dependencies() {
+    echo "Installing system dependencies..."
+    if [ -f /etc/debian_version ]; then
+        # Debian/Ubuntu
+        sudo apt-get update
+        sudo apt-get install -y postgresql postgresql-contrib postgresql-client libpq-dev
+        
+        # Start PostgreSQL service
+        sudo service postgresql start
+        
+        # Configure PostgreSQL to allow local connections
+        sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+        sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/13/main/postgresql.conf
+        sudo sed -i "s/peer/trust/" /etc/postgresql/13/main/pg_hba.conf
+        sudo sed -i "s/md5/trust/" /etc/postgresql/13/main/pg_hba.conf
+        sudo service postgresql restart
+    else
+        echo "This script currently only supports Debian/Ubuntu"
+        exit 1
+    fi
+}
+
+# Function to check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Install dependencies if needed
+if ! command_exists psql; then
+    install_system_dependencies
+fi
+
+# Function to wait for PostgreSQL to be ready
+wait_for_postgres() {
+    echo "Waiting for PostgreSQL to be ready..."
+    for i in {1..30}; do
+        if psql -h localhost -U postgres -c '\q' >/dev/null 2>&1; then
+            echo "PostgreSQL is ready!"
+            return 0
+        fi
+        echo "Waiting for PostgreSQL... ($i/30)"
+        sleep 1
+    done
+    echo "PostgreSQL did not become ready in time"
+    exit 1
+}
+
+# Ensure PostgreSQL is running
+wait_for_postgres
+
+# Create test database
+echo "Creating test database..."
+psql -h localhost -U postgres -c "DROP DATABASE IF EXISTS icndb_test;" || {
+    echo "Failed to drop existing database. Make sure PostgreSQL is running and accessible."
+    exit 1
+}
+psql -h localhost -U postgres -c "CREATE DATABASE icndb_test;" || {
+    echo "Failed to create database. Make sure PostgreSQL is running and accessible."
+    exit 1
+}
+
+# Initialize schema
+echo "Initializing database schema..."
+psql -h localhost -U postgres -d icndb_test -f backend/migrations/test/init.sql || {
+    echo "Failed to initialize database schema."
+    exit 1
+}
+
+# Set environment variables for tests
+export TEST_DATABASE_URL="postgres://postgres:postgres@localhost:5432/icndb_test"
+export RUST_LOG="debug"
+export RUST_BACKTRACE=1
+
+# Install Rust test tools if they're not already installed
+echo "Installing Rust test tools..."
+if ! command_exists cargo-tarpaulin; then
+    cargo install cargo-tarpaulin
+fi
+
+if ! command_exists cargo-audit; then
+    cargo install cargo-audit
+fi
+
+if ! command_exists cargo-deny; then
+    cargo install cargo-deny
+fi
+
+# Install k6 for load testing if it's not already installed
+if ! command_exists k6; then
+    echo "Installing k6..."
+    if [ -f /etc/debian_version ]; then
+        sudo gpg -k
+        sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+        echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+        sudo apt-get update
+        sudo apt-get install k6
+    else
+        echo "Please install k6 manually for your operating system"
+    fi
+fi
+
+# Create test results directory
+mkdir -p test-results/k6
+mkdir -p test-results/coverage
+
+echo "Test environment setup complete!" ```
+
+===================
+File: ./scripts/start_icn.sh
+Size: 2491 bytes
+===================
+```sh
+#!/bin/bash
+set -e
+
+# Function to check if postgres is ready
+check_postgres() {
+    local max_attempts=30
+    local attempt=1
+
+    echo "Waiting for database to be ready..."
+    while [ $attempt -le $max_attempts ]; do
+        if docker exec docker_db_1 pg_isready -U icnuser -d icndb > /dev/null 2>&1; then
+            echo "Database is ready"
+            return 0
+        fi
+        echo "Attempt $attempt/$max_attempts: Database not ready yet..."
+        sleep 5
+        attempt=$((attempt + 1))
+    done
+    echo "Database failed to become ready"
+    return 1
+}
+
+# Function to check if a service is healthy
+check_health() {
+    local service=$1
+    local port=$2
+    local max_attempts=30
+    local attempt=1
+
+    echo "Waiting for $service to be healthy..."
+    while [ $attempt -le $max_attempts ]; do
+        if curl -s -f "http://localhost:$port/health" > /dev/null 2>&1; then
+            echo "$service is healthy"
+            return 0
+        fi
+        echo "Attempt $attempt/$max_attempts: $service not ready yet..."
+        sleep 5
+        attempt=$((attempt + 1))
+    done
+    echo "$service failed to become healthy"
+    return 1
+}
+
+# Create required directories
+mkdir -p data/db data/bootstrap data/validator1 data/validator2 logs config
+
+# Load environment variables
+if [ -f .env ]; then
+    source .env
+fi
+
+# Set default environment variables if not set
+export POSTGRES_USER=${POSTGRES_USER:-icnuser}
+export POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-icnpass}
+export POSTGRES_DB=${POSTGRES_DB:-icndb}
+export COOPERATIVE_ID=${COOPERATIVE_ID:-icn-primary}
+export RUST_LOG=${RUST_LOG:-info}
+
+# Start the ICN network
+echo "Starting ICN network..."
+docker-compose -f docker/docker-compose.yml up -d db
+
+# Wait for database to be ready
+check_postgres
+
+# Start the bootstrap node first
+docker-compose -f docker/docker-compose.yml up -d bootstrap
+check_health "bootstrap node" "8082"
+
+# Start validator nodes
+docker-compose -f docker/docker-compose.yml up -d validator1 validator2
+check_health "validator1" "8083"
+check_health "validator2" "8084"
+
+# Start the backend and frontend services
+docker-compose -f docker/docker-compose.yml up -d backend frontend
+check_health "backend" "8081"
+check_health "frontend" "80"
+
+echo "ICN network is now running!"
+echo "Access the dashboard at http://localhost"
+echo "Bootstrap node API: http://localhost:8082"
+echo "Validator1 API: http://localhost:8083"
+echo "Validator2 API: http://localhost:8084"
+echo "Main backend API: http://localhost:8081"```
+
+===================
+File: ./setup_and_run_script.sh
+Size: 1193 bytes
+===================
+```sh
+#!/bin/bash
+
+# Set up missing files and directories for documentation
+mkdir -p docs/guides
+mkdir -p docs/architecture/diagrams/images
+mkdir -p docs/architecture/diagrams/mermaid
+
+# Create missing Markdown files in docs/guides
+touch docs/guides/getting-started.md
+touch docs/guides/governance-guide.md
+touch docs/guides/reputation-management.md
+
+# Create placeholder image in docs/architecture/diagrams/images
+touch docs/architecture/diagrams/images/component-diagram.png
+
+# Create Mermaid diagram placeholder in docs/architecture/diagrams/mermaid
+echo "%% Mermaid diagram placeholder" > docs/architecture/diagrams/mermaid/component-diagram.mermaid
+
+# Add placeholder content to new files
+echo "# Getting Started" > docs/guides/getting-started.md
+echo "# Governance Guide" > docs/guides/governance-guide.md
+echo "# Reputation Management" > docs/guides/reputation-management.md
+
+# Change permissions to ensure Docker can access the docs directory
+chmod -R 755 docs
+
+# Navigate to docker folder and start the services
+cd docker
+
+# Bring down any running containers
+sudo docker-compose down
+
+# Build and start the docs service
+sudo docker-compose up --build docs
+```
+
+===================
+File: ./setup_docs.sh
+Size: 4497 bytes
+===================
+```sh
+#!/bin/bash
+
+# Create documentation tools structure
+mkdir -p tools/doctools
+touch tools/doctools/__init__.py
+
+# Create documentation structure
+mkdir -p docs/{architecture/{overview,backend,frontend,diagrams/{system,sequence,component}},specifications/{core,api,protocols},development/{setup,guides,plans},user/{guides,tutorials}}
+
+# Create tools files
+cat > tools/doctools/docmanager.py << 'EOL'
+#!/usr/bin/env python3
+import os
+import yaml
+from datetime import datetime
+import argparse
+from pathlib import Path
+import re
+import shutil
+
+# [Previous docmanager.py content would go here]
+EOL
+
+cat > tools/doctools/specgen.py << 'EOL'
+#!/usr/bin/env python3
+import sys
+from docmanager import DocManager
+from pathlib import Path
+import yaml
+
+# [Previous specgen.py content would go here]
+EOL
+
+# Make the Python files executable
+chmod +x tools/doctools/docmanager.py
+chmod +x tools/doctools/specgen.py
+
+# Create requirements.txt
+cat > tools/requirements.txt << 'EOL'
+pyyaml>=6.0
+EOL
+
+# Create tools README
+cat > tools/README.md << 'EOL'
+# ICN Documentation Tools
+
+This directory contains tools for managing ICN project documentation.
+
+## Setup
+
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Add tools to your PATH:
+   ```bash
+   export PATH=$PATH:$(pwd)/tools/doctools
+   ```
+
+## Usage
+
+Generate a new specification:
+```bash
+specgen.py --title "Component Name" --type "specification" --component "core-component"
+```
+
+List all documents:
+```bash
+docmanager.py list
+```
+
+Create documentation index:
+```bash
+docmanager.py index
+```
+EOL
+
+# Create initial documentation templates
+mkdir -p docs/templates
+
+# Create core component template
+cat > docs/templates/core-component-template.md << 'EOL'
+# {title}
+
+## 1. Overview
+
+### 1.1 Purpose
+
+### 1.2 Core Components
+
+## 2. Detailed Specifications
+
+### 2.1 Data Structures
+
+### 2.2 Interfaces
+
+### 2.3 Behaviors
+
+## 3. Implementation Guidelines
+
+### 3.1 Performance Requirements
+
+### 3.2 Security Requirements
+
+### 3.3 Error Handling
+
+## 4. Testing Requirements
+
+## 5. Monitoring and Metrics
+
+## 6. Future Considerations
+EOL
+
+# Create API template
+cat > docs/templates/api-template.md << 'EOL'
+# {title} API Specification
+
+## 1. API Overview
+
+### 1.1 Purpose
+
+### 1.2 Endpoints
+
+## 2. Authentication
+
+## 3. Endpoints Detail
+
+## 4. Error Handling
+
+## 5. Rate Limiting
+
+## 6. Security Considerations
+
+## 7. Example Usage
+EOL
+
+# Create root documentation index
+cat > docs/README.md << 'EOL'
+# ICN Documentation
+
+## Structure
+
+- `architecture/` - System architecture documentation
+- `specifications/` - Technical specifications
+- `development/` - Development guides and plans
+- `user/` - User documentation and tutorials
+
+## Getting Started
+
+1. Install documentation tools:
+   ```bash
+   cd tools
+   pip install -r requirements.txt
+   ```
+
+2. Generate documentation index:
+   ```bash
+   python tools/doctools/docmanager.py index
+   ```
+
+## Documentation Standards
+
+Please refer to `development/guides/documentation-standards.md` for our documentation guidelines.
+EOL
+
+# Create initial documentation standards guide
+mkdir -p docs/development/guides
+cat > docs/development/guides/documentation-standards.md << 'EOL'
+# Documentation Standards
+
+## File Organization
+
+- Use appropriate directory for document type
+- Follow naming conventions
+- Include required metadata
+
+## Writing Style
+
+- Be clear and concise
+- Include code examples where appropriate
+- Keep documentation up to date
+- Use proper Markdown formatting
+
+## Review Process
+
+1. Create new document using tools
+2. Submit for review
+3. Address feedback
+4. Update documentation index
+
+## Templates
+
+Use provided templates in `docs/templates/` for new documents.
+EOL
+
+# Create .gitignore for documentation
+cat > .gitignore << 'EOL'
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment
+.env
+.venv
+env/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Documentation build
+_build/
+EOL
+
+# Initialize documentation index
+python tools/doctools/docmanager.py index
+
+echo "Documentation structure and tools have been set up successfully!"
+echo "Next steps:"
+echo "1. Install Python dependencies: pip install -r tools/requirements.txt"
+echo "2. Review the documentation structure in docs/"
+echo "3. Start creating documentation using the tools in tools/doctools/"```
+
+===================
+File: ./setup_venv.sh
+Size: 1222 bytes
+===================
+```sh
+#!/bin/bash
+
+# Create a .env directory in tools for the virtual environment
+mkdir -p tools/.env
+
+# Create the virtual environment
+python3 -m venv tools/.env/icn-docs
+
+# Create activation script for convenience
+cat > tools/activate-docs-env.sh << 'EOL'
+#!/bin/bash
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Activate the virtual environment
+source "${SCRIPT_DIR}/.env/icn-docs/bin/activate"
+
+# Add tools/doctools to PYTHONPATH
+export PYTHONPATH="${SCRIPT_DIR}/doctools:${PYTHONPATH}"
+
+echo "ICN documentation environment activated!"
+echo "Use 'deactivate' to exit the virtual environment"
+EOL
+
+# Make the activation script executable
+chmod +x tools/activate-docs-env.sh
+
+# Create a .gitignore entry
+cat >> .gitignore << 'EOL'
+
+# Python virtual environments
+tools/.env/
+EOL
+
+echo "Virtual environment setup complete!"
+echo ""
+echo "To use the environment:"
+echo "1. Source the activation script:"
+echo "   source tools/activate-docs-env.sh"
+echo ""
+echo "2. Install the requirements:"
+echo "   pip install -r tools/requirements.txt"
+echo ""
+echo "3. When finished, type 'deactivate' to exit the environment"```
+
+===================
+File: ./start_docs_server.sh
+Size: 412 bytes
+===================
+```sh
+#!/bin/bash
+
+# Navigate to the project root directory
+PROJECT_ROOT_DIR="$(dirname "$(readlink -f "$0")")"
+cd "$PROJECT_ROOT_DIR/docker" || exit
+
+# Stop any running documentation container if it exists
+echo "Stopping any existing docs container..."
+docker-compose down
+
+# Rebuild and bring up the documentation server only
+echo "Starting the documentation server..."
+docker-compose up --build docs
+
+```
+
+===================
+File: build-and-run.sh
+Size: 392 bytes
+===================
+```sh
+#!/bin/bash
+set -e
+
+# Build the CLI
+echo "Building ICN CLI..."
+cargo build -p icn-cli
+
+# Find and execute the CLI binary
+CLI_PATH=$(find target/debug -type f -executable -name "icn-cli" | head -n 1)
+
+if [ -z "$CLI_PATH" ]; then
+    echo "Error: icn-cli binary not found after build"
+    exit 1
+fi
+
+echo "Found CLI binary at: $CLI_PATH"
+echo "Running CLI command: $CLI_PATH $@"
+$CLI_PATH "$@"
+```
+
+===================
+File: create_docs_dump.sh
+Size: 1572 bytes
+===================
+```sh
+#!/bin/bash
+
+# Output file (default to "project_docs_dump.txt" if not provided)
+OUTPUT_FILE="${1:-project_docs_dump.txt}"
+
+# Directories to exclude
+EXCLUDE_DIRS="target|node_modules|dist|.git|coverage"
+
+# Ensure required commands are available
+for cmd in tree find cat; do
+    if ! command -v $cmd &> /dev/null; then
+        echo "Error: $cmd command is required but not installed." >&2
+        exit 1
+    fi
+done
+
+# Create or clear the output file
+echo "Project Docs Dump - Generated $(date)" > $OUTPUT_FILE
+echo "======================================" >> $OUTPUT_FILE
+echo "" >> $OUTPUT_FILE
+
+# Add docs tree
+echo "Docs Tree:" >> $OUTPUT_FILE
+echo "=============" >> $OUTPUT_FILE
+tree -L 5 --prune -I "$EXCLUDE_DIRS" ./docs >> $OUTPUT_FILE  # Relative path to docs
+echo "" >> $OUTPUT_FILE
+echo "" >> $OUTPUT_FILE
+
+# Function to add a file to the dump, including empty files
+add_file() {
+    local file=$1
+    echo "===================" >> $OUTPUT_FILE
+    echo "File: $file" >> $OUTPUT_FILE
+    echo "===================" >> $OUTPUT_FILE
+
+    if [ -s "$file" ]; then
+        # If the file is not empty, add its content
+        cat "$file" >> $OUTPUT_FILE
+    else
+        # If the file is empty, add a placeholder message
+        echo "<EMPTY FILE>" >> $OUTPUT_FILE
+    fi
+
+    echo "" >> $OUTPUT_FILE
+    echo "" >> $OUTPUT_FILE
+}
+
+# Documentation files
+echo "Adding documentation files..."
+find ./docs -type f -not -path "*/.git/*" | while read file; do  # Relative path to docs
+    add_file "$file"
+done
+
+# Summarize output
+echo "Docs dump generated in $OUTPUT_FILE"```
+
+===================
+File: generate_code_dump.sh
+Size: 8563 bytes
+===================
+```sh
+#!/bin/bash
+
+# Base output filename prefix (will be used as prefix for multiple files)
+OUTPUT_PREFIX="${1:-project_code}"
+
+# Target output size for each file (approximate in bytes)
+TARGET_SIZE=1500000  # ~1.5MB per file
+
+# Exclude patterns - be very aggressive with dependencies and generated files
+EXCLUDE_PATTERNS=(
+    "*/node_modules/*"
+    "*/target/*"
+    "*/dist/*"
+    "*/.git/*"
+    "*/coverage/*"
+    "*/.vscode/*"
+    "*/build/*"
+    "*/docs/*"
+    "*/__tests__/*"
+    "*/tests/*"
+    "*/test/*"
+    "*/examples/*"
+    "*/.cache/*"
+    "*/vendor/*"
+)
+
+# Dump file structure - define components and their patterns
+declare -A COMPONENT_PATTERNS
+# Core config files
+COMPONENT_PATTERNS["01_config"]="Cargo.toml package.json tsconfig.json docker-compose.yml .env.example Makefile README.md rust-toolchain.toml"
+# Backend (Rust) files
+COMPONENT_PATTERNS["02_backend"]="backend/src/*.rs backend/src/*/*.rs src/*.rs src/*/*.rs src/*/*/*.rs"
+# Frontend files
+COMPONENT_PATTERNS["03_frontend"]="frontend/src/*.ts frontend/src/*.tsx frontend/src/*/*.ts frontend/src/*/*.tsx frontend/src/*/*/*.ts frontend/src/*/*/*.tsx"
+# Contracts
+COMPONENT_PATTERNS["04_contracts"]="contracts/*/src/*.rs"
+# Core services
+COMPONENT_PATTERNS["05_identity"]="identity/*.rs identity/*/*.rs"
+COMPONENT_PATTERNS["06_governance"]="governance/*.rs governance/*/*.rs"
+COMPONENT_PATTERNS["07_consensus"]="consensus/*.rs consensus/*/*.rs"
+COMPONENT_PATTERNS["08_reputation"]="reputation/*.rs reputation/*/*.rs"
+COMPONENT_PATTERNS["09_relationship"]="relationship/*.rs relationship/*/*.rs"
+# Scripts and utilities
+COMPONENT_PATTERNS["10_scripts"]="scripts/*.sh *.sh"
+
+# Build the exclude args for find command
+build_exclude_args() {
+    local exclude_args=""
+    for pattern in "${EXCLUDE_PATTERNS[@]}"; do
+        exclude_args="$exclude_args -not -path \"$pattern\""
+    done
+    echo "$exclude_args"
+}
+
+# Ensure required commands are available
+for cmd in find cat wc; do
+    if ! command -v $cmd &> /dev/null; then
+        echo "Error: $cmd command is required but not installed." >&2
+        exit 1
+    fi
+done
+
+# Generate common header for all files
+generate_header() {
+    local component="$1"
+    local output_file="$2"
+    
+    cat << EOF > "$output_file"
+Project Code Dump - $component - Generated $(date -u)
+=========================================================
+
+LLM Context Information
+======================
+This is a distributed cooperative network system with the following key components:
+
+Core Components:
+- Backend: Rust-based node implementation
+- Frontend: TypeScript/React web interface
+- Contracts: Smart contracts for cooperative governance
+
+Architecture Overview:
+- Blockchain: Handles consensus and state management
+- Identity: DID-based identity management
+- Relationship: Tracks member interactions and relationships
+- Reputation: Manages trust and reputation scores
+- Governance: Handles proposals and voting
+- WebSocket: Real-time communication layer
+
+Note: This is file $(echo "$component" | cut -d'_' -f1) of a multi-file dump.
+All dependency directories are excluded from these dumps.
+======================
+
+EOF
+}
+
+# Function to format and add a file to the dump, with size tracking
+add_file() {
+    local filepath="$1"
+    local output_file="$2"
+    local current_size="$3"
+    local max_size="$4"  # Optional max size for individual files
+    
+    # Get file extension
+    local ext="${filepath##*.}"
+    
+    # Skip binary files like .png, .jpg, etc.
+    if [[ "$ext" == "png" || "$ext" == "jpg" || "$ext" == "jpeg" || 
+          "$ext" == "gif" || "$ext" == "woff" || "$ext" == "woff2" || 
+          "$ext" == "ttf" || "$ext" == "eot" || "$ext" == "ico" ]]; then
+        return "$current_size"
+    fi
+    
+    # Get file size
+    local filesize=$(wc -c < "$filepath" 2>/dev/null || echo 0)
+    
+    # Skip if filesize is 0 or exceeds max_size
+    if [[ $filesize -eq 0 || ($max_size -gt 0 && $filesize -gt $max_size) ]]; then
+        return "$current_size"
+    fi
+    
+    # Guess if it's a binary file using the 'file' command
+    if file "$filepath" | grep -q "binary"; then
+        return "$current_size"
+    fi
+    
+    # Calculate the size this entry would add to output
+    # Include metadata (headers) + file content + markdown formatting
+    local entry_size=$(( 100 + filesize + 10 ))
+    
+    # Check if adding this file would exceed our target size
+    if [[ $(( current_size + entry_size )) -gt $TARGET_SIZE ]]; then
+        return "$current_size"  # Return unchanged size if we'd exceed the limit
+    fi
+    
+    # Add file to output
+    {
+        echo "==================="
+        echo "File: $filepath"
+        echo "Size: $filesize bytes"
+        echo "==================="
+        
+        # Format code based on extension
+        if [[ -n "$ext" ]]; then
+            echo "\`\`\`$ext"
+            cat "$filepath"
+            echo "\`\`\`"
+        else
+            # Handle files without extension
+            echo "\`\`\`"
+            cat "$filepath"
+            echo "\`\`\`"
+        fi
+        echo ""
+    } >> "$output_file"
+    
+    # Return updated size
+    echo $(( current_size + entry_size ))
+}
+
+# Process each component and create separate dump files
+for component in "${!COMPONENT_PATTERNS[@]}"; do
+    patterns="${COMPONENT_PATTERNS[$component]}"
+    output_file="${OUTPUT_PREFIX}_${component}.txt"
+    
+    echo "Processing component: $component"
+    echo "Output file: $output_file"
+    
+    # Generate header
+    generate_header "$component" "$output_file"
+    current_size=$(wc -c < "$output_file")
+    
+    # Process file patterns for this component
+    file_list=()
+    
+    # Build a list of matching files
+    for pattern in $patterns; do
+        # Get exclude args
+        exclude_args=$(build_exclude_args)
+        
+        # Build and execute find command
+        find_cmd="find . -type f -path \"*/$pattern\" $exclude_args 2>/dev/null"
+        while read -r file; do
+            if [[ -n "$file" ]]; then
+                file_list+=("$file")
+            fi
+        done < <(eval "$find_cmd")
+        
+        # Also try direct match for files in root directory
+        if [[ "$pattern" != *"/"* ]]; then
+            if [[ -f "$pattern" ]]; then
+                file_list+=("$pattern")
+            fi
+        fi
+    done
+    
+    # Remove duplicates
+    unique_files=($(echo "${file_list[@]}" | tr ' ' '\n' | sort -u))
+    
+    echo "Found ${#unique_files[@]} files for component $component"
+    
+    # Process each file
+    for file in "${unique_files[@]}"; do
+        # Check if file still exists and is not a directory
+        if [[ -f "$file" ]]; then
+            # Skip if this file belongs to an excluded pattern
+            skip_file=0
+            for exclude in "${EXCLUDE_PATTERNS[@]}"; do
+                if [[ "$file" == $exclude ]]; then
+                    skip_file=1
+                    break
+                fi
+            done
+            
+            if [[ $skip_file -eq 0 ]]; then
+                new_size=$(add_file "$file" "$output_file" "$current_size" 50000)
+                current_size=$new_size
+            fi
+        fi
+    done
+    
+    # Add summary
+    {
+        echo "==================="
+        echo "Summary for $component"
+        echo "==================="
+        echo "Total size of dump: $current_size bytes"
+        echo "Patterns included:"
+        for pattern in $patterns; do
+            echo "- $pattern"
+        done
+        echo ""
+        echo "Files processed: ${#unique_files[@]}"
+        echo "==================="
+    } >> "$output_file"
+    
+    echo "Component $component dump complete. Size: $current_size bytes"
+    echo ""
+done
+
+# Generate a manifest file listing all components
+manifest_file="${OUTPUT_PREFIX}_manifest.txt"
+echo "Project Code Dump Manifest - Generated $(date -u)" > "$manifest_file"
+echo "==========================================================" >> "$manifest_file"
+echo "" >> "$manifest_file"
+echo "This project has been split into multiple files to stay within size limits." >> "$manifest_file"
+echo "Use these files in the following order:" >> "$manifest_file"
+echo "" >> "$manifest_file"
+
+for component in "${!COMPONENT_PATTERNS[@]}"; do
+    output_file="${OUTPUT_PREFIX}_${component}.txt"
+    file_size=$(wc -c < "$output_file")
+    echo "- ${component}: ${output_file} ($(numfmt --to=iec-i --suffix=B --format="%.2f" $file_size))" >> "$manifest_file"
+done
+
+echo "" >> "$manifest_file"
+echo "Total components: ${#COMPONENT_PATTERNS[@]}" >> "$manifest_file"
+
+echo "Multi-file code dump complete. See $manifest_file for details."```
+
+===================
+File: improved-setup.sh
+Size: 2862 bytes
+===================
+```sh
+#!/bin/bash
+# ICN Project Setup Script
+# Version: 1.0.0
+
+# Set error handling
+set -e
+
+# Define colors for output
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Function definitions
+check_requirement() {
+    local cmd=$1
+    local msg=$2
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo -e "${RED}Error: $msg is required but not installed.${NC}"
+        return 1
+    fi
+    echo -e "${GREEN}Found: $msg${NC}"
+    return 0
+}
+
+create_directory() {
+    local dir=$1
+    if [ ! -d "$dir" ]; then
+        mkdir -p "$dir"
+        echo -e "${GREEN}Created directory: $dir${NC}"
+    else
+        echo -e "${GREEN}Directory exists: $dir${NC}"
+    fi
+}
+
+# Main setup process
+echo -e "${GREEN}🚀 Starting ICN Development Environment Setup...${NC}"
+
+# 1. Check prerequisites
+echo "Checking prerequisites..."
+check_requirement "docker" "Docker" || exit 1
+check_requirement "cargo" "Rust/Cargo" || exit 1
+check_requirement "npm" "Node.js/npm" || exit 1
+
+# 2. Create required directories
+echo "Creating project directories..."
+create_directory ".logs"
+create_directory ".data"
+create_directory "tools/doctools"
+
+# 3. Backend setup
+if [ -d "backend" ]; then
+    echo "Setting up backend..."
+    cd backend
+    if [ -f "Cargo.toml" ]; then
+        echo "Running cargo check..."
+        cargo check || {
+            echo -e "${RED}Cargo check failed${NC}"
+            exit 1
+        }
+        echo "Running cargo test..."
+        cargo test || {
+            echo -e "${RED}Tests failed${NC}"
+            exit 1
+        }
+    else
+        echo -e "${RED}Error: Cargo.toml not found in backend directory${NC}"
+        exit 1
+    fi
+    cd ..
+else
+    echo -e "${RED}Error: Backend directory not found${NC}"
+    exit 1
+fi
+
+# 4. Frontend setup
+if [ -d "frontend" ]; then
+    echo "Setting up frontend..."
+    cd frontend
+    if [ -f "package.json" ]; then
+        npm install || {
+            echo -e "${RED}npm install failed${NC}"
+            exit 1
+        }
+    else
+        echo -e "${RED}Warning: No package.json found in frontend directory${NC}"
+    fi
+    cd ..
+fi
+
+# 5. Docker environment setup
+if [ -f "docker/docker-compose.yml" ]; then
+    echo "Starting Docker services..."
+    cd docker
+    docker-compose up -d || {
+        echo -e "${RED}Docker Compose failed${NC}"
+        exit 1
+    }
+    cd ..
+else
+    echo -e "${RED}Warning: docker-compose.yml not found${NC}"
+fi
+
+# Setup complete
+echo -e "${GREEN}✅ Setup completed successfully!${NC}"
+echo "
+Available Services:
+------------------
+Backend API: http://localhost:8081
+WebSocket:   ws://localhost:8088
+
+Development Resources:
+--------------------
+Logs: .logs/
+Data: .data/
+
+Next Steps:
+----------
+1. Check service status:
+   docker-compose -f docker/docker-compose.yml ps
+
+2. View logs:
+   docker-compose -f docker/docker-compose.yml logs -f
+
+3. Run backend tests:
+   cd backend && cargo test
+"```
+
+===================
+File: inventory_nodes.sh
+Size: 1357 bytes
+===================
+```sh
+#!/bin/bash
+
+# List of Proxmox node IPs or hostnames
+NODES=("10.8.10.250" "10.8.10.251" "10.8.10.252" "10.8.10.253" "10.8.10.254")
+SSH_USER="root"
+OUTPUT_DIR="./node_inventory"
+
+# Ensure output directory exists
+mkdir -p $OUTPUT_DIR
+
+echo "Starting inventory of nodes..."
+for NODE in "${NODES[@]}"; do
+    echo "Collecting inventory from $NODE..."
+
+    # Collect CPU, Memory, Disk, and Network Information
+    ssh $SSH_USER@$NODE "bash -s" <<-'EOSSH' > "$NODE-inventory.log"
+        echo "========== Node Information =========="
+        echo "Hostname: $(hostname)"
+        echo "IP Address: $(hostname -I | awk '{print $1}')"
+        echo
+        echo "========== CPU Information =========="
+        lscpu
+        echo
+        echo "========== Memory Information =========="
+        free -h
+        echo
+        echo "========== Storage Information =========="
+        lsblk -o NAME,SIZE,TYPE,MOUNTPOINT
+        echo
+        echo "========== Disk Usage =========="
+        df -h
+        echo
+        echo "========== Network Interfaces =========="
+        ip -br addr show
+EOSSH
+
+    # Save inventory to file
+    mv "$NODE-inventory.log" "$OUTPUT_DIR/$NODE-inventory.log"
+    echo "Inventory for $NODE saved to $OUTPUT_DIR/$NODE-inventory.log"
+done
+
+echo "Inventory collection complete! Files saved in $OUTPUT_DIR"
+```
+
+===================
+File: setup_and_run_script.sh
+Size: 1193 bytes
+===================
+```sh
+#!/bin/bash
+
+# Set up missing files and directories for documentation
+mkdir -p docs/guides
+mkdir -p docs/architecture/diagrams/images
+mkdir -p docs/architecture/diagrams/mermaid
+
+# Create missing Markdown files in docs/guides
+touch docs/guides/getting-started.md
+touch docs/guides/governance-guide.md
+touch docs/guides/reputation-management.md
+
+# Create placeholder image in docs/architecture/diagrams/images
+touch docs/architecture/diagrams/images/component-diagram.png
+
+# Create Mermaid diagram placeholder in docs/architecture/diagrams/mermaid
+echo "%% Mermaid diagram placeholder" > docs/architecture/diagrams/mermaid/component-diagram.mermaid
+
+# Add placeholder content to new files
+echo "# Getting Started" > docs/guides/getting-started.md
+echo "# Governance Guide" > docs/guides/governance-guide.md
+echo "# Reputation Management" > docs/guides/reputation-management.md
+
+# Change permissions to ensure Docker can access the docs directory
+chmod -R 755 docs
+
+# Navigate to docker folder and start the services
+cd docker
+
+# Bring down any running containers
+sudo docker-compose down
+
+# Build and start the docs service
+sudo docker-compose up --build docs
+```
+
+===================
+File: setup_docs.sh
+Size: 4497 bytes
+===================
+```sh
+#!/bin/bash
+
+# Create documentation tools structure
+mkdir -p tools/doctools
+touch tools/doctools/__init__.py
+
+# Create documentation structure
+mkdir -p docs/{architecture/{overview,backend,frontend,diagrams/{system,sequence,component}},specifications/{core,api,protocols},development/{setup,guides,plans},user/{guides,tutorials}}
+
+# Create tools files
+cat > tools/doctools/docmanager.py << 'EOL'
+#!/usr/bin/env python3
+import os
+import yaml
+from datetime import datetime
+import argparse
+from pathlib import Path
+import re
+import shutil
+
+# [Previous docmanager.py content would go here]
+EOL
+
+cat > tools/doctools/specgen.py << 'EOL'
+#!/usr/bin/env python3
+import sys
+from docmanager import DocManager
+from pathlib import Path
+import yaml
+
+# [Previous specgen.py content would go here]
+EOL
+
+# Make the Python files executable
+chmod +x tools/doctools/docmanager.py
+chmod +x tools/doctools/specgen.py
+
+# Create requirements.txt
+cat > tools/requirements.txt << 'EOL'
+pyyaml>=6.0
+EOL
+
+# Create tools README
+cat > tools/README.md << 'EOL'
+# ICN Documentation Tools
+
+This directory contains tools for managing ICN project documentation.
+
+## Setup
+
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Add tools to your PATH:
+   ```bash
+   export PATH=$PATH:$(pwd)/tools/doctools
+   ```
+
+## Usage
+
+Generate a new specification:
+```bash
+specgen.py --title "Component Name" --type "specification" --component "core-component"
+```
+
+List all documents:
+```bash
+docmanager.py list
+```
+
+Create documentation index:
+```bash
+docmanager.py index
+```
+EOL
+
+# Create initial documentation templates
+mkdir -p docs/templates
+
+# Create core component template
+cat > docs/templates/core-component-template.md << 'EOL'
+# {title}
+
+## 1. Overview
+
+### 1.1 Purpose
+
+### 1.2 Core Components
+
+## 2. Detailed Specifications
+
+### 2.1 Data Structures
+
+### 2.2 Interfaces
+
+### 2.3 Behaviors
+
+## 3. Implementation Guidelines
+
+### 3.1 Performance Requirements
+
+### 3.2 Security Requirements
+
+### 3.3 Error Handling
+
+## 4. Testing Requirements
+
+## 5. Monitoring and Metrics
+
+## 6. Future Considerations
+EOL
+
+# Create API template
+cat > docs/templates/api-template.md << 'EOL'
+# {title} API Specification
+
+## 1. API Overview
+
+### 1.1 Purpose
+
+### 1.2 Endpoints
+
+## 2. Authentication
+
+## 3. Endpoints Detail
+
+## 4. Error Handling
+
+## 5. Rate Limiting
+
+## 6. Security Considerations
+
+## 7. Example Usage
+EOL
+
+# Create root documentation index
+cat > docs/README.md << 'EOL'
+# ICN Documentation
+
+## Structure
+
+- `architecture/` - System architecture documentation
+- `specifications/` - Technical specifications
+- `development/` - Development guides and plans
+- `user/` - User documentation and tutorials
+
+## Getting Started
+
+1. Install documentation tools:
+   ```bash
+   cd tools
+   pip install -r requirements.txt
+   ```
+
+2. Generate documentation index:
+   ```bash
+   python tools/doctools/docmanager.py index
+   ```
+
+## Documentation Standards
+
+Please refer to `development/guides/documentation-standards.md` for our documentation guidelines.
+EOL
+
+# Create initial documentation standards guide
+mkdir -p docs/development/guides
+cat > docs/development/guides/documentation-standards.md << 'EOL'
+# Documentation Standards
+
+## File Organization
+
+- Use appropriate directory for document type
+- Follow naming conventions
+- Include required metadata
+
+## Writing Style
+
+- Be clear and concise
+- Include code examples where appropriate
+- Keep documentation up to date
+- Use proper Markdown formatting
+
+## Review Process
+
+1. Create new document using tools
+2. Submit for review
+3. Address feedback
+4. Update documentation index
+
+## Templates
+
+Use provided templates in `docs/templates/` for new documents.
+EOL
+
+# Create .gitignore for documentation
+cat > .gitignore << 'EOL'
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment
+.env
+.venv
+env/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Documentation build
+_build/
+EOL
+
+# Initialize documentation index
+python tools/doctools/docmanager.py index
+
+echo "Documentation structure and tools have been set up successfully!"
+echo "Next steps:"
+echo "1. Install Python dependencies: pip install -r tools/requirements.txt"
+echo "2. Review the documentation structure in docs/"
+echo "3. Start creating documentation using the tools in tools/doctools/"```
+
+===================
+File: setup_venv.sh
+Size: 1222 bytes
+===================
+```sh
+#!/bin/bash
+
+# Create a .env directory in tools for the virtual environment
+mkdir -p tools/.env
+
+# Create the virtual environment
+python3 -m venv tools/.env/icn-docs
+
+# Create activation script for convenience
+cat > tools/activate-docs-env.sh << 'EOL'
+#!/bin/bash
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Activate the virtual environment
+source "${SCRIPT_DIR}/.env/icn-docs/bin/activate"
+
+# Add tools/doctools to PYTHONPATH
+export PYTHONPATH="${SCRIPT_DIR}/doctools:${PYTHONPATH}"
+
+echo "ICN documentation environment activated!"
+echo "Use 'deactivate' to exit the virtual environment"
+EOL
+
+# Make the activation script executable
+chmod +x tools/activate-docs-env.sh
+
+# Create a .gitignore entry
+cat >> .gitignore << 'EOL'
+
+# Python virtual environments
+tools/.env/
+EOL
+
+echo "Virtual environment setup complete!"
+echo ""
+echo "To use the environment:"
+echo "1. Source the activation script:"
+echo "   source tools/activate-docs-env.sh"
+echo ""
+echo "2. Install the requirements:"
+echo "   pip install -r tools/requirements.txt"
+echo ""
+echo "3. When finished, type 'deactivate' to exit the environment"```
+
+===================
+File: start_docs_server.sh
+Size: 412 bytes
+===================
+```sh
+#!/bin/bash
+
+# Navigate to the project root directory
+PROJECT_ROOT_DIR="$(dirname "$(readlink -f "$0")")"
+cd "$PROJECT_ROOT_DIR/docker" || exit
+
+# Stop any running documentation container if it exists
+echo "Stopping any existing docs container..."
+docker-compose down
+
+# Rebuild and bring up the documentation server only
+echo "Starting the documentation server..."
+docker-compose up --build docs
+
+```
+
+===================
+Summary for 10_scripts
+===================
+Total size of dump: 72500 bytes
+Patterns included:
+- scripts/make_front_end.sh
+- scripts/make_scripts_executable.sh
+- scripts/run_load_tests.sh
+- scripts/run_tests.sh
+- scripts/setup.sh
+- scripts/setup_test_env.sh
+- scripts/start_icn.sh
+- build-and-run.sh
+- create_docs_dump.sh
+- generate_code_dump.sh
+- improved-setup.sh
+- inventory_nodes.sh
+- setup_and_run_script.sh
+- setup_docs.sh
+- setup_venv.sh
+- start_docs_server.sh
+
+Files processed: 25
+===================

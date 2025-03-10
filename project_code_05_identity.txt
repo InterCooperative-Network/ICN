@@ -1,0 +1,1202 @@
+Project Code Dump - 05_identity - Generated Mon Mar 10 03:54:29 UTC 2025
+=========================================================
+
+LLM Context Information
+======================
+This is a distributed cooperative network system with the following key components:
+
+Core Components:
+- Backend: Rust-based node implementation
+- Frontend: TypeScript/React web interface
+- Contracts: Smart contracts for cooperative governance
+
+Architecture Overview:
+- Blockchain: Handles consensus and state management
+- Identity: DID-based identity management
+- Relationship: Tracks member interactions and relationships
+- Reputation: Manages trust and reputation scores
+- Governance: Handles proposals and voting
+- WebSocket: Real-time communication layer
+
+Note: This is file 05 of a multi-file dump.
+All dependency directories are excluded from these dumps.
+======================
+
+===================
+File: ./crates/icn-core/src/identity/mod.rs
+Size: 1438 bytes
+===================
+```rs
+use std::collections::HashMap;
+use tokio::sync::RwLock;
+use icn_types::{MemberId, CooperativeId};
+use async_trait::async_trait;
+
+pub struct IdentityManager {
+    members: RwLock<HashMap<String, MemberId>>,
+    cooperatives: RwLock<HashMap<String, CooperativeId>>,
+}
+
+#[async_trait]
+pub trait IdentityInterface: Send + Sync {
+    async fn register_member(&self, did: String, cooperative_id: CooperativeId) -> Result<MemberId, String>;
+    async fn verify_member(&self, did: &str) -> bool;
+    async fn start(&self) -> Result<(), String>;
+    async fn stop(&self) -> Result<(), String>;
+}
+
+#[async_trait]
+impl IdentityInterface for IdentityManager {
+    async fn register_member(&self, did: String, cooperative_id: CooperativeId) -> Result<MemberId, String> {
+        let member_id = MemberId {
+            did: did.clone(),
+            cooperative_id: cooperative_id.clone(),
+        };
+        
+        self.members.write().await.insert(did, member_id.clone());
+        Ok(member_id)
+    }
+
+    async fn verify_member(&self, did: &str) -> bool {
+        self.members.read().await.contains_key(did)
+    }
+
+    async fn start(&self) -> Result<(), String> {
+        Ok(())
+    }
+
+    async fn stop(&self) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+impl IdentityManager {
+    pub fn new() -> Self {
+        Self {
+            members: RwLock::new(HashMap::new()),
+            cooperatives: RwLock::new(HashMap::new()),
+        }
+    }
+}
+```
+
+===================
+File: ./identity/did.rs
+Size: 18468 bytes
+===================
+```rs
+use secp256k1::{SecretKey, PublicKey, Secp256k1};
+use rsa::{RSAPrivateKey, RSAPublicKey};
+use ecdsa::{SigningKey, VerifyingKey};
+use rand::thread_rng;
+use serde::{Serialize, Deserialize};
+use sha2::{Sha256, Digest};
+use thiserror::Error;
+use kyber::keypair as kyber_keypair;
+use kyber::encapsulate as kyber_encapsulate;
+use kyber::decapsulate as kyber_decapsulate;
+use dilithium::keypair as dilithium_keypair;
+use dilithium::sign as dilithium_sign;
+use dilithium::verify as dilithium_verify;
+use falcon::keypair as falcon_keypair;
+use falcon::sign as falcon_sign;
+use falcon::verify as falcon_verify;
+use bls_signatures::{PrivateKey as BlsPrivateKey, PublicKey as BlsPublicKey, Signature as BlsSignature, Serialize as BlsSerialize, AggregatePublicKey, AggregateSignature};
+use crate::key_manager::{KeyManager, KeyManagerError, KeyStatus};
+use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use bls12_381::Bls12;
+use ff::PrimeField;
+use pairing::Engine;
+
+#[derive(Debug, Error)]
+pub enum DIDError {
+    #[error("Invalid key")]
+    InvalidKey,
+    #[error("Signature verification failed")]
+    SignatureVerification,
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+    #[error("Key rotation failed")]
+    KeyRotation,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum Algorithm {
+    Secp256k1,
+    RSA,
+    ECDSA,
+    Kyber,
+    Dilithium,
+    Falcon,
+    BLS,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DID {
+    pub id: String,
+    secret_key: Vec<u8>,
+    public_key: Vec<u8>,
+    algorithm: Algorithm,
+    pub is_verified: bool,
+    pub verification_proof: Option<VerificationProof>,
+    pub last_verification: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerificationProof {
+    pub proof_type: ProofType,
+    pub proof_data: Vec<u8>,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ProofType {
+    ZkSnark,
+    RepurationThreshold,
+    HumanityCheck,
+}
+
+impl DID {
+    pub fn new(id: String, algorithm: Algorithm) -> Self {
+        let (secret_key, public_key) = match algorithm {
+            Algorithm::Secp256k1 => {
+                let secp = Secp256k1::new();
+                let secret = SecretKey::new(&mut thread_rng());
+                let public = PublicKey::from_secret_key(&secp, &secret);
+                (secret.to_bytes().to_vec(), public.serialize().to_vec())
+            },
+            Algorithm::RSA => {
+                let private_key = RSAPrivateKey::new(&mut thread_rng(), 2048)
+                    .expect("failed to generate RSA key");
+                let public_key = private_key.to_public_key();
+                (
+                    private_key.to_pkcs1().expect("failed to encode private key"),
+                    public_key.to_pkcs1().expect("failed to encode public key")
+                )
+            },
+            Algorithm::ECDSA => {
+                let signing_key = SigningKey::random(&mut thread_rng());
+                let verifying_key = VerifyingKey::from(&signing_key);
+                (
+                    signing_key.to_bytes().to_vec(),
+                    verifying_key.to_bytes().to_vec()
+                )
+            },
+            Algorithm::Kyber => {
+                let (public_key, private_key) = kyber_keypair();
+                (private_key, public_key)
+            },
+            Algorithm::Dilithium => {
+                let (public_key, private_key) = dilithium_keypair();
+                (private_key, public_key)
+            },
+            Algorithm::Falcon => {
+                let (public_key, private_key) = falcon_keypair();
+                (private_key, public_key)
+            },
+            Algorithm::BLS => {
+                let private_key = BlsPrivateKey::generate(&mut thread_rng());
+                let public_key = BlsPublicKey::from(&private_key);
+                (private_key.as_bytes().to_vec(), public_key.as_bytes().to_vec())
+            },
+        };
+
+        DID {
+            id,
+            secret_key,
+            public_key,
+            algorithm,
+            is_verified: false,
+            verification_proof: None,
+            last_verification: None,
+        }
+    }
+
+    pub fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, DIDError> {
+        match self.algorithm {
+            Algorithm::Secp256k1 => {
+                let secp = Secp256k1::new();
+                let secret_key = SecretKey::from_slice(&self.secret_key)
+                    .map_err(|_| DIDError::InvalidKey)?;
+                let msg = secp256k1::Message::from_slice(&Sha256::digest(message))
+                    .map_err(|_| DIDError::InvalidKey)?;
+                Ok(secp.sign(&msg, &secret_key).serialize_compact().to_vec())
+            },
+            Algorithm::RSA => {
+                let private_key = RSAPrivateKey::from_pkcs1(&self.secret_key).expect("failed to decode private key");
+                let padding = rsa::PaddingScheme::new_pkcs1v15_sign(None);
+                Ok(private_key.sign(padding, &Sha256::digest(message)).expect("failed to sign message"))
+            },
+            Algorithm::ECDSA => {
+                let signing_key = SigningKey::from_bytes(&self.secret_key).expect("failed to decode private key");
+                Ok(signing_key.sign(message).to_bytes().to_vec())
+            },
+            Algorithm::Dilithium => {
+                Ok(dilithium_sign(&self.secret_key, message))
+            },
+            Algorithm::Falcon => {
+                Ok(falcon_sign(&self.secret_key, message))
+            },
+            Algorithm::BLS => {
+                let private_key = BlsPrivateKey::from_bytes(&self.secret_key).map_err(|_| DIDError::InvalidKey)?;
+                let signature = private_key.sign(message);
+                Ok(signature.as_bytes().to_vec())
+            },
+            _ => Err(DIDError::InvalidKey),
+        }
+    }
+
+    pub fn verify_signature(&self, message: &[u8], signature: &[u8]) -> Result<bool, DIDError> {
+        match self.algorithm {
+            Algorithm::Secp256k1 => {
+                let secp = Secp256k1::new();
+                let public_key = PublicKey::from_slice(&self.public_key)
+                    .map_err(|_| DIDError::InvalidKey)?;
+                let msg = secp256k1::Message::from_slice(&Sha256::digest(message))
+                    .map_err(|_| DIDError::InvalidKey)?;
+                let sig = secp256k1::Signature::from_compact(signature)
+                    .map_err(|_| DIDError::SignatureVerification)?;
+                Ok(secp.verify(&msg, &sig, &public_key).is_ok())
+            },
+            Algorithm::RSA => {
+                if let Ok(public_key) = RSAPublicKey::from_pkcs1(&self.public_key) {
+                    let padding = rsa::PaddingScheme::new_pkcs1v15_sign(None);
+                    Ok(public_key.verify(padding, &Sha256::digest(message), signature).is_ok())
+                } else {
+                    Err(DIDError::InvalidKey)
+                }
+            },
+            Algorithm::ECDSA => {
+                if let Ok(verifying_key) = VerifyingKey::from_bytes(&self.public_key) {
+                    Ok(verifying_key.verify(message, signature).is_ok())
+                } else {
+                    Err(DIDError::InvalidKey)
+                }
+            },
+            Algorithm::Dilithium => {
+                Ok(dilithium_verify(&self.public_key, message, signature))
+            },
+            Algorithm::Falcon => {
+                Ok(falcon_verify(&self.public_key, message, signature))
+            },
+            Algorithm::BLS => {
+                let public_key = BlsPublicKey::from_bytes(&self.public_key).map_err(|_| DIDError::InvalidKey)?;
+                let signature = BlsSignature::from_bytes(signature).map_err(|_| DIDError::SignatureVerification)?;
+                Ok(public_key.verify(message, &signature))
+            },
+            _ => Err(DIDError::InvalidKey),
+        }
+    }
+
+    pub fn rotate_key(&mut self) -> Result<(), DIDError> {
+        let key_manager = KeyManager::new();
+        match key_manager.rotate_key(&self.id) {
+            Ok(new_public_key) => {
+                self.public_key = new_public_key;
+                Ok(())
+            }
+            Err(KeyManagerError::RotationFailed) => Err(DIDError::KeyRotation),
+            Err(_) => Err(DIDError::InvalidKey),
+        }
+    }
+
+    pub fn revoke_key(&mut self) -> Result<(), DIDError> {
+        let key_manager = KeyManager::new();
+        match key_manager.revoke_key(&self.id) {
+            Ok(()) => Ok(()),
+            Err(_) => Err(DIDError::KeyRotation),
+        }
+    }
+
+    pub fn verify_sybil_resistance(&mut self, proof: VerificationProof) -> Result<bool, DIDError> {
+        match proof.proof_type {
+            ProofType::ZkSnark => {
+                // Verify zk-SNARK proof
+                let verified = verify_snark_proof(&proof.proof_data)?;
+                if verified {
+                    self.is_verified = true;
+                    self.verification_proof = Some(proof);
+                    self.last_verification = Some(std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs());
+                }
+                Ok(verified)
+            },
+            ProofType::RepurationThreshold => {
+                // Verify reputation meets minimum threshold
+                let verified = verify_reputation_threshold(&self.id, &proof.proof_data)?;
+                if verified {
+                    self.is_verified = true;
+                    self.verification_proof = Some(proof);
+                    self.last_verification = Some(std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs());
+                }
+                Ok(verified)
+            },
+            ProofType::HumanityCheck => {
+                // Verify human proof (e.g. captcha)
+                let verified = verify_humanity_proof(&proof.proof_data)?;
+                if verified {
+                    self.is_verified = true;
+                    self.verification_proof = Some(proof);
+                    self.last_verification = Some(std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs());
+                }
+                Ok(verified) 
+            }
+        }
+    }
+
+    pub fn requires_verification(&self) -> bool {
+        // Check if verification has expired (1 week)
+        if let Some(last_verification) = self.last_verification {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            if now - last_verification > 7 * 24 * 60 * 60 {
+                return true;
+            }
+        }
+        !self.is_verified
+    }
+}
+
+fn verify_snark_proof(proof_data: &[u8]) -> Result<bool, DIDError> {
+    // Implementation of zk-SNARK verification
+    let circuit = ReputationCircuit {
+        // Initialize circuit parameters
+    };
+
+    let pvk = prepare_verifying_key(&VERIFYING_KEY);
+    let proof = Proof::read(proof_data).map_err(|_| DIDError::InvalidKey)?;
+    
+    Ok(verify_proof(&pvk, &proof, &[]))
+}
+
+fn verify_reputation_threshold(did: &str, proof_data: &[u8]) -> Result<bool, DIDError> {
+    // Verify reputation meets minimum threshold
+    let min_reputation = 100;
+    let current_reputation = get_reputation_score(did)?;
+    Ok(current_reputation >= min_reputation)
+}
+
+fn verify_humanity_proof(proof_data: &[u8]) -> Result<bool, DIDError> {
+    // Verify human verification proof
+    // This could integrate with external CAPTCHA or other human verification services
+    Ok(true) // Placeholder implementation
+}
+
+// Circuit implementation for zk-SNARK proof
+struct ReputationCircuit {
+    // Circuit parameters
+}
+
+impl Circuit<Bls12> for ReputationCircuit {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(
+        self,
+        cs: &mut CS
+    ) -> Result<(), SynthesisError> {
+        // Implement constraint system for reputation verification
+        Ok(())
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SerializableDID {
+    pub id: String,
+    pub secret_key: Vec<u8>,
+    pub public_key: Vec<u8>,
+    pub algorithm: Algorithm,
+}
+
+impl From<&DID> for SerializableDID {
+    fn from(did: &DID) -> Self {
+        SerializableDID {
+            id: did.id.clone(),
+            secret_key: did.secret_key.clone(),
+            public_key: did.public_key.clone(),
+            algorithm: did.algorithm.clone(),
+        }
+    }
+}
+
+impl From<&SerializableDID> for DID {
+    fn from(serializable_did: &SerializableDID) -> Self {
+        DID {
+            id: serializable_did.id.clone(),
+            secret_key: serializable_did.secret_key.clone(),
+            public_key: serializable_did.public_key.clone(),
+            algorithm: serializable_did.algorithm.clone(),
+            is_verified: false,
+            verification_proof: None,
+            last_verification: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_algorithm_support() {
+        for alg in &[Algorithm::Secp256k1, Algorithm::RSA, Algorithm::ECDSA, Algorithm::Kyber, Algorithm::Dilithium, Algorithm::Falcon, Algorithm::BLS] {
+            let did = DID::new("did:example:123".to_string(), alg.clone());
+            let message = b"test message";
+            let signature = did.sign_message(message).unwrap();
+            assert!(did.verify_signature(message, &signature).unwrap());
+        }
+    }
+
+    #[test]
+    fn test_did_creation() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+        assert_eq!(did.id, "did:example:123");
+    }
+
+    #[test]
+    fn test_did_serialization() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+        let serializable_did: SerializableDID = (&did).into();
+        let deserialized_did: DID = (&serializable_did).into();
+        assert_eq!(did.id, deserialized_did.id);
+    }
+
+    #[test]
+    fn test_did_sign_and_verify() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+        let message = b"test message";
+        let signature = did.sign_message(message).unwrap();
+        assert!(did.verify_signature(message, &signature).unwrap());
+    }
+
+    #[test]
+    fn test_secp256k1_signing() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+        let message = b"test message";
+        let signature = did.sign_message(message).unwrap();
+        assert!(did.verify_signature(message, &signature).unwrap());
+    }
+
+    #[test]
+    fn test_rsa_signing() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::RSA);
+        let message = b"test message";
+        let signature = did.sign_message(message).unwrap();
+        assert!(did.verify_signature(message, &signature).unwrap());
+    }
+
+    #[test]
+    fn test_ecdsa_signing() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::ECDSA);
+        let message = b"test message";
+        let signature = did.sign_message(message).unwrap();
+        assert!(did.verify_signature(message, &signature).unwrap());
+    }
+
+    #[test]
+    fn test_dilithium_signing() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::Dilithium);
+        let message = b"test message";
+        let signature = did.sign_message(message).unwrap();
+        assert!(did.verify_signature(message, &signature).unwrap());
+    }
+
+    #[test]
+    fn test_falcon_signing() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::Falcon);
+        let message = b"test message";
+        let signature = did.sign_message(message).unwrap();
+        assert!(did.verify_signature(message, &signature).unwrap());
+    }
+
+    #[test]
+    fn test_bls_signing() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::BLS);
+        let message = b"test message";
+        let signature = did.sign_message(message).unwrap();
+        assert!(did.verify_signature(message, &signature).unwrap());
+    }
+
+    #[test]
+    fn test_serialization() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+        let serializable: SerializableDID = (&did).into();
+        let deserialized: DID = (&serializable).into();
+        
+        assert_eq!(did.id, deserialized.id);
+        assert_eq!(did.public_key, deserialized.public_key);
+        assert_eq!(did.algorithm, deserialized.algorithm);
+    }
+
+    #[test]
+    fn test_key_rotation() {
+        let mut did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+        let old_public_key = did.public_key.clone();
+        did.rotate_key().unwrap();
+        assert_ne!(old_public_key, did.public_key);
+    }
+
+    #[test]
+    fn test_detailed_validation_error_handling() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+        let message = b"test message";
+        let invalid_signature = vec![0u8; 64];
+        let result = did.verify_signature(message, &invalid_signature);
+        assert!(matches!(result, Err(DIDError::SignatureVerification)));
+    }
+
+    #[test]
+    fn test_comprehensive_test_coverage() {
+        let did = DID::new("did:example:123".to_string(), Algorithm::Secp256k1);
+        let message = b"test message";
+        let signature = did.sign_message(message).unwrap();
+        assert!(did.verify_signature(message, &signature).unwrap());
+
+        let long_message = vec![0u8; 10000];
+        let signature = did.sign_message(&long_message).unwrap();
+        assert!(did.verify_signature(&long_message, &signature).unwrap());
+
+        let empty_message = b"";
+        let signature = did.sign_message(empty_message).unwrap();
+        assert!(did.verify_signature(empty_message, &signature).unwrap());
+    }
+}
+```
+
+===================
+File: ./identity/identity_system.rs
+Size: 17097 bytes
+===================
+```rs
+use std::collections::HashMap;
+use std::time::{Duration, SystemTime};
+use secp256k1::{Secp256k1, PublicKey as Secp256k1PublicKey, Signature as Secp256k1Signature};
+use rsa::{RSAPublicKey, PaddingScheme};
+use ecdsa::{VerifyingKey, signature::Verifier};
+use sha2::{Sha256, Digest};
+use crate::did::creation::Algorithm;
+use crate::did::creation::DID;
+use crate::did::creation::DIDError;
+use tokio::time::sleep;
+use bls_signatures::{PrivateKey as BlsPrivateKey, PublicKey as BlsPublicKey, Signature as BlsSignature, Serialize as BlsSerialize, AggregatePublicKey, AggregateSignature};
+
+pub struct IdentitySystem {
+    permissions: HashMap<String, Vec<String>>,
+    roles: HashMap<String, Vec<String>>,
+    public_keys: HashMap<String, (Vec<u8>, Algorithm)>,
+    reputation_scores: HashMap<String, HashMap<String, i64>>, // Multi-dimensional reputation scores
+    last_activity: HashMap<String, SystemTime>,
+    key_versions: HashMap<String, u32>,
+    federation_roles: HashMap<String, HashMap<String, Vec<String>>>, // Federation-specific roles
+}
+
+impl IdentitySystem {
+    pub fn new() -> Self {
+        IdentitySystem {
+            permissions: HashMap::new(),
+            roles: HashMap::new(),
+            public_keys: HashMap::new(),
+            reputation_scores: HashMap::new(),
+            last_activity: HashMap::new(),
+            key_versions: HashMap::new(),
+            federation_roles: HashMap::new(),
+        }
+    }
+
+    pub fn register_did(&mut self, did: String, permissions: Vec<String>, initial_reputation: i64, public_key: Vec<u8>, algorithm: Algorithm) {
+        self.permissions.insert(did.clone(), permissions);
+        self.reputation_scores.insert(did.clone(), {
+            let mut categories = HashMap::new();
+            categories.insert("general".to_string(), initial_reputation);
+            categories.insert("governance".to_string(), initial_reputation);
+            categories.insert("resource_sharing".to_string(), initial_reputation);
+            categories.insert("technical_contributions".to_string(), initial_reputation);
+            categories
+        });
+        self.public_keys.insert(did.clone(), (public_key, algorithm));
+        self.last_activity.insert(did.clone(), SystemTime::now());
+        self.key_versions.insert(did, 1);
+    }
+
+    pub fn has_permission(&self, did: &str, permission: &str) -> bool {
+        if let Some(perms) = self.permissions.get(did) {
+            perms.contains(&permission.to_string())
+        } else {
+            false
+        }
+    }
+
+    pub fn assign_role(&mut self, did: String, role: String) {
+        self.roles.entry(did).or_insert_with(Vec::new).push(role);
+    }
+
+    pub fn get_roles(&self, did: &str) -> Vec<String> {
+        self.roles.get(did).cloned().unwrap_or_default()
+    }
+
+    pub fn assign_federation_role(&mut self, federation_id: String, did: String, role: String) -> Result<(), String> {
+        self.federation_roles
+            .entry(federation_id)
+            .or_default()
+            .entry(did)
+            .or_default()
+            .push(role);
+        Ok(())
+    }
+
+    pub fn get_federation_roles(&self, federation_id: &str, did: &str) -> Vec<String> {
+        self.federation_roles
+            .get(federation_id)
+            .and_then(|roles| roles.get(did))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub fn revoke_federation_role(&mut self, federation_id: &str, did: &str, role: &str) -> Result<(), String> {
+        if let Some(roles) = self.federation_roles.get_mut(federation_id) {
+            if let Some(user_roles) = roles.get_mut(did) {
+                user_roles.retain(|r| r != role);
+                return Ok(());
+            }
+        }
+        Err("Federation or DID not found".to_string())
+    }
+
+    pub fn verify_federation_role(&self, federation_id: &str, did: &str, required_role: &str) -> bool {
+        self.get_federation_roles(federation_id, did)
+            .iter()
+            .any(|role| role == required_role)
+    }
+
+    pub fn verify_did(&self, did: &str, message: &[u8], signature: &[u8]) -> bool {
+        if let Some((public_key, algorithm)) = self.public_keys.get(did) {
+            match algorithm {
+                Algorithm::Secp256k1 => {
+                    let secp = Secp256k1::new();
+                    let public_key = Secp256k1PublicKey::from_slice(public_key).expect("invalid public key");
+                    let msg = secp256k1::Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
+                    let signature = Secp256k1Signature::from_compact(signature).expect("invalid signature");
+                    secp.verify(&msg, &signature, &public_key).is_ok()
+                },
+                Algorithm::RSA => {
+                    let public_key = RSAPublicKey::from_pkcs1(public_key).expect("failed to decode public key");
+                    let padding = PaddingScheme::new_pkcs1v15_sign(None);
+                    public_key.verify(padding, &Sha256::digest(message), signature).is_ok()
+                },
+                Algorithm::ECDSA => {
+                    let verifying_key = VerifyingKey::from_bytes(public_key).expect("failed to decode public key");
+                    verifying_key.verify(message, signature).is_ok()
+                },
+                Algorithm::Kyber => {
+                    // Kyber does not support signing and verification directly
+                    false
+                },
+                Algorithm::Dilithium => {
+                    dilithium::verify(public_key, message, signature)
+                },
+                Algorithm::Falcon => {
+                    falcon::verify(public_key, message, signature)
+                },
+                Algorithm::BLS => {
+                    let public_key = BlsPublicKey::from_bytes(public_key).map_err(|_| DIDError::InvalidKey).unwrap();
+                    let signature = BlsSignature::from_bytes(signature).map_err(|_| DIDError::SignatureVerification).unwrap();
+                    public_key.verify(message, &signature)
+                },
+            }
+        } else {
+            false
+        }
+    }
+
+    pub fn get_reputation(&self, did: &str, category: &str) -> i64 {
+        self.reputation_scores.get(did).and_then(|categories| categories.get(category)).cloned().unwrap_or(0)
+    }
+
+    pub fn adjust_reputation(&mut self, did: &str, change: i64, category: &str) {
+        if let Some(categories) = self.reputation_scores.get_mut(did) {
+            if let Some(score) = categories.get_mut(category) {
+                *score += change;
+            }
+        }
+    }
+
+    pub fn is_eligible(&self, did: &str, min_reputation: i64, category: &str) -> bool {
+        self.get_reputation(did, category) >= min_reputation
+    }
+
+    pub fn dynamic_recalibration(&mut self) {
+        let now = SystemTime::now();
+        for (did, last_active) in &self.last_activity {
+            if let Ok(duration) = now.duration_since(*last_active) {
+                if duration > Duration::from_secs(30 * 24 * 60 * 60) { // 30 days
+                    self.adjust_reputation(did, -1, "general"); // Decay general reputation
+                    self.adjust_reputation(did, -1, "governance"); // Decay governance reputation
+                    self.adjust_reputation(did, -1, "resource_sharing"); // Decay resource sharing reputation
+                    self.adjust_reputation(did, -1, "technical_contributions"); // Decay technical contributions reputation
+                }
+            }
+        }
+    }
+
+    pub fn update_last_activity(&mut self, did: &str) {
+        self.last_activity.insert(did.to_string(), SystemTime::now());
+    }
+
+    pub fn rotate_key(&mut self, did: &str) -> Result<(), DIDError> {
+        if let Some((public_key, algorithm)) = self.public_keys.get_mut(did) {
+            let mut did_instance = DID::new(did.to_string(), algorithm.clone());
+            did_instance.rotate_key()?;
+            *public_key = did_instance.public_key.clone();
+            if let Some(version) = self.key_versions.get_mut(did) {
+                *version += 1;
+            }
+            Ok(())
+        } else {
+            Err(DIDError::KeyRotation)
+        }
+    }
+
+    pub async fn start_real_time_recalibration(&self) {
+        let reputation_system = self.clone();
+        tokio::spawn(async move {
+            loop {
+                {
+                    let mut reputation = reputation_system.lock().unwrap();
+                    reputation.dynamic_recalibration();
+                }
+                sleep(Duration::from_secs(10)).await;
+            }
+        });
+    }
+
+    pub fn generate_bls_threshold_signature(&self, message: &[u8], private_keys: Vec<BlsPrivateKey>) -> Result<Vec<u8>, DIDError> {
+        let signatures: Vec<BlsSignature> = private_keys.iter().map(|key| key.sign(message)).collect();
+        let aggregate_signature = AggregateSignature::aggregate(&signatures).map_err(|_| DIDError::SignatureVerification)?;
+        Ok(aggregate_signature.as_bytes().to_vec())
+    }
+
+    pub fn verify_bls_threshold_signature(&self, message: &[u8], signature: &[u8], public_keys: Vec<BlsPublicKey>) -> Result<bool, DIDError> {
+        let aggregate_public_key = AggregatePublicKey::aggregate(&public_keys).map_err(|_| DIDError::InvalidKey)?;
+        let signature = BlsSignature::from_bytes(signature).map_err(|_| DIDError::SignatureVerification)?;
+        Ok(aggregate_public_key.verify(message, &signature))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use secp256k1::{Secp256k1, SecretKey, PublicKey, Signature};
+    use rsa::{RSAPrivateKey, RSAPublicKey};
+    use ecdsa::{SigningKey, VerifyingKey, signature::Signer};
+    use bls_signatures::{PrivateKey as BlsPrivateKey, PublicKey as BlsPublicKey};
+
+    #[test]
+    fn test_register_and_verify_did_secp256k1() {
+        let mut identity_system = IdentitySystem::new();
+        let secp = Secp256k1::new();
+        let (secret_key, public_key) = secp.generate_keypair(&mut rand::thread_rng());
+        let did = "did:example:secp256k1".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 10, public_key.serialize().to_vec(), Algorithm::Secp256k1);
+
+        let message = b"test message";
+        let msg = secp256k1::Message::from_slice(&Sha256::digest(message)).expect("32 bytes");
+        let signature = secp.sign(&msg, &secret_key).serialize_compact().to_vec();
+
+        assert!(identity_system.verify_did(&did, message, &signature));
+    }
+
+    #[test]
+    fn test_register_and_verify_did_rsa() {
+        let mut identity_system = IdentitySystem::new();
+        let private_key = RSAPrivateKey::new(&mut rand::thread_rng(), 2048).expect("failed to generate a key");
+        let public_key = RSAPublicKey::from(&private_key);
+        let did = "did:example:rsa".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 10, public_key.to_pkcs1().expect("failed to encode public key"), Algorithm::RSA);
+
+        let message = b"test message";
+        let padding = PaddingScheme::new_pkcs1v15_sign(None);
+        let signature = private_key.sign(padding, &Sha256::digest(message)).expect("failed to sign message");
+
+        assert!(identity_system.verify_did(&did, message, &signature));
+    }
+
+    #[test]
+    fn test_register_and_verify_did_ecdsa() {
+        let mut identity_system = IdentitySystem::new();
+        let signing_key = SigningKey::random(&mut rand::thread_rng());
+        let verifying_key = VerifyingKey::from(&signing_key);
+        let did = "did:example:ecdsa".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 10, verifying_key.to_bytes().to_vec(), Algorithm::ECDSA);
+
+        let message = b"test message";
+        let signature = signing_key.sign(message).to_bytes().to_vec();
+
+        assert!(identity_system.verify_did(&did, message, &signature));
+    }
+
+    #[test]
+    fn test_register_and_verify_did_dilithium() {
+        let mut identity_system = IdentitySystem::new();
+        let (public_key, private_key) = dilithium::keypair();
+        let did = "did:example:dilithium".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 10, public_key.clone(), Algorithm::Dilithium);
+
+        let message = b"test message";
+        let signature = dilithium::sign(&private_key, message);
+
+        assert!(identity_system.verify_did(&did, message, &signature));
+    }
+
+    #[test]
+    fn test_register_and_verify_did_falcon() {
+        let mut identity_system = IdentitySystem::new();
+        let (public_key, private_key) = falcon::keypair();
+        let did = "did:example:falcon".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 10, public_key.clone(), Algorithm::Falcon);
+
+        let message = b"test message";
+        let signature = falcon::sign(&private_key, message);
+
+        assert!(identity_system.verify_did(&did, message, &signature));
+    }
+
+    #[test]
+    fn test_key_rotation() {
+        let mut identity_system = IdentitySystem::new();
+        let secp = Secp256k1::new();
+        let (secret_key, public_key) = secp.generate_keypair(&mut rand::thread_rng());
+        let did = "did:example:secp256k1".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 10, public_key.serialize().to_vec(), Algorithm::Secp256k1);
+
+        let old_public_key = identity_system.public_keys.get(&did).unwrap().0.clone();
+        identity_system.rotate_key(&did).unwrap();
+        let new_public_key = identity_system.public_keys.get(&did).unwrap().0.clone();
+
+        assert_ne!(old_public_key, new_public_key);
+    }
+
+    #[test]
+    fn test_reputation_decay() {
+        let mut identity_system = IdentitySystem::new();
+        let did = "did:example:secp256k1".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 100, vec![], Algorithm::Secp256k1);
+
+        identity_system.dynamic_recalibration();
+        assert_eq!(identity_system.get_reputation(&did, "general"), 99);
+        assert_eq!(identity_system.get_reputation(&did, "governance"), 99);
+        assert_eq!(identity_system.get_reputation(&did, "resource_sharing"), 99);
+        assert_eq!(identity_system.get_reputation(&did, "technical_contributions"), 99);
+    }
+
+    #[test]
+    fn test_multi_dimensional_reputation_tracking() {
+        let mut identity_system = IdentitySystem::new();
+        let did = "did:example:secp256k1".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 50, vec![], Algorithm::Secp256k1);
+
+        identity_system.adjust_reputation(&did, 20, "governance");
+        identity_system.adjust_reputation(&did, 30, "resource_sharing");
+
+        assert_eq!(identity_system.get_reputation(&did, "governance"), 70);
+        assert_eq!(identity_system.get_reputation(&did, "resource_sharing"), 80);
+    }
+
+    #[test]
+    fn test_category_specific_eligibility_checks() {
+        let mut identity_system = IdentitySystem::new();
+        let did = "did:example:secp256k1".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 40, vec![], Algorithm::Secp256k1);
+
+        identity_system.adjust_reputation(&did, 10, "governance");
+
+        assert!(identity_system.is_eligible(&did, 30, "governance"));
+        assert!(!identity_system.is_eligible(&did, 50, "governance"));
+    }
+
+    #[test]
+    fn test_assign_and_get_federation_roles() {
+        let mut identity_system = IdentitySystem::new();
+        let federation_id = "federation123".to_string();
+        let did = "did:example:secp256k1".to_string();
+        identity_system.register_did(did.clone(), vec!["read".to_string()], 10, vec![], Algorithm::Secp256k1);
+
+        identity_system.assign_federation_role(federation_id.clone(), did.clone(), "admin".to_string()).unwrap();
+        identity_system.assign_federation_role(federation_id.clone(), did.clone(), "member".to_string()).unwrap();
+
+        let roles = identity_system.get_federation_roles(&federation_id, &did);
+        assert_eq!(roles, vec!["admin".to_string(), "member".to_string()]);
+    }
+
+    #[test]
+    fn test_generate_and_verify_bls_threshold_signature() {
+        let identity_system = IdentitySystem::new();
+        let message = b"test message";
+
+        let private_keys: Vec<BlsPrivateKey> = (0..3).map(|_| BlsPrivateKey::generate(&mut rand::thread_rng())).collect();
+        let public_keys: Vec<BlsPublicKey> = private_keys.iter().map(|key| BlsPublicKey::from(key)).collect();
+
+        let signature = identity_system.generate_bls_threshold_signature(message, private_keys).unwrap();
+        assert!(identity_system.verify_bls_threshold_signature(message, &signature, public_keys).unwrap());
+    }
+}
+```
+
+===================
+File: ./identity/key_manager.rs
+Size: 6969 bytes
+===================
+```rs
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, Duration};
+use ring::signature::{self, KeyPair, Ed25519KeyPair};
+use ring::rand::SystemRandom;
+use thiserror::Error;
+use serde::{Serialize, Deserialize};
+use crate::did::Algorithm;
+
+#[derive(Error, Debug)]
+pub enum KeyManagerError {
+    #[error("Key generation failed")]
+    KeyGenerationError,
+    #[error("Key not found")]
+    KeyNotFound,
+    #[error("Invalid key")]
+    InvalidKey,
+    #[error("Key rotation failed")]
+    RotationFailed,
+    #[error("Key revocation failed")]
+    RevocationFailed,
+    #[error("Key backup failed")]
+    BackupFailed,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct KeyMetadata {
+    pub created_at: SystemTime,
+    pub rotated_at: Option<SystemTime>,
+    pub version: u32,
+    pub status: KeyStatus,
+    pub algorithm: Algorithm,
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
+pub enum KeyStatus {
+    Active,
+    Revoked,
+    Expired,
+    Rotating,
+}
+
+pub struct KeyManager {
+    keys: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+    metadata: Arc<Mutex<HashMap<String, KeyMetadata>>>,
+    backup_keys: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+    rng: SystemRandom,
+}
+
+impl KeyManager {
+    pub fn new() -> Self {
+        Self {
+            keys: Arc::new(Mutex::new(HashMap::new())),
+            metadata: Arc::new(Mutex::new(HashMap::new())),
+            backup_keys: Arc::new(Mutex::new(HashMap::new())),
+            rng: SystemRandom::new(),
+        }
+    }
+
+    pub fn generate_key(&self, did: &str, algorithm: Algorithm) -> Result<Vec<u8>, KeyManagerError> {
+        let key_pair = Ed25519KeyPair::generate_pkcs8(&self.rng)
+            .map_err(|_| KeyManagerError::KeyGenerationError)?;
+        
+        let public_key = key_pair.public_key().as_ref().to_vec();
+        
+        // Store the key and metadata
+        {
+            let mut keys = self.keys.lock().unwrap();
+            let mut metadata = self.metadata.lock().unwrap();
+            
+            keys.insert(did.to_string(), key_pair.to_pkcs8_der().as_ref().to_vec());
+            metadata.insert(did.to_string(), KeyMetadata {
+                created_at: SystemTime::now(),
+                rotated_at: None,
+                version: 1,
+                status: KeyStatus::Active,
+                algorithm,
+            });
+        }
+        
+        // Create backup key
+        self.create_backup(did)?;
+        
+        Ok(public_key)
+    }
+
+    pub fn rotate_key(&self, did: &str) -> Result<Vec<u8>, KeyManagerError> {
+        let mut keys = self.keys.lock().unwrap();
+        let mut metadata = self.metadata.lock().unwrap();
+        
+        let meta = metadata.get_mut(did).ok_or(KeyManagerError::KeyNotFound)?;
+        if meta.status == KeyStatus::Revoked {
+            return Err(KeyManagerError::RotationFailed);
+        }
+
+        // Generate new key pair
+        let new_key_pair = Ed25519KeyPair::generate_pkcs8(&self.rng)
+            .map_err(|_| KeyManagerError::KeyGenerationError)?;
+        
+        // Update metadata
+        meta.rotated_at = Some(SystemTime::now());
+        meta.version += 1;
+        meta.status = KeyStatus::Active;
+
+        // Store new key
+        keys.insert(did.to_string(), new_key_pair.to_pkcs8_der().as_ref().to_vec());
+        
+        // Create new backup
+        self.create_backup(did)?;
+
+        Ok(new_key_pair.public_key().as_ref().to_vec())
+    }
+
+    pub fn revoke_key(&self, did: &str) -> Result<(), KeyManagerError> {
+        let mut metadata = self.metadata.lock().unwrap();
+        
+        let meta = metadata.get_mut(did).ok_or(KeyManagerError::KeyNotFound)?;
+        meta.status = KeyStatus::Revoked;
+        
+        Ok(())
+    }
+
+    fn create_backup(&self, did: &str) -> Result<(), KeyManagerError> {
+        let keys = self.keys.lock().unwrap();
+        let mut backup_keys = self.backup_keys.lock().unwrap();
+        
+        if let Some(key) = keys.get(did) {
+            backup_keys.insert(did.to_string(), key.clone());
+            Ok(())
+        } else {
+            Err(KeyManagerError::BackupFailed)
+        }
+    }
+
+    pub fn get_key_metadata(&self, did: &str) -> Result<KeyMetadata, KeyManagerError> {
+        let metadata = self.metadata.lock().unwrap();
+        metadata.get(did)
+            .cloned()
+            .ok_or(KeyManagerError::KeyNotFound)
+    }
+
+    pub fn restore_from_backup(&self, did: &str) -> Result<Vec<u8>, KeyManagerError> {
+        let backup_keys = self.backup_keys.lock().unwrap();
+        let mut keys = self.keys.lock().unwrap();
+        let mut metadata = self.metadata.lock().unwrap();
+        
+        if let Some(backup_key) = backup_keys.get(did) {
+            keys.insert(did.to_string(), backup_key.clone());
+            if let Some(meta) = metadata.get_mut(did) {
+                meta.status = KeyStatus::Active;
+            }
+            Ok(backup_key.clone())
+        } else {
+            Err(KeyManagerError::KeyNotFound)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::thread;
+    use std::time::Duration;
+
+    #[test]
+    fn test_key_generation() {
+        let key_manager = KeyManager::new();
+        let did = "did:example:123";
+        
+        let public_key = key_manager.generate_key(did, Algorithm::Secp256k1).unwrap();
+        assert!(!public_key.is_empty());
+        
+        let metadata = key_manager.get_key_metadata(did).unwrap();
+        assert_eq!(metadata.version, 1);
+        assert_eq!(metadata.status, KeyStatus::Active);
+    }
+
+    #[test]
+    fn test_key_rotation() {
+        let key_manager = KeyManager::new();
+        let did = "did:example:123";
+        
+        let original_key = key_manager.generate_key(did, Algorithm::Secp256k1).unwrap();
+        let rotated_key = key_manager.rotate_key(did).unwrap();
+        
+        assert_ne!(original_key, rotated_key);
+        
+        let metadata = key_manager.get_key_metadata(did).unwrap();
+        assert_eq!(metadata.version, 2);
+        assert_eq!(metadata.status, KeyStatus::Active);
+        assert!(metadata.rotated_at.is_some());
+    }
+
+    #[test]
+    fn test_key_revocation() {
+        let key_manager = KeyManager::new();
+        let did = "did:example:123";
+        
+        key_manager.generate_key(did, Algorithm::Secp256k1).unwrap();
+        key_manager.revoke_key(did).unwrap();
+        
+        let metadata = key_manager.get_key_metadata(did).unwrap();
+        assert_eq!(metadata.status, KeyStatus::Revoked);
+    }
+
+    #[test]
+    fn test_backup_restore() {
+        let key_manager = KeyManager::new();
+        let did = "did:example:123";
+        
+        key_manager.generate_key(did, Algorithm::Secp256k1).unwrap();
+        key_manager.revoke_key(did).unwrap();
+        
+        let restored_key = key_manager.restore_from_backup(did).unwrap();
+        assert!(!restored_key.is_empty());
+        
+        let metadata = key_manager.get_key_metadata(did).unwrap();
+        assert_eq!(metadata.status, KeyStatus::Active);
+    }
+}
+```
+
+===================
+File: ./identity/mod.rs
+Size: 113 bytes
+===================
+```rs
+pub mod did;
+pub mod identity_system;
+
+pub use did::creation::DID;
+pub use identity_system::IdentitySystem;
+```
+
+===================
+Summary for 05_identity
+===================
+Total size of dump: 45500 bytes
+Patterns included:
+- identity/did.rs
+- identity/identity_system.rs
+- identity/key_manager.rs
+- identity/mod.rs
+- identity/tests/did_validation_tests.rs
+
+Files processed: 5
+===================

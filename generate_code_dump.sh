@@ -1,41 +1,74 @@
 #!/bin/bash
 
-# Input validation
-OUTPUT_FILE="${1:-project_code_dump.txt}"
-if [[ -f "$OUTPUT_FILE" && ! -w "$OUTPUT_FILE" ]]; then
-    echo "Error: Cannot write to $OUTPUT_FILE" >&2
-    exit 1
-fi
+# Base output filename prefix (will be used as prefix for multiple files)
+OUTPUT_PREFIX="${1:-project_code}"
 
-# Key directories and files to analyze
-CORE_DIRS="backend/src frontend/src contracts"
-EXCLUDE_DIRS="target|node_modules|dist|.git|coverage|docs|tests|examples|__tests__|.vscode"
-IMPORTANT_FILES=(
-    "backend/Cargo.toml"
-    "backend/src/lib.rs" 
-    "backend/src/main.rs"
-    "frontend/package.json"
-    "frontend/tsconfig.json"
-    "contracts/*/src/lib.rs"
-    "docker-compose.yml"
+# Target output size for each file (approximate in bytes)
+TARGET_SIZE=1500000  # ~1.5MB per file
+
+# Exclude patterns - be very aggressive with dependencies and generated files
+EXCLUDE_PATTERNS=(
+    "*/node_modules/*"
+    "*/target/*"
+    "*/dist/*"
+    "*/.git/*"
+    "*/coverage/*"
+    "*/.vscode/*"
+    "*/build/*"
+    "*/docs/*"
+    "*/__tests__/*"
+    "*/tests/*"
+    "*/test/*"
+    "*/examples/*"
+    "*/.cache/*"
+    "*/vendor/*"
 )
 
+# Dump file structure - define components and their patterns
+declare -A COMPONENT_PATTERNS
+# Core config files
+COMPONENT_PATTERNS["01_config"]="Cargo.toml package.json tsconfig.json docker-compose.yml .env.example Makefile README.md rust-toolchain.toml"
+# Backend (Rust) files
+COMPONENT_PATTERNS["02_backend"]="backend/src/*.rs backend/src/*/*.rs src/*.rs src/*/*.rs src/*/*/*.rs"
+# Frontend files
+COMPONENT_PATTERNS["03_frontend"]="frontend/src/*.ts frontend/src/*.tsx frontend/src/*/*.ts frontend/src/*/*.tsx frontend/src/*/*/*.ts frontend/src/*/*/*.tsx"
+# Contracts
+COMPONENT_PATTERNS["04_contracts"]="contracts/*/src/*.rs"
+# Core services
+COMPONENT_PATTERNS["05_identity"]="identity/*.rs identity/*/*.rs"
+COMPONENT_PATTERNS["06_governance"]="governance/*.rs governance/*/*.rs"
+COMPONENT_PATTERNS["07_consensus"]="consensus/*.rs consensus/*/*.rs"
+COMPONENT_PATTERNS["08_reputation"]="reputation/*.rs reputation/*/*.rs"
+COMPONENT_PATTERNS["09_relationship"]="relationship/*.rs relationship/*/*.rs"
+# Scripts and utilities
+COMPONENT_PATTERNS["10_scripts"]="scripts/*.sh *.sh"
+
+# Build the exclude args for find command
+build_exclude_args() {
+    local exclude_args=""
+    for pattern in "${EXCLUDE_PATTERNS[@]}"; do
+        exclude_args="$exclude_args -not -path \"$pattern\""
+    done
+    echo "$exclude_args"
+}
+
 # Ensure required commands are available
-for cmd in tree find cat; do
+for cmd in find cat wc; do
     if ! command -v $cmd &> /dev/null; then
         echo "Error: $cmd command is required but not installed." >&2
         exit 1
     fi
 done
 
-# Project metadata and timestamp
-echo "Project Code Dump - Generated $(date -u)" > "$OUTPUT_FILE"
-echo "======================================" >> "$OUTPUT_FILE"
-echo >> "$OUTPUT_FILE"
+# Generate common header for all files
+generate_header() {
+    local component="$1"
+    local output_file="$2"
+    
+    cat << EOF > "$output_file"
+Project Code Dump - $component - Generated $(date -u)
+=========================================================
 
-# Function to generate LLM context header
-generate_llm_context() {
-    cat << EOF >> "$OUTPUT_FILE"
 LLM Context Information
 ======================
 This is a distributed cooperative network system with the following key components:
@@ -53,123 +86,173 @@ Architecture Overview:
 - Governance: Handles proposals and voting
 - WebSocket: Real-time communication layer
 
-File Organization:
-- /backend/src/: Core Rust implementation
-- /frontend/src/: React frontend application
-- /contracts/: Smart contract implementations
-- /docker/: Deployment configurations
-
+Note: This is file $(echo "$component" | cut -d'_' -f1) of a multi-file dump.
+All dependency directories are excluded from these dumps.
 ======================
 
 EOF
 }
 
-# Add LLM context at the beginning
-generate_llm_context
-
-# Project tree section - limit depth and filter more aggressively
-echo "Project Tree:" >> "$OUTPUT_FILE"
-echo "=============" >> "$OUTPUT_FILE"
-tree -L 3 -I "$EXCLUDE_DIRS" --noreport . >> "$OUTPUT_FILE" 2>/dev/null || ls -R . >> "$OUTPUT_FILE"
-echo >> "$OUTPUT_FILE"
-
-# Function to add dependency context
-add_dependency_context() {
-    local filepath="$1"
-    local filename=$(basename "$filepath")
-    local dirpath=$(dirname "$filepath")
-
-    # Extract imports and dependencies
-    case "$filename" in
-        *.rs)
-            echo "Dependencies:" >> "$OUTPUT_FILE"
-            grep -E "^(use|mod) " "$filepath" | sort | uniq >> "$OUTPUT_FILE"
-            ;;
-        *.ts|*.tsx)
-            echo "Dependencies:" >> "$OUTPUT_FILE"
-            grep -E "^import " "$filepath" | sort | uniq >> "$OUTPUT_FILE"
-            ;;
-    esac
-    echo >> "$OUTPUT_FILE"
-}
-
-# Function to format and add a file to the dump
+# Function to format and add a file to the dump, with size tracking
 add_file() {
     local filepath="$1"
+    local output_file="$2"
+    local current_size="$3"
+    local max_size="$4"  # Optional max size for individual files
+    
+    # Get file extension
     local ext="${filepath##*.}"
     
-    # Get file size in a more robust way
-    local filesize=0
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        filesize=$(stat -f %z "$filepath" 2>/dev/null)
-    else
-        filesize=$(stat -c %s "$filepath" 2>/dev/null)
+    # Skip binary files like .png, .jpg, etc.
+    if [[ "$ext" == "png" || "$ext" == "jpg" || "$ext" == "jpeg" || 
+          "$ext" == "gif" || "$ext" == "woff" || "$ext" == "woff2" || 
+          "$ext" == "ttf" || "$ext" == "eot" || "$ext" == "ico" ]]; then
+        return "$current_size"
     fi
-
-    # Get modification time
-    local modified=""
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        modified=$(stat -f %Sm "$filepath" 2>/dev/null)
-    else
-        modified=$(stat -c %y "$filepath" 2>/dev/null)
-    fi
-
-    # Convert filesize to number and check
-    filesize=${filesize:-0}
-    if (( filesize > 150000 )); then
-        echo "Skipping large file: $filepath ($filesize bytes)" >&2
-        return
-    fi
-
-    # Skip empty files
-    if [[ ! -s "$filepath" ]]; then
-        return
-    fi
-
-    # Skip generated files and test files
-    if [[ $filepath =~ .*\.(generated|test|spec)\..* ]]; then
-        return
-    fi
-
-    echo "===================" >> "$OUTPUT_FILE"
-    echo "File: $filepath" >> "$OUTPUT_FILE"
-    echo "Size: $filesize bytes" >> "$OUTPUT_FILE"
-    echo "Modified: $modified" >> "$OUTPUT_FILE"
     
-    # Add dependency context
-    add_dependency_context "$filepath"
+    # Get file size
+    local filesize=$(wc -c < "$filepath" 2>/dev/null || echo 0)
     
-    echo "===================" >> "$OUTPUT_FILE"
+    # Skip if filesize is 0 or exceeds max_size
+    if [[ $filesize -eq 0 || ($max_size -gt 0 && $filesize -gt $max_size) ]]; then
+        return "$current_size"
+    fi
     
-    # Only process code files
-    case "$ext" in
-        rs|ts|tsx|js|json|toml)
-            echo "\`\`\`$ext" >> "$OUTPUT_FILE"
-            cat "$filepath" >> "$OUTPUT_FILE"
-            echo "\`\`\`" >> "$OUTPUT_FILE"
-            ;;
-    esac
-    echo >> "$OUTPUT_FILE"
+    # Guess if it's a binary file using the 'file' command
+    if file "$filepath" | grep -q "binary"; then
+        return "$current_size"
+    fi
+    
+    # Calculate the size this entry would add to output
+    # Include metadata (headers) + file content + markdown formatting
+    local entry_size=$(( 100 + filesize + 10 ))
+    
+    # Check if adding this file would exceed our target size
+    if [[ $(( current_size + entry_size )) -gt $TARGET_SIZE ]]; then
+        return "$current_size"  # Return unchanged size if we'd exceed the limit
+    fi
+    
+    # Add file to output
+    {
+        echo "==================="
+        echo "File: $filepath"
+        echo "Size: $filesize bytes"
+        echo "==================="
+        
+        # Format code based on extension
+        if [[ -n "$ext" ]]; then
+            echo "\`\`\`$ext"
+            cat "$filepath"
+            echo "\`\`\`"
+        else
+            # Handle files without extension
+            echo "\`\`\`"
+            cat "$filepath"
+            echo "\`\`\`"
+        fi
+        echo ""
+    } >> "$output_file"
+    
+    # Return updated size
+    echo $(( current_size + entry_size ))
 }
 
-# Main file processing
-{
-    # Process IMPORTANT_FILES first
-    for file in "${IMPORTANT_FILES[@]}"; do
-        find . -type f -path "*/$file" 2>/dev/null
+# Process each component and create separate dump files
+for component in "${!COMPONENT_PATTERNS[@]}"; do
+    patterns="${COMPONENT_PATTERNS[$component]}"
+    output_file="${OUTPUT_PREFIX}_${component}.txt"
+    
+    echo "Processing component: $component"
+    echo "Output file: $output_file"
+    
+    # Generate header
+    generate_header "$component" "$output_file"
+    current_size=$(wc -c < "$output_file")
+    
+    # Process file patterns for this component
+    file_list=()
+    
+    # Build a list of matching files
+    for pattern in $patterns; do
+        # Get exclude args
+        exclude_args=$(build_exclude_args)
+        
+        # Build and execute find command
+        find_cmd="find . -type f -path \"*/$pattern\" $exclude_args 2>/dev/null"
+        while read -r file; do
+            if [[ -n "$file" ]]; then
+                file_list+=("$file")
+            fi
+        done < <(eval "$find_cmd")
+        
+        # Also try direct match for files in root directory
+        if [[ "$pattern" != *"/"* ]]; then
+            if [[ -f "$pattern" ]]; then
+                file_list+=("$pattern")
+            fi
+        fi
     done
     
-    # Then process core API/interface files
-    find . -type f \( \
-        -path "*/src/api/*.rs" -o \
-        -path "*/src/lib.rs" -o \
-        -path "*/src/main.rs" -o \
-        -path "*/src/types/*.ts" -o \
-        -path "*/src/models/*.ts" -o \
-        -path "*/src/interfaces/*.ts" \
-    \) -not -path "*/\.*" -not -path "*/${EXCLUDE_DIRS}*"
-} | while read -r file; do
-    add_file "$file"
+    # Remove duplicates
+    unique_files=($(echo "${file_list[@]}" | tr ' ' '\n' | sort -u))
+    
+    echo "Found ${#unique_files[@]} files for component $component"
+    
+    # Process each file
+    for file in "${unique_files[@]}"; do
+        # Check if file still exists and is not a directory
+        if [[ -f "$file" ]]; then
+            # Skip if this file belongs to an excluded pattern
+            skip_file=0
+            for exclude in "${EXCLUDE_PATTERNS[@]}"; do
+                if [[ "$file" == $exclude ]]; then
+                    skip_file=1
+                    break
+                fi
+            done
+            
+            if [[ $skip_file -eq 0 ]]; then
+                new_size=$(add_file "$file" "$output_file" "$current_size" 50000)
+                current_size=$new_size
+            fi
+        fi
+    done
+    
+    # Add summary
+    {
+        echo "==================="
+        echo "Summary for $component"
+        echo "==================="
+        echo "Total size of dump: $current_size bytes"
+        echo "Patterns included:"
+        for pattern in $patterns; do
+            echo "- $pattern"
+        done
+        echo ""
+        echo "Files processed: ${#unique_files[@]}"
+        echo "==================="
+    } >> "$output_file"
+    
+    echo "Component $component dump complete. Size: $current_size bytes"
+    echo ""
 done
 
-echo "Code dump generated successfully in $OUTPUT_FILE"
+# Generate a manifest file listing all components
+manifest_file="${OUTPUT_PREFIX}_manifest.txt"
+echo "Project Code Dump Manifest - Generated $(date -u)" > "$manifest_file"
+echo "==========================================================" >> "$manifest_file"
+echo "" >> "$manifest_file"
+echo "This project has been split into multiple files to stay within size limits." >> "$manifest_file"
+echo "Use these files in the following order:" >> "$manifest_file"
+echo "" >> "$manifest_file"
+
+for component in "${!COMPONENT_PATTERNS[@]}"; do
+    output_file="${OUTPUT_PREFIX}_${component}.txt"
+    file_size=$(wc -c < "$output_file")
+    echo "- ${component}: ${output_file} ($(numfmt --to=iec-i --suffix=B --format="%.2f" $file_size))" >> "$manifest_file"
+done
+
+echo "" >> "$manifest_file"
+echo "Total components: ${#COMPONENT_PATTERNS[@]}" >> "$manifest_file"
+
+echo "Multi-file code dump complete. See $manifest_file for details."

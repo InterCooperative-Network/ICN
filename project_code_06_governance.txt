@@ -1,0 +1,176 @@
+Project Code Dump - 06_governance - Generated Mon Mar 10 03:54:23 UTC 2025
+=========================================================
+
+LLM Context Information
+======================
+This is a distributed cooperative network system with the following key components:
+
+Core Components:
+- Backend: Rust-based node implementation
+- Frontend: TypeScript/React web interface
+- Contracts: Smart contracts for cooperative governance
+
+Architecture Overview:
+- Blockchain: Handles consensus and state management
+- Identity: DID-based identity management
+- Relationship: Tracks member interactions and relationships
+- Reputation: Manages trust and reputation scores
+- Governance: Handles proposals and voting
+- WebSocket: Real-time communication layer
+
+Note: This is file 06 of a multi-file dump.
+All dependency directories are excluded from these dumps.
+======================
+
+===================
+File: ./src/governance/mod.rs
+Size: 2489 bytes
+===================
+```rs
+mod rollback;
+
+use rollback::{DisputeInfo, DisputeStatus, RollbackError, RollbackConfig};
+use std::collections::HashMap;
+use chrono::Utc;
+use crate::icn_types::Proposal;
+
+pub struct GovernanceService {
+    // ...existing code...
+    disputes: HashMap<String, DisputeInfo>,
+    rollback_config: RollbackConfig,
+    proposals: HashMap<String, Proposal>,
+}
+
+impl GovernanceService {
+    pub async fn initiate_rollback(
+        &mut self,
+        proposal_id: &str,
+        initiator: String,
+        reason: String,
+        evidence: Option<String>,
+    ) -> Result<(), RollbackError> {
+        let proposal = self.proposals
+            .get(proposal_id)
+            .ok_or(RollbackError::ProposalNotFound)?;
+
+        if !self.is_within_rollback_window(&proposal) {
+            return Err(RollbackError::TimeframePassed);
+        }
+
+        let dispute = DisputeInfo {
+            initiator,
+            reason,
+            timestamp: Utc::now(),
+            evidence,
+            status: DisputeStatus::Pending,
+            votes: HashMap::new(),
+        };
+
+        self.disputes.insert(proposal_id.to_string(), dispute);
+        self.freeze_proposal(proposal_id)?;
+        Ok(())
+    }
+
+    pub async fn execute_rollback(
+        &mut self,
+        proposal_id: &str,
+    ) -> Result<(), RollbackError> {
+        let dispute = self.disputes.get(proposal_id)
+            .ok_or(RollbackError::InvalidRollbackState)?;
+
+        if dispute.status != DisputeStatus::Pending {
+            return Err(RollbackError::InvalidRollbackState);
+        }
+
+        if self.get_rollback_approvals(proposal_id) < self.rollback_config.required_approvals {
+            return Err(RollbackError::UnauthorizedRollback);
+        }
+
+        self.proposals.remove(proposal_id)
+            .ok_or(RollbackError::ProposalNotFound)?;
+        self.disputes.remove(proposal_id);
+        Ok(())
+    }
+
+    fn is_within_rollback_window(&self, proposal: &Proposal) -> bool {
+        let now = Utc::now();
+        let window = chrono::Duration::seconds(self.rollback_config.rollback_window.as_secs() as i64);
+        now.signed_duration_since(proposal.created_at) <= window
+    }
+
+    fn freeze_proposal(&mut self, _proposal_id: &str) -> Result<(), RollbackError> {
+        // Implementation to freeze proposal during dispute resolution
+        Ok(())
+    }
+
+    fn get_rollback_approvals(&self, _proposal_id: &str) -> u32 {
+        // Implementation to count governance members' approvals for rollback
+        0
+    }
+}
+```
+
+===================
+File: ./src/governance/rollback.rs
+Size: 1029 bytes
+===================
+```rs
+use std::time::Duration;
+use std::collections::HashMap;
+use chrono::{DateTime, Utc};
+
+#[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
+pub enum DisputeStatus {
+    Pending,
+    UnderReview,
+    Resolved,
+    Rejected,
+}
+
+#[derive(Debug, Clone)]
+pub struct DisputeInfo {
+    pub initiator: String,
+    pub reason: String,
+    pub timestamp: DateTime<Utc>,
+    pub evidence: Option<String>,
+    pub status: DisputeStatus,
+    pub votes: HashMap<String, bool>,
+}
+
+#[derive(Debug)]
+pub enum RollbackError {
+    ProposalNotFound,
+    InvalidRollbackState,
+    DisputeAlreadyExists,
+    UnauthorizedRollback,
+    TimeframePassed,
+}
+
+pub struct RollbackConfig {
+    pub rollback_window: Duration,
+    pub required_approvals: u32,
+    pub cooling_period: Duration,
+}
+
+impl Default for RollbackConfig {
+    fn default() -> Self {
+        Self {
+            rollback_window: Duration::from_secs(86400), // 24 hours
+            required_approvals: 3,
+            cooling_period: Duration::from_secs(3600), // 1 hour
+        }
+    }
+}
+```
+
+===================
+Summary for 06_governance
+===================
+Total size of dump: 4605 bytes
+Patterns included:
+- governance/*.rs
+- governance/*/*.rs
+
+Files processed: 2
+===================
