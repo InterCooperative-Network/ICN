@@ -35,13 +35,13 @@ pub struct ProofData {
     data: Vec<u8>,
 }
 
-pub struct ProofOfCooperation {
+pub struct LocalProofOfCooperation {
     data: Vec<u8>,
     timestamp: u64,
     participants: Vec<String>,
 }
 
-impl ProofOfCooperation {
+impl LocalProofOfCooperation {
     pub fn new(data: Vec<u8>, participants: Vec<String>) -> Self {
         Self {
             data,
@@ -55,62 +55,5 @@ impl ProofOfCooperation {
 
     pub fn verify(&self) -> bool {
         verify_proof(&self.data)
-    }
-}
-
-pub struct LocalProofOfCooperation {
-    // Local implementation of proof of cooperation
-    data: Vec<u8>,
-}
-
-pub struct ProofOfCooperation {
-    reputation_manager: Arc<dyn ReputationInterface>,
-    cooperation_scores: RwLock<HashMap<String, u32>>,
-}
-
-impl ProofOfCooperation {
-    pub fn new(reputation_manager: Arc<dyn ReputationInterface>) -> Self {
-        Self {
-            reputation_manager,
-            cooperation_scores: RwLock::new(HashMap::new()),
-        }
-    }
-
-    pub async fn get_cooperation_score(&self, did: &str) -> Option<u32> {
-        // First check cache
-        if let Some(score) = self.cooperation_scores.read().await.get(did) {
-            return Some(*score);
-        }
-
-        // If not in cache, calculate from reputation
-        if let Ok(reputation) = self.reputation_manager.get_reputation(did.to_string(), "governance".to_string()).await {
-            let score = self.calculate_score(reputation);
-            self.cooperation_scores.write().await.insert(did.to_string(), score);
-            Some(score)
-        } else {
-            None
-        }
-    }
-
-    fn calculate_score(&self, reputation: i64) -> u32 {
-        // Convert reputation to cooperation score (0-100)
-        let score = (reputation as f64 / 10.0).max(0.0).min(100.0);
-        score as u32
-    }
-
-    pub async fn verify_zk_snark_proof(&self, proof: &str) -> Result<bool, String> {
-        if !verify_proof(proof) {
-            return Err("Invalid zk-SNARK proof".to_string());
-        }
-        Ok(true)
-    }
-
-    pub async fn verify_all_proofs(&self) -> Result<bool, String> {
-        for proof in &self.proofs {
-            if !self.verify_zk_snark_proof(&proof).await? {
-                return Err("One or more zk-SNARK proofs are invalid".to_string());
-            }
-        }
-        Ok(true)
     }
 }
