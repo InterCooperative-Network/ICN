@@ -5,6 +5,9 @@ use rustls::{Certificate, PrivateKey};
 use bytes::Bytes;
 use thiserror::Error;
 use icn_crypto::KeyPair;
+use crate::nat::{NatManager, NatConfig, NatType};
+use std::sync::Arc;
+use log;
 
 #[derive(Error, Debug)]
 pub enum SDPError {
@@ -30,6 +33,7 @@ pub struct SDPConfig {
     pub keep_alive_interval: std::time::Duration,
     pub idle_timeout: std::time::Duration,
     pub enable_0rtt: bool,
+    pub connection_timeout: u64,
 }
 
 impl Default for SDPConfig {
@@ -40,6 +44,7 @@ impl Default for SDPConfig {
             keep_alive_interval: std::time::Duration::from_secs(10),
             idle_timeout: std::time::Duration::from_secs(30),
             enable_0rtt: false,
+            connection_timeout: 10,
         }
     }
 }
@@ -50,6 +55,9 @@ pub struct SDPEndpoint {
     config: SDPConfig,
     message_tx: mpsc::Sender<SDPMessage>,
     message_rx: mpsc::Receiver<SDPMessage>,
+    nat_manager: Arc<NatManager>,
+    external_addr: SocketAddr,
+    nat_type: NatType,
 }
 
 #[derive(Debug, Clone)]
@@ -71,6 +79,17 @@ impl SDPEndpoint {
     pub async fn new(config: SDPConfig, keypair: KeyPair) -> SDPResult<Self> {
         let (message_tx, message_rx) = mpsc::channel(1000);
         
+        // Initialize NAT manager
+        let nat_config = NatConfig::default();
+        let nat_manager = NatManager::new(nat_config).await
+            .map_err(|e| SDPError::ConnectionFailed(e.to_string()))?;
+            
+        // Discover external address and NAT type
+        let (external_addr, nat_type) = nat_manager.discover_nat().await
+            .map_err(|e| SDPError::ConnectionFailed(e.to_string()))?;
+            
+        log::info!("External address: {}, NAT type: {:?}", external_addr, nat_type);
+        
         // Set up QUIC transport with our custom certificate
         let (endpoint, _server_cert) = Self::setup_transport(&config, &keypair).await?;
         
@@ -80,6 +99,9 @@ impl SDPEndpoint {
             config,
             message_tx,
             message_rx,
+            nat_manager: Arc::new(nat_manager),
+            external_addr,
+            nat_type,
         })
     }
     
@@ -116,6 +138,19 @@ impl SDPEndpoint {
     }
     
     pub async fn connect(&self, remote_addr: SocketAddr) -> SDPResult<SDPConnection> {
+        // Start NAT traversal if needed
+        if self.nat_type != NatType::None || self.nat_type != NatType::FullCone {
+            log::info!("Starting NAT traversal for connection to {}", remote_addr);
+            self.nat_manager.start_hole_punching(
+                remote_addr.to_string(),
+                remote_addr,
+            ).await.map_err(|e| SDPError::ConnectionFailed(e.to_string()))?;
+            
+            // Wait for hole punching to complete
+            let timeout = tokio::time::Duration::from_secs(self.config.connection_timeout);
+            tokio::time::sleep(timeout).await;
+        }
+        
         // Create client config
         let client_config = Self::create_client_config()?;
         
@@ -180,6 +215,14 @@ impl SDPEndpoint {
         });
         
         Ok(())
+    }
+    
+    pub async fn get_external_addr(&self) -> SocketAddr {
+        self.external_addr
+    }
+    
+    pub async fn get_nat_type(&self) -> NatType {
+        self.nat_type
     }
 }
 
