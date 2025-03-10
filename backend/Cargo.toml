@@ -3,21 +3,19 @@ name = "icn-backend"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
-tokio = { workspace = true, features = ["full"] }
-warp = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-log = { workspace = true }
-env_logger = { workspace = true }
-sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres"] }
-thiserror = { workspace = true }
-futures = { workspace = true }
-async-trait = { workspace = true }
-chrono = { workspace = true }
+[[bin]]
+name = "icn-backend"
+path = "src/main.rs"
 
-# Internal crates
-icn-types = { workspace = true }
-icn-common = { workspace = true }
-icn-core = { workspace = true }
-icn-p2p = { workspace = true }
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+warp = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
+env_logger = "0.11.6"
+futures = "0.3.31"
+
+# Core internal dependencies
+icn-types = { path = "../crates/icn-types" }
+icn-common = { path = "../crates/icn-common" }

@@ -1,0 +1,75 @@
+/*!
+ * ICN {{crate_name}}
+ * 
+ * {{crate_description}}
+ */
+
+//! # ICN {{crate_name}}
+//!
+//! {{crate_description}}
+//!
+//! ## Overview
+//!
+//! This crate provides functionality for {{crate_purpose}}.
+//!
+//! ## Usage
+//!
+//! ```rust,no_run
+//! // Example code showing how to use this crate
+//! ```
+
+use icn_types::prelude::*;
+use std::sync::Arc;
+use thiserror::Error;
+
+mod models;
+mod utils;
+
+// Re-export important items
+pub use models::*;
+
+#[derive(Error, Debug)]
+pub enum {{pascal_crate_name}}Error {
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+    
+    #[error("Operation failed: {0}")]
+    OperationFailed(String),
+    
+    #[error("Authentication error: {0}")]
+    AuthenticationError(String),
+    
+    #[error("Not found: {0}")]
+    NotFound(String),
+}
+
+pub type Result<T> = std::result::Result<T, {{pascal_crate_name}}Error>;
+
+/// Main interface for the {{crate_name}} module
+#[derive(Debug)]
+pub struct {{pascal_crate_name}}Manager {
+    // Add fields as needed
+}
+
+impl {{pascal_crate_name}}Manager {
+    /// Create a new instance
+    pub fn new() -> Self {
+        Self {
+            // Initialize fields
+        }
+    }
+    
+    // Add methods as needed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn it_works() {
+        // Basic test
+        let manager = {{pascal_crate_name}}Manager::new();
+        // Test operations
+    }
+} 

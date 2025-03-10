@@ -1,114 +1,116 @@
-# Internet of Cooperative Networks (ICN)
+# Inter-Cooperative Network (ICN)
 
-A federated blockchain platform for cooperative resource sharing and governance.
+The Inter-Cooperative Network (ICN) is a platform for cooperative resource sharing and governance.
 
-## Table of Contents
-- [Core Components](#core-components)
-- [Architecture](#architecture)
-- [Quick Start](#quick-start)
-- [Project Structure](#project-structure)
-- [Key Features](#key-features)
-- [Usage](#usage)
-- [Contributing](#contributing)
-- [Testing](#testing)
-- [Documentation](#documentation)
-- [License](#license)
+## Project Status
 
-## Core Components
+This project is currently in development. Some components may not be fully functional.
 
-- **Consensus Engine**: Proof of Cooperation based consensus with democratic validator selection
-- **Federated Ledger**: Distributed transaction processing with cooperative governance
-- **DID Authentication**: Identity management using decentralized identifiers
-- **Hybrid Storage**: Combined on-chain/off-chain storage model
+## Getting Started
 
-## Architecture
+### Prerequisites
 
-```mermaid
-graph TD
-    A[Consensus Layer] --> B[Governance Engine]
-    B --> C[Transaction Processing]
-    C --> D[Storage Manager]
-    D --> E[IPFS/Filecoin]
-    D --> F[On-Chain Storage]
-```
+- Rust/Cargo (latest stable version)
+- Node.js/npm (for frontend)
+- Docker and Docker Compose (for services)
 
-## Quick Start
+### Setup
+
+1. Clone the repository:
 
 ```bash
-# Build the project
-cargo build
-
-# Run tests
-cargo test
-
-# Start a local testnet
-cargo run --bin icn-node -- --testnet
+git clone https://github.com/yourusername/ICN.git
+cd ICN
 ```
 
-## Project Structure
-The ICN project is organized into several directories, each serving a specific purpose:
+2. Set up the development environment:
 
-- **backend**: Contains the Rust code for the backend services.
-- **frontend**: Contains the JavaScript code for the frontend application.
-- **contracts**: Contains the smart contracts for governance and cooperative operations.
-- **crates**:
-  - **core**: Contains core libraries (icn-core, icn-crypto, icn-dsl, icn-types).
-  - **consensus**: Contains the consensus mechanism (icn-consensus).
-  - **networking**: Contains networking libraries (icn-p2p, icn-federation).
-  - **storage**: Contains persistence and storage management (icn-storage).
-  - **runtime**: Contains runtime support (icn-runtime).
-  - **resources**: Contains resource management (icn-resource).
-  - **finance**: Contains the mutual credit system (icn-mutual-credit).
-- **docker**: Contains Dockerfiles and Docker Compose configurations for containerizing the services.
-- **docs**: Contains the project documentation, including setup guides, contribution guides, and API documentation.
-- **scripts**: Contains various scripts for setup, deployment, and management of the project.
-- **config**: Contains configuration files for different environments and services.
-
-## Key Features
-- **Decentralized Identity Management**: Secure and verifiable identities using DIDs.
-- **Reputation System**: Track and manage reputation across cooperatives.
-- **Governance**: Democratic decision-making through proposals and voting.
-- **Resource Sharing**: Efficient allocation and management of resources.
-- **Consensus Mechanism**: Proof of Cooperation (PoC) for transaction validation.
-- **Telemetry and Logging**: Integrated metrics and logging for monitoring and debugging.
-
-## Usage
-To run the ICN project locally, follow the instructions in the [Getting Started](#getting-started) section. For detailed usage instructions, refer to the [User Guides](docs/user/guides/index.md).
-
-### Starting the Backend
 ```bash
-# Navigate to the backend directory
+cp .env.template .env
+./setup-dev.sh
+```
+
+### Building and Running
+
+#### CLI
+
+The CLI component is currently the most stable part of the project. You can build and run it using:
+
+```bash
+./build-and-run.sh --help
+```
+
+This will show you the available commands. For example, to check the health of the ICN API:
+
+```bash
+./build-and-run.sh health
+```
+
+See the [CLI README](crates/icn-cli/README.md) for more details.
+
+#### Backend
+
+The backend is still under development and may not build completely due to dependency issues. However, you can try building it:
+
+```bash
 cd backend
-
-# Run the backend services
-cargo run --bin icn-backend
+cargo build
 ```
 
-### Starting the Frontend
+#### Frontend
+
+The frontend is also under development:
+
 ```bash
-# Navigate to the frontend directory
 cd frontend
-
-# Install dependencies
 npm install
-
-# Run the frontend application
 npm start
 ```
 
+## Project Structure
+
+- `backend/`: Backend API server
+- `crates/`: Rust crates for various components
+  - `icn-cli/`: Command-line interface
+  - `icn-types/`: Common data types
+  - `icn-common/`: Common utilities
+  - `icn-core/`: Core functionality
+  - `icn-crypto/`: Cryptographic operations
+  - `icn-identity/`: Identity management
+  - `icn-resource/`: Resource allocation
+  - `icn-consensus/`: Consensus mechanisms
+  - `icn-runtime/`: Runtime execution
+  - `icn-zk/`: Zero-knowledge proofs
+- `frontend/`: Web interface
+- `docker/`: Docker configurations
+- `scripts/`: Utility scripts
+
+## Development
+
+### Building Individual Components
+
+To build a specific component:
+
+```bash
+cargo build -p <crate-name>
+```
+
+For example, to build the CLI:
+
+```bash
+cargo build -p icn-cli
+```
+
+### Running Tests
+
+```bash
+cargo test
+```
+
 ## Contributing
-We welcome contributions from the community! To get started, please read the [ICN Contribution Guide](docs/development/guides/contributing.md) for guidelines on how to contribute to the project.
 
-## Testing
-The ICN project uses a comprehensive testing strategy to ensure the quality and reliability of the codebase. For detailed information on the testing strategy and how to run tests, refer to the [ICN Testing Strategy Guide](docs/development/guides/test-strategy.md).
-
-## Documentation
-For detailed documentation, including the Development Setup Guide, ICN Contribution Guide, and other relevant documents, refer to the [Documentation Index](docs/INDEX.md).
-
-- [Consensus Engine](./crates/icn-consensus/README.md)
-- [Core Architecture](./crates/icn-core/README.md)
-- [API Reference](./docs/api.md)
-- [Governance Model](./docs/governance.md)
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute to the project.
 
 ## License
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+
+This project is licensed under the MIT License - see the LICENSE file for details.

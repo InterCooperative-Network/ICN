@@ -1,0 +1,36 @@
+# Rustfmt configuration for the ICN project
+
+# Maximum width of each line
+max_width = 100
+
+# Number of spaces per tab
+tab_spaces = 4
+
+# Use field initialization shorthand when possible
+use_field_init_shorthand = true
+
+# Put single-expression functions on a single line
+single_line_if_else_max_width = 80
+
+# Import sorting and grouping
+imports_granularity = "Module"
+group_imports = "StdExternalCrate"
+
+# Documentation comments
+normalize_comments = true
+wrap_comments = true
+
+# Formatting of chains
+chain_width = 60
+
+# Format more code constructs
+format_code_in_doc_comments = true
+format_macro_bodies = true
+format_macro_matchers = true
+format_strings = true
+
+# Control structure alignment
+control_brace_style = "AlwaysSameLine"
+
+# Formatting of where clauses
+where_single_line = true 
