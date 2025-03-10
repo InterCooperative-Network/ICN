@@ -3,7 +3,8 @@ version: "3.8"
 services:
   # PostgreSQL database service
   db:
-    image: postgres:14-alpine
+    image: postgres:13-alpine
+    # Changed from postgres:14-alpine to postgres:13-alpine to match existing data
     restart: unless-stopped
     volumes:
       - db_data:/var/lib/postgresql/data
@@ -16,6 +17,11 @@ services:
       - "5432:5432"
     networks:
       - icn-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-icnuser} -d ${POSTGRES_DB:-icndb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Backend service - Development mode with hot reloading
   backend:
@@ -24,7 +30,8 @@ services:
       dockerfile: backend.Dockerfile
     restart: unless-stopped
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     ports:
       - "8081:8081"
     volumes:
@@ -39,6 +46,11 @@ services:
       - RUST_BACKTRACE=1
     networks:
       - icn-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # Frontend service - Development mode with hot reloading
   frontend:
@@ -47,7 +59,8 @@ services:
       dockerfile: frontend.Dockerfile
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "3000:3000"
       - "35729:35729"  # For live reload
