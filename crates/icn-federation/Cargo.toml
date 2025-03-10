@@ -7,9 +7,14 @@ edition = "2021"
 async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1.0", features = ["full"] }
-uuid = { version = "1.0", features = ["v4"] }
+tokio = { version = "1.17", features = ["full"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
 thiserror = "1.0"
 icn-types = { path = "../icn-types" }
 icn-governance = { path = "../icn-governance" }
 icn-zk = { path = "../icn-zk" }
+
+# New dependencies
+icn-crypto = { path = "../icn-crypto" }
+icn-reputation = { path = "../icn-reputation" }
+chrono = { version = "0.4", features = ["serde"] }

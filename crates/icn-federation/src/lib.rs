@@ -6,9 +6,29 @@ use tokio::sync::RwLock;
 use std::time::SystemTime;
 use serde_json;
 use uuid::Uuid;
+use icn_types::{ResourceType, Resource};
+use log::*;
 
-mod federation;
-pub use federation::*;
+pub mod federation;
+pub mod governance;
+pub mod dispute;
+
+pub use federation::{
+    Federation, FederationType, FederationTerms, FederationError, 
+    FederationStatus, MemberStatus, MemberRole, ResourcePool,
+    ProposalType, ProposalStatus, Vote, VoteDecision, MembershipAction,
+    ResourceAllocationDetails, MemberInfo, ResourceAllocation
+};
+
+pub use governance::{
+    GovernanceManager, GovernanceConfig, GovernanceProposal, 
+    GovernanceError, GovernanceResult, VotingStrategy
+};
+
+pub use dispute::{
+    DisputeManager, DisputeConfig, Dispute, DisputeError, DisputeResult,
+    DisputeType, DisputeStatus, ResolutionMethod, ResolutionOutcome
+};
 
 // Add SDP support
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,58 +94,189 @@ pub trait ResourceManager: Send + Sync {
     async fn get_available_resources(&self) -> Result<HashMap<ResourceType, u64>, FederationError>;
 }
 
+/// Top-level federation manager that coordinates federation, governance and dispute resolution
 pub struct FederationManager {
     federations: Arc<RwLock<HashMap<String, Federation>>>,
+    governance_manager: Arc<governance::GovernanceManager>,
+    dispute_manager: Arc<dispute::DisputeManager>,
     resource_manager: Arc<dyn ResourceManager>,
     sdp_config: SDPConfig,
 }
 
 impl FederationManager {
-    pub fn new(resource_manager: Arc<dyn ResourceManager>) -> Self {
+    pub fn new(
+        governance_manager: Arc<governance::GovernanceManager>,
+        dispute_manager: Arc<dispute::DisputeManager>,
+        resource_manager: Arc<dyn ResourceManager>,
+    ) -> Self {
         Self {
             federations: Arc::new(RwLock::new(HashMap::new())),
+            governance_manager,
+            dispute_manager,
             resource_manager,
             sdp_config: SDPConfig::default(),
         }
     }
-
+    
+    /// Create a new federation
     pub async fn create_federation(
         &self,
+        id: String,
         name: String,
         federation_type: FederationType,
-        initial_terms: FederationTerms,
-        founding_member: String,
+        terms: FederationTerms,
+        founder: String,
     ) -> Result<String, FederationError> {
-        let federation_id = format!("fed_{}", Uuid::new_v4());
-        let mut members = HashMap::new();
-        members.insert(founding_member.clone(), MemberStatus::Active);
-
-        let mut member_roles = HashMap::new();
-        member_roles.insert(founding_member, MemberRole::Admin);
-
-        let federation = Federation {
-            id: federation_id.clone(),
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        // Create federation with founder as first member
+        let mut federation = Federation {
+            id: id.clone(),
             name,
             federation_type,
-            members,
-            member_roles,
-            terms: initial_terms,
+            members: HashMap::new(),
+            member_roles: HashMap::new(),
+            terms,
             resources: HashMap::new(),
             proposals: Vec::new(),
-            created_at: SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
+            created_at: now,
             status: FederationStatus::Active,
             disputes: HashMap::new(),
             cross_federation_disputes: HashMap::new(),
             audit_log: Vec::new(),
         };
-
+        
+        // Add founder
+        federation.members.insert(founder.clone(), MemberInfo::default());
+        
+        // Set founder role
+        federation.member_roles.insert(
+            founder,
+            vec![MemberRole::Founder, MemberRole::Admin],
+        );
+        
+        // Register with subsystems
+        self.governance_manager.register_federation(federation.clone()).await
+            .map_err(|e| FederationError::GovernanceError(e.to_string()))?;
+            
+        self.dispute_manager.register_federation(federation.clone()).await
+            .map_err(|e| FederationError::DisputeError(e.to_string()))?;
+        
+        // Store federation
         let mut federations = self.federations.write().await;
-        federations.insert(federation_id.clone(), federation);
-
-        Ok(federation_id)
+        federations.insert(id.clone(), federation);
+        
+        Ok(id)
+    }
+    
+    /// Get a federation by ID
+    pub async fn get_federation(&self, id: &str) -> Result<Federation, FederationError> {
+        let federations = self.federations.read().await;
+        federations.get(id)
+            .cloned()
+            .ok_or_else(|| FederationError::FederationNotFound(id.to_string()))
+    }
+    
+    /// Update a federation
+    pub async fn update_federation(&self, federation: Federation) -> Result<(), FederationError> {
+        // Check if federation exists
+        let mut federations = self.federations.write().await;
+        if !federations.contains_key(&federation.id) {
+            return Err(FederationError::FederationNotFound(federation.id));
+        }
+        
+        // Update federation
+        federations.insert(federation.id.clone(), federation.clone());
+        
+        // Update in subsystems
+        self.governance_manager.register_federation(federation.clone()).await
+            .map_err(|e| FederationError::GovernanceError(e.to_string()))?;
+            
+        self.dispute_manager.register_federation(federation).await
+            .map_err(|e| FederationError::DisputeError(e.to_string()))?;
+        
+        Ok(())
+    }
+    
+    /// Get all federations
+    pub async fn list_federations(&self) -> Vec<Federation> {
+        let federations = self.federations.read().await;
+        federations.values().cloned().collect()
+    }
+    
+    /// Create a proposal for a federation
+    pub async fn create_proposal(
+        &self,
+        title: String,
+        description: String,
+        proposer: String,
+        federation_id: String,
+        proposal_type: ProposalType,
+        voting_period: Option<u64>,
+    ) -> Result<String, FederationError> {
+        self.governance_manager.create_proposal(
+            title,
+            description,
+            proposer,
+            federation_id,
+            proposal_type,
+            voting_period,
+            Vec::new(),
+        ).await
+        .map_err(|e| FederationError::GovernanceError(e.to_string()))
+    }
+    
+    /// Submit a vote on a proposal
+    pub async fn submit_vote(
+        &self,
+        proposal_id: &str,
+        voter: String,
+        decision: VoteDecision,
+        justification: Option<String>,
+    ) -> Result<(), FederationError> {
+        self.governance_manager.submit_vote(
+            proposal_id,
+            voter,
+            decision,
+            justification,
+        ).await
+        .map_err(|e| FederationError::GovernanceError(e.to_string()))
+    }
+    
+    /// File a dispute
+    pub async fn file_dispute(
+        &self,
+        title: String,
+        description: String,
+        complainant: String,
+        respondents: Vec<String>,
+        federation_id: String,
+        dispute_type: DisputeType,
+        severity: u8,
+    ) -> Result<String, FederationError> {
+        self.dispute_manager.file_dispute(
+            title,
+            description,
+            complainant,
+            respondents,
+            federation_id,
+            dispute_type,
+            severity,
+        ).await
+        .map_err(|e| FederationError::DisputeError(e.to_string()))
+    }
+    
+    /// Get governance manager
+    pub fn governance_manager(&self) -> Arc<governance::GovernanceManager> {
+        self.governance_manager.clone()
+    }
+    
+    /// Get dispute manager
+    pub fn dispute_manager(&self) -> Arc<dispute::DisputeManager> {
+        self.dispute_manager.clone()
     }
 
     pub async fn join_federation(
@@ -220,16 +371,6 @@ impl FederationManager {
         } else {
             Err(FederationError::FederationNotFound(federation_id.to_string()))
         }
-    }
-
-    pub async fn get_federation(&self, federation_id: &str) -> Result<Option<Federation>, FederationError> {
-        let federations = self.federations.read().await;
-        Ok(federations.get(federation_id).cloned())
-    }
-
-    pub async fn list_federations(&self) -> Result<Vec<Federation>, FederationError> {
-        let federations = self.federations.read().await;
-        Ok(federations.values().cloned().collect())
     }
 
     pub async fn update_federation_status(

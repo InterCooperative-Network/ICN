@@ -2,22 +2,105 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, Duration};
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Federation {
+    /// Unique federation ID
     pub id: String,
+    
+    /// Human-readable name
     pub name: String,
+    
+    /// Type of federation
     pub federation_type: FederationType,
-    pub members: HashMap<String, MemberStatus>,
-    pub member_roles: HashMap<String, MemberRole>,
+    
+    /// Members of the federation
+    pub members: HashMap<String, MemberInfo>,
+    
+    /// Member roles
+    pub member_roles: HashMap<String, Vec<MemberRole>>,
+    
+    /// Federation terms
     pub terms: FederationTerms,
+    
+    /// Shared resources
     pub resources: HashMap<ResourceType, ResourcePool>,
-    pub proposals: Vec<FederationProposal>,
+    
+    /// Governance proposals
+    pub proposals: Vec<ProposalReference>,
+    
+    /// Creation timestamp
     pub created_at: u64,
+    
+    /// Current status
     pub status: FederationStatus,
-    pub disputes: HashMap<String, FederationDispute>,
-    pub cross_federation_disputes: HashMap<String, Vec<FederationDispute>>,
+    
+    /// Internal disputes
+    pub disputes: HashMap<String, DisputeReference>,
+    
+    /// Cross-federation disputes
+    pub cross_federation_disputes: HashMap<String, CrossFederationDisputeReference>,
+    
+    /// Audit log
     pub audit_log: Vec<AuditEntry>,
+}
+
+/// Reference to a governance proposal
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProposalReference {
+    /// Proposal ID
+    pub id: String,
+    
+    /// Proposal title
+    pub title: String,
+    
+    /// Proposal status
+    pub status: ProposalStatus,
+    
+    /// Creation timestamp
+    pub created_at: u64,
+}
+
+/// Reference to a dispute
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisputeReference {
+    /// Dispute ID
+    pub id: String,
+    
+    /// Dispute title
+    pub title: String,
+    
+    /// Dispute status
+    pub status: String,
+    
+    /// Complainant member ID
+    pub complainant: String,
+    
+    /// Respondent member IDs
+    pub respondents: Vec<String>,
+    
+    /// Creation timestamp
+    pub created_at: u64,
+}
+
+/// Reference to a cross-federation dispute
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrossFederationDisputeReference {
+    /// Dispute ID
+    pub id: String,
+    
+    /// Dispute title
+    pub title: String,
+    
+    /// Dispute status
+    pub status: String,
+    
+    /// Other federation ID
+    pub other_federation_id: String,
+    
+    /// Creation timestamp
+    pub created_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,11 +204,11 @@ pub enum AllocationStrategy {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum ResourceType {
-    Compute,
-    Storage,
-    Network,
-    Memory,
-    Custom(String),
+    ComputeUnit,
+    StorageGb,
+    BandwidthMbps,
+    MemoryGb,
+    CustomResource(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -205,21 +288,24 @@ pub enum ProposalType {
 pub enum MembershipAction {
     Add(String),
     Remove(String),
-    ChangeRole { member: String, new_role: MemberRole },
+    ChangeRole(String, Vec<MemberRole>),
+    Suspend(String, u64),
+    Reinstate(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ResourceAllocationDetails {
     pub resource_type: ResourceType,
+    pub member_id: String,
     pub amount: u64,
-    pub recipient: String,
-    pub duration: Option<Duration>,
+    pub duration: u64,
+    pub details: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GovernanceUpdateDetails {
-    pub field: String,
-    pub new_value: String,
+    pub parameters: HashMap<String, String>,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -235,7 +321,7 @@ pub enum ProposalStatus {
     Approved,
     Rejected,
     Executed,
-    Failed,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -315,25 +401,27 @@ pub enum DisputeDecision {
     Compromise(String),
 }
 
+/// Audit log entry for federation activities
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditEntry {
-    pub id: String,
-    pub action_type: AuditActionType,
-    pub actor: String,
-    pub target: String,
-    pub details: String,
+    /// Timestamp of the entry
     pub timestamp: u64,
+    
+    /// Type of event
+    pub event_type: String,
+    
+    /// Description of the event
+    pub description: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AuditActionType {
-    MembershipChange,
-    ResourceAllocation,
-    ProposalSubmission,
-    Vote,
-    DisputeResolution,
-    TermsUpdate,
-    Custom(String),
+pub struct ResourceAllocation {
+    pub id: String,
+    pub resource_type: ResourceType,
+    pub amount: u64,
+    pub allocated_at: u64,
+    pub expires_at: Option<u64>,
+    pub details: HashMap<String, String>,
 }
 
 #[derive(Error, Debug)]
@@ -341,36 +429,205 @@ pub enum FederationError {
     #[error("Federation not found: {0}")]
     FederationNotFound(String),
     
-    #[error("Member already exists: {0}")]
-    AlreadyMember(String),
-    
     #[error("Member not found: {0}")]
     MemberNotFound(String),
     
-    #[error("Insufficient resources: {0}")]
-    InsufficientResources(String),
+    #[error("Resource not found: {0}")]
+    ResourceNotFound(String),
     
-    #[error("Invalid proposal: {0}")]
-    InvalidProposal(String),
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
     
-    #[error("Invalid vote: {0}")]
-    InvalidVote(String),
+    #[error("Proposal not found: {0}")]
+    ProposalNotFound(String),
     
-    #[error("Invalid dispute: {0}")]
-    InvalidDispute(String),
+    #[error("Dispute not found: {0}")]
+    DisputeNotFound(String),
     
-    #[error("Communication error: {0}")]
-    CommunicationError(String),
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
     
-    #[error("Invalid state transition: {from} -> {to}")]
-    InvalidStatusTransition { from: String, to: String },
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
     
-    #[error("Authorization error: {0}")]
-    AuthorizationError(String),
+    #[error("Governance error: {0}")]
+    GovernanceError(String),
     
-    #[error("Validation error: {0}")]
-    ValidationError(String),
+    #[error("Dispute resolution error: {0}")]
+    DisputeError(String),
     
-    #[error("Internal error: {0}")]
-    InternalError(String),
+    #[error("Networking error: {0}")]
+    NetworkingError(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemberInfo {
+    /// Member status
+    pub status: MemberStatus,
+    
+    /// Join timestamp
+    pub joined_at: u64,
+    
+    /// Last active timestamp
+    pub last_active: u64,
+    
+    /// Resource allocations
+    pub resource_allocations: Vec<ResourceAllocation>,
+    
+    /// When suspension ends (if suspended)
+    pub suspension_end: Option<u64>,
+    
+    /// Member metadata
+    pub metadata: HashMap<String, String>,
+}
+
+impl Default for MemberInfo {
+    fn default() -> Self {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        Self {
+            status: MemberStatus::Active,
+            joined_at: now,
+            last_active: now,
+            resource_allocations: Vec::new(),
+            suspension_end: None,
+            metadata: HashMap::new(),
+        }
+    }
+}
+
+impl Federation {
+    pub fn apply_membership_action(&mut self, action: MembershipAction) -> Result<(), FederationError> {
+        match action {
+            MembershipAction::Add(member_id) => {
+                if self.members.contains_key(&member_id) {
+                    return Err(FederationError::InvalidOperation(
+                        format!("Member {} already exists", member_id)
+                    ));
+                }
+                
+                self.members.insert(member_id.clone(), Default::default());
+                self.member_roles.insert(member_id, vec![MemberRole::Member]);
+                
+                Ok(())
+            },
+            MembershipAction::Remove(member_id) => {
+                if !self.members.contains_key(&member_id) {
+                    return Err(FederationError::MemberNotFound(member_id));
+                }
+                
+                self.members.remove(&member_id);
+                self.member_roles.remove(&member_id);
+                
+                Ok(())
+            },
+            MembershipAction::ChangeRole(member_id, roles) => {
+                if !self.members.contains_key(&member_id) {
+                    return Err(FederationError::MemberNotFound(member_id));
+                }
+                
+                self.member_roles.insert(member_id, roles);
+                
+                Ok(())
+            },
+            MembershipAction::Suspend(member_id, duration) => {
+                if !self.members.contains_key(&member_id) {
+                    return Err(FederationError::MemberNotFound(member_id));
+                }
+                
+                let now = SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                
+                let member_info = self.members.get_mut(&member_id).unwrap();
+                member_info.status = MemberStatus::Suspended;
+                member_info.suspension_end = Some(now + duration);
+                
+                Ok(())
+            },
+            MembershipAction::Reinstate(member_id) => {
+                if !self.members.contains_key(&member_id) {
+                    return Err(FederationError::MemberNotFound(member_id));
+                }
+                
+                let member_info = self.members.get_mut(&member_id).unwrap();
+                member_info.status = MemberStatus::Active;
+                member_info.suspension_end = None;
+                
+                Ok(())
+            },
+        }
+    }
+    
+    pub fn allocate_resource(&mut self, details: ResourceAllocationDetails) -> Result<(), FederationError> {
+        if !self.members.contains_key(&details.member_id) {
+            return Err(FederationError::MemberNotFound(details.member_id));
+        }
+        
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        
+        let allocation = ResourceAllocation {
+            id: Uuid::new_v4().to_string(),
+            resource_type: details.resource_type.clone(),
+            amount: details.amount,
+            allocated_at: now,
+            expires_at: if details.duration > 0 { Some(now + details.duration) } else { None },
+            details: details.details,
+        };
+        
+        let member_info = self.members.get_mut(&details.member_id).unwrap();
+        member_info.resource_allocations.push(allocation);
+        
+        Ok(())
+    }
+    
+    pub fn update_governance(&mut self, details: GovernanceUpdateDetails) -> Result<(), FederationError> {
+        for (key, value) in details.parameters {
+            self.terms.governance_params.insert(key, value);
+        }
+        
+        self.add_audit_log_entry(
+            "governance_update",
+            format!("Governance parameters updated: {}", details.reason)
+        );
+        
+        Ok(())
+    }
+    
+    pub fn update_terms(&mut self, terms: FederationTerms) -> Result<(), FederationError> {
+        self.terms = terms;
+        
+        self.add_audit_log_entry(
+            "terms_update",
+            "Federation terms updated".to_string()
+        );
+        
+        Ok(())
+    }
+    
+    fn add_audit_log_entry(&mut self, event_type: &str, description: String) {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        let entry = AuditEntry {
+            timestamp: now,
+            event_type: event_type.to_string(),
+            description,
+        };
+        
+        self.audit_log.push(entry);
+        
+        if self.audit_log.len() > 1000 {
+            self.audit_log.remove(0);
+        }
+    }
 } 

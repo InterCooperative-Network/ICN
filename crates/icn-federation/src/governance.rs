@@ -1,13 +1,20 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tokio::sync::{RwLock, Mutex};
+use std::time::{SystemTime, Duration};
+use tokio::sync::RwLock;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
-use icn_types::{FederationId, Did};
-use icn_reputation::{ReputationManager, ReputationScore};
-use crate::messaging::{FederationMessenger, MessageType, MessagePriority, MessageVisibility};
+use log::{debug, info, warn, error};
+
+use icn_types::FederationId;
+use icn_reputation::ReputationInterface;
+use icn_crypto::KeyPair;
+
+use crate::federation::{
+    Federation, FederationType, FederationTerms, FederationError,
+    ProposalType, ProposalStatus, Vote, VoteDecision, MemberRole
+};
 
 /// Error types for federation governance
 #[derive(Error, Debug)]
@@ -15,14 +22,11 @@ pub enum GovernanceError {
     #[error("Proposal not found: {0}")]
     ProposalNotFound(String),
     
-    #[error("Vote not found: {0}")]
-    VoteNotFound(String),
+    #[error("Member not found: {0}")]
+    MemberNotFound(String),
     
-    #[error("Unauthorized action: {0}")]
+    #[error("Member not authorized: {0}")]
     Unauthorized(String),
-    
-    #[error("Invalid proposal: {0}")]
-    InvalidProposal(String),
     
     #[error("Invalid vote: {0}")]
     InvalidVote(String),
@@ -30,834 +34,700 @@ pub enum GovernanceError {
     #[error("Voting period ended")]
     VotingPeriodEnded,
     
-    #[error("Insufficient reputation: required {required}, actual {actual}")]
-    InsufficientReputation { required: i64, actual: i64 },
+    #[error("Quorum not reached")]
+    QuorumNotReached,
     
-    #[error("Proposal already exists: {0}")]
-    ProposalExists(String),
+    #[error("Federation error: {0}")]
+    FederationError(#[from] FederationError),
     
-    #[error("Already voted on proposal")]
-    AlreadyVoted,
-    
-    #[error("Federation messaging error: {0}")]
-    MessagingError(String),
-    
-    #[error("Reputation system error: {0}")]
+    #[error("Reputation service error: {0}")]
     ReputationError(String),
+    
+    #[error("Internal error: {0}")]
+    InternalError(String),
 }
 
-/// Types of federation governance proposals
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ProposalType {
-    /// Add a new member to the federation
-    AddMember,
-    
-    /// Remove a member from the federation
-    RemoveMember,
-    
-    /// Change federation parameters
-    ChangeParameters,
-    
-    /// Allocate resources
-    ResourceAllocation,
-    
-    /// Form partnership with another federation
-    FormPartnership,
-    
-    /// Dissolve partnership with another federation
-    DissolvePartnership,
-    
-    /// Modify federation rules
-    ModifyRules,
-    
-    /// Generic proposal type
-    Generic,
-    
-    /// Custom proposal type
-    Custom(String),
-}
+pub type GovernanceResult<T> = Result<T, GovernanceError>;
 
-/// Voting methods for proposals
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum VotingMethod {
-    /// Simple majority voting (>50%)
-    SimpleMajority,
+/// Voting power allocation strategies
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum VotingStrategy {
+    /// One member, one vote (democratic)
+    EqualVoting,
     
-    /// Super majority voting (e.g., 2/3 or 3/4)
-    SuperMajority(f64),
-    
-    /// Unanimous voting (100%)
-    Unanimous,
-    
-    /// Quadratic voting (votes weighted by square root of reputation)
-    QuadraticVoting,
-    
-    /// Reputation-weighted voting
+    /// Voting power proportional to reputation
     ReputationWeighted,
     
-    /// Delegation-based voting
-    DelegatedVoting,
+    /// Voting power with quadratic scaling (sqrt of reputation)
+    QuadraticVoting,
     
-    /// Custom voting method
-    Custom(String),
+    /// Voting power based on resource contribution
+    ResourceWeighted,
 }
 
-/// Current status of a proposal
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ProposalStatus {
-    /// Proposal has been created but not yet open for voting
-    Draft,
-    
-    /// Proposal is open for voting
-    Active,
-    
-    /// Proposal has been approved
-    Approved,
-    
-    /// Proposal has been rejected
-    Rejected,
-    
-    /// Proposal has been withdrawn
-    Withdrawn,
-    
-    /// Proposal execution is in progress
-    Executing,
-    
-    /// Proposal has been executed
-    Executed,
-    
-    /// Proposal has failed execution
-    Failed,
+impl Default for VotingStrategy {
+    fn default() -> Self {
+        Self::ReputationWeighted
+    }
 }
 
-/// Voting options
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum VoteOption {
-    /// Vote in favor of the proposal
-    Approve,
-    
-    /// Vote against the proposal
-    Reject,
-    
-    /// Abstain from voting (neutral)
-    Abstain,
-    
-    /// Request more information before voting
-    RequestInfo,
-}
-
-/// A governance proposal
+/// Configuration for federation governance
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Proposal {
+pub struct GovernanceConfig {
+    /// Voting strategy to use
+    pub voting_strategy: VotingStrategy,
+    
+    /// Minimum percentage of votes required for quorum (0-100)
+    pub quorum_percentage: u8,
+    
+    /// Minimum percentage of yes votes required to pass a proposal (0-100)
+    pub approval_threshold: u8,
+    
+    /// Default voting period in seconds
+    pub default_voting_period: u64,
+    
+    /// Minimum reputation required to create proposals
+    pub min_proposal_reputation: i64,
+    
+    /// Minimum reputation required to vote
+    pub min_voting_reputation: i64,
+    
+    /// Minimum reputation required for member admission
+    pub min_membership_reputation: i64,
+}
+
+impl Default for GovernanceConfig {
+    fn default() -> Self {
+        Self {
+            voting_strategy: VotingStrategy::default(),
+            quorum_percentage: 50,
+            approval_threshold: 66,  // 2/3 majority
+            default_voting_period: 7 * 24 * 60 * 60, // 7 days
+            min_proposal_reputation: 100,
+            min_voting_reputation: 10,
+            min_membership_reputation: 0,
+        }
+    }
+}
+
+/// Federation proposal with voting
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GovernanceProposal {
     /// Unique proposal ID
     pub id: String,
     
-    /// Title of the proposal
+    /// Proposal title
     pub title: String,
     
-    /// Detailed description of the proposal
+    /// Detailed description
     pub description: String,
     
-    /// Type of the proposal
-    pub proposal_type: ProposalType,
-    
-    /// DID of the proposer
-    pub proposer: Did,
-    
-    /// When the proposal was created
-    pub created_at: DateTime<Utc>,
-    
-    /// When voting starts
-    pub voting_starts_at: DateTime<Utc>,
-    
-    /// When voting ends
-    pub voting_ends_at: DateTime<Utc>,
-    
-    /// Current status of the proposal
-    pub status: ProposalStatus,
-    
-    /// Voting method to be used
-    pub voting_method: VotingMethod,
-    
-    /// Minimum reputation required to vote
-    pub min_reputation: i64,
-    
-    /// Proposal data (type-specific content)
-    pub data: HashMap<String, String>,
-    
-    /// Proposal attachments (e.g., documents, evidence)
-    pub attachments: Vec<ProposalAttachment>,
-    
-    /// Record of votes on this proposal
-    pub votes: HashMap<Did, Vote>,
-    
-    /// Metadata and tags
-    pub metadata: HashMap<String, String>,
+    /// Member who created the proposal
+    pub proposer: String,
     
     /// Federation this proposal belongs to
     pub federation_id: FederationId,
+    
+    /// Type of proposal
+    pub proposal_type: ProposalType,
+    
+    /// Current status
+    pub status: ProposalStatus,
+    
+    /// Votes cast for this proposal
+    pub votes: HashMap<String, Vote>,
+    
+    /// When voting starts
+    pub created_at: u64,
+    
+    /// When voting ends
+    pub ends_at: u64,
+    
+    /// When the proposal was executed (if applicable)
+    pub executed_at: Option<u64>,
+    
+    /// Tags for categorization
+    pub tags: Vec<String>,
+    
+    /// Optional supporting evidence (URLs, hashes, etc.)
+    pub evidence: Vec<String>,
+    
+    /// Execution result details
+    pub execution_result: Option<String>,
 }
 
-/// Attachment to a proposal
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProposalAttachment {
-    /// Name of the attachment
-    pub name: String,
-    
-    /// MIME type of the attachment
-    pub mime_type: String,
-    
-    /// Content hash for integrity verification
-    pub hash: String,
-    
-    /// URL or IPFS CID where the content can be retrieved
-    pub url: String,
-    
-    /// Size in bytes
-    pub size: u64,
-}
-
-/// A vote on a proposal
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Vote {
-    /// ID of the vote
-    pub id: String,
-    
-    /// ID of the proposal being voted on
-    pub proposal_id: String,
-    
-    /// DID of the voter
-    pub voter: Did,
-    
-    /// The vote choice
-    pub vote: VoteOption,
-    
-    /// Optional explanation for the vote
-    pub explanation: Option<String>,
-    
-    /// Reputation weight of the vote
-    pub weight: f64,
-    
-    /// When the vote was cast
-    pub timestamp: DateTime<Utc>,
-    
-    /// If this vote was delegated
-    pub delegated: bool,
-    
-    /// If delegated, the original voter
-    pub delegated_from: Option<Did>,
-    
-    /// Digital signature of the vote
-    pub signature: String,
-}
-
-/// Results of a vote
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VoteResults {
-    /// ID of the proposal
-    pub proposal_id: String,
-    
-    /// Total number of votes
-    pub total_votes: usize,
-    
-    /// Number of approve votes
-    pub approve_count: usize,
-    
-    /// Number of reject votes
-    pub reject_count: usize,
-    
-    /// Number of abstain votes
-    pub abstain_count: usize,
-    
-    /// Number of request info votes
-    pub request_info_count: usize,
-    
-    /// Sum of approve vote weights
-    pub approve_weight: f64,
-    
-    /// Sum of reject vote weights
-    pub reject_weight: f64,
-    
-    /// Sum of abstain vote weights
-    pub abstain_weight: f64,
-    
-    /// Sum of request info vote weights
-    pub request_info_weight: f64,
-    
-    /// Total possible voting weight
-    pub total_possible_weight: f64,
-    
-    /// Participation rate (0.0 - 1.0)
-    pub participation_rate: f64,
-    
-    /// Whether the proposal passed
-    pub passed: bool,
-}
-
-/// Federation governance system
-pub struct FederationGovernance {
-    /// Federation ID
-    federation_id: FederationId,
-    
-    /// Active proposals
-    proposals: RwLock<HashMap<String, Proposal>>,
-    
-    /// Archive of past proposals
-    proposal_archive: RwLock<HashMap<String, Proposal>>,
-    
-    /// Federation messenger for proposal notifications
-    messenger: Arc<FederationMessenger>,
-    
-    /// Reputation manager for vote weighting
-    reputation_manager: Arc<dyn ReputationManager>,
-    
-    /// Vote delegates
-    delegates: RwLock<HashMap<Did, Did>>,
-    
-    /// Minimum reputation to create proposals
-    min_proposal_reputation: RwLock<i64>,
-    
-    /// Proposals pending execution
-    pending_execution: RwLock<Vec<String>>,
-    
-    /// Vote proxy configurations
-    vote_proxies: RwLock<HashMap<Did, Vec<Did>>>,
-}
-
-impl FederationGovernance {
-    /// Create a new federation governance system
+impl GovernanceProposal {
     pub fn new(
+        title: String,
+        description: String,
+        proposer: String,
         federation_id: FederationId,
-        messenger: Arc<FederationMessenger>,
-        reputation_manager: Arc<dyn ReputationManager>,
+        proposal_type: ProposalType,
+        voting_period: u64,
+        tags: Vec<String>,
     ) -> Self {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
         Self {
+            id: Uuid::new_v4().to_string(),
+            title,
+            description,
+            proposer,
             federation_id,
-            proposals: RwLock::new(HashMap::new()),
-            proposal_archive: RwLock::new(HashMap::new()),
-            messenger,
-            reputation_manager,
-            delegates: RwLock::new(HashMap::new()),
-            min_proposal_reputation: RwLock::new(100), // Default minimum reputation
-            pending_execution: RwLock::new(Vec::new()),
-            vote_proxies: RwLock::new(HashMap::new()),
+            proposal_type,
+            status: ProposalStatus::Draft,
+            votes: HashMap::new(),
+            created_at: now,
+            ends_at: now + voting_period,
+            executed_at: None,
+            tags,
+            evidence: Vec::new(),
+            execution_result: None,
         }
     }
-
-    /// Set minimum reputation required to create proposals
-    pub async fn set_min_proposal_reputation(&self, reputation: i64) {
-        let mut min_rep = self.min_proposal_reputation.write().await;
-        *min_rep = reputation;
+    
+    /// Check if voting is still open for this proposal
+    pub fn is_voting_open(&self) -> bool {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        self.status == ProposalStatus::Active && now < self.ends_at
     }
+    
+    /// Add evidence to the proposal
+    pub fn add_evidence(&mut self, evidence: String) {
+        self.evidence.push(evidence);
+    }
+    
+    /// Calculate vote totals
+    pub fn count_votes(&self) -> (u64, u64, u64) {
+        let mut yes_votes = 0;
+        let mut no_votes = 0;
+        let mut abstain_votes = 0;
+        
+        for vote in self.votes.values() {
+            match vote.decision {
+                VoteDecision::Approve => yes_votes += 1,
+                VoteDecision::Reject => no_votes += 1,
+                VoteDecision::Abstain => abstain_votes += 1,
+            }
+        }
+        
+        (yes_votes, no_votes, abstain_votes)
+    }
+    
+    /// Calculate weighted vote totals
+    pub fn count_weighted_votes(&self) -> (f64, f64, f64) {
+        let mut yes_weight = 0.0;
+        let mut no_weight = 0.0;
+        let mut abstain_weight = 0.0;
+        
+        for vote in self.votes.values() {
+            // Assuming vote weight is stored in the justification field for simplicity
+            // In a real implementation, you'd have a proper weight field
+            let weight = 1.0;
+            
+            match vote.decision {
+                VoteDecision::Approve => yes_weight += weight,
+                VoteDecision::Reject => no_weight += weight,
+                VoteDecision::Abstain => abstain_weight += weight,
+            }
+        }
+        
+        (yes_weight, no_weight, abstain_weight)
+    }
+}
 
+/// Federation governance manager
+pub struct GovernanceManager {
+    config: GovernanceConfig,
+    proposals: Arc<RwLock<HashMap<String, GovernanceProposal>>>,
+    federations: Arc<RwLock<HashMap<FederationId, Federation>>>,
+    reputation_service: Arc<dyn ReputationInterface>,
+}
+
+impl GovernanceManager {
+    pub fn new(
+        config: GovernanceConfig,
+        reputation_service: Arc<dyn ReputationInterface>,
+    ) -> Self {
+        Self {
+            config,
+            proposals: Arc::new(RwLock::new(HashMap::new())),
+            federations: Arc::new(RwLock::new(HashMap::new())),
+            reputation_service,
+        }
+    }
+    
+    /// Register a federation with the governance manager
+    pub async fn register_federation(&self, federation: Federation) -> GovernanceResult<()> {
+        let mut federations = self.federations.write().await;
+        federations.insert(federation.id.clone(), federation);
+        Ok(())
+    }
+    
     /// Create a new proposal
     pub async fn create_proposal(
         &self,
         title: String,
         description: String,
+        proposer: String,
+        federation_id: FederationId,
         proposal_type: ProposalType,
-        proposer: Did,
-        voting_starts_at: DateTime<Utc>,
-        voting_ends_at: DateTime<Utc>,
-        voting_method: VotingMethod,
-        min_reputation: i64,
-        data: HashMap<String, String>,
-        attachments: Vec<ProposalAttachment>,
-        metadata: HashMap<String, String>,
-    ) -> Result<String, GovernanceError> {
+        voting_period: Option<u64>,
+        tags: Vec<String>,
+    ) -> GovernanceResult<String> {
+        // Check if federation exists
+        let federations = self.federations.read().await;
+        let federation = federations.get(&federation_id)
+            .ok_or_else(|| GovernanceError::FederationError(
+                FederationError::FederationNotFound(federation_id.clone())
+            ))?;
+            
+        // Check if proposer is a member
+        if !federation.members.contains_key(&proposer) {
+            return Err(GovernanceError::MemberNotFound(proposer));
+        }
+        
         // Check if proposer has sufficient reputation
-        let proposer_reputation = self.reputation_manager.get_reputation(&proposer)
-            .await
+        let reputation = self.reputation_service.get_reputation(&proposer).await
             .map_err(|e| GovernanceError::ReputationError(e.to_string()))?;
             
-        let min_rep = *self.min_proposal_reputation.read().await;
-        
-        if proposer_reputation.score < min_rep {
-            return Err(GovernanceError::InsufficientReputation { 
-                required: min_rep,
-                actual: proposer_reputation.score,
-            });
+        if reputation < self.config.min_proposal_reputation {
+            return Err(GovernanceError::Unauthorized(
+                format!("Insufficient reputation to create proposal: {} < {}", 
+                    reputation, self.config.min_proposal_reputation)
+            ));
         }
         
-        // Validate proposal parameters
-        if voting_starts_at >= voting_ends_at {
-            return Err(GovernanceError::InvalidProposal("Voting end time must be after start time".to_string()));
-        }
-        
-        // Create a new proposal ID
-        let proposal_id = Uuid::new_v4().to_string();
-        
-        // Create the proposal
-        let proposal = Proposal {
-            id: proposal_id.clone(),
+        // Create proposal
+        let voting_period = voting_period.unwrap_or(self.config.default_voting_period);
+        let proposal = GovernanceProposal::new(
             title,
             description,
+            proposer,
+            federation_id,
             proposal_type,
-            proposer: proposer.clone(),
-            created_at: Utc::now(),
-            voting_starts_at,
-            voting_ends_at,
-            status: ProposalStatus::Draft,
-            voting_method,
-            min_reputation,
-            data,
-            attachments,
-            votes: HashMap::new(),
-            metadata,
-            federation_id: self.federation_id.clone(),
-        };
+            voting_period,
+            tags,
+        );
         
-        // Store the proposal
+        let proposal_id = proposal.id.clone();
+        
+        // Store proposal
         let mut proposals = self.proposals.write().await;
-        proposals.insert(proposal_id.clone(), proposal.clone());
-        
-        // Notify federation members about the new proposal
-        self.notify_new_proposal(&proposal).await?;
+        proposals.insert(proposal_id.clone(), proposal);
         
         Ok(proposal_id)
     }
-
-    /// Notify federation members about a new proposal
-    async fn notify_new_proposal(&self, proposal: &Proposal) -> Result<(), GovernanceError> {
-        let title = format!("New Proposal: {}", proposal.title);
-        let message = format!(
-            "A new proposal has been created by {}.\n\nTitle: {}\n\nDescription: {}\n\nVoting starts: {}\nVoting ends: {}\n\nProposal ID: {}",
-            proposal.proposer,
-            proposal.title,
-            proposal.description,
-            proposal.voting_starts_at.to_rfc3339(),
-            proposal.voting_ends_at.to_rfc3339(),
-            proposal.id
-        );
-        
-        // Send message via the messenger
-        // In a production system, this would be more sophisticated with proper serialization
-        self.messenger.send_new_message(
-            &self.federation_id, // Send to all federation members
-            MessageType::Proposal,
-            &title,
-            message.as_bytes(),
-            MessageVisibility::Federation,
-            MessagePriority::Normal,
-            Vec::new(),
-            None,
-        )
-        .await
-        .map_err(|e| GovernanceError::MessagingError(e.to_string()))?;
-        
-        Ok(())
-    }
-
-    /// Get a proposal by ID
-    pub async fn get_proposal(&self, proposal_id: &str) -> Result<Proposal, GovernanceError> {
-        // Check active proposals
-        let proposals = self.proposals.read().await;
-        if let Some(proposal) = proposals.get(proposal_id) {
-            return Ok(proposal.clone());
-        }
-        
-        // Check archived proposals
-        let archived = self.proposal_archive.read().await;
-        archived.get(proposal_id)
-            .cloned()
-            .ok_or_else(|| GovernanceError::ProposalNotFound(proposal_id.to_string()))
-    }
-
-    /// List all active proposals
-    pub async fn list_active_proposals(&self) -> Vec<Proposal> {
-        let proposals = self.proposals.read().await;
-        proposals.values()
-            .filter(|p| p.status == ProposalStatus::Active)
-            .cloned()
-            .collect()
-    }
-
-    /// List all proposals
-    pub async fn list_all_proposals(&self, include_archived: bool) -> Vec<Proposal> {
-        let mut result = Vec::new();
-        
-        // Get active proposals
-        {
-            let proposals = self.proposals.read().await;
-            result.extend(proposals.values().cloned());
-        }
-        
-        // Get archived proposals if requested
-        if include_archived {
-            let archived = self.proposal_archive.read().await;
-            result.extend(archived.values().cloned());
-        }
-        
-        result
-    }
-
-    /// Cast a vote on a proposal
-    pub async fn cast_vote(
+    
+    /// Submit a vote for a proposal
+    pub async fn submit_vote(
         &self,
         proposal_id: &str,
-        voter: Did,
-        vote: VoteOption,
-        explanation: Option<String>,
-        signature: String,
-    ) -> Result<String, GovernanceError> {
-        // Get the proposal
+        voter: String,
+        decision: VoteDecision,
+        justification: Option<String>,
+    ) -> GovernanceResult<()> {
+        // Get proposal
         let mut proposals = self.proposals.write().await;
         let proposal = proposals.get_mut(proposal_id)
             .ok_or_else(|| GovernanceError::ProposalNotFound(proposal_id.to_string()))?;
-        
-        // Check if voting is open
-        let now = Utc::now();
-        if now < proposal.voting_starts_at {
-            return Err(GovernanceError::InvalidVote("Voting has not started yet".to_string()));
-        }
-        if now > proposal.voting_ends_at {
+            
+        // Check if voting is still open
+        if !proposal.is_voting_open() {
             return Err(GovernanceError::VotingPeriodEnded);
         }
         
-        // Check if proposal is active
-        if proposal.status != ProposalStatus::Active {
-            return Err(GovernanceError::InvalidVote(format!("Proposal is not active: {:?}", proposal.status)));
+        // Check if federation exists
+        let federations = self.federations.read().await;
+        let federation = federations.get(&proposal.federation_id)
+            .ok_or_else(|| GovernanceError::FederationError(
+                FederationError::FederationNotFound(proposal.federation_id.clone())
+            ))?;
+            
+        // Check if voter is a member
+        if !federation.members.contains_key(&voter) {
+            return Err(GovernanceError::MemberNotFound(voter));
         }
         
-        // Check if voter has already voted
-        if proposal.votes.contains_key(&voter) {
-            return Err(GovernanceError::AlreadyVoted);
-        }
-        
-        // Check voter reputation
-        let voter_reputation = self.reputation_manager.get_reputation(&voter)
-            .await
+        // Check if voter has sufficient reputation
+        let reputation = self.reputation_service.get_reputation(&voter).await
             .map_err(|e| GovernanceError::ReputationError(e.to_string()))?;
             
-        if voter_reputation.score < proposal.min_reputation {
-            return Err(GovernanceError::InsufficientReputation {
-                required: proposal.min_reputation,
-                actual: voter_reputation.score,
-            });
+        if reputation < self.config.min_voting_reputation {
+            return Err(GovernanceError::Unauthorized(
+                format!("Insufficient reputation to vote: {} < {}", 
+                    reputation, self.config.min_voting_reputation)
+            ));
         }
         
-        // Calculate vote weight based on voting method
-        let weight = self.calculate_vote_weight(&proposal.voting_method, &voter_reputation).await;
-        
-        // Generate vote ID
-        let vote_id = Uuid::new_v4().to_string();
-        
-        // Create the vote
-        let vote_record = Vote {
-            id: vote_id.clone(),
-            proposal_id: proposal_id.to_string(),
+        // Create vote
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        let vote = Vote {
             voter: voter.clone(),
-            vote,
-            explanation,
-            weight,
+            decision,
             timestamp: now,
-            delegated: false,
-            delegated_from: None,
-            signature,
+            justification,
         };
         
-        // Record the vote
-        proposal.votes.insert(voter, vote_record.clone());
+        // Store vote
+        proposal.votes.insert(voter, vote);
         
-        // Check if we should update proposal status
-        self.update_proposal_status(proposal).await;
+        // Update proposal status if needed
+        self.check_proposal_outcome(proposal).await?;
         
-        Ok(vote_id)
-    }
-
-    /// Calculate vote weight based on voting method and reputation
-    async fn calculate_vote_weight(&self, voting_method: &VotingMethod, reputation: &ReputationScore) -> f64 {
-        match voting_method {
-            VotingMethod::SimpleMajority | VotingMethod::SuperMajority(_) | VotingMethod::Unanimous => {
-                // Each vote counts as 1
-                1.0
-            },
-            VotingMethod::QuadraticVoting => {
-                // Square root of reputation
-                (reputation.score as f64).sqrt()
-            },
-            VotingMethod::ReputationWeighted => {
-                // Weight is proportional to reputation
-                reputation.score as f64
-            },
-            VotingMethod::DelegatedVoting => {
-                // In delegated voting, we need to account for delegated votes
-                // This is a simplification - real delegation would be more complex
-                reputation.score as f64
-            },
-            VotingMethod::Custom(_) => {
-                // Default for custom methods
-                1.0
-            },
-        }
-    }
-
-    /// Update proposal status based on votes
-    async fn update_proposal_status(&self, proposal: &mut Proposal) {
-        // Calculate current vote totals
-        let results = self.calculate_vote_results(proposal);
-        
-        // Check if we have a decision
-        match proposal.voting_method {
-            VotingMethod::SimpleMajority => {
-                // Simple majority requires > 50% approval of total votes cast
-                if results.participation_rate >= 0.5 && // Minimum participation requirement
-                   results.approve_weight > results.reject_weight {
-                    proposal.status = ProposalStatus::Approved;
-                }
-            },
-            VotingMethod::SuperMajority(threshold) => {
-                // Super majority requires approval to meet or exceed threshold
-                if results.participation_rate >= 0.5 && // Minimum participation requirement
-                   results.approve_weight / (results.approve_weight + results.reject_weight) >= threshold {
-                    proposal.status = ProposalStatus::Approved;
-                }
-            },
-            VotingMethod::Unanimous => {
-                // Unanimous requires all votes to be approvals
-                if results.participation_rate >= 0.5 && // Minimum participation requirement
-                   results.reject_weight == 0.0 && results.approve_weight > 0.0 {
-                    proposal.status = ProposalStatus::Approved;
-                }
-            },
-            VotingMethod::QuadraticVoting | VotingMethod::ReputationWeighted => {
-                // Weighted voting methods require more approval weight than rejection weight
-                if results.participation_rate >= 0.5 && // Minimum participation requirement
-                   results.approve_weight > results.reject_weight {
-                    proposal.status = ProposalStatus::Approved;
-                }
-            },
-            VotingMethod::DelegatedVoting => {
-                // Delegated voting also needs more approval weight than rejection weight
-                if results.participation_rate >= 0.5 && // Minimum participation requirement
-                   results.approve_weight > results.reject_weight {
-                    proposal.status = ProposalStatus::Approved;
-                }
-            },
-            VotingMethod::Custom(_) => {
-                // Custom methods would have their own implementation
-                // For now, we use a simple majority as default
-                if results.participation_rate >= 0.5 && // Minimum participation requirement
-                   results.approve_weight > results.reject_weight {
-                    proposal.status = ProposalStatus::Approved;
-                }
-            },
-        }
-    }
-
-    /// Calculate vote results for a proposal
-    pub fn calculate_vote_results(&self, proposal: &Proposal) -> VoteResults {
-        let mut results = VoteResults {
-            proposal_id: proposal.id.clone(),
-            total_votes: proposal.votes.len(),
-            approve_count: 0,
-            reject_count: 0,
-            abstain_count: 0,
-            request_info_count: 0,
-            approve_weight: 0.0,
-            reject_weight: 0.0,
-            abstain_weight: 0.0,
-            request_info_weight: 0.0,
-            total_possible_weight: 0.0, // This will be calculated later
-            participation_rate: 0.0,    // This will be calculated later
-            passed: false,
-        };
-        
-        // Count votes and weights
-        for vote in proposal.votes.values() {
-            match vote.vote {
-                VoteOption::Approve => {
-                    results.approve_count += 1;
-                    results.approve_weight += vote.weight;
-                },
-                VoteOption::Reject => {
-                    results.reject_count += 1;
-                    results.reject_weight += vote.weight;
-                },
-                VoteOption::Abstain => {
-                    results.abstain_count += 1;
-                    results.abstain_weight += vote.weight;
-                },
-                VoteOption::RequestInfo => {
-                    results.request_info_count += 1;
-                    results.request_info_weight += vote.weight;
-                },
-            }
-        }
-        
-        // For simplicity in this implementation, we estimate total possible weight
-        // In a real system, we'd calculate based on eligible voters
-        results.total_possible_weight = results.approve_weight + 
-                                       results.reject_weight + 
-                                       results.abstain_weight + 
-                                       results.request_info_weight;
-                                       
-        if results.total_possible_weight > 0.0 {
-            results.participation_rate = (results.approve_weight + 
-                                        results.reject_weight) / 
-                                        results.total_possible_weight;
-        }
-        
-        // Determine if proposal passed
-        results.passed = proposal.status == ProposalStatus::Approved;
-        
-        results
-    }
-
-    /// Delegate voting authority to another member
-    pub async fn set_voting_delegate(&self, delegator: Did, delegate: Did) -> Result<(), GovernanceError> {
-        let mut delegates = self.delegates.write().await;
-        delegates.insert(delegator, delegate);
         Ok(())
     }
-
-    /// Remove voting delegation
-    pub async fn remove_voting_delegate(&self, delegator: &Did) -> Result<(), GovernanceError> {
-        let mut delegates = self.delegates.write().await;
-        delegates.remove(delegator);
+    
+    /// Check if a proposal has reached a decision
+    async fn check_proposal_outcome(&self, proposal: &mut GovernanceProposal) -> GovernanceResult<()> {
+        if proposal.status != ProposalStatus::Active {
+            return Ok(());
+        }
+        
+        // Get federation
+        let federations = self.federations.read().await;
+        let federation = federations.get(&proposal.federation_id)
+            .ok_or_else(|| GovernanceError::FederationError(
+                FederationError::FederationNotFound(proposal.federation_id.clone())
+            ))?;
+            
+        // Count votes
+        let (yes_votes, no_votes, _) = proposal.count_votes();
+        let total_votes = yes_votes + no_votes;
+        let total_members = federation.members.len() as u64;
+        
+        // Check quorum
+        let quorum_threshold = (total_members * self.config.quorum_percentage as u64) / 100;
+        if total_votes < quorum_threshold {
+            // Not enough votes yet
+            return Ok(());
+        }
+        
+        // Check approval threshold
+        let approval_threshold = (total_votes * self.config.approval_threshold as u64) / 100;
+        if yes_votes >= approval_threshold {
+            // Proposal approved
+            proposal.status = ProposalStatus::Approved;
+        } else if no_votes > total_votes - approval_threshold {
+            // Proposal rejected (impossible to reach threshold)
+            proposal.status = ProposalStatus::Rejected;
+        }
+        
         Ok(())
     }
-
+    
     /// Execute an approved proposal
-    pub async fn execute_proposal(&self, proposal_id: &str) -> Result<(), GovernanceError> {
+    pub async fn execute_proposal(&self, proposal_id: &str) -> GovernanceResult<()> {
+        // Get proposal
         let mut proposals = self.proposals.write().await;
         let proposal = proposals.get_mut(proposal_id)
             .ok_or_else(|| GovernanceError::ProposalNotFound(proposal_id.to_string()))?;
             
         // Check if proposal is approved
         if proposal.status != ProposalStatus::Approved {
-            return Err(GovernanceError::InvalidProposal(
-                format!("Proposal not approved: {:?}", proposal.status)
+            return Err(GovernanceError::InvalidVote(
+                format!("Cannot execute proposal with status: {:?}", proposal.status)
             ));
         }
         
-        // Update status to executing
-        proposal.status = ProposalStatus::Executing;
+        // Get federation
+        let mut federations = self.federations.write().await;
+        let federation = federations.get_mut(&proposal.federation_id)
+            .ok_or_else(|| GovernanceError::FederationError(
+                FederationError::FederationNotFound(proposal.federation_id.clone())
+            ))?;
+            
+        // Execute proposal based on type
+        match &proposal.proposal_type {
+            ProposalType::MembershipChange(action) => {
+                // Execute membership change
+                federation.apply_membership_action(action.clone())?;
+                proposal.execution_result = Some("Membership updated successfully".to_string());
+            }
+            ProposalType::ResourceAllocation(details) => {
+                // Execute resource allocation
+                federation.allocate_resource(details.clone())?;
+                proposal.execution_result = Some("Resource allocated successfully".to_string());
+            }
+            ProposalType::GovernanceUpdate(details) => {
+                // Execute governance update
+                federation.update_governance(details.clone())?;
+                proposal.execution_result = Some("Governance updated successfully".to_string());
+            }
+            ProposalType::FederationTermsUpdate(details) => {
+                // Execute terms update
+                federation.update_terms(details.clone())?;
+                proposal.execution_result = Some("Terms updated successfully".to_string());
+            }
+            ProposalType::Custom(action) => {
+                // Just log custom actions
+                proposal.execution_result = Some(format!("Custom action executed: {}", action));
+            }
+        }
         
-        // Add to pending execution queue
-        let mut pending = self.pending_execution.write().await;
-        pending.push(proposal_id.to_string());
-        
-        // In a real implementation, we'd have proposal handlers for different types
-        // For now, just mark it as executed
+        // Update proposal status
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
         proposal.status = ProposalStatus::Executed;
-        
-        // Send notification about executed proposal
-        self.notify_proposal_execution(proposal).await?;
+        proposal.executed_at = Some(now);
         
         Ok(())
     }
-
-    /// Notify federation members about proposal execution
-    async fn notify_proposal_execution(&self, proposal: &Proposal) -> Result<(), GovernanceError> {
-        let title = format!("Proposal Executed: {}", proposal.title);
-        let message = format!(
-            "Proposal has been executed.\n\nTitle: {}\n\nProposal ID: {}",
-            proposal.title,
-            proposal.id
-        );
+    
+    /// Get a proposal by ID
+    pub async fn get_proposal(&self, proposal_id: &str) -> GovernanceResult<GovernanceProposal> {
+        let proposals = self.proposals.read().await;
+        proposals.get(proposal_id)
+            .cloned()
+            .ok_or_else(|| GovernanceError::ProposalNotFound(proposal_id.to_string()))
+    }
+    
+    /// List all proposals for a federation
+    pub async fn list_proposals(
+        &self,
+        federation_id: &FederationId,
+        status_filter: Option<ProposalStatus>,
+    ) -> GovernanceResult<Vec<GovernanceProposal>> {
+        let proposals = self.proposals.read().await;
         
-        // Send message via the messenger
-        self.messenger.send_new_message(
-            &self.federation_id, // Send to all federation members
-            MessageType::SystemNotification,
-            &title,
-            message.as_bytes(),
-            MessageVisibility::Federation,
-            MessagePriority::High,
-            Vec::new(),
+        let filtered = proposals.values()
+            .filter(|p| &p.federation_id == federation_id)
+            .filter(|p| status_filter.map_or(true, |s| p.status == s))
+            .cloned()
+            .collect();
+            
+        Ok(filtered)
+    }
+    
+    /// Check for proposals with ended voting periods
+    pub async fn check_expired_proposals(&self) -> GovernanceResult<Vec<String>> {
+        let mut updated_proposals = Vec::new();
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        let mut proposals = self.proposals.write().await;
+        
+        for proposal in proposals.values_mut() {
+            if proposal.status == ProposalStatus::Active && now >= proposal.ends_at {
+                // Voting period ended
+                
+                // Count votes
+                let (yes_votes, no_votes, _) = proposal.count_votes();
+                let total_votes = yes_votes + no_votes;
+                
+                // Get total members
+                let federations = self.federations.read().await;
+                if let Some(federation) = federations.get(&proposal.federation_id) {
+                    let total_members = federation.members.len() as u64;
+                    
+                    // Check quorum
+                    let quorum_threshold = (total_members * self.config.quorum_percentage as u64) / 100;
+                    if total_votes < quorum_threshold {
+                        // Failed due to lack of quorum
+                        proposal.status = ProposalStatus::Rejected;
+                        proposal.execution_result = Some("Rejected due to insufficient quorum".to_string());
+                    } else {
+                        // Check approval threshold
+                        let approval_threshold = (total_votes * self.config.approval_threshold as u64) / 100;
+                        if yes_votes >= approval_threshold {
+                            // Proposal approved
+                            proposal.status = ProposalStatus::Approved;
+                        } else {
+                            // Proposal rejected
+                            proposal.status = ProposalStatus::Rejected;
+                        }
+                    }
+                    
+                    updated_proposals.push(proposal.id.clone());
+                }
+            }
+        }
+        
+        Ok(updated_proposals)
+    }
+    
+    /// Calculate voting power for a member based on reputation
+    pub async fn calculate_voting_power(&self, member_id: &str) -> GovernanceResult<f64> {
+        let reputation = self.reputation_service.get_reputation(member_id).await
+            .map_err(|e| GovernanceError::ReputationError(e.to_string()))?;
+            
+        let voting_power = match self.config.voting_strategy {
+            VotingStrategy::EqualVoting => {
+                // Everyone gets equal vote
+                1.0
+            }
+            VotingStrategy::ReputationWeighted => {
+                // Linear scaling with reputation
+                reputation as f64 / 1000.0
+            }
+            VotingStrategy::QuadraticVoting => {
+                // Square root scaling for diminishing returns
+                (reputation as f64).sqrt()
+            }
+            VotingStrategy::ResourceWeighted => {
+                // For now, approximation based on reputation
+                // In a real implementation, would be based on resource contributions
+                reputation as f64 / 500.0
+            }
+        };
+        
+        Ok(voting_power.max(0.1).min(100.0)) // Clamp between 0.1 and 100
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::federation::{MembershipAction, ResourceAllocationDetails, ResourceType};
+    
+    struct MockReputationService {
+        reputations: HashMap<String, i64>,
+    }
+    
+    #[async_trait::async_trait]
+    impl ReputationInterface for MockReputationService {
+        async fn update_reputation(&self, _member_id: &str, _delta: i64) -> Result<(), icn_types::ReputationError> {
+            Ok(())
+        }
+        
+        async fn get_reputation(&self, member_id: &str) -> Result<i64, icn_types::ReputationError> {
+            Ok(*self.reputations.get(member_id).unwrap_or(&0))
+        }
+        
+        async fn validate_reputation(&self, member_id: &str, min_required: i64) -> Result<bool, icn_types::ReputationError> {
+            let rep = self.get_reputation(member_id).await?;
+            Ok(rep >= min_required)
+        }
+        
+        async fn get_voting_power(&self, member_id: &str) -> Result<f64, icn_types::ReputationError> {
+            let rep = self.get_reputation(member_id).await?;
+            Ok(rep as f64 / 100.0)
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_proposal_creation() {
+        // Setup
+        let mut reputations = HashMap::new();
+        reputations.insert("member1".to_string(), 200);
+        
+        let reputation_service = Arc::new(MockReputationService { reputations });
+        let governance = GovernanceManager::new(GovernanceConfig::default(), reputation_service);
+        
+        // Create a test federation
+        let mut federation = Federation {
+            id: "fed1".to_string(),
+            name: "Test Federation".to_string(),
+            federation_type: FederationType::ResourceSharing,
+            members: HashMap::new(),
+            member_roles: HashMap::new(),
+            terms: FederationTerms::default(),
+            resources: HashMap::new(),
+            proposals: Vec::new(),
+            created_at: 0,
+            status: Default::default(),
+            disputes: HashMap::new(),
+            cross_federation_disputes: HashMap::new(),
+            audit_log: Vec::new(),
+        };
+        
+        federation.members.insert("member1".to_string(), Default::default());
+        
+        governance.register_federation(federation).await.unwrap();
+        
+        // Test proposal creation
+        let proposal_id = governance.create_proposal(
+            "Test Proposal".to_string(),
+            "This is a test".to_string(),
+            "member1".to_string(),
+            "fed1".to_string(),
+            ProposalType::Custom("test".to_string()),
             None,
-        )
-        .await
-        .map_err(|e| GovernanceError::MessagingError(e.to_string()))?;
+            vec!["test".to_string()],
+        ).await.unwrap();
         
-        Ok(())
+        // Verify proposal was created
+        let proposal = governance.get_proposal(&proposal_id).await.unwrap();
+        assert_eq!(proposal.title, "Test Proposal");
+        assert_eq!(proposal.proposer, "member1");
     }
-
-    /// Set up a new vote proxy
-    pub async fn set_vote_proxy(&self, voter: Did, proxy_voters: Vec<Did>) -> Result<(), GovernanceError> {
-        let mut proxies = self.vote_proxies.write().await;
-        proxies.insert(voter, proxy_voters);
-        Ok(())
-    }
-
-    /// Get vote results for a proposal
-    pub async fn get_vote_results(&self, proposal_id: &str) -> Result<VoteResults, GovernanceError> {
-        let proposal = self.get_proposal(proposal_id).await?;
-        Ok(self.calculate_vote_results(&proposal))
-    }
-
-    /// Archive a proposal
-    pub async fn archive_proposal(&self, proposal_id: &str) -> Result<(), GovernanceError> {
-        let mut proposals = self.proposals.write().await;
+    
+    #[tokio::test]
+    async fn test_voting() {
+        // Setup
+        let mut reputations = HashMap::new();
+        reputations.insert("member1".to_string(), 200);
+        reputations.insert("member2".to_string(), 150);
+        reputations.insert("member3".to_string(), 100);
         
-        // Find and remove the proposal from active proposals
-        let proposal = proposals.remove(proposal_id)
-            .ok_or_else(|| GovernanceError::ProposalNotFound(proposal_id.to_string()))?;
-            
-        // Add to archive
-        let mut archive = self.proposal_archive.write().await;
-        archive.insert(proposal_id.to_string(), proposal);
+        let reputation_service = Arc::new(MockReputationService { reputations });
+        let governance = GovernanceManager::new(GovernanceConfig::default(), reputation_service);
         
-        Ok(())
-    }
-
-    /// Check and update status of all proposals
-    pub async fn update_all_proposal_statuses(&self) -> Result<usize, GovernanceError> {
-        let now = Utc::now();
-        let mut updated_count = 0;
-        let mut to_archive = Vec::new();
+        // Create a test federation
+        let mut federation = Federation {
+            id: "fed1".to_string(),
+            name: "Test Federation".to_string(),
+            federation_type: FederationType::ResourceSharing,
+            members: HashMap::new(),
+            member_roles: HashMap::new(),
+            terms: FederationTerms::default(),
+            resources: HashMap::new(),
+            proposals: Vec::new(),
+            created_at: 0,
+            status: Default::default(),
+            disputes: HashMap::new(),
+            cross_federation_disputes: HashMap::new(),
+            audit_log: Vec::new(),
+        };
         
-        // First, get all proposals that need updating
-        let mut proposals = self.proposals.write().await;
+        federation.members.insert("member1".to_string(), Default::default());
+        federation.members.insert("member2".to_string(), Default::default());
+        federation.members.insert("member3".to_string(), Default::default());
         
-        for (id, proposal) in proposals.iter_mut() {
-            // Check if voting period has ended
-            if proposal.status == ProposalStatus::Active && now > proposal.voting_ends_at {
-                // Update status based on votes
-                self.update_proposal_status(proposal).await;
-                
-                // If still active after update, it didn't reach the threshold - mark as rejected
-                if proposal.status == ProposalStatus::Active {
-                    proposal.status = ProposalStatus::Rejected;
-                }
-                
-                updated_count += 1;
-            }
-            
-            // Check if proposal is final and should be archived
-            match proposal.status {
-                ProposalStatus::Executed | ProposalStatus::Rejected | ProposalStatus::Failed | ProposalStatus::Withdrawn => {
-                    to_archive.push(id.clone());
-                }
-                _ => {}
-            }
-        }
+        governance.register_federation(federation).await.unwrap();
         
-        // Archive completed proposals
-        for id in to_archive {
-            if let Some(proposal) = proposals.remove(&id) {
-                let mut archive = self.proposal_archive.write().await;
-                archive.insert(id, proposal);
-                updated_count += 1;
-            }
-        }
+        // Create a proposal
+        let proposal_id = governance.create_proposal(
+            "Test Proposal".to_string(),
+            "This is a test".to_string(),
+            "member1".to_string(),
+            "fed1".to_string(),
+            ProposalType::MembershipChange(MembershipAction::Add("new_member".to_string())),
+            Some(3600), // 1 hour voting period
+            vec!["test".to_string()],
+        ).await.unwrap();
         
-        Ok(updated_count)
-    }
-
-    /// Start the background proposal status updater
-    pub async fn start_background_updater(governance: Arc<FederationGovernance>) {
-        tokio::spawn(async move {
-            loop {
-                // Update proposal statuses
-                if let Err(e) = governance.update_all_proposal_statuses().await {
-                    eprintln!("Error updating proposal statuses: {:?}", e);
-                }
-                
-                // Sleep for a reasonable interval
-                tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
-            }
-        });
+        // Cast votes
+        governance.submit_vote(&proposal_id, "member1".to_string(), VoteDecision::Approve, None).await.unwrap();
+        governance.submit_vote(&proposal_id, "member2".to_string(), VoteDecision::Approve, None).await.unwrap();
+        governance.submit_vote(&proposal_id, "member3".to_string(), VoteDecision::Reject, None).await.unwrap();
+        
+        // Check proposal status
+        let proposal = governance.get_proposal(&proposal_id).await.unwrap();
+        assert_eq!(proposal.status, ProposalStatus::Approved); // 2/3 approval
+        
+        // Execute proposal
+        governance.execute_proposal(&proposal_id).await.unwrap();
+        
+        // Verify proposal was executed
+        let proposal = governance.get_proposal(&proposal_id).await.unwrap();
+        assert_eq!(proposal.status, ProposalStatus::Executed);
+        assert!(proposal.execution_result.is_some());
     }
 }
