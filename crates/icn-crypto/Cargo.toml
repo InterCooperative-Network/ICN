@@ -8,13 +8,17 @@ license = "MIT"
 
 [dependencies]
 # Cryptographic dependencies
-secp256k1 = "0.28.0"
+secp256k1 = { version = "0.28.0", features = ["rand-std"] }
 sha2 = "0.10.8"
 rsa = "0.9.3"
-ecdsa = { version = "0.16.9", features = ["signing"] }
+ecdsa = { version = "0.16.9", features = ["signing", "der", "pem"] }
 rand = "0.8.5"
-p256 = "0.13.2"
+p256 = { version = "0.13.2", features = ["ecdsa"] }
 signature = "2.1.0"
+digest = "0.10.7"
+thiserror = "1.0.69"
+bincode = "1.3.3"
+generic-array = "0.14.7"
 
 # Internal crates
 icn-types = { path = "../icn-types" }
@@ -23,7 +27,6 @@ icn-types = { path = "../icn-types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
-thiserror = { workspace = true }
 
 # For testing
 [dev-dependencies]

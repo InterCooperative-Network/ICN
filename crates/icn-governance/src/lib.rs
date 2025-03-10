@@ -3,7 +3,9 @@ use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use icn_types::{DecisionType, Federation, ExecutionEvent, EvidenceItem};
-use icn_zk::verify_proof; // Import zk-SNARK verification function
+use icn_zk::verify_proof as zk_verify_proof; // Import zk-SNARK verification function
+use std::time::{Duration, SystemTime};
+use icn_types::FederationId;
 
 #[derive(Error, Debug)]
 pub enum GovernanceError {
@@ -19,7 +21,21 @@ pub enum GovernanceError {
     InvalidResolution,
     #[error("Database error: {0}")]
     DatabaseError(String),
+    #[error("Invalid proposal: {0}")]
+    InvalidProposal(String),
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+    #[error("Voting error: {0}")]
+    VotingError(String),
+    #[error("Execution error: {0}")]
+    ExecutionError(String),
+    #[error("Resource allocation error: {0}")]
+    ResourceError(String),
+    #[error("Federation error: {0}")]
+    FederationError(String),
 }
+
+pub type GovernanceResult<T> = Result<T, GovernanceError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proposal {
@@ -159,36 +175,46 @@ pub struct ReputationControls {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum VotingModel {
-    Equal,
-    Proportional { cap_percentage: u8 },
+    // One member, one vote
+    Democratic,
+    
+    // Voting power proportional to resource contribution
+    ResourceBased,
+    
+    // Voting power based on reputation score
+    ReputationBased,
+    
+    // Voting power based on stake
+    StakeBased,
+    
+    // Custom voting model with weights
+    Weighted(HashMap<String, f64>),
+    
+    // Hybrid model combining governance and resource aspects
     Hybrid {
-        governance_model: Box<VotingModel>,
-        resource_model: Box<VotingModel>,
+        governance_model: f64,
+        resource_model: f64,
     },
-    Simple,
-    Weighted { weight_factor: f64 },
-    Hybrid { governance_model: f64, resource_model: f64 },
 }
 
 impl VotingModel {
-    pub fn calculate_voting_power(&self, federation: &Federation, cooperative_id: &str) -> f64 {
+    pub fn calculate_vote_weight(&self, member_id: &str, resource_contribution: f64) -> f64 {
         match self {
-            VotingModel::Equal => 1.0,
-            VotingModel::Proportional { cap_percentage } => {
-                let power = federation.get_cooperative_weight(cooperative_id);
-                power.min(*cap_percentage as f64 / 100.0)
+            VotingModel::Democratic => 1.0,
+            VotingModel::ResourceBased => resource_contribution.min(1.0),
+            VotingModel::ReputationBased => {
+                // In a real implementation, this would query the reputation system
+                0.5 // Default value for now
+            },
+            VotingModel::StakeBased => {
+                // In a real implementation, this would query the staking system
+                0.7 // Default value for now
+            },
+            VotingModel::Weighted(weights) => {
+                weights.get(member_id).copied().unwrap_or(0.1)
             },
             VotingModel::Hybrid { governance_model, resource_model } => {
-                // Use different models based on proposal type
-                // ...existing code...
-            }
-            VotingModel::Simple => 1.0,
-            VotingModel::Weighted { weight_factor } => {
-                // Implement weighted voting calculation
-                weight_factor * 1.0
-            }
-            VotingModel::Hybrid { governance_model, resource_model } => {
-                // Implement hybrid voting calculation
+                // Combine governance and resource aspects with the specified weights
                 governance_model * 0.5 + resource_model * 0.5
             }
         }
@@ -266,7 +292,7 @@ impl Proposal {
         }
         
         if let Some(proof) = &self.zk_snark_proof {
-            if !verify_proof(proof) {
+            if !zk_verify_proof(proof) {
                 return Err("Invalid zk-SNARK proof".to_string());
             }
         }
@@ -288,7 +314,7 @@ impl Proposal {
 
     pub async fn execute_proposal(&self) -> bool {
         if let Some(proof) = &self.zk_snark_proof {
-            if verify_proof(proof) {
+            if zk_verify_proof(proof) {
                 execute_approved_action();
                 return true;
             }

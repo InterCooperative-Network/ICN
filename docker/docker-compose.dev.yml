@@ -1,24 +1,23 @@
-version: "3.8"
+version: "3.3"
 
 services:
   # PostgreSQL database service
   db:
     image: postgres:13-alpine
-    # Changed from postgres:14-alpine to postgres:13-alpine to match existing data
     restart: unless-stopped
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./init-db:/docker-entrypoint-initdb.d
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-icnuser}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-icnpass}
-      POSTGRES_DB: ${POSTGRES_DB:-icndb}
+      POSTGRES_USER: ${POSTGRES_USER:-icn_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-development_password}
+      POSTGRES_DB: ${POSTGRES_DB:-icn_db}
     ports:
       - "5432:5432"
     networks:
       - icn-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-icnuser} -d ${POSTGRES_DB:-icndb}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-icn_user} -d ${POSTGRES_DB:-icn_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -27,13 +26,12 @@ services:
   backend:
     build:
       context: ..
-      dockerfile: backend.Dockerfile
+      dockerfile: docker/backend.Dockerfile
     restart: unless-stopped
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     ports:
-      - "8081:8081"
+      - "${BACKEND_API_PORT:-8081}:8081"
     volumes:
       - ../backend:/usr/src/app/backend
       - ../crates:/usr/src/app/crates
@@ -41,9 +39,13 @@ services:
       - target_cache:/usr/src/app/target
       - backend_logs:/logs
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER:-icnuser}:${POSTGRES_PASSWORD:-icnpass}@db:5432/${POSTGRES_DB:-icndb}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-icn_user}:${POSTGRES_PASSWORD:-development_password}@db:5432/${POSTGRES_DB:-icn_db}
       - RUST_LOG=${RUST_LOG:-debug}
       - RUST_BACKTRACE=1
+      - API_PORT=8081
+      - API_HOST=0.0.0.0
+      - COOPERATIVE_ID=${COOPERATIVE_ID:-icn-primary}
+      - ICN_NETWORK_MODE=${ICN_NETWORK_MODE:-development}
     networks:
       - icn-network
     healthcheck:
@@ -56,19 +58,18 @@ services:
   frontend:
     build:
       context: ..
-      dockerfile: frontend.Dockerfile
+      dockerfile: docker/frontend.Dockerfile
     restart: unless-stopped
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
       - "35729:35729"  # For live reload
     volumes:
       - ../frontend:/app
       - /app/node_modules
     environment:
-      - REACT_APP_API_URL=http://localhost:8081/api
+      - REACT_APP_API_URL=http://localhost:${BACKEND_API_PORT:-8081}/api
       - NODE_ENV=development
     networks:
       - icn-network

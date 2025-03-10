@@ -1,0 +1,21 @@
+{
+  "system": {
+    "env": "development",
+    "log_level": "debug"
+  },
+  "api": {
+    "port": 8081,
+    "host": "0.0.0.0", 
+    "cors_origins": ["*"]
+  },
+  "federation": {
+    "cooperative_id": "icn-primary",
+    "network_mode": "development",
+    "sdp_enabled": true,
+    "sdp_bind_address": "0.0.0.0:0"
+  },
+  "frontend": {
+    "api_url": "http://localhost:8081/api",
+    "ws_url": "ws://localhost:8081/ws"
+  }
+} 

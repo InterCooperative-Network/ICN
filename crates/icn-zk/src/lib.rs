@@ -1,4 +1,4 @@
-use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use bellman::{Circuit, ConstraintSystem as BellmanCS, SynthesisError};
 use ff::PrimeField;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -9,7 +9,7 @@ pub struct ProofOfCooperation<F: PrimeField> {
 }
 
 impl<F: PrimeField> Circuit<F> for ProofOfCooperation<F> {
-    fn synthesize<CS: ConstraintSystem<F>>(
+    fn synthesize<CS: BellmanCS<F>>(
         self,
         cs: &mut CS
     ) -> Result<(), SynthesisError> {
@@ -32,13 +32,13 @@ pub struct Vote {
     pub approve: bool,
 }
 
-pub fn verify_proof(proof: &str) -> bool {
+pub fn verify_proof(_proof: &str) -> bool {
     // TODO: Implement actual zk-SNARK verification
     // For now, return true for testing
     true
 }
 
-pub fn generate_proof(_cs: &mut impl ConstraintSystem) -> Result<String, Box<dyn Error>> {
+pub fn generate_proof(_cs: &mut impl IcnConstraintSystem) -> Result<String, Box<dyn Error>> {
     // TODO: Implement actual proof generation
     Ok("dummy_proof".to_string())
 }
@@ -50,7 +50,7 @@ pub struct ProofCircuit {
     pub private_inputs: Vec<u64>,
 }
 
-pub trait ConstraintSystem {
+pub trait IcnConstraintSystem {
     fn alloc(&mut self, value: Option<u64>) -> Result<Variable, Box<dyn Error>>;
     fn enforce(&mut self, lc0: LinearCombination, lc1: LinearCombination, lc2: LinearCombination);
 }

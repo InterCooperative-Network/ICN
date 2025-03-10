@@ -7,7 +7,6 @@ use tokio::sync::mpsc;
 use log::{info, debug, error, trace};
 use serde::{Serialize, Deserialize};
 use rand::Rng;
-use icn_crypto::PublicKey;
 
 #[derive(Debug, Clone)]
 pub enum NetworkTransport {
@@ -29,7 +28,7 @@ pub enum PeerStatus {
 pub struct PeerInfo {
     pub id: String,
     pub addresses: Vec<SocketAddr>,
-    pub public_key: Option<PublicKey>,
+    pub public_key: Option<Vec<u8>>,
     pub transport: NetworkTransport,
     pub status: PeerStatus,
     pub bandwidth_usage: u64,
@@ -87,10 +86,8 @@ impl NetworkLayer {
     }
 
     pub async fn simulate_traffic(&self, _peer_id: &str) -> Result<u64, String> {
-        let mut rng = self.rng.lock().await;
-        let traffic = rng.gen_range(1024..10240); // 1KB to 10KB
-        drop(rng);
-
+        let mut rng_lock = self.rng.lock().await;
+        let traffic = rng_lock.gen_range(1024..10240); // 1KB to 10KB
         self.update_bandwidth_usage(traffic).await;
         Ok(traffic)
     }
@@ -328,46 +325,30 @@ impl NetworkManager {
     }
     
     pub async fn ping_all_peers(&mut self) -> Result<(), String> {
-        debug!("Pinging all peers");
+        debug!("Pinging all peers...");
         let mut statuses_updated = 0;
         
         for peer in self.peers.values_mut() {
-            // Simulate pinging the peer
-            let mut rng = rand::thread_rng();
+            if peer.status == PeerStatus::Disconnected || peer.status == PeerStatus::Unreachable {
+                continue;
+            }
             
-            // Randomly decide if peer is reachable (90% chance)
-            let is_reachable = rng.gen_bool(0.9);
+            // Simulate ping latency
+            let latency = match peer.status {
+                PeerStatus::Connected => rand::thread_rng().gen_range(5..100),
+                PeerStatus::Syncing => rand::thread_rng().gen_range(100..500),
+                _ => 0,
+            };
             
-            if is_reachable {
-                // Update peer latency (between 5 and 150ms)
-                peer.latency = rng.gen_range(5..150);
-                peer.last_seen = SystemTime::now();
-                
-                // Update peer status based on latency
-                if peer.latency < 50 {
-                    peer.status = PeerStatus::Connected;
-                } else if peer.latency < 100 {
+            peer.latency = latency;
+            
+            // Randomly change status occasionally
+            if rand::thread_rng().gen_ratio(1, 20) {
+                if peer.status == PeerStatus::Connected {
                     peer.status = PeerStatus::Syncing;
-                } else {
-                    peer.status = PeerStatus::Connected; // Still connected but high latency
+                } else if peer.status == PeerStatus::Syncing {
+                    peer.status = PeerStatus::Connected;
                 }
-                
-                // Record ping stats for this peer
-                if !self.ping_stats.contains_key(&peer.id) {
-                    self.ping_stats.insert(peer.id.clone(), Vec::new());
-                }
-                
-                let stats = self.ping_stats.get_mut(&peer.id).unwrap();
-                stats.push(peer.latency);
-                
-                // Keep only the last 10 pings
-                if stats.len() > 10 {
-                    stats.remove(0);
-                }
-            } else {
-                // Peer is unreachable
-                peer.status = PeerStatus::Unreachable;
-                peer.latency = 0;
             }
             
             statuses_updated += 1;
@@ -375,7 +356,7 @@ impl NetworkManager {
         }
         
         // Simulate some network traffic to update bandwidth usage
-        let traffic = rng.gen_range(1024..10240); // 1KB to 10KB
+        let traffic = rand::thread_rng().gen_range(1024..10240); // 1KB to 10KB
         self.update_bandwidth_usage(traffic);
         
         debug!("Finished pinging {} peers", statuses_updated);
@@ -383,32 +364,40 @@ impl NetworkManager {
     }
     
     pub async fn ping_peer(&mut self, peer_id: &str, count: u8) -> Result<Vec<u64>, String> {
-        let peer = self.peers.get(peer_id).ok_or(format!("Peer {} not found", peer_id))?;
+        // Clone the peer info to avoid borrowing issues
+        let peer_info = match self.peers.get(peer_id) {
+            Some(p) => p.clone(),
+            None => return Err(format!("Peer {} not found", peer_id))
+        };
         
         debug!("Pinging peer {} {} times", peer_id, count);
-        let mut results = Vec::with_capacity(count as usize);
-        let mut rng = rand::thread_rng();
+        let mut latencies = Vec::with_capacity(count as usize);
         
         for i in 0..count {
-            // Simulate ping result based on peer's current status
-            let latency = match peer.status {
-                PeerStatus::Connected => rng.gen_range(5..50),
-                PeerStatus::Syncing => rng.gen_range(50..100),
-                PeerStatus::Disconnected | PeerStatus::Unreachable => 0,
+            // Simulate ping latency based on peer status
+            let latency = match peer_info.status {
+                PeerStatus::Connected => rand::thread_rng().gen_range(5..100),
+                PeerStatus::Syncing => rand::thread_rng().gen_range(100..500),
+                PeerStatus::Unreachable => 0,
+                PeerStatus::Disconnected => 0,
             };
             
             if latency > 0 {
-                results.push(latency);
+                debug!("Ping {} to {}: {}ms", i + 1, peer_id, latency);
+                latencies.push(latency);
+            } else {
+                debug!("Ping {} to {}: failed", i + 1, peer_id);
             }
             
-            // Simulate network traffic
+            // Simulate network traffic for the ping packet
             self.update_bandwidth_usage(64); // 64 bytes for ping packet
-            
-            trace!("Ping {}/{} to peer {}: {}ms", i+1, count, peer_id, latency);
         }
         
-        debug!("Completed pinging peer {}: {} successful pings", peer_id, results.len());
-        Ok(results)
+        if latencies.is_empty() {
+            return Err(format!("Peer {} is unreachable", peer_id));
+        }
+        
+        Ok(latencies)
     }
     
     pub fn get_peer_stats(&self, peer_id: &str) -> Result<(f64, f64, u64), String> {
