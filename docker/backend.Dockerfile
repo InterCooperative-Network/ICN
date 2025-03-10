@@ -1,3 +1,27 @@
+# Stage 1: Development
+FROM rust:1.75-slim as development
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install cargo-watch for development
+RUN cargo install cargo-watch
+
+WORKDIR /usr/src/app
+
+# Copy only dependency files first for better caching
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+# Create dummy main.rs to build dependencies
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build
+
+# Stage 2: Production build
 FROM rust:1.75 AS builder
 
 WORKDIR /usr/src/app
@@ -9,8 +33,8 @@ RUN apt-get update && \
     rustup component add rustfmt clippy
 
 # Copy workspace configuration
-COPY Cargo.toml Cargo.lock ./
-COPY rust-toolchain.toml ./
+COPY Cargo.toml Cargo.lock ./ 
+COPY rust-toolchain.toml ./ 
 
 # Create dummy source files for all crates
 RUN mkdir -p backend/src \
@@ -59,8 +83,8 @@ COPY crates/icn-reputation/src crates/icn-reputation/src/
 # Build the release version
 RUN cargo build --release -p icn-backend
 
-# Runtime stage
-FROM debian:bookworm-slim
+# Stage 3: Production runtime
+FROM debian:bookworm-slim as production
 
 WORKDIR /usr/local/bin
 
@@ -70,12 +94,8 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy the binary and create directories
-COPY --from=builder /usr/src/app/target/release/icn-backend .
-RUN mkdir -p /data /config /logs
-
-# Copy default configuration
-COPY config/log4rs.yaml /config/
-COPY config/feature-flags.json /config/
+COPY --from=builder /usr/src/app/target/release/icn-backend /usr/local/bin/
+COPY --from=builder /usr/src/app/config /etc/icn/config
 
 ENV RUST_LOG=info
 ENV NODE_TYPE=regular
@@ -87,4 +107,4 @@ EXPOSE 8081 9000-9002
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:${API_PORT}/health || exit 1
 
-ENTRYPOINT ["./icn-backend"]
+ENTRYPOINT ["icn-backend"]

@@ -6,12 +6,18 @@ services:
     image: postgres:14-alpine
     restart: unless-stopped
     volumes:
-      - db_data:/var/lib/postgresql/data
-      - ./init-db:/docker-entrypoint-initdb.d
+      - ../data/db:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d:ro
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-icnuser}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-icnpass}
       POSTGRES_DB: ${POSTGRES_DB:-icndb}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-icnuser} -d ${POSTGRES_DB:-icndb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     ports:
       - "5432:5432"
     networks:
@@ -20,18 +26,19 @@ services:
   # Backend service - Development mode with hot reloading
   backend:
     build:
-      context: ..
-      dockerfile: docker/backend.dev.Dockerfile
+      context: ../backend
+      dockerfile: ../docker/backend.Dockerfile
+      target: development
     restart: unless-stopped
     depends_on:
       - db
     ports:
-      - "8081:8081"
+      - "${BACKEND_API_PORT:-8081}:8081"
       - "9229:9229"  # For debugging
     volumes:
-      - ../backend:/usr/src/app/backend
+      - ../backend:/usr/src/app/backend:cached
       - ../crates:/usr/src/app/crates
-      - cargo_cache:/usr/local/cargo/registry
+      - backend_cache:/usr/local/cargo/registry
       - target_cache:/usr/src/app/target
       - backend_logs:/logs
     environment:
@@ -46,22 +53,45 @@ services:
   # Frontend service - Development mode with hot reloading
   frontend:
     build:
-      context: ..
-      dockerfile: docker/frontend.dev.Dockerfile
+      context: ../frontend
+      dockerfile: ../docker/frontend.Dockerfile
+      target: development
     restart: unless-stopped
     depends_on:
       - backend
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
       - "35729:35729"  # For live reload
     volumes:
-      - ../frontend:/app
+      - ../frontend:/app:cached
       - /app/node_modules
     environment:
-      - REACT_APP_API_URL=http://localhost:8081/api
+      - REACT_APP_API_URL=http://localhost:${BACKEND_API_PORT:-8081}/api
       - NODE_ENV=development
       - CHOKIDAR_USEPOLLING=true  # Enable polling for Windows/WSL
     command: ["npm", "run", "dev"]
+    networks:
+      - icn-network
+
+  bootstrap:
+    build:
+      context: ../backend
+      dockerfile: ../docker/backend.Dockerfile
+      target: development
+    volumes:
+      - ../data/bootstrap:/data
+      - ../logs:/logs
+    environment:
+      - NODE_TYPE=bootstrap
+      - NODE_PORT=${BOOTSTRAP_NODE_PORT:-9000}
+      - API_PORT=${BOOTSTRAP_API_PORT:-8082}
+      - BOOTSTRAP_NODES=[]
+      - DATABASE_URL=postgres://${POSTGRES_USER:-icnuser}:${POSTGRES_PASSWORD:-icnpass}@db:5432/${POSTGRES_DB:-icndb}
+    ports:
+      - "${BOOTSTRAP_NODE_PORT:-9000}:9000"
+      - "${BOOTSTRAP_API_PORT:-8082}:8082"
+    depends_on:
+      - db
     networks:
       - icn-network
 
@@ -74,6 +104,7 @@ volumes:
     name: icn_dev_target_cache
   backend_logs:
     name: icn_dev_backend_logs
+  backend_cache:
 
 networks:
   icn-network:
