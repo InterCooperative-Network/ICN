@@ -4,10 +4,17 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use serde::{Serialize, Deserialize};
 use log::{debug, error, info, warn};
+use tokio::task;
+use tokio::time::sleep;
+use async_trait::async_trait;
+use thiserror::Error;
+use bit_set::BitSet;
+use patricia_trie::Trie;
 
 use icn_common::{ReputationManager, ConsensusEngine};
 use icn_types::{Block, Transaction};
 use icn_crypto::KeyPair;
+use icn_federation::federation::{FederationType, FederationTerms, Federation};
 
 pub mod federation;
 pub mod proof_of_cooperation;
@@ -17,7 +24,7 @@ pub mod pbft;
 pub mod validation;
 pub mod timeout_handling;
 
-// Re-export federation types
+// Re-export types with new names to avoid conflicts
 pub use federation::{Federation, FederationType, FederationTerms, FederationError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -387,8 +394,8 @@ impl ProofOfCooperation {
     pub fn create_federation(
         &mut self,
         creator_id: String,
-        federation_type: FederationType,
-        terms: FederationTerms,
+        federation_type: FedType,
+        terms: FedTerms,
     ) -> Result<String, ConsensusError> {
         // Verify creator's reputation
         let creator_reputation = self.reputation_manager.get_reputation(&creator_id, "consensus");
@@ -685,9 +692,9 @@ impl ConsensusEngine for ProofOfCooperation {
 #[derive(Serialize, Deserialize)]
 enum FederationOperation {
     InitiateFederation {
-        federation_type: FederationType,
+        federation_type: FedType,
         partner_id: String,
-        terms: FederationTerms,
+        terms: FedTerms,
     },
     JoinFederation {
         federation_id: String,
@@ -717,7 +724,7 @@ enum FederationOperation {
     },
     UpdateFederationTerms {
         federation_id: String,
-        new_terms: FederationTerms,
+        new_terms: FedTerms,
     },
 }
 

@@ -1,6 +1,8 @@
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use thiserror::Error;
+use std::time::Duration;
+use icn_federation::{FederationType, FederationTerms};
 
 #[derive(Error, Debug)]
 pub enum FederationError {
@@ -10,6 +12,12 @@ pub enum FederationError {
     AlreadyExists(String),
     #[error("Insufficient reputation: {0}")]
     InsufficientReputation(String),
+    #[error("Not found: {0}")]
+    NotFound(String),
+    #[error("Invalid state: {0}")]
+    InvalidState(String),
+    #[error("Permission denied: {0}")]
+    PermissionDenied(String),
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -17,7 +25,7 @@ pub struct Federation {
     pub id: String,
     pub federation_type: FederationType,
     pub terms: FederationTerms,
-    pub members: HashMap<String, MemberStatus>,
+    pub members: Vec<String>,
     pub created_at: u64,
     pub status: FederationStatus,
     pub proposals: HashMap<i64, Proposal>,
@@ -59,18 +67,15 @@ pub struct Vote {
 impl Federation {
     pub fn new(
         id: String,
+        members: Vec<String>,
         federation_type: FederationType,
         terms: FederationTerms,
-        creator_id: String,
     ) -> Self {
-        let mut members = HashMap::new();
-        members.insert(creator_id, MemberStatus::Active);
-
         Self {
             id,
+            members,
             federation_type,
             terms,
-            members,
             created_at: chrono::Utc::now().timestamp() as u64,
             status: FederationStatus::Forming,
             proposals: HashMap::new(),
@@ -83,12 +88,12 @@ impl Federation {
     }
 
     pub fn add_member(&mut self, member_id: String) -> Result<(), FederationError> {
-        if self.members.contains_key(&member_id) {
+        if self.members.contains(&member_id) {
             return Err(FederationError::AlreadyExists(
                 "Member already exists in federation".to_string(),
             ));
         }
-        self.members.insert(member_id, MemberStatus::Pending);
+        self.members.push(member_id);
         Ok(())
     }
 

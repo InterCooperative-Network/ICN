@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.28", features = ["full"] }
+tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
@@ -19,6 +19,9 @@ bls12_381 = "0.8"
 md-5 = "0.10"
 digest = "0.10"
 hex = "0.4"
+bit-set = "0.5"
+patricia-trie = "0.3"
+bellman = "0.14"
 
 # Internal dependencies
 icn-types = { path = "../icn-types" }

@@ -4,6 +4,7 @@ use serde::{Serialize, Deserialize};
 use md5::Md5;
 use digest::{Digest, Update};
 use icn_types::{Block, Transaction, ShardId, NodeId};
+use thiserror::Error;
 
 #[derive(Debug, Clone)]
 pub struct ShardConfig {
@@ -16,7 +17,7 @@ pub struct ShardConfig {
 #[derive(Error, Debug)]
 pub enum ShardingError {
     #[error("Invalid shard configuration: {0}")]
-    InvalidConfiguration(String),
+    InvalidConfig(String),
     
     #[error("Shard not found: {0}")]
     ShardNotFound(String),
@@ -205,4 +206,28 @@ pub struct ReputationChange {
     pub did: String,
     pub change: i64,
     pub reason: String,
+}
+
+pub struct Shard {
+    pub id: String,
+    pub nodes: Vec<String>,
+    pub transactions: HashMap<String, Transaction>,
+}
+
+impl Shard {
+    pub fn new(id: String) -> Self {
+        Self {
+            id,
+            nodes: Vec::new(),
+            transactions: HashMap::new(),
+        }
+    }
+
+    pub fn add_node(&mut self, node_id: String) {
+        self.nodes.push(node_id);
+    }
+
+    pub fn add_transaction(&mut self, transaction: Transaction) {
+        self.transactions.insert(transaction.id.clone(), transaction);
+    }
 }

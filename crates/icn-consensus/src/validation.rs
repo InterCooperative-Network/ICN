@@ -3,10 +3,10 @@ use async_trait::async_trait;
 use log::{debug, error};
 use thiserror::Error;
 use serde::{Serialize, Deserialize};
+use secp256k1::PublicKey;
 
 use crate::sharding::ShardManager;
 use icn_types::{Block, Transaction};
-use icn_crypto::PublicKey;
 
 #[derive(Error, Debug)]
 pub enum ValidationError {

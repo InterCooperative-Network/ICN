@@ -7,7 +7,7 @@ use log::{info, warn, debug};
 use thiserror::Error;
 use crate::pbft::PbftConsensus;
 use crate::timeout_handling::TimeoutStrategy;
-use icn_types::{Block, BlockHeader};
+use icn_types::{Block, BlockHeader, Transaction};
 
 /// Round states in the consensus process
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,6 +58,10 @@ pub struct RoundManager {
     pub validator_set: Vec<String>,
     /// Tracks participation statistics
     pub validator_participation: HashMap<String, ParticipationStats>,
+    /// Current round blocks
+    pub blocks: HashMap<u64, Block>,
+    /// Current round transactions
+    pub transactions: HashMap<String, Transaction>,
 }
 
 /// Statistics about validator participation
@@ -126,6 +130,8 @@ impl RoundManager {
             validator_id,
             validator_set,
             validator_participation,
+            blocks: HashMap::new(),
+            transactions: HashMap::new(),
         }
     }
     
@@ -333,5 +339,13 @@ impl RoundManager {
         
         let successful_rounds = self.round_history.iter().filter(|m| m.success).count();
         Some(successful_rounds as f64 / self.round_history.len() as f64)
+    }
+
+    pub fn advance_round(&mut self) {
+        self.round_number += 1;
+    }
+
+    pub fn get_current_round(&self) -> u64 {
+        self.round_number
     }
 }
