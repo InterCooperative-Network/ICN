@@ -3,15 +3,14 @@ mod client;
 use clap::{Command, Arg, ArgAction, value_parser};
 use std::error::Error;
 use client::IcnClient;
-use log::{info, error};
+use log::{info, error, debug};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize logging
-    env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
-    info!("Starting ICN CLI...");
-
-    let app = Command::new("icn-cli")
+    let mut builder = env_logger::Builder::from_default_env();
+    
+    let matches = Command::new("icn-cli")
         .version(env!("CARGO_PKG_VERSION"))
         .author("ICN Team")
         .about("Command Line Interface for the Inter-Cooperative Network")
@@ -26,8 +25,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Arg::new("verbose")
                 .short('v')
                 .long("verbose")
-                .help("Enable verbose output")
-                .action(ArgAction::SetTrue)
+                .help("Enable verbose output (can be used multiple times for increased verbosity)")
+                .action(ArgAction::Count)
+        )
+        .arg(
+            Arg::new("timeout")
+                .short('t')
+                .long("timeout")
+                .help("Global timeout for requests in seconds")
+                .default_value("30")
+                .value_parser(value_parser!(u64))
+        )
+        .arg(
+            Arg::new("config")
+                .short('c')
+                .long("config")
+                .help("Path to config file")
+                .value_parser(value_parser!(String))
         )
         .subcommand(
             Command::new("health")
@@ -176,7 +190,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 .long("filter")
                                 .help("Filter peers by status (connected, disconnected, all)")
                                 .default_value("connected")
-                                .value_parser(value_parser!(String))
+                                .value_parser(["connected", "disconnected", "all"])
+                        )
+                        .arg(
+                            Arg::new("sort")
+                                .short('s')
+                                .long("sort")
+                                .help("Sort peers by (latency, id, address)")
+                                .default_value("id")
+                                .value_parser(["latency", "id", "address"])
+                        )
+                        .arg(
+                            Arg::new("output")
+                                .short('o')
+                                .long("output")
+                                .help("Output format (table, json, csv)")
+                                .default_value("table")
+                                .value_parser(["table", "json", "csv"])
                         )
                 )
                 .subcommand(
@@ -209,7 +239,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 )
                 .subcommand(
                     Command::new("ping")
-                        .about("Ping a peer to check connectivity")
+                        .about("Ping a peer")
                         .arg(
                             Arg::new("peer-id")
                                 .help("ID of the peer to ping")
@@ -220,57 +250,77 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             Arg::new("count")
                                 .short('c')
                                 .long("count")
-                                .help("Number of pings to send")
-                                .default_value("3")
+                                .help("Number of ping packets to send")
+                                .default_value("4")
                                 .value_parser(value_parser!(u8))
+                        )
+                        .arg(
+                            Arg::new("interval")
+                                .short('i')
+                                .long("interval")
+                                .help("Interval between pings in milliseconds")
+                                .default_value("1000")
+                                .value_parser(value_parser!(u64))
                         )
                 )
                 .subcommand(
                     Command::new("diagnostics")
                         .about("Run network diagnostics")
+                        .arg(
+                            Arg::new("comprehensive")
+                                .short('c')
+                                .long("comprehensive")
+                                .help("Run comprehensive diagnostics (may take longer)")
+                                .action(ArgAction::SetTrue)
+                        )
+                        .arg(
+                            Arg::new("output-file")
+                                .short('o')
+                                .long("output-file")
+                                .help("Save diagnostics output to a file")
+                                .value_parser(value_parser!(String))
+                        )
                 )
-        );
+        )
+        .get_matches();
 
-    let matches = app.get_matches();
-    let api_url = matches.get_one::<String>("api-url").unwrap().to_string();
-    let verbose = matches.get_flag("verbose");
-    let client = IcnClient::new(api_url);
+    // Configure logging based on verbosity
+    let verbosity = matches.get_count("verbose");
+    match verbosity {
+        0 => builder.filter_level(log::LevelFilter::Info),
+        1 => builder.filter_level(log::LevelFilter::Debug),
+        _ => builder.filter_level(log::LevelFilter::Trace),
+    };
+    builder.init();
 
-    if verbose {
-        info!("Verbose mode enabled");
-    }
+    // Create client with global timeout if specified
+    let api_url = matches.get_one::<String>("api-url").unwrap().clone();
+    let timeout = *matches.get_one::<u64>("timeout").unwrap();
+    let client = IcnClient::with_timeout(api_url, timeout);
 
-    if let Some(_) = matches.subcommand_matches("health") {
-        match client.check_health().await {
-            Ok(health) => {
-                println!("✅ ICN API is healthy");
-                println!("Status: {}", health.status);
-                println!("Version: {}", health.version);
-                println!("Uptime: {} seconds", health.uptime);
-            },
-            Err(e) => {
-                error!("Health check failed: {}", e);
-                println!("❌ ICN API health check failed: {}", e);
-                return Err(e);
+    debug!("Created ICN client with timeout: {} seconds", timeout);
+
+    match matches.subcommand() {
+        Some(("health", _)) => {
+            info!("Checking ICN API health...");
+            let health = client.check_health().await?;
+            println!("ICN API Status: {}", health.status);
+            println!("Version: {}", health.version);
+            println!("Uptime: {} seconds", health.uptime);
+            if let Some(node_id) = health.node_id {
+                println!("Node ID: {}", node_id);
             }
         }
-    } else if let Some(identity_matches) = matches.subcommand_matches("identity") {
-        if let Some(_) = identity_matches.subcommand_matches("create") {
-            match client.create_identity().await {
-                Ok(identity) => {
+        Some(("identity", identity_matches)) => {
+            match identity_matches.subcommand() {
+                Some(("create", _)) => {
+                    let identity = client.create_identity().await?;
                     println!("✅ Created new identity");
                     println!("DID: {}", identity.did);
                     println!("Public Key: {}", identity.public_key);
                 },
-                Err(e) => {
-                    error!("Failed to create identity: {}", e);
-                    println!("❌ Failed to create identity: {}", e);
-                    return Err(e);
-                }
-            }
-        } else if let Some(_) = identity_matches.subcommand_matches("list") {
-            match client.list_identities().await {
-                Ok(identities) => {
+                Some(("list", _)) => {
+                    let identities = client.list_identities().await?;
                     println!("✅ Found {} identities", identities.len());
                     for identity in identities {
                         println!("DID: {}", identity.did);
@@ -278,34 +328,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         println!("---");
                     }
                 },
-                Err(e) => {
-                    error!("Failed to list identities: {}", e);
-                    println!("❌ Failed to list identities: {}", e);
-                    return Err(e);
+                Some(("show", show_matches)) => {
+                    let did = show_matches.get_one::<String>("did").unwrap();
+                    // Implement show identity details
+                    println!("Showing identity details for DID: {}", did);
+                    println!("Note: This functionality is not yet implemented.");
+                },
+                _ => {
+                    println!("Unknown identity command. Run 'icn-cli identity --help' for usage information.");
                 }
             }
-        } else if let Some(show_matches) = identity_matches.subcommand_matches("show") {
-            let did = show_matches.get_one::<String>("did").unwrap();
-            // Implement show identity details
-            println!("Showing identity details for DID: {}", did);
-            println!("Note: This functionality is not yet implemented.");
         }
-    } else if let Some(cooperative_matches) = matches.subcommand_matches("cooperative") {
-        if let Some(join_matches) = cooperative_matches.subcommand_matches("join") {
-            let coop_id = join_matches.get_one::<String>("coop-id").unwrap();
-            match client.join_cooperative(coop_id).await {
-                Ok(_) => {
+        Some(("cooperative", cooperative_matches)) => {
+            match cooperative_matches.subcommand() {
+                Some(("join", join_matches)) => {
+                    let coop_id = join_matches.get_one::<String>("coop-id").unwrap();
+                    client.join_cooperative(coop_id).await?;
                     println!("✅ Successfully joined cooperative {}", coop_id);
                 },
-                Err(e) => {
-                    error!("Failed to join cooperative: {}", e);
-                    println!("❌ Failed to join cooperative: {}", e);
-                    return Err(e);
-                }
-            }
-        } else if let Some(_) = cooperative_matches.subcommand_matches("list") {
-            match client.list_cooperatives().await {
-                Ok(cooperatives) => {
+                Some(("list", _)) => {
+                    let cooperatives = client.list_cooperatives().await?;
                     println!("✅ Found {} cooperatives", cooperatives.len());
                     for coop in cooperatives {
                         println!("ID: {}", coop.id);
@@ -314,39 +356,31 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         println!("---");
                     }
                 },
-                Err(e) => {
-                    error!("Failed to list cooperatives: {}", e);
-                    println!("❌ Failed to list cooperatives: {}", e);
-                    return Err(e);
+                Some(("create", create_matches)) => {
+                    let name = create_matches.get_one::<String>("name").unwrap();
+                    let description = create_matches.get_one::<String>("description").unwrap();
+                    // Implement create cooperative
+                    println!("Creating cooperative: {} - {}", name, description);
+                    println!("Note: This functionality is not yet implemented.");
+                },
+                _ => {
+                    println!("Unknown cooperative command. Run 'icn-cli cooperative --help' for usage information.");
                 }
             }
-        } else if let Some(create_matches) = cooperative_matches.subcommand_matches("create") {
-            let name = create_matches.get_one::<String>("name").unwrap();
-            let description = create_matches.get_one::<String>("description").unwrap();
-            // Implement create cooperative
-            println!("Creating cooperative: {} - {}", name, description);
-            println!("Note: This functionality is not yet implemented.");
         }
-    } else if let Some(resource_matches) = matches.subcommand_matches("resource") {
-        if let Some(register_matches) = resource_matches.subcommand_matches("register") {
-            let resource_type = register_matches.get_one::<String>("resource-type").unwrap();
-            let capacity = register_matches.get_one::<String>("capacity").unwrap();
-            match client.register_resource(resource_type, capacity).await {
-                Ok(resource) => {
+        Some(("resource", resource_matches)) => {
+            match resource_matches.subcommand() {
+                Some(("register", register_matches)) => {
+                    let resource_type = register_matches.get_one::<String>("resource-type").unwrap();
+                    let capacity = register_matches.get_one::<String>("capacity").unwrap();
+                    let resource = client.register_resource(resource_type, capacity).await?;
                     println!("✅ Successfully registered resource");
                     println!("ID: {}", resource.id);
                     println!("Type: {}", resource.resource_type);
                     println!("Capacity: {}", resource.capacity);
                 },
-                Err(e) => {
-                    error!("Failed to register resource: {}", e);
-                    println!("❌ Failed to register resource: {}", e);
-                    return Err(e);
-                }
-            }
-        } else if let Some(_) = resource_matches.subcommand_matches("list") {
-            match client.list_resources().await {
-                Ok(resources) => {
+                Some(("list", _)) => {
+                    let resources = client.list_resources().await?;
                     println!("✅ Found {} resources", resources.len());
                     for resource in resources {
                         println!("ID: {}", resource.id);
@@ -356,149 +390,187 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         println!("---");
                     }
                 },
-                Err(e) => {
-                    error!("Failed to list resources: {}", e);
-                    println!("❌ Failed to list resources: {}", e);
-                    return Err(e);
+                _ => {
+                    println!("Unknown resource command. Run 'icn-cli resource --help' for usage information.");
                 }
             }
         }
-    } else if let Some(governance_matches) = matches.subcommand_matches("governance") {
-        if let Some(propose_matches) = governance_matches.subcommand_matches("propose") {
-            let title = propose_matches.get_one::<String>("title").unwrap();
-            let description = propose_matches.get_one::<String>("description").unwrap();
-            match client.create_proposal(title, description).await {
-                Ok(proposal) => {
+        Some(("governance", governance_matches)) => {
+            match governance_matches.subcommand() {
+                Some(("propose", propose_matches)) => {
+                    let title = propose_matches.get_one::<String>("title").unwrap();
+                    let description = propose_matches.get_one::<String>("description").unwrap();
+                    let proposal = client.create_proposal(title, description).await?;
                     println!("✅ Successfully created proposal");
                     println!("ID: {}", proposal.id);
                     println!("Title: {}", proposal.title);
                     println!("Status: {}", proposal.status);
                 },
-                Err(e) => {
-                    error!("Failed to create proposal: {}", e);
-                    println!("❌ Failed to create proposal: {}", e);
-                    return Err(e);
-                }
-            }
-        } else if let Some(vote_matches) = governance_matches.subcommand_matches("vote") {
-            let proposal_id = vote_matches.get_one::<String>("proposal-id").unwrap();
-            let vote = vote_matches.get_one::<String>("vote").unwrap();
-            match client.vote_on_proposal(proposal_id, vote).await {
-                Ok(_) => {
+                Some(("vote", vote_matches)) => {
+                    let proposal_id = vote_matches.get_one::<String>("proposal-id").unwrap();
+                    let vote = vote_matches.get_one::<String>("vote").unwrap();
+                    client.vote_on_proposal(proposal_id, vote).await?;
                     println!("✅ Successfully voted on proposal {}", proposal_id);
                 },
-                Err(e) => {
-                    error!("Failed to vote on proposal: {}", e);
-                    println!("❌ Failed to vote on proposal: {}", e);
-                    return Err(e);
+                Some(("list", _)) => {
+                    // Implement list proposals
+                    println!("Listing active proposals...");
+                    println!("Note: This functionality is not yet implemented.");
+                },
+                _ => {
+                    println!("Unknown governance command. Run 'icn-cli governance --help' for usage information.");
                 }
             }
-        } else if let Some(_) = governance_matches.subcommand_matches("list") {
-            // Implement list proposals
-            println!("Listing active proposals...");
-            println!("Note: This functionality is not yet implemented.");
         }
-    } else if let Some(network_matches) = matches.subcommand_matches("network") {
-        if let Some(status_matches) = network_matches.subcommand_matches("status") {
-            let detailed = status_matches.get_flag("detail");
-            match client.get_network_status(detailed).await {
-                Ok(status) => {
-                    println!("📊 Network Status");
-                    println!("Status: {}", status.status);
-                    println!("Connected peers: {}", status.peer_count);
-                    if detailed {
-                        println!("Average latency: {}ms", status.avg_latency);
-                        println!("Bandwidth usage: {}%", status.bandwidth_usage);
+        Some(("network", network_matches)) => {
+            match network_matches.subcommand() {
+                Some(("status", status_matches)) => {
+                    let detailed = status_matches.get_flag("detail");
+                    info!("Checking network status (detailed: {})...", detailed);
+                    let status = client.get_network_status(detailed).await?;
+                    println!("Network Status: {}", status.status);
+                    println!("Peer Count: {}", status.peer_count);
+                    println!("Average Latency: {} ms", status.avg_latency);
+                    println!("Bandwidth Usage: {:.2} MB/s", status.bandwidth_usage);
+                    if let Some(uptime) = status.uptime {
+                        println!("Uptime: {} seconds", uptime);
                     }
-                },
-                Err(e) => {
-                    error!("Failed to get network status: {}", e);
-                    println!("❌ Failed to get network status: {}", e);
-                    return Err(e);
+                    if let Some(version) = status.version {
+                        println!("Version: {}", version);
+                    }
                 }
-            }
-        } else if let Some(peers_matches) = network_matches.subcommand_matches("peers") {
-            let filter = peers_matches.get_one::<String>("filter").unwrap();
-            match client.list_peers().await {
-                Ok(peers) => {
-                    // Filter peers based on specified filter
-                    let filtered_peers = match filter.as_str() {
-                        "all" => peers,
-                        "connected" => peers.into_iter().filter(|p| p.status == "connected").collect(),
-                        "disconnected" => peers.into_iter().filter(|p| p.status == "disconnected").collect(),
-                        _ => {
-                            println!("❌ Invalid filter: {}", filter);
-                            return Ok(());
+                Some(("peers", peers_matches)) => {
+                    let filter = peers_matches.get_one::<String>("filter").unwrap();
+                    let sort = peers_matches.get_one::<String>("sort").unwrap();
+                    let output = peers_matches.get_one::<String>("output").unwrap();
+                    
+                    info!("Listing peers (filter: {}, sort: {}, output: {})...", filter, sort, output);
+                    
+                    let mut peers = client.list_peers_with_filter(filter).await?;
+                    
+                    // Sort peers based on the sort parameter
+                    match sort.as_str() {
+                        "latency" => peers.sort_by(|a, b| a.latency.cmp(&b.latency)),
+                        "id" => peers.sort_by(|a, b| a.id.cmp(&b.id)),
+                        "address" => peers.sort_by(|a, b| a.address.cmp(&b.address)),
+                        _ => {} // Default sort by ID
+                    }
+                    
+                    // Output in the specified format
+                    match output.as_str() {
+                        "json" => {
+                            println!("{}", serde_json::to_string_pretty(&peers).unwrap());
                         }
-                    };
-
-                    if filtered_peers.is_empty() {
-                        println!("No peers found matching filter: {}", filter);
-                    } else {
-                        println!("📊 Peers ({})", filtered_peers.len());
-                        println!("{:<40} | {:<15} | {:<8} | {}", "Peer ID", "Address", "Latency", "Status");
-                        println!("--------------------------------------------------------------------------------");
-                        for peer in filtered_peers {
-                            println!("{:<40} | {:<15} | {:<8}ms | {}", 
-                                peer.id, 
-                                peer.address, 
-                                peer.latency,
-                                peer.status
-                            );
+                        "csv" => {
+                            println!("ID,Address,Latency,Status,Connected Since");
+                            for peer in peers {
+                                println!("{},{},{},{},{}", 
+                                    peer.id, peer.address, peer.latency, 
+                                    peer.status, peer.connected_since);
+                            }
+                        }
+                        _ => { // Default to table
+                            if peers.is_empty() {
+                                println!("No peers found.");
+                            } else {
+                                println!("{:<36} {:<15} {:<8} {:<12} {:<20}", 
+                                    "ID", "Address", "Latency", "Status", "Connected Since");
+                                println!("{}", "-".repeat(95));
+                                for peer in peers {
+                                    println!("{:<36} {:<15} {:<8} {:<12} {:<20}", 
+                                        peer.id, peer.address, format!("{}ms", peer.latency), 
+                                        peer.status, peer.connected_since);
+                                }
+                            }
                         }
                     }
-                },
-                Err(e) => {
-                    error!("Failed to list peers: {}", e);
-                    println!("❌ Failed to list peers: {}", e);
-                    return Err(e);
                 }
-            }
-        } else if let Some(connect_matches) = network_matches.subcommand_matches("connect") {
-            let address = connect_matches.get_one::<String>("address").unwrap();
-            let timeout = connect_matches.get_one::<u64>("timeout").unwrap();
-            
-            println!("Connecting to {} (timeout: {}s)...", address, timeout);
-            match client.connect_peer(address).await {
-                Ok(peer) => {
-                    println!("✅ Successfully connected to peer");
-                    println!("Peer ID: {}", peer.id);
+                Some(("connect", connect_matches)) => {
+                    let address = connect_matches.get_one::<String>("address").unwrap();
+                    info!("Connecting to peer at {}...", address);
+                    let peer = client.connect_peer(address).await?;
+                    println!("Successfully connected to peer:");
+                    println!("ID: {}", peer.id);
                     println!("Address: {}", peer.address);
-                    println!("Latency: {}ms", peer.latency);
                     println!("Status: {}", peer.status);
-                },
-                Err(e) => {
-                    error!("Failed to connect to peer: {}", e);
-                    println!("❌ Failed to connect to peer: {}", e);
-                    return Err(e);
+                    println!("Connected Since: {}", peer.connected_since);
+                    println!("Latency: {} ms", peer.latency);
+                }
+                Some(("disconnect", disconnect_matches)) => {
+                    let peer_id = disconnect_matches.get_one::<String>("peer-id").unwrap();
+                    info!("Disconnecting from peer {}...", peer_id);
+                    client.disconnect_peer(peer_id).await?;
+                    println!("Successfully disconnected from peer {}", peer_id);
+                }
+                Some(("ping", ping_matches)) => {
+                    let peer_id = ping_matches.get_one::<String>("peer-id").unwrap();
+                    let count = *ping_matches.get_one::<u8>("count").unwrap();
+                    let interval = *ping_matches.get_one::<u64>("interval").unwrap();
+                    
+                    info!("Pinging peer {} ({} times with {}ms interval)...", peer_id, count, interval);
+                    
+                    let results = client.ping_peer_with_interval(peer_id, count, interval).await?;
+                    
+                    println!("Ping results for peer {}:", peer_id);
+                    
+                    let mut successful = 0;
+                    let mut total_latency = 0;
+                    
+                    for (i, result) in results.iter().enumerate() {
+                        if result.success {
+                            println!("Ping {}: {} ms", i + 1, result.latency);
+                            successful += 1;
+                            total_latency += result.latency;
+                        } else {
+                            println!("Ping {}: timeout", i + 1);
+                        }
+                    }
+                    
+                    if successful > 0 {
+                        let avg_latency = total_latency / successful;
+                        println!("\n--- {} ping statistics ---", peer_id);
+                        println!("{} packets transmitted, {} received, {}% packet loss", 
+                            count, successful, ((count as f32 - successful as f32) / count as f32) * 100.0);
+                        println!("round-trip min/avg/max = {}/{}/{} ms", 
+                            results.iter().filter(|r| r.success).map(|r| r.latency).min().unwrap_or(0),
+                            avg_latency,
+                            results.iter().filter(|r| r.success).map(|r| r.latency).max().unwrap_or(0));
+                    } else {
+                        println!("\n--- {} ping statistics ---", peer_id);
+                        println!("{} packets transmitted, 0 received, 100% packet loss", count);
+                    }
+                }
+                Some(("diagnostics", diagnostics_matches)) => {
+                    let comprehensive = diagnostics_matches.get_flag("comprehensive");
+                    let output_file = diagnostics_matches.get_one::<String>("output-file");
+                    
+                    info!("Running network diagnostics (comprehensive: {})...", comprehensive);
+                    
+                    let result = client.run_diagnostics_with_options(comprehensive).await?;
+                    
+                    if let Some(file_path) = output_file {
+                        match std::fs::write(file_path, &result) {
+                            Ok(_) => println!("Diagnostics results written to {}", file_path),
+                            Err(e) => {
+                                error!("Failed to write diagnostics to file: {}", e);
+                                println!("Failed to write to file: {}", e);
+                                println!("Network Diagnostics Results:\n");
+                                println!("{}", result);
+                            }
+                        }
+                    } else {
+                        println!("Network Diagnostics Results:\n");
+                        println!("{}", result);
+                    }
+                }
+                _ => {
+                    println!("Unknown network command. Run 'icn-cli network --help' for usage information.");
                 }
             }
-        } else if let Some(disconnect_matches) = network_matches.subcommand_matches("disconnect") {
-            let peer_id = disconnect_matches.get_one::<String>("peer-id").unwrap();
-            match client.disconnect_peer(peer_id).await {
-                Ok(_) => {
-                    println!("✅ Successfully disconnected from peer {}", peer_id);
-                },
-                Err(e) => {
-                    error!("Failed to disconnect peer: {}", e);
-                    println!("❌ Failed to disconnect peer: {}", e);
-                    return Err(e);
-                }
-            }
-        } else if let Some(ping_matches) = network_matches.subcommand_matches("ping") {
-            let peer_id = ping_matches.get_one::<String>("peer-id").unwrap();
-            let count = ping_matches.get_one::<u8>("count").unwrap();
-            
-            // Implement peer ping functionality
-            println!("Pinging peer {} ({} times)...", peer_id, count);
-            println!("Note: This functionality is not yet implemented.");
-        } else if let Some(_) = network_matches.subcommand_matches("diagnostics") {
-            // Implement network diagnostics
-            println!("Running network diagnostics...");
-            println!("Note: This functionality is not yet implemented.");
         }
-    } else {
-        println!("No command specified. Use --help to see available commands.");
+        _ => {
+            println!("No command specified. Run 'icn-cli --help' for usage information.");
+        }
     }
 
     Ok(())
