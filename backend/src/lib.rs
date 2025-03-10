@@ -1,7 +1,5 @@
 pub mod api;
 pub mod networking;
-pub mod core;
-pub mod db;
 pub mod middleware;
 
 use thiserror::Error;
