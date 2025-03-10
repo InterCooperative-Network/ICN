@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # ICN System Startup Script
 # Version: 3.0
 # Description: Starts all components of the ICN system using Docker containers with proper 
@@ -11,6 +13,15 @@ export PROJECT_ROOT=$(pwd)
 
 # Source the dependency management and utility functions
 source "${PROJECT_ROOT}/scripts/startup-utils.sh"
+
+# Create required directories
+mkdir -p "${PROJECT_ROOT}/logs"
+mkdir -p "${PROJECT_ROOT}/data/db"
+
+# Load environment variables
+if [ -f "${PROJECT_ROOT}/.env" ]; then
+    export $(cat "${PROJECT_ROOT}/.env" | grep -v '^#' | xargs)
+fi
 
 # Main execution
 main() {
@@ -57,6 +68,24 @@ main() {
         exit 1
     }
     
+    # Start services in correct order
+    echo "Starting database..."
+    docker-compose -f "${PROJECT_ROOT}/docker/docker-compose.dev.yml" up -d db
+
+    echo "Waiting for database to be ready..."
+    sleep 5
+
+    echo "Starting backend services..."
+    docker-compose -f "${PROJECT_ROOT}/docker/docker-compose.dev.yml" up -d backend
+
+    echo "Starting consensus nodes..."
+    docker-compose -f "${PROJECT_ROOT}/docker/docker-compose.dev.yml" up -d bootstrap validator1 validator2
+
+    echo "Starting frontend..."
+    docker-compose -f "${PROJECT_ROOT}/docker/docker-compose.dev.yml" up -d frontend
+
+    echo "System startup complete. Use 'docker-compose logs -f' to view logs."
+
     # Final status message
     echo -e "\n${GREEN}ICN system startup completed successfully!${NC}"
     echo -e "${YELLOW}You can monitor the system status with:${NC}"

@@ -586,4 +586,4 @@ start_icn_docker() {
 }
 
 # Register signal handlers for graceful shutdown
-trap "shutdown_docker_services" EXIT INT TERM 
+trap "shutdown_docker_services" EXIT INT TERM
