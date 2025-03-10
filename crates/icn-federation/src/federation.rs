@@ -22,6 +22,7 @@ pub struct Federation {
     /// Set of member IDs 
     pub members: HashSet<MemberId>,
     /// Resource manager for this federation
+    #[serde(skip)]
     pub resource_manager: Option<Arc<dyn ResourceProvider>>,
     /// Key-value metadata storage
     pub metadata: HashMap<String, String>,
@@ -55,6 +56,30 @@ pub struct Federation {
     
     /// Audit log
     pub audit_log: Vec<AuditEntry>,
+}
+
+impl std::fmt::Debug for Federation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Federation")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("description", &self.description)
+            .field("founded_date", &self.founded_date)
+            .field("members", &self.members)
+            .field("resource_manager", &"<ResourceProvider>")
+            .field("metadata", &self.metadata)
+            .field("federation_type", &self.federation_type)
+            .field("member_roles", &self.member_roles)
+            .field("terms", &self.terms)
+            .field("resources", &self.resources)
+            .field("proposals", &self.proposals)
+            .field("created_at", &self.created_at)
+            .field("status", &self.status)
+            .field("disputes", &self.disputes)
+            .field("cross_federation_disputes", &self.cross_federation_disputes)
+            .field("audit_log", &self.audit_log)
+            .finish()
+    }
 }
 
 /// Reference to a governance proposal
@@ -303,6 +328,18 @@ pub enum ResourceType {
     BandwidthMbps,
     MemoryGb,
     CustomResource(String),
+}
+
+impl std::fmt::Display for ResourceType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResourceType::ComputeUnit => write!(f, "ComputeUnit"),
+            ResourceType::StorageGb => write!(f, "StorageGb"),
+            ResourceType::BandwidthMbps => write!(f, "BandwidthMbps"),
+            ResourceType::MemoryGb => write!(f, "MemoryGb"),
+            ResourceType::CustomResource(name) => write!(f, "CustomResource({})", name),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -659,40 +696,59 @@ impl Default for MemberInfo {
 impl Federation {
     pub fn apply_membership_action(&mut self, action: MembershipAction) -> Result<(), FederationError> {
         match action {
-            MembershipAction::Add(member_id) => {
-                if self.members.contains_key(&member_id) {
+            MembershipAction::Add(member_id_str) => {
+                let member_id = MemberId { 
+                    did: member_id_str.clone(), 
+                    cooperative_id: CooperativeId("default".to_string()) 
+                };
+                
+                if self.members.contains(&member_id) {
                     return Err(FederationError::InvalidOperation(
-                        format!("Member {} already exists", member_id)
+                        format!("Member {:?} already exists", member_id)
                     ));
                 }
                 
-                self.members.insert(member_id.clone(), Default::default());
-                self.member_roles.insert(member_id, vec![MemberRole::Member]);
+                self.members.insert(member_id.clone());
+                self.member_roles.insert(member_id_str, vec![MemberRole::Member]);
                 
                 Ok(())
-            },
-            MembershipAction::Remove(member_id) => {
-                if !self.members.contains_key(&member_id) {
-                    return Err(FederationError::MemberNotFound(member_id));
+            }
+            MembershipAction::Remove(member_id_str) => {
+                let member_id = MemberId { 
+                    did: member_id_str.clone(), 
+                    cooperative_id: CooperativeId("default".to_string()) 
+                };
+                if !self.members.contains(&member_id) {
+                    return Err(FederationError::InvalidOperation(
+                        format!("Member {:?} does not exist", member_id)
+                    ));
                 }
                 
                 self.members.remove(&member_id);
-                self.member_roles.remove(&member_id);
+                self.member_roles.remove(&member_id_str);
                 
                 Ok(())
             },
-            MembershipAction::ChangeRole(member_id, roles) => {
-                if !self.members.contains_key(&member_id) {
-                    return Err(FederationError::MemberNotFound(member_id));
+            MembershipAction::ChangeRole(member_id_str, roles) => {
+                let member_id = MemberId { 
+                    did: member_id_str.clone(), 
+                    cooperative_id: CooperativeId("default".to_string()) 
+                };
+                if !self.members.contains(&member_id) {
+                    return Err(FederationError::MemberNotFound(member_id.did));
                 }
                 
-                self.member_roles.insert(member_id, roles);
+                self.member_roles.insert(member_id_str, roles);
                 
                 Ok(())
             },
-            MembershipAction::Suspend(member_id, duration) => {
-                if !self.members.contains_key(&member_id) {
-                    return Err(FederationError::MemberNotFound(member_id));
+            MembershipAction::Suspend(member_id_str, duration) => {
+                let member_id = MemberId { 
+                    did: member_id_str.clone(), 
+                    cooperative_id: CooperativeId("default".to_string()) 
+                };
+                if !self.members.contains(&member_id) {
+                    return Err(FederationError::MemberNotFound(member_id.did));
                 }
                 
                 let now = SystemTime::now()
@@ -706,9 +762,13 @@ impl Federation {
                 
                 Ok(())
             },
-            MembershipAction::Reinstate(member_id) => {
-                if !self.members.contains_key(&member_id) {
-                    return Err(FederationError::MemberNotFound(member_id));
+            MembershipAction::Reinstate(member_id_str) => {
+                let member_id = MemberId { 
+                    did: member_id_str.clone(), 
+                    cooperative_id: CooperativeId("default".to_string()) 
+                };
+                if !self.members.contains(&member_id) {
+                    return Err(FederationError::MemberNotFound(member_id.did));
                 }
                 
                 let member_info = self.members.get_mut(&member_id).unwrap();
@@ -721,26 +781,46 @@ impl Federation {
     }
     
     pub fn allocate_resource(&mut self, details: ResourceAllocationDetails) -> Result<(), FederationError> {
-        if !self.members.contains_key(&details.member_id) {
-            return Err(FederationError::MemberNotFound(details.member_id));
+        // Check if member exists
+        let member_id = MemberId { 
+            did: details.member_id.clone(), 
+            cooperative_id: CooperativeId("default".to_string()) 
+        };
+        if !self.members.contains(&member_id) {
+            return Err(FederationError::InvalidOperation(
+                format!("Member {:?} does not exist in federation", member_id)
+            ));
         }
         
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
+        // Get or create resource pool
+        let pool = self.resources.entry(details.resource_type.clone())
+            .or_insert_with(|| ResourcePool {
+                resource_type: details.resource_type.clone(),
+                total_capacity: details.amount,
+                available_capacity: details.amount,
+                allocations: HashMap::new(),
+                sharing_policy: SharingPolicy::MembersOnly,
+            });
         
-        let allocation = ResourceAllocation {
-            id: Uuid::new_v4().to_string(),
-            resource_type: details.resource_type.clone(),
-            amount: details.amount,
-            allocated_at: now,
-            expires_at: if details.duration > 0 { Some(now + details.duration) } else { None },
-            details: details.details,
-        };
+        // Check if there are enough resources
+        if pool.available_capacity < details.amount {
+            return Err(FederationError::InsufficientResources(
+                format!("Not enough {} resources: requested {}, available {}", 
+                    details.resource_type.to_string(), details.amount, pool.available_capacity)
+            ));
+        }
         
-        let member_info = self.members.get_mut(&details.member_id).unwrap();
-        member_info.resource_allocations.push(allocation);
+        // Allocate resources
+        let current = pool.allocations.entry(details.member_id.clone()).or_insert(0);
+        *current += details.amount;
+        pool.available_capacity -= details.amount;
+        
+        // Add audit log
+        self.add_audit_log_entry(
+            "ResourceAllocation",
+            format!("Allocated {} {} to member {}", 
+                details.amount, details.resource_type.to_string(), details.member_id)
+        );
         
         Ok(())
     }
@@ -783,9 +863,60 @@ impl Federation {
         Ok(())
     }
     
-    pub fn update_terms(&mut self, terms: FederationTerms) -> Result<(), FederationError> {
-        self.terms = terms;
-        self.add_audit_log_entry("UpdateTerms", "Federation terms updated".to_string());
+    pub fn update_terms(&mut self, terms_update: FederationTermsUpdateDetails) -> Result<(), FederationError> {
+        // Apply specific changes based on the section
+        match terms_update.section.as_str() {
+            "governance" => {
+                for (key, value) in terms_update.changes {
+                    self.update_governance_rules(key, value)?;
+                }
+            },
+            "resources" => {
+                // Update resource rules based on changes
+                for (key, value) in terms_update.changes {
+                    match key.as_str() {
+                        "min_contribution" => {
+                            if let Ok(val) = value.parse::<u64>() {
+                                self.terms.resource_rules.min_contribution = val;
+                            }
+                        },
+                        "max_allocation" => {
+                            if let Ok(val) = value.parse::<u64>() {
+                                self.terms.resource_rules.max_allocation_per_member = val;
+                            }
+                        },
+                        // Add more fields as needed
+                        _ => {}
+                    }
+                }
+            },
+            "membership" => {
+                // Update membership rules based on changes
+                for (key, value) in terms_update.changes {
+                    match key.as_str() {
+                        "min_reputation" => {
+                            if let Ok(val) = value.parse::<f64>() {
+                                self.terms.membership_rules.min_reputation_score = val;
+                            }
+                        },
+                        "max_members" => {
+                            if let Ok(val) = value.parse::<u32>() {
+                                self.terms.membership_rules.max_members = val;
+                            }
+                        },
+                        // Add more fields as needed
+                        _ => {}
+                    }
+                }
+            },
+            _ => {
+                return Err(FederationError::InvalidOperation(
+                    format!("Unknown terms section: {}", terms_update.section)
+                ));
+            }
+        }
+        
+        self.add_audit_log_entry("terms_update", format!("Updated terms section: {}", terms_update.section));
         Ok(())
     }
     

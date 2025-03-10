@@ -45,14 +45,35 @@ use resource_manager::ResourceProvider as ResourceManagerTrait;
 /// Result type for federation operations
 pub type FederationResult<T> = Result<T, FederationError>;
 
-// Remove our own FederationId definition and use icn_types::FederationId instead
-// Add convenience conversions from String to FederationId
+/// Helper to create a FederationId from a String
 pub fn federation_id_from_string(id: String) -> FederationId {
     FederationId(id)
 }
 
+/// Helper to convert a FederationId to a String
 pub fn federation_id_to_string(id: &FederationId) -> String {
     id.0.clone()
+}
+
+/// Implementation to help with displaying FederationId
+impl std::fmt::Display for FederationId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// Implementation to help with comparing FederationId with String
+impl PartialEq<String> for FederationId {
+    fn eq(&self, other: &String) -> bool {
+        self.0 == *other
+    }
+}
+
+/// Implementation to help with comparing String with FederationId
+impl PartialEq<FederationId> for String {
+    fn eq(&self, other: &FederationId) -> bool {
+        *self == other.0
+    }
 }
 
 // Add SDP support
@@ -163,21 +184,22 @@ impl FederationManager {
         name: String,
         description: String,
     ) -> Result<Federation, FederationError> {
-        let id = FederationId(Uuid::new_v4().to_string());
+        let id = Uuid::new_v4().to_string();
+        let federation_id = federation_id_from_string(id);
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
         
         let federation = Federation {
-            id: id.clone(),
+            id: federation_id.clone(),
             name,
             description,
             founded_date: Utc::now(),
             members: HashSet::new(),
             resource_manager: self.resource_manager.clone(),
             metadata: HashMap::new(),
-            federation_type: federation::FederationType::Standard,
+            federation_type: federation::FederationType::Custom("Standard".to_string()),
             member_roles: HashMap::new(),
             terms: federation::FederationTerms::default(),
             resources: HashMap::new(),
@@ -190,33 +212,29 @@ impl FederationManager {
         };
         
         let mut federations = self.federations.write().await;
-        federations.insert(id.to_string(), federation.clone());
+        federations.insert(federation_id_to_string(&federation_id), federation.clone());
         
         Ok(federation)
     }
     
-    /// Update a federation
+    /// Update an existing federation
     pub async fn update_federation(&self, federation: Federation) -> Result<(), FederationError> {
         // Check if federation exists
         let mut federations = self.federations.write().await;
-        let federation_id = FederationId(federation.id.clone());
+        let federation_id_str = federation_id_to_string(&federation.id);
         
-        if !federations.contains_key(&federation_id) {
-            return Err(FederationError::NotFound(federation.id));
+        if !federations.contains_key(&federation_id_str) {
+            return Err(FederationError::NotFound(format!("Federation not found: {}", federation_id_str)));
         }
         
         // Update federation
-        federations.insert(federation_id, federation.clone());
+        federations.insert(federation_id_str, federation.clone());
         
         // Update in subsystems
         if let Some(governance) = &self.governance_manager {
-            governance.register_federation(federation.clone()).await
+            governance.register_federation(federation.clone())
+                .await
                 .map_err(|e| FederationError::GovernanceError(e.to_string()))?;
-        }
-        
-        if let Some(dispute) = &self.dispute_manager {
-            dispute.register_federation(federation).await
-                .map_err(|e| FederationError::DisputeError(e.to_string()))?;
         }
         
         Ok(())
@@ -332,20 +350,28 @@ impl FederationManager {
         member_id: MemberId,
         roles: Vec<federation::MemberRole>,
     ) -> Result<(), FederationError> {
-        let mut federations = self.federations.write().await;
+        // Get federation
+        let federation = self.get_federation(federation_id).await?;
         
-        let federation = federations.get_mut(federation_id)
-            .ok_or_else(|| FederationError::NotFound(format!("Federation not found: {}", federation_id)))?;
-        
-        // Add member to the set
-        federation.members.insert(member_id.clone());
-        
-        // Add roles if provided
-        if !roles.is_empty() {
-            federation.member_roles.insert(member_id.0, roles);
+        // Check if member already exists
+        if federation.members.contains(&member_id) {
+            return Err(FederationError::AlreadyExists(format!("Member {} already exists", member_id)));
         }
         
-        Ok(())
+        // Create membership action
+        let action = federation::MembershipAction::Add(member_id.clone());
+        
+        // Create updated federation with new member
+        let mut updated_federation = federation.clone();
+        updated_federation.apply_membership_action(action)?;
+        
+        // Add roles if specified
+        if !roles.is_empty() {
+            updated_federation.member_roles.insert(member_id.to_string(), roles);
+        }
+        
+        // Update federation
+        self.update_federation(updated_federation).await
     }
 
     /// Allocate resources to a member
@@ -356,27 +382,38 @@ impl FederationManager {
         resource_type: &str,
         amount: u64,
     ) -> Result<(), FederationError> {
-        // First check if the federation exists
-        let federations = self.federations.read().await;
-        let federation = federations.get(federation_id)
-            .ok_or_else(|| FederationError::NotFound(format!("Federation not found: {}", federation_id)))?;
+        // Get federation
+        let federation = self.get_federation(federation_id).await?;
         
-        // Check if the member exists in the federation
+        // Check if member exists
         if !federation.members.contains(member_id) {
-            return Err(FederationError::NotFound(format!("Member not found in federation: {}", member_id.0)));
+            return Err(FederationError::NotFound(format!("Member {} not found", member_id)));
         }
         
-        // If we have a resource manager, use it to allocate resources
-        if let Some(resource_manager) = &self.resource_manager {
-            resource_manager.reserve_resources(federation_id, resource_type, amount)
-                .await
-                .map_err(|e| FederationError::ResourceError(e.to_string()))?;
-        } else {
-            // If no resource manager, we can't allocate resources
-            return Err(FederationError::ResourceError("No resource manager available".to_string()));
-        }
+        // Parse resource type
+        let resource_type = match resource_type {
+            "compute" => federation::ResourceType::ComputeUnit,
+            "storage" => federation::ResourceType::StorageGb,
+            "bandwidth" => federation::ResourceType::BandwidthMbps,
+            "memory" => federation::ResourceType::MemoryGb,
+            custom => federation::ResourceType::CustomResource(custom.to_string()),
+        };
         
-        Ok(())
+        // Create resource allocation details
+        let allocation = federation::ResourceAllocationDetails {
+            resource_type,
+            member_id: member_id.to_string(),
+            amount,
+            duration: 0, // No expiration
+            details: HashMap::new(),
+        };
+        
+        // Create updated federation with resource allocation
+        let mut updated_federation = federation.clone();
+        updated_federation.allocate_resource(allocation)?;
+        
+        // Update federation
+        self.update_federation(updated_federation).await
     }
 
     pub async fn create_governance_proposal(
@@ -424,7 +461,7 @@ impl FederationManager {
 }
 
 /// Federation error types
-#[derive(Debug, Error)]
+#[derive(Error, Debug)]
 pub enum FederationError {
     #[error("Not found: {0}")]
     NotFound(String),
@@ -455,4 +492,16 @@ pub enum FederationError {
     
     #[error("Internal error: {0}")]
     InternalError(String),
+    
+    #[error("Invalid state: {0}")]
+    InvalidState(String),
+    
+    #[error("Governance manager not configured")]
+    GovernanceManagerNotConfigured,
+    
+    #[error("Dispute manager not configured")]
+    DisputeManagerNotConfigured,
+    
+    #[error("Resource manager not configured")]
+    ResourceManagerNotConfigured,
 }

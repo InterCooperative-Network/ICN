@@ -93,7 +93,7 @@ pub enum MessageStatus {
 }
 
 /// Types of federation messages
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum MessageType {
     /// Standard text message
     Text,
@@ -249,21 +249,20 @@ impl FederationMessenger {
         references: Vec<String>,
         expires_in_hours: Option<u64>,
     ) -> Result<FederationMessage, MessagingError> {
-        // Encrypt content for recipient
-        let encrypted_content = self.encrypt_for_recipient(recipient, content).await?;
-        
-        // Generate message ID
+        // Generate unique message ID
         let message_id = Uuid::new_v4().to_string();
         
-        // Set expiration time if provided
-        let expires_at = expires_in_hours.map(|hours| {
-            Utc::now() + chrono::Duration::hours(hours as i64)
-        });
+        // Get current time
+        let now = Utc::now();
         
-        // Create signature for message
+        // Encrypt message content for recipient
+        let encrypted_content = self.encrypt_for_recipient(recipient, content).await?;
+        
+        // Generate signature
+        let federation_id_str = crate::federation_id_to_string(&self.federation_id);
         let signature_data = format!(
             "{}:{}:{}:{}:{}",
-            message_id, self.federation_id, recipient, Utc::now(), hex::encode(&encrypted_content)
+            message_id, federation_id_str, recipient, Utc::now(), hex::encode(&encrypted_content)
         );
         
         let signature = match self.key_pair.sign(signature_data.as_bytes()) {
@@ -274,24 +273,20 @@ impl FederationMessenger {
         // Create the message
         let message = FederationMessage {
             id: message_id,
-            sender: self.federation_id.clone(),
+            sender: federation_id_str,
             recipient: recipient.to_string(),
             visibility,
             message_type,
             priority,
             subject: subject.to_string(),
             encrypted_content,
-            timestamp: Utc::now(),
-            expires_at,
+            timestamp: now,
+            expires_at: expires_in_hours.map(|h| now + chrono::Duration::hours(h as i64)),
             status: MessageStatus::Draft,
             signature,
             references,
             attributes: HashMap::new(),
         };
-        
-        // Store in drafts
-        let mut drafts = self.drafts.write().await;
-        drafts.insert(message.id.clone(), message.clone());
         
         Ok(message)
     }
@@ -374,31 +369,35 @@ impl FederationMessenger {
 
     /// Process a received message
     pub async fn process_received_message(&self, message: FederationMessage) -> Result<(), MessagingError> {
-        // Verify this message is intended for us
-        if message.recipient != self.federation_id && !self.is_broadcast(&message).await {
-            return Err(MessagingError::Unauthorized("Message not intended for this recipient".to_string()));
+        // Verify message signature
+        if !self.verify_message(&message).await? {
+            return Err(MessagingError::Unauthorized("Invalid message signature".to_string()));
         }
         
-        // Verify the signature
-        self.verify_message(&message).await?;
+        // Check if this message is intended for us
+        let federation_id_str = crate::federation_id_to_string(&self.federation_id);
+        if message.recipient != federation_id_str && !self.is_broadcast(&message).await {
+            return Err(MessagingError::InvalidRecipient(format!(
+                "Message not intended for this federation: {}", message.recipient
+            )));
+        }
         
-        // Update status
-        let mut updated_message = message.clone();
-        updated_message.status = MessageStatus::Delivered;
+        // Decrypt the message
+        let _decrypted_content = self.decrypt_message(&message).await?;
         
-        // Store in inbox
-        let mut inbox = self.inbox.write().await;
-        inbox.push(updated_message.clone());
-        
-        // Update delivery status
-        let mut status = self.delivery_status.write().await;
-        status.insert(updated_message.id.clone(), MessageStatus::Delivered);
-        
-        // Check if we have a handler for this message type
+        // Handle based on message type
         let handlers = self.message_handlers.read().await;
         if let Some(handler) = handlers.get(&message.message_type) {
-            handler.handle_message(&updated_message).await?;
+            handler.handle_message(&message).await?;
         }
+        
+        // Add to inbox
+        let mut inbox = self.inbox.write().await;
+        inbox.push(message.clone());
+        
+        // Update status
+        let mut status = self.delivery_status.write().await;
+        status.insert(message.id.clone(), MessageStatus::Read);
         
         Ok(())
     }

@@ -13,6 +13,8 @@ use icn_reputation::ReputationInterface;
 
 use crate::federation::{Federation, FederationError};
 use crate::governance::{GovernanceManager, GovernanceError};
+use icn_types::MemberId;
+use icn_types::CooperativeId;
 
 #[derive(Error, Debug)]
 pub enum DisputeError {
@@ -320,9 +322,8 @@ impl DisputeManager {
     
     /// Register a federation with the dispute manager
     pub async fn register_federation(&self, federation: Federation) -> DisputeResult<()> {
-        let federation_id = FederationId(federation.id.clone());
         let mut federations = self.federations.write().await;
-        federations.insert(federation_id, federation);
+        federations.insert(federation.id.clone(), federation);
         Ok(())
     }
     
@@ -345,13 +346,21 @@ impl DisputeManager {
             ))?;
             
         // Check if complainant is a member
-        if !federation.members.contains_key(&complainant) {
+        let complainant_id = MemberId { 
+            did: complainant.clone(), 
+            cooperative_id: CooperativeId("default".to_string()) 
+        };
+        if !federation.members.contains(&complainant_id) {
             return Err(DisputeError::MemberNotFound(complainant));
         }
         
         // Check if respondents are members
         for respondent in &respondents {
-            if !federation.members.contains_key(respondent) {
+            let respondent_id = MemberId { 
+                did: respondent.clone(), 
+                cooperative_id: CooperativeId("default".to_string()) 
+            };
+            if !federation.members.contains(&respondent_id) {
                 return Err(DisputeError::MemberNotFound(respondent.clone()));
             }
         }
@@ -462,6 +471,10 @@ impl DisputeManager {
             .ok_or_else(|| DisputeError::DisputeNotFound(dispute_id.to_string()))?;
             
         // Check if provider is involved in dispute
+        let provider_id = MemberId { 
+            did: provider.clone(), 
+            cooperative_id: CooperativeId("default".to_string()) 
+        };
         if dispute.complainant != provider && !dispute.respondents.contains(&provider) {
             return Err(DisputeError::Unauthorized(
                 "Only dispute participants can add evidence".to_string()
@@ -517,7 +530,14 @@ impl DisputeManager {
             .ok_or_else(|| DisputeError::DisputeNotFound(dispute_id.to_string()))?;
             
         // Check if member is involved in dispute or is mediator
-        let is_mediator = dispute.mediator.as_ref().map_or(false, |m| m == &member);
+        let mediator_id = dispute.mediator.as_ref().map(|m| MemberId { 
+            did: m.clone(), 
+            cooperative_id: CooperativeId("default".to_string()) 
+        });
+        let is_mediator = mediator_id.as_ref().map_or(false, |m| m == &MemberId { 
+            did: member.clone(), 
+            cooperative_id: CooperativeId("default".to_string()) 
+        });
         if dispute.complainant != member && 
            !dispute.respondents.contains(&member) && 
            !is_mediator {
@@ -588,7 +608,11 @@ impl DisputeManager {
             ))?;
             
         // Check if mediator is a member
-        if !federation.members.contains_key(&mediator) {
+        let mediator_id = MemberId { 
+            did: mediator.clone(), 
+            cooperative_id: CooperativeId("default".to_string()) 
+        };
+        if !federation.members.contains(&mediator_id) {
             return Err(DisputeError::MemberNotFound(mediator));
         }
         
@@ -688,7 +712,14 @@ impl DisputeManager {
         }
         
         // Check if resolver is authorized
-        let is_mediator = dispute.mediator.as_ref().map_or(false, |m| m == &resolver);
+        let mediator_id = dispute.mediator.as_ref().map(|m| MemberId { 
+            did: m.clone(), 
+            cooperative_id: CooperativeId("default".to_string()) 
+        });
+        let is_mediator = mediator_id.as_ref().map_or(false, |m| m == &MemberId { 
+            did: resolver.clone(), 
+            cooperative_id: CooperativeId("default".to_string()) 
+        });
         if resolver != "system" && // Allow system to resolve
            !is_mediator && // Allow mediator to resolve
            resolver != dispute.complainant && // Allow complainant to resolve
@@ -779,7 +810,14 @@ impl DisputeManager {
         }
         
         // Check if dismisser is authorized
-        let is_mediator = dispute.mediator.as_ref().map_or(false, |m| m == &dismisser);
+        let mediator_id = dispute.mediator.as_ref().map(|m| MemberId { 
+            did: m.clone(), 
+            cooperative_id: CooperativeId("default".to_string()) 
+        });
+        let is_mediator = mediator_id.as_ref().map_or(false, |m| m == &MemberId { 
+            did: dismisser.clone(), 
+            cooperative_id: CooperativeId("default".to_string()) 
+        });
         if dismisser != "system" && !is_mediator {
             return Err(DisputeError::Unauthorized(
                 "Only mediators or the system can dismiss disputes".to_string()

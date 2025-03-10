@@ -13,7 +13,7 @@ use icn_crypto::KeyPair;
 
 use crate::federation::{
     Federation, FederationType, FederationTerms, FederationError,
-    ProposalType, ProposalStatus, Vote, VoteDecision, MemberRole
+    ProposalType, ProposalStatus, Vote, VoteDecision, MemberRole, MemberId, CooperativeId
 };
 
 /// Error types for federation governance
@@ -266,9 +266,8 @@ impl GovernanceManager {
     
     /// Register a federation with the governance manager
     pub async fn register_federation(&self, federation: Federation) -> GovernanceResult<()> {
-        let federation_id = FederationId(federation.id.clone());
         let mut federations = self.federations.write().await;
-        federations.insert(federation_id, federation);
+        federations.insert(federation.id.clone(), federation);
         Ok(())
     }
     
@@ -291,7 +290,11 @@ impl GovernanceManager {
             ))?;
             
         // Check if proposer is a member
-        if !federation.members.contains_key(&proposer) {
+        let proposer_id = MemberId { 
+            did: proposer.clone(), 
+            cooperative_id: CooperativeId("default".to_string()) 
+        };
+        if !federation.members.contains(&proposer_id) {
             return Err(GovernanceError::MemberNotFound(proposer));
         }
         
@@ -353,7 +356,11 @@ impl GovernanceManager {
             ))?;
             
         // Check if voter is a member
-        if !federation.members.contains_key(&voter) {
+        let voter_id = MemberId { 
+            did: voter.clone(), 
+            cooperative_id: CooperativeId("default".to_string()) 
+        };
+        if !federation.members.contains(&voter_id) {
             return Err(GovernanceError::MemberNotFound(voter));
         }
         
