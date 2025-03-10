@@ -1,18 +1,15 @@
 [package]
 name = "icn-federation"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
-tokio = { version = "1.30", features = ["full"] }
-tendermint = "0.23"
-serde = { version = "1.0", features = ["derive"] }
-thiserror = "1.0"
 async-trait = "0.1"
-chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
 uuid = { version = "1.0", features = ["v4"] }
-icn-types = { workspace = true }
+thiserror = "1.0"
+icn-types = { path = "../icn-types" }
 icn-governance = { path = "../icn-governance" }
 icn-zk = { path = "../icn-zk" }
-icn-networking = { path = "../networking" }
-sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "postgres"] }
