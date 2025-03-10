@@ -6,10 +6,13 @@ use tokio::sync::RwLock;
 use std::time::SystemTime;
 use serde_json;
 use uuid::Uuid;
-use icn_types::FederationId;
+use icn_types::{FederationId, MemberId};
 use std::collections::HashSet;
 use chrono;
 use chrono::{Utc};
+use thiserror::Error;
+use crate::resource_manager::ResourceProvider;
+use icn_reputation::ReputationService;
 
 pub mod federation;
 pub mod governance;
@@ -21,7 +24,7 @@ pub mod resource_manager;
 pub mod resource_sharing;
 
 pub use federation::{
-    Federation, FederationType, FederationTerms, FederationError, 
+    Federation, FederationType, FederationTerms, FederationError as FederationModuleError, 
     FederationStatus, MemberStatus, MemberRole, ResourcePool, ResourceType,
     ProposalType, ProposalStatus, Vote, VoteDecision, MembershipAction,
     ResourceAllocationDetails, MemberInfo, ResourceAllocation
@@ -199,7 +202,7 @@ impl FederationManager {
         let federation_id = FederationId(federation.id.clone());
         
         if !federations.contains_key(&federation_id) {
-            return Err(FederationError::FederationNotFound(federation.id));
+            return Err(FederationError::NotFound(federation.id));
         }
         
         // Update federation
@@ -345,19 +348,32 @@ impl FederationManager {
         Ok(())
     }
 
-    pub async fn allocate_resources(&self, federation_id: &str, resource_type: String, amount: u64) -> FederationResult<()> {
-        let fed_id = FederationId(federation_id.to_string());
+    /// Allocate resources to a member
+    pub async fn allocate_resources(
+        &self,
+        federation_id: &str,
+        member_id: &MemberId,
+        resource_type: &str,
+        amount: u64,
+    ) -> Result<(), FederationError> {
+        // First check if the federation exists
         let federations = self.federations.read().await;
+        let federation = federations.get(federation_id)
+            .ok_or_else(|| FederationError::NotFound(format!("Federation not found: {}", federation_id)))?;
         
-        let _federation = federations.get(&fed_id)
-            .ok_or_else(|| FederationError::FederationNotFound(federation_id.to_string()))?;
+        // Check if the member exists in the federation
+        if !federation.members.contains(member_id) {
+            return Err(FederationError::NotFound(format!("Member not found in federation: {}", member_id.0)));
+        }
         
-        // Ensure federation exists before allocating resources
+        // If we have a resource manager, use it to allocate resources
         if let Some(resource_manager) = &self.resource_manager {
-            resource_manager.reserve_resources(federation_id, &resource_type, amount).await
+            resource_manager.reserve_resources(federation_id, resource_type, amount)
+                .await
                 .map_err(|e| FederationError::ResourceError(e.to_string()))?;
         } else {
-            return Err(FederationError::ResourceManagerNotConfigured);
+            // If no resource manager, we can't allocate resources
+            return Err(FederationError::ResourceError("No resource manager available".to_string()));
         }
         
         Ok(())
@@ -405,4 +421,38 @@ impl FederationManager {
             Err(FederationError::GovernanceManagerNotConfigured)
         }
     }
+}
+
+/// Federation error types
+#[derive(Debug, Error)]
+pub enum FederationError {
+    #[error("Not found: {0}")]
+    NotFound(String),
+    
+    #[error("Already exists: {0}")]
+    AlreadyExists(String),
+    
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
+    
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+    
+    #[error("Governance error: {0}")]
+    GovernanceError(String),
+    
+    #[error("Dispute error: {0}")]
+    DisputeError(String),
+    
+    #[error("Resource error: {0}")]
+    ResourceError(String),
+    
+    #[error("Storage error: {0}")]
+    StorageError(String),
+    
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+    
+    #[error("Internal error: {0}")]
+    InternalError(String),
 }

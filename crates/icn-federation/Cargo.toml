@@ -19,3 +19,6 @@ log = "0.4"
 icn-crypto = { path = "../icn-crypto" }
 icn-reputation = { path = "../icn-reputation" }
 chrono = { version = "0.4", features = ["serde"] }
+hex = "0.4"
+rust_decimal = "1.30"
+sodiumoxide = "0.2.7"

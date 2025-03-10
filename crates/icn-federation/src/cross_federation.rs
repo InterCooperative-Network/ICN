@@ -1,10 +1,16 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use serde::{Serialize, Deserialize};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use thiserror::Error;
+use uuid::Uuid;
+use hex;
+
 use icn_types::FederationId;
 use icn_crypto::KeyPair;
+use crate::resource_manager::{ResourceProvider, ResourceError};
+use crate::FederationError;
 
 use crate::federation::Federation;
 
@@ -58,17 +64,19 @@ pub enum CrossFederationError {
     CryptoError(CryptoError),
     #[error("Unknown error: {0}")]
     Other(String),
+    #[error("Insufficient resources: requested {requested}, available {available}")]
+    InsufficientResources { requested: u64, available: u64 },
 }
 
 /// Manages cross-federation resource sharing
 pub struct CrossFederationManager {
     agreements: Mutex<HashMap<String, ResourceSharingAgreement>>,
-    resource_manager: Arc<dyn ResourceManager>,
+    resource_manager: Arc<dyn ResourceProvider>,
 }
 
 impl CrossFederationManager {
     /// Create a new CrossFederationManager
-    pub fn new(resource_manager: Arc<dyn ResourceManager>) -> Self {
+    pub fn new(resource_manager: Arc<dyn ResourceProvider>) -> Self {
         Self {
             agreements: Mutex::new(HashMap::new()),
             resource_manager,
@@ -76,53 +84,41 @@ impl CrossFederationManager {
     }
 
     /// Propose a new resource sharing agreement
-    pub async fn propose_sharing_agreement(
+    pub async fn propose_agreement(
         &self,
-        source_federation: &Federation,
+        source_federation_id: String,
         target_federation_id: String,
         resource_type: String,
         amount: u64,
         duration_seconds: Option<u64>,
         terms: String,
         min_reputation_score: i64,
-    ) -> Result<String, FederationError> {
-        // Verify the source federation has the requested resource
-        let has_resource = source_federation.resources
-            .get(&resource_type)
-            .map(|pool| pool.available_amount >= amount)
-            .unwrap_or(false);
+    ) -> Result<String, CrossFederationError> {
+        // Check if source federation has sufficient resources
+        let has_resources = self.resource_manager
+            .has_sufficient_resources(&source_federation_id, &resource_type, amount)
+            .await
+            .map_err(|e| CrossFederationError::ResourceError(e.to_string()))?;
         
-        if !has_resource {
-            return Err(FederationError::ResourceError(
-                format!("Insufficient resources: {}", resource_type)
-            ));
+        if !has_resources {
+            return Err(CrossFederationError::InsufficientResources { 
+                requested: amount,
+                available: 0 // Actual amount unknown at this level
+            });
         }
         
-        // Generate agreement ID
-        let agreement_id = format!("share_agreement_{}", uuid::Uuid::new_v4());
-        
-        // Create agreement
-        let now = Utc::now().timestamp() as u64;
-        let end_time = duration_seconds.map(|duration| now + duration);
-        
-        let agreement = ResourceSharingAgreement {
-            id: agreement_id.clone(),
-            source_federation_id: source_federation.id.clone(),
+        // Create the agreement
+        let agreement = ResourceSharingAgreement::new(
+            source_federation_id,
             target_federation_id,
             resource_type,
             amount,
-            start_time: now,
-            end_time,
+            duration_seconds,
             terms,
-            status: SharingAgreementStatus::Proposed,
-            usage_metrics: ResourceUsageMetrics {
-                total_allocated: 0,
-                total_used: 0,
-                last_activity: now,
-            },
             min_reputation_score,
-            approval_signatures: HashMap::new(),
-        };
+        );
+        
+        let agreement_id = agreement.id.clone();
         
         // Store the agreement
         let mut agreements = self.agreements.lock().unwrap();

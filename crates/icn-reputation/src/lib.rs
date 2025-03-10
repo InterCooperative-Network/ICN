@@ -58,6 +58,19 @@ pub trait ReputationInterface: Send + Sync {
     async fn get_voting_power(&self, member_id: &str) -> ReputationResult<f64>;
 }
 
+/// Extended reputation service with federation-specific methods
+#[async_trait]
+pub trait ReputationService: ReputationInterface + Send + Sync {
+    /// Get a federation's reputation score
+    async fn get_federation_reputation(&self, federation_id: &str) -> ReputationResult<i64>;
+    
+    /// Update a federation's reputation
+    async fn update_federation_reputation(&self, federation_id: &str, delta: i64) -> ReputationResult<()>;
+    
+    /// Calculate aggregate reputation for a federation based on its members
+    async fn calculate_federation_reputation(&self, federation_id: &str, member_ids: &[String]) -> ReputationResult<i64>;
+}
+
 // Simple in-memory reputation manager for testing
 pub struct SimpleReputationManager {
     scores: RwLock<HashMap<String, i64>>,
@@ -94,5 +107,32 @@ impl ReputationInterface for SimpleReputationManager {
         let rep = self.get_reputation(member_id).await?;
         // Simple linear voting power calculation
         Ok(rep as f64 / 100.0)
+    }
+}
+
+#[async_trait]
+impl ReputationService for SimpleReputationManager {
+    async fn get_federation_reputation(&self, federation_id: &str) -> ReputationResult<i64> {
+        // For simple implementation, just treat federation_id as a regular member_id
+        self.get_reputation(federation_id).await
+    }
+    
+    async fn update_federation_reputation(&self, federation_id: &str, delta: i64) -> ReputationResult<()> {
+        // For simple implementation, just treat federation_id as a regular member_id
+        self.update_reputation(federation_id, delta).await
+    }
+    
+    async fn calculate_federation_reputation(&self, federation_id: &str, member_ids: &[String]) -> ReputationResult<i64> {
+        // Simple implementation: average of all member reputations
+        if member_ids.is_empty() {
+            return self.get_federation_reputation(federation_id).await;
+        }
+        
+        let mut total = 0;
+        for member_id in member_ids {
+            total += self.get_reputation(member_id).await?;
+        }
+        
+        Ok(total / member_ids.len() as i64)
     }
 }
