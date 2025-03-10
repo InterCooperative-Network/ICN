@@ -195,6 +195,25 @@ pub struct ErrorResponse {
     pub message: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FederationConnection {
+    pub status: String,
+    pub public_key: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FederationInfo {
+    pub id: String,
+    pub status: String,
+    pub connection_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FederationMessage {
+    pub message_id: String,
+    pub timestamp: String,
+}
+
 impl IcnClient {
     pub fn new(base_url: String) -> Self {
         let client = Client::builder()
@@ -741,5 +760,99 @@ impl IcnClient {
                 message: error_text 
             })
         }
+    }
+
+    pub async fn connect_federation(&self, federation_id: &str, address: &str) -> Result<FederationConnection, IcnClientError> {
+        debug!("Connecting to federation {} at {} via {}/federation/connect", 
+               federation_id, address, self.base_url);
+        
+        let response = match self.client
+            .post(&format!("{}/federation/connect", self.base_url))
+            .json(&serde_json::json!({
+                "federation_id": federation_id,
+                "address": address
+            }))
+            .timeout(self.timeout)
+            .send()
+            .await 
+        {
+            Ok(resp) => resp,
+            Err(e) => {
+                if e.is_timeout() {
+                    error!("Connection to federation timed out after {}s", self.timeout.as_secs());
+                    return Err(IcnClientError::TimeoutError(
+                        format!("Connection to federation timed out after {}s", self.timeout.as_secs())
+                    ));
+                } else {
+                    return Err(IcnClientError::from(e));
+                }
+            }
+        };
+        
+        self.handle_response::<FederationConnection>(response).await
+    }
+    
+    pub async fn list_federations(&self) -> Result<Vec<FederationInfo>, IcnClientError> {
+        debug!("Listing federations from {}/federation/list", self.base_url);
+        
+        let response = match self.client.get(&format!("{}/federation/list", self.base_url)).send().await {
+            Ok(resp) => resp,
+            Err(e) => return Err(IcnClientError::from(e)),
+        };
+        
+        let response_data = self.handle_response::<serde_json::Value>(response).await?;
+        
+        // Parse the response data
+        let federations = match response_data.get("federations") {
+            Some(serde_json::Value::Array(arr)) => {
+                let mut result = Vec::with_capacity(arr.len());
+                for item in arr {
+                    if let Ok(federation) = serde_json::from_value::<FederationInfo>(item.clone()) {
+                        result.push(federation);
+                    }
+                }
+                result
+            },
+            _ => Vec::new(),
+        };
+        
+        Ok(federations)
+    }
+    
+    pub async fn send_federation_message(
+        &self, 
+        target: &str, 
+        msg_type: &str, 
+        payload: serde_json::Value
+    ) -> Result<FederationMessage, IcnClientError> {
+        debug!("Sending message to federation {} via {}/federation/message", 
+               target, self.base_url);
+        
+        // Convert string type to enum
+        let message_type = match msg_type {
+            "proposal" => "ProposalSubmission",
+            "vote" => "Vote",
+            "resource" => "ResourceSharing",
+            "identity" => "IdentityVerification",
+            "dispute" => "DisputeResolution",
+            "general" => "GeneralCommunication",
+            _ => "GeneralCommunication",
+        };
+        
+        let response = match self.client
+            .post(&format!("{}/federation/message", self.base_url))
+            .json(&serde_json::json!({
+                "target_federation": target,
+                "message_type": message_type,
+                "payload": payload
+            }))
+            .send()
+            .await 
+        {
+            Ok(resp) => resp,
+            Err(e) => return Err(IcnClientError::from(e)),
+        };
+        
+        self.handle_response::<FederationMessage>(response).await
     }
 }

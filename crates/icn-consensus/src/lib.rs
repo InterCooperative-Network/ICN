@@ -1,27 +1,54 @@
-pub mod proof_of_cooperation;
-pub mod validation;
-pub mod round_management;
-pub mod timeout_handling;
-pub mod federation;
-pub mod sharding; // Add sharding module
-pub mod pbft; // Add PBFT module
-
-use async_trait::async_trait;
-use std::collections::{HashMap, VecDeque, HashSet}; // Added HashSet import
+use std::collections::{HashMap, VecDeque, HashSet};
 use std::time::Duration;
-use tokio::time::sleep;
-use tokio::task;
-use icn_common::{ReputationManager, ConsensusEngine, Vote, VoteStatus, GovernanceError};
-use icn_types::{Block, Transaction}; // Import Transaction
 use std::sync::Arc;
-use bit_set::BitSet;
-use trie_rs::Trie;
-use thiserror::Error;
-use federation::{Federation, FederationError};
+use tokio::sync::RwLock;
 use serde::{Serialize, Deserialize};
-use zk_snarks::verify_proof; // Import zk-SNARK verification function
-use icn_crypto::KeyPair; // Import KeyPair for signature verification
-use log::error;
+use log::{debug, error, info, warn};
+
+use icn_common::{ReputationManager, ConsensusEngine};
+use icn_types::{Block, Transaction};
+use icn_crypto::KeyPair;
+
+pub mod federation;
+pub mod proof_of_cooperation;
+pub mod round_management;
+pub mod sharding;
+pub mod pbft;
+pub mod validation;
+pub mod timeout_handling;
+
+// Re-export federation types
+pub use federation::{Federation, FederationType, FederationTerms, FederationError};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsensusState {
+    pub current_round: u64,
+    pub votes: HashMap<String, Vote>,
+    pub round_proposals: Vec<Block>,
+    pub finalized_blocks: Vec<Block>,
+}
+
+// Export consensus-specific error type
+#[derive(Debug, thiserror::Error)]
+pub enum ConsensusError {
+    #[error("Invalid vote: {0}")]
+    InvalidVote(String),
+    #[error("Round mismatch: {0}")]
+    RoundMismatch(String),
+    #[error("Verification failed: {0}")]
+    VerificationFailed(String),
+    #[error("Federation error: {0}")]
+    FederationError(String),
+    #[error("ProofOfCooperation error: {0}")]
+    ProofOfCooperationError(String),
+}
+
+pub struct ConsensusManager {
+    state: Arc<RwLock<ConsensusState>>,
+    reputation_manager: Arc<dyn ReputationManager>,
+    engine: Box<dyn ConsensusEngine>,
+    keypair: KeyPair,
+}
 
 // Interface for identity services
 #[async_trait]
@@ -30,16 +57,29 @@ pub trait IdentityService: Send + Sync {
     async fn verify_identity(&self, did: &str, proof: &str) -> bool;
 }
 
-#[derive(Error, Debug)]
-pub enum ConsensusError {
-    #[error("Failed to reach consensus: {0}")]
-    ConsensusFailure(String),
-    #[error("Block validation failed: {0}")]
-    ValidationFailure(String),
-    #[error("Timeout occurred: {0}")]
-    TimeoutError(String),
-    #[error("BFT error: {0}")]
-    BftError(String),
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Vote {
+    pub proposal_id: String,
+    pub voter: String,
+    pub approve: bool,
+    pub timestamp: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VoteStatus {
+    Accepted,
+    Rejected,
+    Pending,
+}
+
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum GovernanceError {
+    #[error("Proposal not found")]
+    ProposalNotFound,
+    #[error("Not eligible to vote")]
+    NotEligibleToVote,
+    #[error("Invalid proposal")]
+    InvalidProposal,
 }
 
 pub struct ProofOfCooperation {
@@ -694,26 +734,4 @@ enum FederationType {
     Cooperative,
     Community,
     Hybrid,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Vote {
-    pub proposal_id: String,
-    pub voter: String,
-    pub approve: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum VoteStatus {
-    Accepted,
-    Rejected,
-    Pending,
-}
-
-#[derive(Error, Debug)]
-pub enum GovernanceError {
-    #[error("Proposal not found")]
-    ProposalNotFound,
-    #[error("Not eligible to vote")]
-    NotEligibleToVote,
 }

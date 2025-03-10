@@ -16,7 +16,28 @@ log = "0.4"
 env_logger = "0.9"
 chrono = { version = "0.4", features = ["serde"] }
 rand = "0.8"
+bls12_381 = "0.8"
+x25519-dalek = "2.0"
+md-5 = "0.10"
 
 # Core internal dependencies
 icn-types = { path = "../crates/icn-types" }
 icn-common = { path = "../crates/icn-common" }
+icn-p2p = { path = "../crates/icn-p2p" }
+icn-consensus = { path = "../crates/icn-consensus" }
+icn-federation = { path = "../crates/icn-federation" }
+icn-crypto = { path = "../crates/icn-crypto" }
+icn-zk = { path = "../crates/icn-zk" }
+
+[dev-dependencies]
+tokio-test = "0.4"
+async-trait = "0.1"
+futures = "0.3"
+
+[[test]]
+name = "federation_manager_tests"
+path = "tests/federation_manager_tests.rs"
+
+[[test]]
+name = "federation_sdp_tests"
+path = "tests/federation_sdp_tests.rs"

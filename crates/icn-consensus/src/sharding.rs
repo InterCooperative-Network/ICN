@@ -1,17 +1,15 @@
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::Arc;
-use tokio::sync::{RwLock, Mutex};
+use std::collections::{HashMap, HashSet};
+use rand::Rng;
 use serde::{Serialize, Deserialize};
-use thiserror::Error;
-use uuid::Uuid;
-use icn_types::{Transaction, Block, ShardId, NodeId};
+use md5::Md5;
+use digest::{Digest, Update};
+use icn_types::{Block, Transaction, ShardId, NodeId};
 
-/// Config for the shard manager
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct ShardConfig {
     pub shard_count: u32,
     pub shard_capacity: u32,
-    pub rebalance_threshold: f64,
+    pub rebalance_threshold: f32,
 }
 
 /// Error types for sharding module
@@ -33,16 +31,15 @@ pub enum ShardingError {
     ConsensusError(String),
 }
 
-// Simplified ShardManager for direct integration with ProofOfCooperation
 pub struct ShardManager {
     pub config: ShardConfig,
     pub shards: HashMap<u32, Vec<Transaction>>,
-    current_shard_id: u32,
+    transaction_assignments: HashMap<String, u32>, // tx_hash -> shard_id
+    load_metrics: HashMap<u32, f32>,
 }
 
 impl ShardManager {
     pub fn new(config: ShardConfig) -> Self {
-        // Initialize empty shards
         let mut shards = HashMap::new();
         for i in 0..config.shard_count {
             shards.insert(i, Vec::new());
@@ -51,59 +48,54 @@ impl ShardManager {
         Self {
             config,
             shards,
-            current_shard_id: 0,
+            transaction_assignments: HashMap::new(),
+            load_metrics: HashMap::new(),
         }
     }
     
-    // Assign a transaction to a shard
     pub fn assign_transaction(&mut self, transaction: Transaction) -> u32 {
-        // Simple round-robin assignment
-        let shard_id = self.current_shard_id;
+        // Use transaction hash to determine shard
+        let tx_hash = self.hash_transaction(&transaction);
+        let shard_id = self.get_shard_for_hash(&tx_hash);
         
-        // Add to shard
-        self.shards.entry(shard_id).or_insert_with(Vec::new).push(transaction);
-        
-        // Move to next shard
-        self.current_shard_id = (self.current_shard_id + 1) % self.config.shard_count;
+        // Store transaction in shard
+        if let Some(shard) = self.shards.get_mut(&shard_id) {
+            shard.push(transaction);
+            self.transaction_assignments.insert(tx_hash, shard_id);
+            self.update_load_metrics(shard_id);
+        }
         
         shard_id
     }
     
-    // Finalize a shard by creating a block from its transactions
     pub fn finalize_shard(&mut self, shard_id: u32) -> Option<Block> {
-        if let Some(transactions) = self.shards.get(&shard_id) {
+        if let Some(transactions) = self.shards.get_mut(&shard_id) {
             if transactions.is_empty() {
                 return None;
             }
             
-            // Create a block from transactions
-            let mut tx_ids = Vec::new();
-            let mut tx_hashes = Vec::new();
+            // Create Merkle tree of transaction hashes
+            let tx_hashes: Vec<String> = transactions.iter()
+                .map(|tx| self.hash_transaction(tx))
+                .collect();
+                
+            let merkle_root = self.create_merkle_root(&tx_hashes);
             
-            for tx in transactions {
-                tx_ids.push(tx.id.clone());
-                tx_hashes.push(tx.hash.clone());
-            }
-            
-            // Create simple hash from transaction hashes
-            let hash = format!("{:x}", md5::compute(tx_hashes.join("")));
-            
+            // Create new block
             let block = Block {
-                height: 0, // This would be set by blockchain
-                hash,
-                transactions: tx_ids,
-                timestamp: chrono::Utc::now(),
-                previous_hash: "".to_string(), // This would be set by blockchain
-                shard_id: Some(shard_id),
+                shard_id,
+                transactions: transactions.drain(..).collect(),
+                merkle_root,
+                timestamp: chrono::Utc::now().timestamp(),
                 metadata: BlockMetadata {
-                    consensus_duration_ms: 0, // Will be set later
-                    validator_signatures: Vec::new(), // Will be set later
-                    reputation_changes: Vec::new(), // Will be set later
-                },
+                    consensus_duration_ms: 0,
+                    shard_size: tx_hashes.len() as u32,
+                },   
             };
             
-            // Clear the shard's transactions
-            self.shards.insert(shard_id, Vec::new());
+            // Clear transaction assignments for this shard
+            self.transaction_assignments.retain(|_, &mut sid| sid != shard_id);
+            self.update_load_metrics(shard_id);
             
             Some(block)
         } else {
@@ -111,61 +103,93 @@ impl ShardManager {
         }
     }
     
-    // Balance load across shards
     pub fn rebalance(&mut self) {
-        // Find average load
-        let total_transactions: usize = self.shards.values().map(|v| v.len()).sum();
-        let avg_load = total_transactions as f64 / self.config.shard_count as f64;
-        
-        // Identify overloaded and underloaded shards
-        let mut overloaded = Vec::new();
-        let mut underloaded = Vec::new();
-        
-        for (id, shard) in &self.shards {
-            let load = shard.len() as f64;
-            let diff = (load - avg_load) / avg_load;
-            
-            if diff > self.config.rebalance_threshold {
-                overloaded.push(*id);
-            } else if diff < -self.config.rebalance_threshold {
-                underloaded.push(*id);
+        // Calculate load factors
+        let mut loads = Vec::new();
+        for shard_id in 0..self.config.shard_count {
+            if let Some(load) = self.load_metrics.get(&shard_id) {
+                loads.push((*load, shard_id));
             }
         }
         
-        // Balance if needed
-        if !overloaded.is_empty() && !underloaded.is_empty() {
-            let mut i = 0;
-            let mut j = 0;
+        // Sort by load
+        loads.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+        
+        // Check if rebalancing is needed
+        if loads.len() >= 2 {
+            let (max_load, overloaded_shard) = loads[0];
+            let (min_load, underloaded_shard) = loads[loads.len() - 1];
             
-            while i < overloaded.len() && j < underloaded.len() {
-                let over_id = overloaded[i];
-                let under_id = underloaded[j];
-                
-                if let (Some(over_shard), Some(under_shard)) = 
-                    (self.shards.get_mut(&over_id), self.shards.get_mut(&under_id)) {
-                    
-                    let over_len = over_shard.len();
-                    let under_len = under_shard.len();
-                    
-                    // Calculate how many transactions to move
-                    let target_len = ((over_len + under_len) as f64 / 2.0).round() as usize;
-                    let to_move = over_len - target_len;
-                    
-                    // Move transactions
-                    if to_move > 0 {
-                        let mut transactions_to_move = Vec::new();
-                        for _ in 0..to_move {
-                            if let Some(tx) = over_shard.pop() {
-                                transactions_to_move.push(tx);
+            if (max_load - min_load) > self.config.rebalance_threshold {
+                // Move transactions from overloaded to underloaded shard
+                if let Some(source_shard) = self.shards.get_mut(&overloaded_shard) {
+                    if let Some(target_shard) = self.shards.get_mut(&underloaded_shard) {
+                        let transfer_count = (source_shard.len() - target_shard.len()) / 2;
+                        let mut transferred = 0;
+                        
+                        while transferred < transfer_count && !source_shard.is_empty() {
+                            if let Some(tx) = source_shard.pop() {
+                                let tx_hash = self.hash_transaction(&tx);
+                                target_shard.push(tx);
+                                self.transaction_assignments.insert(tx_hash, underloaded_shard);
+                                transferred += 1;
                             }
                         }
-                        under_shard.extend(transactions_to_move);
+                        
+                        // Update load metrics
+                        self.update_load_metrics(overloaded_shard);
+                        self.update_load_metrics(underloaded_shard);
                     }
                 }
-                
-                i += 1;
-                j += 1;
             }
+        }
+    }
+    
+    fn hash_transaction(&self, transaction: &Transaction) -> String {
+        let mut hasher = Md5::new();
+        hasher.update(format!("{:?}", transaction).as_bytes());
+        format!("{:x}", hasher.finalize())
+    }
+    
+    fn get_shard_for_hash(&self, hash: &str) -> u32 {
+        // Use first 4 bytes of hash as u32
+        let bytes = hex::decode(&hash[0..8]).unwrap();
+        let shard_hash = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        shard_hash % self.config.shard_count
+    }
+    
+    fn create_merkle_root(&self, tx_hashes: &[String]) -> String {
+        if tx_hashes.is_empty() {
+            return String::from("0");
+        }
+        
+        let mut current_level = tx_hashes.to_vec();
+        
+        while current_level.len() > 1 {
+            let mut next_level = Vec::new();
+            
+            for pair in current_level.chunks(2) {
+                let combined = if pair.len() == 2 {
+                    format!("{}{}", pair[0], pair[1])
+                } else {
+                    pair[0].clone()
+                };
+                
+                let mut hasher = Md5::new();
+                hasher.update(combined.as_bytes());
+                next_level.push(format!("{:x}", hasher.finalize()));
+            }
+            
+            current_level = next_level;
+        }
+        
+        current_level[0].clone()
+    }
+    
+    fn update_load_metrics(&mut self, shard_id: u32) {
+        if let Some(shard) = self.shards.get(&shard_id) {
+            let load_factor = shard.len() as f32 / self.config.shard_capacity as f32;
+            self.load_metrics.insert(shard_id, load_factor);
         }
     }
 }
@@ -173,8 +197,7 @@ impl ShardManager {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlockMetadata {
     pub consensus_duration_ms: u64,
-    pub validator_signatures: Vec<String>,
-    pub reputation_changes: Vec<ReputationChange>,
+    pub shard_size: u32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -182,24 +205,4 @@ pub struct ReputationChange {
     pub did: String,
     pub change: i64,
     pub reason: String,
-}
-
-// Implement these types if they're not defined elsewhere
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Block {
-    pub height: u64,
-    pub hash: String,
-    pub transactions: Vec<String>,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub previous_hash: String,
-    pub shard_id: Option<u32>,
-    pub metadata: BlockMetadata,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Transaction {
-    pub id: String,
-    pub hash: String,
-    pub transaction_type: String,
-    pub data: String,
 }

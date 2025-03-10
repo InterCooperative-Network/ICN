@@ -1,17 +1,99 @@
 // networking.rs
 use std::collections::HashMap;
-use std::time::{SystemTime, Instant, Duration};
-use tokio::sync::mpsc::{self, Sender, Receiver};
-use log::{info, debug, error, warn, trace};
+use std::net::SocketAddr;
+use std::time::{SystemTime, Instant};
+use tokio::sync::{Mutex, RwLock};
+use tokio::sync::mpsc;
+use log::{info, debug, error, trace};
 use serde::{Serialize, Deserialize};
 use rand::Rng;
+use icn_crypto::PublicKey;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
+pub enum NetworkTransport {
+    TCP,
+    UDP,
+    WebSocket,
+    SDP,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum PeerStatus {
     Connected,
     Disconnected,
     Syncing,
     Unreachable,
+}
+
+#[derive(Debug, Clone)]
+pub struct PeerInfo {
+    pub id: String,
+    pub addresses: Vec<SocketAddr>,
+    pub public_key: Option<PublicKey>,
+    pub transport: NetworkTransport,
+    pub status: PeerStatus,
+    pub bandwidth_usage: u64,
+    pub last_seen: SystemTime,
+}
+
+pub struct NetworkLayer {
+    peers: RwLock<HashMap<String, PeerInfo>>,
+    total_bandwidth: Mutex<u64>,
+    rng: Mutex<rand::rngs::ThreadRng>,
+}
+
+impl NetworkLayer {
+    pub fn new() -> Self {
+        Self {
+            peers: RwLock::new(HashMap::new()),
+            total_bandwidth: Mutex::new(0),
+            rng: Mutex::new(rand::thread_rng()),
+        }
+    }
+
+    pub async fn measure_latency(&self, peer_id: &str) -> Result<f64, String> {
+        let peers = self.peers.read().await;
+        let peer = peers.get(peer_id).ok_or(format!("Peer {} not found", peer_id))?;
+
+        // Clone needed values before dropping peers read lock
+        let status = peer.status.clone();
+        let addresses = peer.addresses.clone();
+        drop(peers); // Release read lock
+
+        let latency = match status {
+            PeerStatus::Connected => {
+                let start = Instant::now();
+                // Simulate network round trip
+                let mut rng = self.rng.lock().await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(rng.gen_range(1..50))).await;
+                let duration = start.elapsed();
+                duration.as_secs_f64() * 1000.0 // Convert to milliseconds
+            },
+            PeerStatus::Disconnected => {
+                return Err(format!("Peer {} is disconnected", peer_id));
+            },
+            PeerStatus::Syncing | PeerStatus::Unreachable => {
+                return Err(format!("Peer {} is not reachable", peer_id));
+            }
+        };
+
+        self.update_bandwidth_usage(64).await; // 64 bytes for ping packet
+        Ok(latency)
+    }
+
+    async fn update_bandwidth_usage(&self, bytes: u64) {
+        let mut bandwidth = self.total_bandwidth.lock().await;
+        *bandwidth += bytes;
+    }
+
+    pub async fn simulate_traffic(&self, _peer_id: &str) -> Result<u64, String> {
+        let mut rng = self.rng.lock().await;
+        let traffic = rng.gen_range(1024..10240); // 1KB to 10KB
+        drop(rng);
+
+        self.update_bandwidth_usage(traffic).await;
+        Ok(traffic)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -50,7 +132,7 @@ pub trait NetworkingOperations {
 
 pub struct NetworkManager {
     peers: HashMap<String, Peer>,
-    message_sender: Option<Sender<Message>>,
+    message_sender: Option<mpsc::Sender<Message>>,
     max_peers: usize,
     network_key: Vec<u8>,
     bandwidth_usage: f32,
@@ -82,11 +164,11 @@ impl NetworkManager {
     
     pub fn start(&mut self) -> Result<(), String> {
         info!("Starting NetworkManager");
-        let (sender, receiver) = mpsc::channel(100);
+        let (sender, mut receiver) = mpsc::channel(100);
         self.message_sender = Some(sender);
         
         // Start background task for processing messages
-        let receiver_handle = tokio::spawn(async move {
+        tokio::spawn(async move {
             Self::process_messages(receiver).await;
         });
         
@@ -94,7 +176,7 @@ impl NetworkManager {
         Ok(())
     }
     
-    async fn process_messages(mut receiver: Receiver<Message>) {
+    async fn process_messages(mut receiver: mpsc::Receiver<Message>) {
         while let Some(message) = receiver.recv().await {
             match message {
                 Message::Block { hash, data: _ } => {

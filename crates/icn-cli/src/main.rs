@@ -282,6 +282,52 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         )
                 )
         )
+        .subcommand(
+            Command::new("federation")
+                .about("Federation management commands")
+                .subcommand(
+                    Command::new("connect")
+                        .about("Connect to another federation")
+                        .arg(
+                            Arg::new("federation-id")
+                                .help("ID of the federation to connect to")
+                                .required(true)
+                                .value_parser(value_parser!(String))
+                        )
+                        .arg(
+                            Arg::new("address")
+                                .help("Network address of the federation")
+                                .required(true)
+                                .value_parser(value_parser!(String))
+                        )
+                )
+                .subcommand(
+                    Command::new("list")
+                        .about("List connected federations")
+                )
+                .subcommand(
+                    Command::new("send")
+                        .about("Send a message to another federation")
+                        .arg(
+                            Arg::new("target")
+                                .help("Target federation ID")
+                                .required(true)
+                                .value_parser(value_parser!(String))
+                        )
+                        .arg(
+                            Arg::new("type")
+                                .help("Message type (proposal, vote, resource, identity, dispute, general)")
+                                .required(true)
+                                .value_parser(["proposal", "vote", "resource", "identity", "dispute", "general"])
+                        )
+                        .arg(
+                            Arg::new("message")
+                                .help("Message content (JSON format)")
+                                .required(true)
+                                .value_parser(value_parser!(String))
+                        )
+                )
+        )
         .get_matches();
 
     // Configure logging based on verbosity
@@ -565,6 +611,62 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
                 _ => {
                     println!("Unknown network command. Run 'icn-cli network --help' for usage information.");
+                }
+            }
+        }
+        Some(("federation", federation_matches)) => {
+            match federation_matches.subcommand() {
+                Some(("connect", connect_matches)) => {
+                    let federation_id = connect_matches.get_one::<String>("federation-id").unwrap();
+                    let address = connect_matches.get_one::<String>("address").unwrap();
+                    
+                    info!("Connecting to federation {} at {}...", federation_id, address);
+                    let response = client.connect_federation(federation_id, address).await?;
+                    
+                    println!("Successfully connected to federation {}", federation_id);
+                    println!("Status: {}", response.status);
+                    println!("Public Key: {}", response.public_key);
+                }
+                Some(("list", _)) => {
+                    info!("Listing connected federations...");
+                    let federations = client.list_federations().await?;
+                    
+                    println!("Connected Federations:");
+                    println!("{:<36} {:<20} {:<15}", "ID", "Status", "Connection Type");
+                    println!("{}", "-".repeat(75));
+                    
+                    for federation in federations {
+                        println!("{:<36} {:<20} {:<15}", 
+                            federation.id, 
+                            federation.status,
+                            federation.connection_type);
+                    }
+                }
+                Some(("send", send_matches)) => {
+                    let target = send_matches.get_one::<String>("target").unwrap();
+                    let msg_type = send_matches.get_one::<String>("type").unwrap();
+                    let message_content = send_matches.get_one::<String>("message").unwrap();
+                    
+                    info!("Sending {} message to federation {}...", msg_type, target);
+                    
+                    // Parse the message content as JSON
+                    let payload = match serde_json::from_str::<serde_json::Value>(message_content) {
+                        Ok(json) => json,
+                        Err(e) => {
+                            error!("Invalid JSON format: {}", e);
+                            println!("Error: Message must be valid JSON");
+                            return Ok(());
+                        }
+                    };
+                    
+                    let response = client.send_federation_message(target, msg_type, payload).await?;
+                    
+                    println!("Message sent successfully");
+                    println!("Message ID: {}", response.message_id);
+                    println!("Timestamp: {}", response.timestamp);
+                }
+                _ => {
+                    println!("Unknown federation command. Run 'icn-cli federation --help' for usage information.");
                 }
             }
         }
