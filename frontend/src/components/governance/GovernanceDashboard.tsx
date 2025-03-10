@@ -1,15 +1,30 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
-import { Button } from '../../components/ui/button'
-import { Alert, AlertDescription } from '../../components/ui/alert'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs'
-import { Progress } from '../../components/ui/progress'
-import { AlertCircle, ChevronRight, Users, TrendingUp } from 'lucide-react'
-import { Dialog, DialogOverlay, DialogContent } from '@reach/dialog'
-import '@reach/dialog/styles.css'
-import { FixedSizeList as List } from 'react-window'
-import ProposalCard from './ProposalCard'
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Alert, AlertDescription } from '../../components/ui/alert';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { Progress } from '../../components/ui/progress';
+import { AlertCircle, ChevronRight, Users, TrendingUp } from 'lucide-react';
+import { Dialog, DialogOverlay, DialogContent } from '@reach/dialog';
+import '@reach/dialog/styles.css';
+import { FixedSizeList as List } from 'react-window';
+import ProposalCard from '../governance/ProposalCard';
+
+// Define missing types
+interface FederationParams {
+  name: string;
+  description: string;
+  resourcePolicy: {
+    cpu: { min: number; max: number };
+    memory: { min: number; max: number };
+  };
+}
+
+interface MembershipProof {
+  memberId: string;
+  signature: string;
+}
 
 type Proposal = {
   id: string
@@ -171,7 +186,6 @@ const GovernanceDashboard = () => {
           }
         } catch (error) {
           console.error('Failed to establish WebSocket connection:', error)
-          setTimeout(connectWebSocket, 5000)
         }
       }
     }
@@ -314,6 +328,70 @@ const GovernanceDashboard = () => {
       setIsSubmitting(false)
     }
   }
+
+  // Add methods to create, join, and propose members for federations
+  const createFederation = async (params: FederationParams) => {
+    try {
+      const response = await fetch('http://localhost:8081/api/federations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(params)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create federation');
+      }
+
+      const federation = await response.json();
+      setProposals((prevProposals) => [...prevProposals, federation]);
+    } catch (error) {
+      console.error('Error creating federation:', error);
+    }
+  };
+
+  const joinFederation = async (federationId: string, proof: MembershipProof) => {
+    try {
+      const response = await fetch(`http://localhost:8081/api/federations/${federationId}/join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(proof)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to join federation');
+      }
+
+      await response.json();
+      // Update state or UI as needed
+    } catch (error) {
+      console.error('Error joining federation:', error);
+    }
+  };
+
+  const proposeMember = async (federationId: string, candidateId: string) => {
+    try {
+      const response = await fetch(`http://localhost:8081/api/federations/${federationId}/propose`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ candidateId })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to propose member');
+      }
+
+      const proposal = await response.json();
+      setProposals((prevProposals) => [...prevProposals, proposal]);
+    } catch (error) {
+      console.error('Error proposing member:', error);
+    }
+  };
 
   return (
     <div className="container mx-auto p-4 space-y-6">
@@ -463,7 +541,7 @@ const GovernanceDashboard = () => {
         </AlertDescription>
       </Alert>
 
-      <Dialog as="div" isOpen={isModalOpen} onDismiss={() => setIsModalOpen(false)} aria-label="Create Proposal">
+      <Dialog isOpen={isModalOpen} onDismiss={() => setIsModalOpen(false)} aria-label="Create Proposal" as="div">
         <DialogOverlay as="div" />
         <DialogContent as="div">
           <h2 className="text-xl font-bold mb-4">Create Proposal</h2>
@@ -507,7 +585,7 @@ const GovernanceDashboard = () => {
         </DialogContent>
       </Dialog>
     </div>
-  )
-}
+  );
+};
 
-export default GovernanceDashboard
+export default GovernanceDashboard;

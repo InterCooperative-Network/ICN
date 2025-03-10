@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { HandHeart, MessageCircle, Users } from 'lucide-react';
+import { Heart, MessageCircle, Users } from 'lucide-react';
 import { FixedSizeList as List } from 'react-window';
 
 // Types for our relationship data
@@ -103,7 +103,7 @@ const MutualAidRow = ({ index, style, data }) => {
     <div style={style}>
       <Card key={index} className="p-4">
         <div className="flex items-start gap-4">
-          <HandHeart className="h-5 w-5 text-green-500 mt-1" />
+          <Heart className="h-5 w-5 text-green-500 mt-1" />
           <div>
             <h3 className="font-medium">{interaction.description}</h3>
             <p className="text-sm text-gray-500">
@@ -139,38 +139,38 @@ export default function RelationshipIntegration() {
     const loadData = async () => {
       try {
         setLoading(true);
-        
+
         // Example of data fetching - replace with actual API endpoints
-        const response = await fetch('/api/relationships/current-user');
+        const response = await fetch('http://localhost:8081/api/relationships/current-user');
         const data = await response.json();
-        
+
         setContributions(data.contributions);
         setRelationships(data.relationships);
         setMutualAid(data.mutualAid);
         setReputationUpdates(data.reputationUpdates);
-        
+
         // Set up WebSocket connection for real-time updates
         if (!wsRef.current) {
           wsRef.current = new WebSocket('ws://localhost:8088/ws');
-          
+
           wsRef.current.onmessage = (event) => {
             const update = JSON.parse(event.data);
             switch (update.type) {
               case 'contribution':
-                setContributions(prev => [...prev, update.data]);
+                setContributions((prev) => [...prev, update.data]);
                 break;
               case 'mutualAid':
-                setMutualAid(prev => [...prev, update.data]);
+                setMutualAid((prev) => [...prev, update.data]);
                 break;
               case 'relationship':
-                setRelationships(prev => 
-                  prev.map(r => 
+                setRelationships((prev) =>
+                  prev.map((r) =>
                     r.memberOne === update.data.memberOne ? update.data : r
                   )
                 );
                 break;
               case 'reputationUpdate':
-                setReputationUpdates(prev => [...prev, update.data]);
+                setReputationUpdates((prev) => [...prev, update.data]);
                 break;
             }
           };
@@ -224,7 +224,7 @@ export default function RelationshipIntegration() {
             Overview
           </TabsTrigger>
           <TabsTrigger value="mutual-aid">
-            <HandHeart className="h-4 w-4 mr-2" />
+            <Heart className="h-4 w-4 mr-2" />
             Mutual Aid
           </TabsTrigger>
           <TabsTrigger value="relationships">

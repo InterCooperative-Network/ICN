@@ -1,10 +1,12 @@
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use icn_p2p::sdp::{SDPManager, PublicKey};
+use std::sync::{Arc, Mutex};
+use tokio::sync::Mutex as TokioMutex;
+use icn_p2p::sdp::{SDPManager};
+use x25519_dalek::PublicKey;
 use icn_federation::{FederationError, Federation};
 use serde::{Serialize, Deserialize};
-use x25519_dalek::PublicKey as X25519PublicKey;
 use std::net::SocketAddr;
+use tokio::time::Duration;
+use serde_json::json;
 
 // Example event types we might want to securely exchange between federations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,63 +42,59 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting ICN Secure Datagram Protocol Federation Example");
     
     // Initialize SDP managers for two example federations
-    let fed1_sdp = Arc::new(Mutex::new(SDPManager::new("127.0.0.1:8081")?));
-    let fed2_sdp = Arc::new(Mutex::new(SDPManager::new("127.0.0.1:8082")?));
+    let fed1_sdp = Arc::new(Mutex::new(SDPManager::new("127.0.0.1:8081".parse::<SocketAddr>()?)?));
+    let fed2_sdp = Arc::new(Mutex::new(SDPManager::new("127.0.0.1:8082".parse::<SocketAddr>()?)?));
     
     // Get public keys for key exchange
-    let fed1_pubkey = fed1_sdp.lock().await.get_public_key();
-    let fed2_pubkey = fed2_sdp.lock().await.get_public_key();
+    let fed1_pubkey = PublicKey::from([0u8; 32]);
+    let fed2_pubkey = PublicKey::from([0u8; 32]);
     
     // Register each federation with the other
     {
-        let mut fed1_manager = fed1_sdp.lock().await;
-        fed1_manager.register_peer(
-            "federation2".to_string(),
-            fed2_pubkey,
-            vec!["127.0.0.1:8082".parse()?]
+        let mut fed1_manager = fed1_sdp.lock().unwrap();
+        fed1_manager.register(
+            "federation1".to_string(),
+            "127.0.0.1:8081".parse::<SocketAddr>()?,
+            PublicKey::from([0u8; 32]),
         );
     }
     
     {
-        let mut fed2_manager = fed2_sdp.lock().await;
-        fed2_manager.register_peer(
-            "federation1".to_string(),
-            fed1_pubkey,
-            vec!["127.0.0.1:8081".parse()?]
+        let mut fed2_manager = fed2_sdp.lock().unwrap();
+        fed2_manager.register(
+            "federation2".to_string(),
+            "127.0.0.1:8082".parse::<SocketAddr>()?,
+            PublicKey::from([0u8; 32]),
         );
     }
     
     // Start SDP receivers
     {
-        let fed1_sdp_clone = fed1_sdp.clone();
+        let fed1_sdp_clone = Arc::clone(&fed1_sdp);
         tokio::spawn(async move {
-            let handler = |data: Vec<u8>, src: SocketAddr| {
-                println!("Federation 1 received data from {}", src);
-                if let Ok(event) = serde_json::from_slice::<FederationSDPEvent>(&data) {
-                    println!("Federation 1 received event: {:?}", event);
-                    // Handle the event according to federation logic
+            let handler = |msg: Result<(Vec<u8>, SocketAddr, String), String>| {
+                match msg {
+                    Ok((data, _addr, _id)) => println!("Received message: {:?}", data),
+                    Err(e) => eprintln!("Error receiving message: {}", e),
                 }
             };
-            
-            if let Err(e) = fed1_sdp_clone.lock().await.start_receiver(handler).await {
-                eprintln!("Federation 1 SDP receiver error: {}", e);
+            if let Err(e) = fed1_sdp_clone.lock().unwrap().start(handler).await {
+                eprintln!("Error in fed1 receiver: {}", e);
             }
         });
     }
     
     {
-        let fed2_sdp_clone = fed2_sdp.clone();
+        let fed2_sdp_clone = Arc::clone(&fed2_sdp);
         tokio::spawn(async move {
-            let handler = |data: Vec<u8>, src: SocketAddr| {
-                println!("Federation 2 received data from {}", src);
-                if let Ok(event) = serde_json::from_slice::<FederationSDPEvent>(&data) {
-                    println!("Federation 2 received event: {:?}", event);
-                    // Handle the event according to federation logic
+            let handler = |msg: Result<(Vec<u8>, SocketAddr, String), String>| {
+                match msg {
+                    Ok((data, _addr, _id)) => println!("Received message: {:?}", data),
+                    Err(e) => eprintln!("Error receiving message: {}", e),
                 }
             };
-            
-            if let Err(e) = fed2_sdp_clone.lock().await.start_receiver(handler).await {
-                eprintln!("Federation 2 SDP receiver error: {}", e);
+            if let Err(e) = fed2_sdp_clone.lock().unwrap().start(handler).await {
+                eprintln!("Error in fed2 receiver: {}", e);
             }
         });
     }
@@ -114,8 +112,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Send via SDP - encrypted, integrity-protected, and potentially via multiple paths
     {
-        let fed1_sdp_locked = fed1_sdp.lock().await;
-        fed1_sdp_locked.send_message("federation2", &event_json, 8).await?;
+        let fed1_sdp_locked = fed1_sdp.lock().unwrap();
+        fed1_sdp_locked.send_message("federation2", event_json.clone(), 8).await?;
     }
     
     println!("Proposal sent securely via SDP");
@@ -135,14 +133,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Send via SDP
     {
-        let fed2_sdp_locked = fed2_sdp.lock().await;
-        fed2_sdp_locked.send_message("federation1", &event_json, 8).await?;
+        let fed2_sdp_locked = fed2_sdp.lock().unwrap();
+        fed2_sdp_locked.send_message("federation1", event_json, 8).await?;
     }
     
     println!("Vote sent securely via SDP");
     
     // Keep the program running to demonstrate message exchange
-    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    tokio::time::sleep(Duration::from_secs(5)).await;
     
     println!("SDP Federation Example completed");
     
