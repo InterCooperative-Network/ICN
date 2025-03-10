@@ -46,7 +46,7 @@ pub enum NetworkError {
 pub type NetworkResult<T> = Result<T, NetworkError>;
 
 /// Network protocol types
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum Protocol {
     /// QUIC protocol for secure, multiplexed connections
     Quic,
@@ -62,7 +62,7 @@ pub enum Protocol {
 }
 
 /// Network message types
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub enum MessageType {
     /// Handshake message for establishing connections
     Handshake,
@@ -142,7 +142,7 @@ pub struct NetworkManager {
     connections: RwLock<HashMap<String, Arc<Connection>>>,
     
     /// Message handlers
-    message_handlers: RwLock<HashMap<MessageType, Vec<Arc<dyn MessageHandler + Send + Sync>>>>,
+    message_handlers: RwLock<HashMap<MessageType, Vec<Arc<Box<dyn MessageHandler + Send + Sync>>>>>,
 }
 
 /// Connection interface for different protocols
@@ -177,10 +177,9 @@ pub enum ConnectionState {
 }
 
 /// Message handler trait
-#[async_trait::async_trait]
 pub trait MessageHandler: Send + Sync {
     /// Handle incoming message
-    async fn handle_message(&self, message: &NetworkMessage) -> NetworkResult<()>;
+    fn handle_message(&self, message: &NetworkMessage) -> NetworkResult<()>;
     
     /// Get message types this handler can process
     fn message_types(&self) -> Vec<MessageType>;
@@ -235,7 +234,7 @@ impl NetworkManager {
     }
     
     /// Send a message to a remote node
-    pub async fn send_message(&self, destination: &str, payload: Vec<u8>, message_type: MessageType) -> NetworkResult<()> {
+    pub async fn send_message(&self, destination: &str, _payload: Vec<u8>, _message_type: MessageType) -> NetworkResult<()> {
         debug!("Sending message to {}", destination);
         
         // TODO: Implement actual message sending logic
@@ -244,7 +243,7 @@ impl NetworkManager {
     }
     
     /// Register a message handler
-    pub async fn register_handler(&self, handler: Arc<dyn MessageHandler + Send + Sync>) -> NetworkResult<()> {
+    pub async fn register_handler(&self, handler: Arc<Box<dyn MessageHandler + Send + Sync>>) -> NetworkResult<()> {
         let mut handlers = self.message_handlers.write().await;
         
         for message_type in handler.message_types() {
