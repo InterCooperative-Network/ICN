@@ -17,9 +17,24 @@ use serde::{Serialize, Deserialize};
 use icn_types::FederationId;
 use icn_crypto::{KeyPair, Algorithm};
 
+pub mod sdp;
+pub mod nat;
+
+pub use sdp::{SDPEndpoint, SDPConfig, SDPMessage, ReliabilityMode};
+pub use nat::{NatManager, NatConfig, NatType, NatError};
+
 /// Error types for networking operations
 #[derive(Error, Debug)]
 pub enum NetworkError {
+    #[error("SDP error: {0}")]
+    SDPError(#[from] sdp::SDPError),
+    
+    #[error("NAT error: {0}")]
+    NatError(#[from] nat::NatError),
+    
+    #[error("Connection error: {0}")]
+    ConnectionError(String),
+    
     #[error("Connection failed: {0}")]
     ConnectionFailed(String),
     
@@ -127,22 +142,11 @@ pub struct NodeInfo {
     pub metadata: HashMap<String, String>,
 }
 
-/// Network manager for handling node communications
+/// Manages network connections and NAT traversal
 pub struct NetworkManager {
-    /// Node information
-    node_info: NodeInfo,
-    
-    /// Node keypair for authentication and signing
-    keypair: KeyPair,
-    
-    /// Connected peers
-    peers: RwLock<HashMap<String, NodeInfo>>,
-    
-    /// Active connections
-    connections: RwLock<HashMap<String, Arc<Connection>>>,
-    
-    /// Message handlers
-    message_handlers: RwLock<HashMap<MessageType, Vec<Arc<Box<dyn MessageHandler + Send + Sync>>>>>,
+    sdp: Arc<SDPEndpoint>,
+    nat: Arc<NatManager>,
+    connections: Arc<RwLock<Vec<SocketAddr>>>,
 }
 
 /// Connection interface for different protocols
@@ -187,73 +191,97 @@ pub trait MessageHandler: Send + Sync {
 
 impl NetworkManager {
     /// Create a new network manager
-    pub async fn new(
-        node_id: String,
-        listen_addr: SocketAddr,
-        federation_id: Option<FederationId>,
-    ) -> NetworkResult<Self> {
-        // Generate keypair for the node
-        let keypair = KeyPair::generate(Algorithm::Ed25519)
-            .map_err(|e| NetworkError::AuthenticationFailed(e.to_string()))?;
+    pub async fn new(keypair: KeyPair) -> NetworkResult<Self> {
+        // Initialize NAT manager first
+        let nat_config = NatConfig::default();
+        let nat = Arc::new(NatManager::new(nat_config).await?);
         
-        // Create node info
-        let node_info = NodeInfo {
-            id: node_id,
-            addresses: vec![listen_addr],
-            federation_id,
-            protocols: vec![Protocol::Quic, Protocol::Tcp],
-            public_key: keypair.public_key.clone(),
-            metadata: HashMap::new(),
+        // Get external address and NAT type
+        let (external_addr, nat_type) = nat.discover_nat().await?;
+        
+        // Initialize SDP with NAT info
+        let sdp_config = SDPConfig {
+            bind_address: external_addr,
+            max_concurrent_streams: 100,
+            keep_alive_interval: std::time::Duration::from_secs(10),
+            idle_timeout: std::time::Duration::from_secs(30),
+            enable_0rtt: false,
+            connection_timeout: 10,
         };
         
+        let sdp = Arc::new(SDPEndpoint::new(sdp_config, keypair).await?);
+        
         Ok(Self {
-            node_info,
-            keypair,
-            peers: RwLock::new(HashMap::new()),
-            connections: RwLock::new(HashMap::new()),
-            message_handlers: RwLock::new(HashMap::new()),
+            sdp,
+            nat,
+            connections: Arc::new(RwLock::new(Vec::new())),
         })
     }
     
     /// Start the network manager
     pub async fn start(&self) -> NetworkResult<()> {
-        info!("Starting network manager for node {}", self.node_info.id);
+        info!("Starting network manager");
         
         // TODO: Implement actual network startup logic
         
         Ok(())
     }
     
-    /// Connect to a remote node
-    pub async fn connect(&self, remote_addr: SocketAddr) -> NetworkResult<Arc<Connection>> {
-        debug!("Connecting to remote node at {}", remote_addr);
-        
-        // TODO: Implement actual connection logic
-        
-        Err(NetworkError::ConnectionFailed("Not implemented".to_string()))
-    }
-    
-    /// Send a message to a remote node
-    pub async fn send_message(&self, destination: &str, _payload: Vec<u8>, _message_type: MessageType) -> NetworkResult<()> {
-        debug!("Sending message to {}", destination);
-        
-        // TODO: Implement actual message sending logic
-        
-        Err(NetworkError::MessageDeliveryFailed("Not implemented".to_string()))
-    }
-    
-    /// Register a message handler
-    pub async fn register_handler(&self, handler: Arc<Box<dyn MessageHandler + Send + Sync>>) -> NetworkResult<()> {
-        let mut handlers = self.message_handlers.write().await;
-        
-        for message_type in handler.message_types() {
-            handlers
-                .entry(message_type)
-                .or_insert_with(Vec::new)
-                .push(handler.clone());
+    /// Connect to a remote peer
+    pub async fn connect(&self, addr: SocketAddr) -> NetworkResult<()> {
+        // Start NAT traversal if needed
+        if self.nat.get_nat_type().await != NatType::None {
+            self.nat.start_hole_punching(
+                addr.to_string(),
+                addr,
+            ).await?;
         }
         
+        // Establish SDP connection
+        self.sdp.connect(addr).await?;
+        
+        // Store connection
+        self.connections.write().await.push(addr);
+        
         Ok(())
+    }
+    
+    /// Send message to a peer
+    pub async fn send_message(
+        &self,
+        dest: SocketAddr,
+        payload: Vec<u8>,
+        reliability: ReliabilityMode,
+    ) -> NetworkResult<()> {
+        let message = SDPMessage {
+            destination: dest,
+            payload: bytes::Bytes::from(payload),
+            priority: 0,
+            reliability,
+        };
+        
+        self.sdp.send(message).await?;
+        Ok(())
+    }
+    
+    /// Get our external address
+    pub async fn get_external_addr(&self) -> SocketAddr {
+        self.sdp.get_external_addr().await
+    }
+    
+    /// Get detected NAT type
+    pub async fn get_nat_type(&self) -> NatType {
+        self.nat.get_nat_type().await
+    }
+    
+    /// Get active connections
+    pub async fn get_connections(&self) -> Vec<SocketAddr> {
+        self.connections.read().await.clone()
+    }
+    
+    /// Get active NAT traversal sessions
+    pub async fn get_nat_sessions(&self) -> Vec<String> {
+        self.nat.get_active_sessions().await
     }
 }
 
@@ -262,15 +290,25 @@ mod tests {
     use super::*;
     
     #[tokio::test]
-    async fn test_network_manager_creation() {
-        let node_id = "test-node".to_string();
-        let listen_addr = "127.0.0.1:8000".parse().unwrap();
+    async fn test_network_manager() {
+        // Generate test keypair
+        let keypair = KeyPair::generate(icn_crypto::Algorithm::Ed25519).unwrap();
         
-        let manager = NetworkManager::new(node_id.clone(), listen_addr, None).await;
-        assert!(manager.is_ok());
+        // Create network manager
+        let manager = NetworkManager::new(keypair).await.unwrap();
         
-        let manager = manager.unwrap();
-        assert_eq!(manager.node_info.id, node_id);
-        assert_eq!(manager.node_info.addresses[0], listen_addr);
+        // Get external address and NAT type
+        let addr = manager.get_external_addr().await;
+        let nat_type = manager.get_nat_type().await;
+        
+        println!("External address: {}", addr);
+        println!("NAT type: {:?}", nat_type);
+        
+        // Try connecting to a peer
+        let peer_addr = "1.2.3.4:1234".parse().unwrap();
+        match manager.connect(peer_addr).await {
+            Ok(()) => println!("Connected to peer"),
+            Err(e) => println!("Failed to connect: {}", e),
+        }
     }
 } 
