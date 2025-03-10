@@ -17,6 +17,7 @@ members = [
     "crates/icn-mutual-credit",
     "crates/icn-zk",
     "crates/zk_snarks",
+    "crates/icn-cli",
     "icn-server"
 ]
 

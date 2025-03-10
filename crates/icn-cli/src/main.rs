@@ -102,6 +102,43 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 .required(true)
                         )
                 )
+        )
+        .subcommand(
+            Command::new("network")
+                .about("Network management commands")
+                .subcommand(
+                    Command::new("status")
+                        .about("Check network status")
+                        .arg(
+                            Arg::new("detail")
+                                .short('d')
+                                .long("detail")
+                                .help("Show detailed status information")
+                                .action(clap::ArgAction::SetTrue)
+                        )
+                )
+                .subcommand(
+                    Command::new("peers")
+                        .about("List connected peers")
+                )
+                .subcommand(
+                    Command::new("connect")
+                        .about("Connect to a peer")
+                        .arg(
+                            Arg::new("address")
+                                .help("Peer address to connect to")
+                                .required(true)
+                        )
+                )
+                .subcommand(
+                    Command::new("disconnect")
+                        .about("Disconnect from a peer")
+                        .arg(
+                            Arg::new("peer-id")
+                                .help("ID of the peer to disconnect from")
+                                .required(true)
+                        )
+                )
         );
 
     let matches = app.get_matches();
@@ -238,6 +275,69 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 },
                 Err(e) => {
                     println!("❌ Failed to vote on proposal: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+    } else if let Some(network_matches) = matches.subcommand_matches("network") {
+        if let Some(status_matches) = network_matches.subcommand_matches("status") {
+            let detailed = status_matches.get_flag("detail");
+            match client.get_network_status(detailed).await {
+                Ok(status) => {
+                    println!("📊 Network Status");
+                    println!("Status: {}", status.status);
+                    println!("Connected peers: {}", status.peer_count);
+                    if detailed {
+                        println!("Average latency: {}ms", status.avg_latency);
+                        println!("Bandwidth usage: {}%", status.bandwidth_usage);
+                    }
+                },
+                Err(e) => {
+                    println!("❌ Failed to get network status: {}", e);
+                    return Err(e);
+                }
+            }
+        } else if let Some(_) = network_matches.subcommand_matches("peers") {
+            match client.list_peers().await {
+                Ok(peers) => {
+                    if peers.is_empty() {
+                        println!("No peers connected");
+                    } else {
+                        println!("📊 Connected Peers ({})", peers.len());
+                        println!("{:<40} | {:<15} | {}", "Peer ID", "Address", "Latency");
+                        println!("----------------------------------------------------------------------");
+                        for peer in peers {
+                            println!("{:<40} | {:<15} | {}ms", peer.id, peer.address, peer.latency);
+                        }
+                    }
+                },
+                Err(e) => {
+                    println!("❌ Failed to list peers: {}", e);
+                    return Err(e);
+                }
+            }
+        } else if let Some(connect_matches) = network_matches.subcommand_matches("connect") {
+            let address = connect_matches.get_one::<String>("address").unwrap();
+            match client.connect_peer(address).await {
+                Ok(peer) => {
+                    println!("✅ Successfully connected to peer");
+                    println!("Peer ID: {}", peer.id);
+                    println!("Address: {}", peer.address);
+                    println!("Latency: {}ms", peer.latency);
+                },
+                Err(e) => {
+                    println!("❌ Failed to connect to peer: {}", e);
+                    return Err(e);
+                }
+            }
+        } else if let Some(disconnect_matches) = network_matches.subcommand_matches("disconnect") {
+            let peer_id = disconnect_matches.get_one::<String>("peer-id").unwrap();
+            match client.disconnect_peer(peer_id).await {
+                Ok(_) => {
+                    println!("✅ Successfully disconnected from peer {}", peer_id);
+                },
+                Err(e) => {
+                    println!("❌ Failed to disconnect peer: {}", e);
                     return Err(e);
                 }
             }
