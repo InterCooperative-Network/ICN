@@ -1,224 +1,246 @@
 mod client;
 
-use clap::{App, Arg, SubCommand};
+use clap::{Command, Arg};
 use std::error::Error;
 use client::IcnClient;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let app = App::new("icn-cli")
+    let app = Command::new("icn-cli")
         .version("0.1.0")
         .author("ICN Team")
         .about("Command Line Interface for the Inter-Cooperative Network")
         .arg(
-            Arg::with_name("api-url")
+            Arg::new("api-url")
                 .long("api-url")
                 .help("ICN API URL")
-                .default_value("http://localhost:8081")
-                .takes_value(true)
+                .default_value("http://localhost:8082")
         )
         .subcommand(
-            SubCommand::with_name("health")
+            Command::new("health")
                 .about("Check the health of the ICN API")
         )
         .subcommand(
-            SubCommand::with_name("identity")
+            Command::new("identity")
                 .about("Identity management commands")
                 .subcommand(
-                    SubCommand::with_name("create")
+                    Command::new("create")
                         .about("Create a new DID identity")
                 )
                 .subcommand(
-                    SubCommand::with_name("list")
+                    Command::new("list")
                         .about("List existing DIDs")
                 )
         )
         .subcommand(
-            SubCommand::with_name("cooperative")
+            Command::new("cooperative")
                 .about("Cooperative management commands")
                 .subcommand(
-                    SubCommand::with_name("join")
+                    Command::new("join")
                         .about("Join a cooperative")
                         .arg(
-                            Arg::with_name("coop-id")
+                            Arg::new("coop-id")
                                 .help("ID of the cooperative to join")
                                 .required(true)
                         )
                 )
                 .subcommand(
-                    SubCommand::with_name("list")
+                    Command::new("list")
                         .about("List available cooperatives")
                 )
         )
         .subcommand(
-            SubCommand::with_name("resource")
+            Command::new("resource")
                 .about("Resource management commands")
                 .subcommand(
-                    SubCommand::with_name("register")
+                    Command::new("register")
                         .about("Register a new resource")
                         .arg(
-                            Arg::with_name("type")
-                                .help("Type of resource (compute/storage/network)")
+                            Arg::new("resource-type")
+                                .help("Type of resource (compute, storage, etc.)")
                                 .required(true)
                         )
                         .arg(
-                            Arg::with_name("capacity")
-                                .help("Resource capacity")
+                            Arg::new("capacity")
+                                .help("Capacity of the resource")
                                 .required(true)
                         )
                 )
                 .subcommand(
-                    SubCommand::with_name("list")
+                    Command::new("list")
                         .about("List available resources")
                 )
         )
         .subcommand(
-            SubCommand::with_name("governance")
+            Command::new("governance")
                 .about("Governance commands")
                 .subcommand(
-                    SubCommand::with_name("propose")
-                        .about("Create a new proposal")
+                    Command::new("propose")
+                        .about("Create a new governance proposal")
                         .arg(
-                            Arg::with_name("title")
-                                .help("Proposal title")
+                            Arg::new("title")
+                                .help("Title of the proposal")
                                 .required(true)
                         )
                         .arg(
-                            Arg::with_name("description")
-                                .help("Proposal description")
+                            Arg::new("description")
+                                .help("Description of the proposal")
                                 .required(true)
                         )
                 )
                 .subcommand(
-                    SubCommand::with_name("vote")
+                    Command::new("vote")
                         .about("Vote on a proposal")
                         .arg(
-                            Arg::with_name("proposal-id")
-                                .help("ID of the proposal")
+                            Arg::new("proposal-id")
+                                .help("ID of the proposal to vote on")
                                 .required(true)
                         )
                         .arg(
-                            Arg::with_name("vote")
-                                .help("Vote (yes/no)")
+                            Arg::new("vote")
+                                .help("Your vote (yes/no)")
                                 .required(true)
                         )
                 )
         );
 
     let matches = app.get_matches();
-    let api_url = matches.value_of("api-url").unwrap().to_string();
+    let api_url = matches.get_one::<String>("api-url").unwrap().to_string();
     let client = IcnClient::new(api_url);
 
-    match matches.subcommand() {
-        ("health", Some(_)) => {
-            match client.check_health().await {
-                Ok(health) => {
-                    println!("✅ ICN API is healthy");
-                    println!("Status: {}", health.status);
-                    println!("Version: {}", health.version);
-                    println!("Uptime: {} seconds", health.uptime);
-                }
+    if let Some(_) = matches.subcommand_matches("health") {
+        match client.check_health().await {
+            Ok(health) => {
+                println!("✅ ICN API is healthy");
+                println!("Status: {}", health.status);
+                println!("Version: {}", health.version);
+                println!("Uptime: {} seconds", health.uptime);
+            },
+            Err(e) => {
+                println!("❌ ICN API health check failed: {}", e);
+                return Err(e);
+            }
+        }
+    } else if let Some(identity_matches) = matches.subcommand_matches("identity") {
+        if let Some(_) = identity_matches.subcommand_matches("create") {
+            match client.create_identity().await {
+                Ok(identity) => {
+                    println!("✅ Created new identity");
+                    println!("DID: {}", identity.did);
+                    println!("Public Key: {}", identity.public_key);
+                },
                 Err(e) => {
-                    eprintln!("❌ ICN API health check failed: {}", e);
+                    println!("❌ Failed to create identity: {}", e);
+                    return Err(e);
+                }
+            }
+        } else if let Some(_) = identity_matches.subcommand_matches("list") {
+            match client.list_identities().await {
+                Ok(identities) => {
+                    println!("✅ Found {} identities", identities.len());
+                    for identity in identities {
+                        println!("DID: {}", identity.did);
+                        println!("Public Key: {}", identity.public_key);
+                        println!("---");
+                    }
+                },
+                Err(e) => {
+                    println!("❌ Failed to list identities: {}", e);
                     return Err(e);
                 }
             }
         }
-        ("identity", Some(identity_matches)) => {
-            match identity_matches.subcommand() {
-                ("create", Some(_)) => {
-                    match client.create_identity().await {
-                        Ok(identity) => println!("Created new DID: {}", identity.did),
-                        Err(e) => eprintln!("Error creating identity: {}", e),
-                    }
+    } else if let Some(cooperative_matches) = matches.subcommand_matches("cooperative") {
+        if let Some(join_matches) = cooperative_matches.subcommand_matches("join") {
+            let coop_id = join_matches.get_one::<String>("coop-id").unwrap();
+            match client.join_cooperative(coop_id).await {
+                Ok(_) => {
+                    println!("✅ Successfully joined cooperative {}", coop_id);
+                },
+                Err(e) => {
+                    println!("❌ Failed to join cooperative: {}", e);
+                    return Err(e);
                 }
-                ("list", Some(_)) => {
-                    match client.list_identities().await {
-                        Ok(identities) => {
-                            println!("Existing DIDs:");
-                            for identity in identities {
-                                println!("- {} (public key: {})", identity.did, identity.public_key);
-                            }
-                        }
-                        Err(e) => eprintln!("Error listing identities: {}", e),
+            }
+        } else if let Some(_) = cooperative_matches.subcommand_matches("list") {
+            match client.list_cooperatives().await {
+                Ok(cooperatives) => {
+                    println!("✅ Found {} cooperatives", cooperatives.len());
+                    for coop in cooperatives {
+                        println!("ID: {}", coop.id);
+                        println!("Name: {}", coop.name);
+                        println!("Members: {}", coop.member_count);
+                        println!("---");
                     }
+                },
+                Err(e) => {
+                    println!("❌ Failed to list cooperatives: {}", e);
+                    return Err(e);
                 }
-                _ => unreachable!(),
             }
         }
-        ("cooperative", Some(coop_matches)) => {
-            match coop_matches.subcommand() {
-                ("join", Some(join_matches)) => {
-                    let coop_id = join_matches.value_of("coop-id").unwrap();
-                    match client.join_cooperative(coop_id).await {
-                        Ok(_) => println!("Successfully joined cooperative {}", coop_id),
-                        Err(e) => eprintln!("Error joining cooperative: {}", e),
-                    }
+    } else if let Some(resource_matches) = matches.subcommand_matches("resource") {
+        if let Some(register_matches) = resource_matches.subcommand_matches("register") {
+            let resource_type = register_matches.get_one::<String>("resource-type").unwrap();
+            let capacity = register_matches.get_one::<String>("capacity").unwrap();
+            match client.register_resource(resource_type, capacity).await {
+                Ok(resource) => {
+                    println!("✅ Successfully registered resource");
+                    println!("ID: {}", resource.id);
+                    println!("Type: {}", resource.resource_type);
+                    println!("Capacity: {}", resource.capacity);
+                },
+                Err(e) => {
+                    println!("❌ Failed to register resource: {}", e);
+                    return Err(e);
                 }
-                ("list", Some(_)) => {
-                    match client.list_cooperatives().await {
-                        Ok(cooperatives) => {
-                            println!("Available cooperatives:");
-                            for coop in cooperatives {
-                                println!("- {} ({} members)", coop.name, coop.member_count);
-                            }
-                        }
-                        Err(e) => eprintln!("Error listing cooperatives: {}", e),
+            }
+        } else if let Some(_) = resource_matches.subcommand_matches("list") {
+            match client.list_resources().await {
+                Ok(resources) => {
+                    println!("✅ Found {} resources", resources.len());
+                    for resource in resources {
+                        println!("ID: {}", resource.id);
+                        println!("Type: {}", resource.resource_type);
+                        println!("Capacity: {}", resource.capacity);
+                        println!("Owner: {}", resource.owner);
+                        println!("---");
                     }
+                },
+                Err(e) => {
+                    println!("❌ Failed to list resources: {}", e);
+                    return Err(e);
                 }
-                _ => unreachable!(),
             }
         }
-        ("resource", Some(resource_matches)) => {
-            match resource_matches.subcommand() {
-                ("register", Some(register_matches)) => {
-                    let resource_type = register_matches.value_of("type").unwrap();
-                    let capacity = register_matches.value_of("capacity").unwrap();
-                    match client.register_resource(resource_type, capacity).await {
-                        Ok(resource) => println!("Registered resource: {} (ID: {})", resource.resource_type, resource.id),
-                        Err(e) => eprintln!("Error registering resource: {}", e),
-                    }
+    } else if let Some(governance_matches) = matches.subcommand_matches("governance") {
+        if let Some(propose_matches) = governance_matches.subcommand_matches("propose") {
+            let title = propose_matches.get_one::<String>("title").unwrap();
+            let description = propose_matches.get_one::<String>("description").unwrap();
+            match client.create_proposal(title, description).await {
+                Ok(proposal) => {
+                    println!("✅ Successfully created proposal");
+                    println!("ID: {}", proposal.id);
+                    println!("Title: {}", proposal.title);
+                    println!("Status: {}", proposal.status);
+                },
+                Err(e) => {
+                    println!("❌ Failed to create proposal: {}", e);
+                    return Err(e);
                 }
-                ("list", Some(_)) => {
-                    match client.list_resources().await {
-                        Ok(resources) => {
-                            println!("Available resources:");
-                            for resource in resources {
-                                println!("- {} ({} capacity, owned by {})", 
-                                    resource.resource_type, 
-                                    resource.capacity,
-                                    resource.owner);
-                            }
-                        }
-                        Err(e) => eprintln!("Error listing resources: {}", e),
-                    }
-                }
-                _ => unreachable!(),
             }
-        }
-        ("governance", Some(governance_matches)) => {
-            match governance_matches.subcommand() {
-                ("propose", Some(propose_matches)) => {
-                    let title = propose_matches.value_of("title").unwrap();
-                    let description = propose_matches.value_of("description").unwrap();
-                    match client.create_proposal(title, description).await {
-                        Ok(proposal) => println!("Created proposal: {} (ID: {})", proposal.title, proposal.id),
-                        Err(e) => eprintln!("Error creating proposal: {}", e),
-                    }
+        } else if let Some(vote_matches) = governance_matches.subcommand_matches("vote") {
+            let proposal_id = vote_matches.get_one::<String>("proposal-id").unwrap();
+            let vote = vote_matches.get_one::<String>("vote").unwrap();
+            match client.vote_on_proposal(proposal_id, vote).await {
+                Ok(_) => {
+                    println!("✅ Successfully voted on proposal {}", proposal_id);
+                },
+                Err(e) => {
+                    println!("❌ Failed to vote on proposal: {}", e);
+                    return Err(e);
                 }
-                ("vote", Some(vote_matches)) => {
-                    let proposal_id = vote_matches.value_of("proposal-id").unwrap();
-                    let vote = vote_matches.value_of("vote").unwrap().to_lowercase() == "yes";
-                    match client.vote_proposal(proposal_id, vote).await {
-                        Ok(_) => println!("Successfully voted on proposal {}", proposal_id),
-                        Err(e) => eprintln!("Error voting on proposal: {}", e),
-                    }
-                }
-                _ => unreachable!(),
             }
-        }
-        _ => {
-            println!("No command specified. Use --help to see available commands.");
         }
     }
 

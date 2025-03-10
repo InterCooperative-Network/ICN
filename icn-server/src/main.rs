@@ -1,7 +1,10 @@
-use std::net::SocketAddr;
-use log::{info, error};
-use warp::{Filter, Reply};
+use log::info;
+use warp::Filter;
 use serde::{Deserialize, Serialize};
+use std::env;
+
+mod config;
+use config::ServerConfig;
 
 // Define data structures for API responses
 #[derive(Debug, Serialize, Deserialize)]
@@ -11,7 +14,7 @@ struct HealthResponse {
     uptime: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Resource {
     id: String,
     resource_type: String,
@@ -19,13 +22,13 @@ struct Resource {
     owner: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Identity {
     did: String,
     public_key: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Cooperative {
     id: String,
     name: String,
@@ -33,7 +36,7 @@ struct Cooperative {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
     info!("Starting ICN backend server...");
@@ -73,7 +76,7 @@ async fn main() {
         .and(warp::get())
         .map(move || {
             info!("Resource list requested");
-            warp::reply::json(&serde_json::json!({ "resources": resources }))
+            warp::reply::json(&serde_json::json!({ "resources": resources.clone() }))
         });
 
     // Identity routes
@@ -92,7 +95,7 @@ async fn main() {
         .and(warp::get())
         .map(move || {
             info!("Identity list requested");
-            warp::reply::json(&serde_json::json!({ "identities": identities }))
+            warp::reply::json(&serde_json::json!({ "identities": identities.clone() }))
         });
 
     // Cooperative routes
@@ -113,26 +116,32 @@ async fn main() {
         .and(warp::get())
         .map(move || {
             info!("Cooperative list requested");
-            warp::reply::json(&serde_json::json!({ "cooperatives": cooperatives }))
+            warp::reply::json(&serde_json::json!({ "cooperatives": cooperatives.clone() }))
         });
 
     // Combine routes and add CORS
+    let config = ServerConfig::from_env();
+    
+    let cors = warp::cors()
+        .allow_any_origin()
+        .allow_headers(vec!["content-type"])
+        .allow_methods(vec!["GET", "POST", "PUT", "DELETE"]);
+    
     let routes = health_route
         .or(resource_list)
         .or(identity_list)
         .or(cooperative_list)
-        .with(warp::cors()
-            .allow_any_origin()
-            .allow_headers(vec!["content-type"])
-            .allow_methods(vec!["GET", "POST", "PUT", "DELETE"])
-        )
+        .with(cors)
         .with(warp::log("icn_backend"));
 
     // Configure server address and start
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8081));
+    let addr = config.socket_addr();
     info!("Server starting on http://{}", addr);
     
+    // Bind to the socket and start the server
     warp::serve(routes)
         .run(addr)
         .await;
+    
+    Ok(())
 }

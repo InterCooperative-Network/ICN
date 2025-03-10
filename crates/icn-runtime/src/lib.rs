@@ -4,9 +4,10 @@ use icn_types::{
     ValidationNode, GovernanceNode, MarketplaceNode, Check, StateValidation,
     RuntimeConfig
 };
-use icn_dsl::CoopLangAST;
+// Commented out unresolved imports
+// use icn_dsl::CoopLangAST;
 use tracing::{info, warn, error};
-use zk_snarks::verify_proof; // Import zk-SNARK verification function
+// use zk_snarks::verify_proof; // Import zk-SNARK verification function
 use std::collections::HashMap;
 
 /// Runtime interface trait for blockchain execution
@@ -95,6 +96,17 @@ impl RuntimeManager {
     pub fn get_transaction_result(&self, tx_hash: &str) -> Option<&Vec<u8>> {
         self.results.get(tx_hash)
     }
+
+    // Add missing methods needed by ValidationExecutor implementation
+    async fn evaluate_condition(&self, condition: &str, _context: &ExecutionContext) -> RuntimeResult<bool> {
+        // Simple implementation for now - just check if condition is "true"
+        Ok(condition == "true")
+    }
+
+    async fn get_current_state(&self, _context: &ExecutionContext) -> RuntimeResult<String> {
+        // Simple implementation for now
+        Ok("current".to_string())
+    }
 }
 
 #[async_trait]
@@ -167,29 +179,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_runtime_initialization() {
-        let config = RuntimeConfig {
-            vm_type: "test".to_string(),
-            max_execution_time: 1000,
-            max_memory: 1024 * 1024,
-            enable_debugging: true,
-            log_level: "debug".to_string(),
-        };
-        
-        let runtime = RuntimeManager::new(config);
-        assert!(runtime.dsl_context.is_none());
+        let runtime = RuntimeManager::new(1000);
+        assert!(runtime.results.is_empty());
     }
 
     #[tokio::test]
     async fn test_validation_rules() {
-        let config = RuntimeConfig {
-            vm_type: "test".to_string(),
-            max_execution_time: 1000,
-            max_memory: 1024 * 1024,
-            enable_debugging: true,
-            log_level: "debug".to_string(),
-        };
-        
-        let runtime = RuntimeManager::new(config);
+        let runtime = RuntimeManager::new(1000);
         
         let context = ExecutionContext {
             transaction: None,

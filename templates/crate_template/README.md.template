@@ -1,0 +1,65 @@
+# ICN {{crate_name}}
+
+{{crate_description}}
+
+## Overview
+
+This crate provides functionality for {{crate_purpose}} in the Internet of Cooperative Networks (ICN) platform.
+
+## Features
+
+- Feature 1: Description
+- Feature 2: Description
+- Feature 3: Description
+
+## Usage
+
+```rust
+use icn_{{crate_name}}::{{pascal_crate_name}}Manager;
+
+let manager = {{pascal_crate_name}}Manager::new();
+// Use the manager to perform operations
+```
+
+## Architecture
+
+This module is designed to be modular and extensible. It consists of the following components:
+
+- **{{pascal_crate_name}}Manager**: Main entry point for interacting with this module
+- **Models**: Core data structures used in this module
+- **Utils**: Helper functions and utilities
+
+## API Documentation
+
+For detailed API documentation, run:
+
+```bash
+cargo doc --package icn-{{crate_name}} --open
+```
+
+## Examples
+
+### Basic Usage
+
+```rust
+use icn_{{crate_name}}::{{pascal_crate_name}}Manager;
+
+async fn example() {
+    let manager = {{pascal_crate_name}}Manager::new();
+    
+    // Example operation
+    // let result = manager.some_operation();
+}
+```
+
+## Testing
+
+Run the tests for this crate with:
+
+```bash
+cargo test --package icn-{{crate_name}}
+```
+
+## License
+
+This crate is part of the ICN project and is licensed under the MIT License. 

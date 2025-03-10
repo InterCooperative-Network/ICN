@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use icn_federation::ResourceManager;
+// use icn_federation::ResourceManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Resource {
@@ -194,6 +194,8 @@ impl ResourceAllocationSystem {
     }
 }
 
+// Commented out ResourceManager trait implementation
+/*
 #[async_trait]
 impl ResourceManager for ResourceAllocationSystem {
     async fn allocate_resources(&self, allocation: icn_federation::ResourceAllocation) -> Result<(), String> {
@@ -207,6 +209,7 @@ impl ResourceManager for ResourceAllocationSystem {
         Ok(())
     }
 }
+*/
 
 #[derive(Debug)]
 pub enum ResourceError {

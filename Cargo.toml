@@ -5,8 +5,20 @@ members = [
     "crates/icn-common",
     "crates/icn-core",
     "crates/icn-p2p",
-    "crates/icn-cli"
-]
+    "crates/icn-cli",
+    "crates/icn-crypto",
+    "crates/icn-identity",
+    "crates/icn-governance",
+    "crates/icn-federation",
+    "crates/icn-reputation",
+    "crates/icn-resource",
+    "crates/icn-consensus",
+    "crates/icn-storage",
+    "crates/icn-runtime",
+    "crates/icn-mutual-credit",
+    "crates/icn-zk",
+    "crates/zk_snarks"
+, "icn-server"]
 
 [workspace.dependencies]
 # Internal crates
@@ -15,6 +27,18 @@ icn-common = { path = "crates/icn-common" }
 icn-core = { path = "crates/icn-core" }
 icn-p2p = { path = "crates/icn-p2p" }
 icn-cli = { path = "crates/icn-cli" }
+icn-crypto = { path = "crates/icn-crypto" }
+icn-identity = { path = "crates/icn-identity" }
+icn-governance = { path = "crates/icn-governance" }
+icn-federation = { path = "crates/icn-federation" }
+icn-reputation = { path = "crates/icn-reputation" }
+icn-resource = { path = "crates/icn-resource" }
+icn-consensus = { path = "crates/icn-consensus" }
+icn-storage = { path = "crates/icn-storage" }
+icn-runtime = { path = "crates/icn-runtime" }
+icn-mutual-credit = { path = "crates/icn-mutual-credit" }
+icn-zk = { path = "crates/icn-zk" }
+zk_snarks = { path = "crates/zk_snarks" }
 
 # External dependencies
 tokio = { version = "1.0", features = ["full"] }
@@ -34,6 +58,8 @@ rayon = "1.10.0"
 lazy_static = "1.5.0"
 x25519-dalek = "2.0.1"
 libsqlite3-sys = "0.30.1"
+reqwest = { version = "0.11", features = ["json"] }
+clap = { version = "4.5.1", features = ["derive"] }
 
 [package]
 name = "icn"
@@ -66,6 +92,8 @@ chrono = { workspace = true }
 futures = { workspace = true }
 tokio-tungstenite = "0.26.2"
 icn-p2p = { path = "crates/icn-p2p" }
+reqwest = { workspace = true, features = ["json"] }
+clap = { workspace = true, features = ["derive"] }
 
 [[bin]]
 name = "icn_cli"

@@ -1,0 +1,23 @@
+# Clippy configuration for the ICN project
+
+# Allow certain lints to be configured
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+
+# Configure cognitive complexity threshold
+cognitive-complexity-threshold = 25
+
+# Configure module lint exclusions
+exclude = [
+    "target/*"
+]
+
+# Configure enum_variant_names to allow suffixes
+enum-variant-name-threshold = 3
+
+# Disallow doc_markdown for this project
+doc_markdown = false
+
+# Allow larger number of expect args
+too-many-arguments-threshold = 8 

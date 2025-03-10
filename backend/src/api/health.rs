@@ -1,11 +1,19 @@
 use warp::Filter;
-use sqlx::PgPool;
-use std::sync::Arc;
+use log::info;
 
+/// Health check route
 pub fn health_routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    let api_health = warp::path!("api" / "v1" / "health")
+    warp::path!("api" / "v1" / "health")
         .and(warp::get())
-        .map(|| warp::reply::json(&serde_json::json!({ "status": "ok" })));
-        
-    api_health
+        .map(|| {
+            info!("Health check requested");
+            warp::reply::json(&serde_json::json!({
+                "status": "ok",
+                "version": env!("CARGO_PKG_VERSION"),
+                "uptime": std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs()
+            }))
+        })
 }

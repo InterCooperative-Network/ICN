@@ -1,0 +1,29 @@
+[package]
+name = "icn-{{crate_name}}"
+version = "0.1.0"
+edition = "2021"
+description = "{{crate_description}} - Part of the Internet of Cooperative Networks (ICN)"
+authors = ["ICN Team"]
+license = "MIT"
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+
+# Internal crates
+icn-types = { workspace = true }
+icn-common = { workspace = true }
+# Add other internal dependencies as needed
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+
+[features]
+default = []
+testing = [] 
