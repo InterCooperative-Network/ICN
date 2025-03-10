@@ -6,6 +6,33 @@
       "enabled": true,
       "defaultValue": true,
       "scope": "global"
+    },
+    "proofOfCooperation": {
+      "name": "Proof of Cooperation Consensus",
+      "description": "Enables the Proof of Cooperation consensus mechanism for validator nodes",
+      "enabled": true,
+      "defaultValue": true,
+      "scope": "global",
+      "config": {
+        "minReputation": 50,
+        "quorumPercentage": 67,
+        "blockTime": 30000,
+        "validatorRotationInterval": 100
+      }
+    },
+    "federation": {
+      "name": "Federation Support",
+      "description": "Enables federation capabilities for cross-cooperative collaboration",
+      "enabled": true,
+      "defaultValue": true,
+      "scope": "global"
+    },
+    "reputationWeighting": {
+      "name": "Reputation-Weighted Voting",
+      "description": "Enables reputation-weighted voting in consensus and governance",
+      "enabled": true,
+      "defaultValue": true,
+      "scope": "global"
     }
   }
 }

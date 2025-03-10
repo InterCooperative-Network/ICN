@@ -12,6 +12,18 @@ appenders:
     encoder:
       pattern: "{d} {l} [{T}] {t} - {m}{n}"
 
+  consensus_file:
+    kind: file
+    path: "log/consensus.log"
+    encoder:
+      pattern: "{d} {l} [{T}] {t} - {m}{n}"
+
+  federation_file:
+    kind: file
+    path: "log/federation.log"
+    encoder:
+      pattern: "{d} {l} [{T}] {t} - {m}{n}"
+
 root:
   level: info
   appenders:
@@ -20,6 +32,27 @@ root:
 
 loggers:
   icn:
+    level: debug
+    appenders:
+      - stdout
+      - file
+    additive: false
+
+  icn::consensus:
+    level: debug
+    appenders:
+      - stdout
+      - consensus_file
+    additive: false
+
+  icn::federation:
+    level: debug
+    appenders:
+      - stdout
+      - federation_file
+    additive: false
+
+  icn::p2p:
     level: debug
     appenders:
       - stdout

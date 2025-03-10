@@ -75,6 +75,89 @@ services:
     networks:
       - icn-network
 
+  # ICN Bootstrap Node
+  bootstrap:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    container_name: icn-bootstrap
+    environment:
+      - NODE_TYPE=bootstrap
+      - NODE_PORT=9000
+      - API_PORT=8082
+      - BOOTSTRAP_NODES=[]
+      - COOPERATIVE_ID=${COOPERATIVE_ID:-icn-primary}
+      - COOPERATIVE_TIER=provider
+      - LOG_LEVEL=${RUST_LOG:-info}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-icnuser}:${POSTGRES_PASSWORD:-icnpass}@db:5432/${POSTGRES_DB:-icndb}
+    ports:
+      - "9000:9000"
+      - "8082:8082"
+    volumes:
+      - bootstrap_data:/data
+      - bootstrap_logs:/logs
+    depends_on:
+      - db
+    networks:
+      - icn-network
+    restart: unless-stopped
+
+  # ICN Validator Node 1
+  validator1:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    container_name: icn-validator1
+    environment:
+      - NODE_TYPE=validator
+      - NODE_PORT=9001
+      - API_PORT=8083
+      - BOOTSTRAP_NODES=["ws://bootstrap:9000"]
+      - COOPERATIVE_ID=${COOPERATIVE_ID:-icn-primary}
+      - COOPERATIVE_TIER=validator
+      - LOG_LEVEL=${RUST_LOG:-info}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-icnuser}:${POSTGRES_PASSWORD:-icnpass}@db:5432/${POSTGRES_DB:-icndb}
+    ports:
+      - "9001:9001"
+      - "8083:8083"
+    volumes:
+      - validator1_data:/data
+      - validator1_logs:/logs
+    depends_on:
+      - bootstrap
+      - db
+    networks:
+      - icn-network
+    restart: unless-stopped
+
+  # ICN Validator Node 2
+  validator2:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    container_name: icn-validator2
+    environment:
+      - NODE_TYPE=validator
+      - NODE_PORT=9002
+      - API_PORT=8084
+      - BOOTSTRAP_NODES=["ws://bootstrap:9000"]
+      - COOPERATIVE_ID=${COOPERATIVE_ID:-icn-primary}
+      - COOPERATIVE_TIER=validator
+      - LOG_LEVEL=${RUST_LOG:-info}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-icnuser}:${POSTGRES_PASSWORD:-icnpass}@db:5432/${POSTGRES_DB:-icndb}
+    ports:
+      - "9002:9002"
+      - "8084:8084"
+    volumes:
+      - validator2_data:/data
+      - validator2_logs:/logs
+    depends_on:
+      - bootstrap
+      - db
+    networks:
+      - icn-network
+    restart: unless-stopped
+
 volumes:
   db_data:
     name: icn_db_data
@@ -84,6 +167,18 @@ volumes:
     name: icn_backend_logs
   backend_config:
     name: icn_backend_config
+  bootstrap_data:
+    name: icn_bootstrap_data
+  bootstrap_logs:
+    name: icn_bootstrap_logs
+  validator1_data:
+    name: icn_validator1_data
+  validator1_logs:
+    name: icn_validator1_logs
+  validator2_data:
+    name: icn_validator2_data
+  validator2_logs:
+    name: icn_validator2_logs
 
 networks:
   icn-network:

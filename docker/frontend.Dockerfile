@@ -2,12 +2,15 @@ FROM node:18-slim as builder
 
 WORKDIR /app
 
+# Set environment for React build
+ENV NODE_ENV=production
+ENV CI=false
+
 # Copy package files
 COPY frontend/package*.json ./
 
-# Install dependencies with legacy SSL provider for compatibility
-ENV NODE_OPTIONS=--openssl-legacy-provider
-RUN npm install --legacy-peer-deps
+# Install dependencies
+RUN npm ci --legacy-peer-deps
 
 # Copy the rest of the application code
 COPY frontend/ ./
@@ -22,38 +25,7 @@ FROM nginx:alpine
 COPY --from=builder /app/build /usr/share/nginx/html
 
 # Copy nginx configuration
-RUN echo 'server { \
-    listen 80; \
-    server_name localhost; \
-    root /usr/share/nginx/html; \
-    index index.html; \
-    location / { \
-        try_files $uri $uri/ /index.html; \
-    } \
-    location /api/ { \
-        proxy_pass http://backend:8081/api/; \
-        proxy_http_version 1.1; \
-        proxy_set_header Upgrade $http_upgrade; \
-        proxy_set_header Connection "upgrade"; \
-        proxy_set_header Host $host; \
-        proxy_set_header X-Real-IP $remote_addr; \
-        proxy_read_timeout 86400; \
-    } \
-    location /ws { \
-        proxy_pass http://backend:8081/ws; \
-        proxy_http_version 1.1; \
-        proxy_set_header Upgrade $http_upgrade; \
-        proxy_set_header Connection "upgrade"; \
-        proxy_set_header Host $host; \
-        proxy_set_header X-Real-IP $remote_addr; \
-        proxy_read_timeout 86400; \
-    } \
-    location = /health { \
-        access_log off; \
-        add_header Content-Type text/plain; \
-        return 200 "healthy\n"; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
