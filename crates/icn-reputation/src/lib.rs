@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use icn_types::ReputationError;
 use icn_storage::StorageInterface;
 use tokio::sync::RwLock;
+use thiserror::Error;
 
 mod anti_monopoly;
 use anti_monopoly::{AntiMonopolyManager, AntiMonopolyConfig};
@@ -39,12 +40,37 @@ impl ReputationScore {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum ReputationError {
+    #[error("Reputation not found: {0}")]
+    NotFound(String),
+    
+    #[error("Invalid reputation value: {0}")]
+    InvalidValue(String),
+    
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+    
+    #[error("Internal error: {0}")]
+    InternalError(String),
+}
+
+pub type ReputationResult<T> = Result<T, ReputationError>;
+
+/// Interface for reputation management systems
 #[async_trait]
 pub trait ReputationInterface: Send + Sync {
-    async fn update_reputation(&self, member_id: &str, delta: i64) -> Result<(), ReputationError>;
-    async fn get_reputation(&self, member_id: &str) -> Result<i64, ReputationError>;
-    async fn validate_reputation(&self, member_id: &str, min_required: i64) -> Result<bool, ReputationError>;
-    async fn get_voting_power(&self, member_id: &str) -> Result<f64, ReputationError>;
+    /// Update a member's reputation
+    async fn update_reputation(&self, member_id: &str, delta: i64) -> ReputationResult<()>;
+    
+    /// Get a member's current reputation
+    async fn get_reputation(&self, member_id: &str) -> ReputationResult<i64>;
+    
+    /// Validate if a member has at least the minimum required reputation
+    async fn validate_reputation(&self, member_id: &str, min_required: i64) -> ReputationResult<bool>;
+    
+    /// Calculate voting power based on reputation
+    async fn get_voting_power(&self, member_id: &str) -> ReputationResult<f64>;
 }
 
 pub struct ReputationManager {
@@ -137,7 +163,7 @@ impl ReputationManager {
 
 #[async_trait]
 impl ReputationInterface for ReputationManager {
-    async fn update_reputation(&self, member_id: &str, delta: i64) -> Result<(), ReputationError> {
+    async fn update_reputation(&self, member_id: &str, delta: i64) -> ReputationResult<()> {
         let mut score = self.load_score(member_id).await?;
         
         // Apply anti-monopoly rules before updating
@@ -164,16 +190,16 @@ impl ReputationInterface for ReputationManager {
         self.save_score(member_id, score).await
     }
 
-    async fn get_reputation(&self, member_id: &str) -> Result<i64, ReputationError> {
+    async fn get_reputation(&self, member_id: &str) -> ReputationResult<i64> {
         Ok(self.load_score(member_id).await?.score)
     }
 
-    async fn validate_reputation(&self, member_id: &str, min_required: i64) -> Result<bool, ReputationError> {
+    async fn validate_reputation(&self, member_id: &str, min_required: i64) -> ReputationResult<bool> {
         let score = self.load_score(member_id).await?.score;
         Ok(score >= min_required)
     }
 
-    async fn get_voting_power(&self, member_id: &str) -> Result<f64, ReputationError> {
+    async fn get_voting_power(&self, member_id: &str) -> ReputationResult<f64> {
         let score = self.load_score(member_id).await?.score;
         Ok(self.anti_monopoly.calculate_voting_power(score))
     }
