@@ -22,7 +22,7 @@
     "autoprefixer": "^10.4.0",
     "clsx": "^2.1.1",
     "d3": "^7.9.0",
-    "lucide-react": "^0.290.0",
+    "lucide-react": "^0.479.0",
     "next": "latest",
     "postcss": "^8.4.0",
     "react": "^18.2.0",
