@@ -44,6 +44,27 @@ pub struct HealthStatus {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct NetworkStatus {
+    pub status: String,
+    pub peer_count: u32,
+    pub avg_latency: u32,
+    pub bandwidth_usage: f32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NetworkPeer {
+    pub id: String,
+    pub address: String,
+    pub latency: u32,
+    pub connected_since: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NetworkPeersResponse {
+    pub peers: Vec<NetworkPeer>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct IdentitiesResponse {
     pub identities: Vec<Identity>,
 }
@@ -191,6 +212,67 @@ impl IcnClient {
             Ok(())
         } else {
             Err(format!("Failed to vote on proposal: {}", response.status()).into())
+        }
+    }
+
+    // Network-related methods
+    
+    pub async fn get_network_status(&self, detailed: bool) -> Result<NetworkStatus, Box<dyn Error>> {
+        let url = if detailed {
+            format!("{}/api/v1/network/status?detail=true", self.base_url)
+        } else {
+            format!("{}/api/v1/network/status", self.base_url)
+        };
+        
+        let response = self.client
+            .get(&url)
+            .send()
+            .await?;
+            
+        if response.status().is_success() {
+            let status: NetworkStatus = response.json().await?;
+            Ok(status)
+        } else {
+            Err(format!("Failed to get network status: {}", response.status()).into())
+        }
+    }
+    
+    pub async fn list_peers(&self) -> Result<Vec<NetworkPeer>, Box<dyn Error>> {
+        let response: NetworkPeersResponse = self.client
+            .get(&format!("{}/api/v1/network/peers", self.base_url))
+            .send()
+            .await?
+            .json()
+            .await?;
+        
+        Ok(response.peers)
+    }
+    
+    pub async fn connect_peer(&self, address: &str) -> Result<NetworkPeer, Box<dyn Error>> {
+        let response = self.client
+            .post(&format!("{}/api/v1/network/peers/connect", self.base_url))
+            .json(&serde_json::json!({ "address": address }))
+            .send()
+            .await?;
+            
+        if response.status().is_success() {
+            let peer: NetworkPeer = response.json().await?;
+            Ok(peer)
+        } else {
+            Err(format!("Failed to connect to peer: {}", response.status()).into())
+        }
+    }
+    
+    pub async fn disconnect_peer(&self, peer_id: &str) -> Result<(), Box<dyn Error>> {
+        let response = self.client
+            .post(&format!("{}/api/v1/network/peers/{}/disconnect", self.base_url, peer_id))
+            .send()
+            .await?;
+            
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            Err(format!("Failed to disconnect peer: {}", response.status()).into())
         }
     }
 }

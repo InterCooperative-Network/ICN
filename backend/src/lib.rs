@@ -1,9 +1,10 @@
 pub mod api;
-pub mod core;
-pub mod db;
+pub mod networking;
 pub mod middleware;
 
 use thiserror::Error;
+use std::error::Error;
+use std::fmt;
 
 #[derive(Debug, Error)]
 pub enum AppError {

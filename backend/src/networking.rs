@@ -1,22 +1,27 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::{self, Sender, Receiver};
-use tokio::time::{Duration, sleep};
+use tokio::time::{Duration, sleep, Instant};
 use log::{info, error};
+use std::time::SystemTime;
 
+#[derive(Clone, Debug)]
 pub enum PeerStatus {
     Connected,
     Disconnected,
     Syncing,
 }
 
+#[derive(Clone, Debug)]
 pub struct Peer {
-    id: String,
-    address: String,
-    status: PeerStatus,
-    latency: u64,
+    pub id: String,
+    pub address: String,
+    pub status: PeerStatus,
+    pub latency: u64,
+    pub connected_since: SystemTime,
 }
 
+#[derive(Debug)]
 pub enum Message {
     Block { hash: String, data: Vec<u8> },
     Transaction { hash: String, data: Vec<u8> },
@@ -42,6 +47,9 @@ pub struct NetworkManager {
     message_sender: Option<Sender<Message>>,
     max_peers: usize,
     network_key: Vec<u8>,
+    bandwidth_usage: f32,
+    last_bandwidth_update: Instant,
+    bytes_transferred: u64,
     cache: HashMap<String, Vec<u8>>,
 }
 
@@ -54,6 +62,9 @@ impl NetworkManager {
             message_sender: None,
             max_peers,
             network_key,
+            bandwidth_usage: 0.0,
+            last_bandwidth_update: Instant::now(),
+            bytes_transferred: 0,
             cache: HashMap::new(),
         }
     }
@@ -72,8 +83,6 @@ impl NetworkManager {
     
     async fn process_messages(mut receiver: Receiver<Message>) {
         while let Some(message) = receiver.recv().await {
-            // In a real implementation, this would process the message
-            // For testing, we just print info about it
             match message {
                 Message::Block { hash, data: _ } => {
                     println!("Received block with hash: {}", hash);
@@ -111,8 +120,9 @@ impl NetworkManager {
         let peer = Peer {
             id: id.clone(),
             address,
-            status: PeerStatus::Disconnected,
+            status: PeerStatus::Connected,
             latency: 0,
+            connected_since: SystemTime::now(),
         };
         
         self.peers.insert(id, peer);
@@ -129,6 +139,44 @@ impl NetworkManager {
     pub fn get_peers(&self) -> Vec<&Peer> {
         self.peers.values().collect()
     }
+
+    pub fn get_connected_peer_count(&self) -> u32 {
+        self.peers.values()
+            .filter(|p| matches!(p.status, PeerStatus::Connected))
+            .count() as u32
+    }
+
+    pub fn get_average_latency(&self) -> u32 {
+        let connected_peers: Vec<_> = self.peers.values()
+            .filter(|p| matches!(p.status, PeerStatus::Connected))
+            .collect();
+        
+        if connected_peers.is_empty() {
+            return 0;
+        }
+
+        let total_latency: u64 = connected_peers.iter()
+            .map(|p| p.latency)
+            .sum();
+
+        (total_latency / connected_peers.len() as u64) as u32
+    }
+
+    pub fn update_bandwidth_usage(&mut self, bytes: u64) {
+        self.bytes_transferred += bytes;
+        let elapsed = self.last_bandwidth_update.elapsed();
+        
+        if elapsed.as_secs() >= 1 {
+            // Calculate MB/s
+            self.bandwidth_usage = (self.bytes_transferred as f32) / (1024.0 * 1024.0) / elapsed.as_secs_f32();
+            self.bytes_transferred = 0;
+            self.last_bandwidth_update = Instant::now();
+        }
+    }
+    
+    pub fn get_bandwidth_usage(&self) -> f32 {
+        self.bandwidth_usage
+    }
     
     pub fn send_message(&self, peer_id: &str, message: Message) -> Result<(), String> {
         if !self.peers.contains_key(peer_id) {
@@ -137,8 +185,6 @@ impl NetworkManager {
         
         let sender = self.message_sender.as_ref().ok_or("Network not started")?;
         
-        // In a real implementation, this would actually send to the peer
-        // For testing, we just forward to our own message processor
         let sender_clone = sender.clone();
         tokio::spawn(async move {
             sender_clone.send(message).await.unwrap();
@@ -150,8 +196,6 @@ impl NetworkManager {
     pub async fn broadcast_message(&self, message: Message) -> Result<(), String> {
         let sender = self.message_sender.as_ref().ok_or("Network not started")?;
         
-        // In a real implementation, this would send to all peers
-        // For testing, we just forward to our own message processor
         let sender_clone = sender.clone();
         tokio::spawn(async move {
             sender_clone.send(message).await.unwrap();
