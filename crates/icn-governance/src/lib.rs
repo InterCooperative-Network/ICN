@@ -265,6 +265,24 @@ pub struct DisputeResolution {
     pub timestamp: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DecisionType {
+    Approve,
+    Reject,
+    Abstain,
+    RequestMoreInfo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvidenceItem {
+    pub id: String,
+    pub evidence_type: String,
+    pub content: String,
+    pub timestamp: u64,
+    pub submitter: String,
+    pub metadata: HashMap<String, String>,
+}
+
 impl Proposal {
     pub fn new(
         id: String,
