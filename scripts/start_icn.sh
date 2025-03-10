@@ -78,13 +78,16 @@ main() {
     echo "Starting backend services..."
     docker-compose -f "${PROJECT_ROOT}/docker/docker-compose.dev.yml" up -d backend
 
-    echo "Starting consensus nodes..."
-    docker-compose -f "${PROJECT_ROOT}/docker/docker-compose.dev.yml" up -d bootstrap validator1 validator2
+    echo "Waiting for backend to be ready..."
+    sleep 3
 
     echo "Starting frontend..."
     docker-compose -f "${PROJECT_ROOT}/docker/docker-compose.dev.yml" up -d frontend
 
     echo "System startup complete. Use 'docker-compose logs -f' to view logs."
+    echo "Services available at:"
+    echo " - Backend API: http://localhost:8081"
+    echo " - Frontend UI: http://localhost:3000"
 
     # Final status message
     echo -e "\n${GREEN}ICN system startup completed successfully!${NC}"
