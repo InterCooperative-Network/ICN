@@ -4,7 +4,8 @@ members = [
     "crates/icn-types",
     "crates/icn-common",
     "crates/icn-core",
-    "crates/icn-p2p"
+    "crates/icn-p2p",
+    "crates/icn-cli"
 ]
 
 [workspace.dependencies]
@@ -13,6 +14,7 @@ icn-types = { path = "crates/icn-types" }
 icn-common = { path = "crates/icn-common" }
 icn-core = { path = "crates/icn-core" }
 icn-p2p = { path = "crates/icn-p2p" }
+icn-cli = { path = "crates/icn-cli" }
 
 # External dependencies
 tokio = { version = "1.0", features = ["full"] }
@@ -40,7 +42,7 @@ description = "Inter-Cooperative Network - A platform for cooperative resource s
 edition = "2021"
 
 [features]
-default = ["basic", "federation"]  # Added federation to default features
+default = ["basic", "federation"]
 basic = []
 federation = ["dep:tokio", "dep:async-trait"]
 advanced-governance = ["dep:parity-scale-codec"]
@@ -48,7 +50,7 @@ monitoring = ["dep:prometheus"]
 
 [dependencies]
 icn-types = { workspace = true }
-tokio = { workspace = true, optional = true }  # Added optional = true
+tokio = { workspace = true, optional = true }
 warp = { workspace = true }
 async-trait = { workspace = true, optional = true }
 parity-scale-codec = { version = "3.7.4", optional = true }
@@ -64,6 +66,10 @@ chrono = { workspace = true }
 futures = { workspace = true }
 tokio-tungstenite = "0.26.2"
 icn-p2p = { path = "crates/icn-p2p" }
+
+[[bin]]
+name = "icn_cli"
+path = "crates/icn-cli/src/main.rs"
 
 [lib]
 name = "icn_lib"
