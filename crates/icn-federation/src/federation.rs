@@ -112,6 +112,18 @@ pub struct FederationTerms {
     pub cross_federation_rules: CrossFederationRules,
 }
 
+impl Default for FederationTerms {
+    fn default() -> Self {
+        Self {
+            governance_rules: GovernanceRules::default(),
+            resource_rules: ResourceRules::default(),
+            membership_rules: MembershipRules::default(),
+            dispute_resolution_rules: DisputeResolutionRules::default(),
+            cross_federation_rules: CrossFederationRules::default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GovernanceRules {
     pub min_votes_required: u32,
@@ -120,6 +132,24 @@ pub struct GovernanceRules {
     pub max_voting_period_hours: u32,
     pub allowed_proposal_types: Vec<ProposalType>,
     pub veto_rights: HashMap<String, Vec<ProposalType>>,
+}
+
+impl Default for GovernanceRules {
+    fn default() -> Self {
+        Self {
+            min_votes_required: 3,
+            approval_threshold_percent: 66,
+            min_voting_period_hours: 24,
+            max_voting_period_hours: 168, // 1 week
+            allowed_proposal_types: vec![
+                ProposalType::MembershipChange(MembershipAction::Add("".to_string())),
+                ProposalType::ResourceAllocation(ResourceAllocationDetails::default()),
+                ProposalType::GovernanceUpdate(GovernanceUpdateDetails::default()),
+                ProposalType::FederationTermsUpdate(FederationTermsUpdateDetails::default()),
+            ],
+            veto_rights: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,6 +161,18 @@ pub struct ResourceRules {
     pub sharing_policies: Vec<SharingPolicy>,
 }
 
+impl Default for ResourceRules {
+    fn default() -> Self {
+        Self {
+            min_contribution: 0,
+            max_allocation_per_member: 1000,
+            allocation_strategy: AllocationStrategy::EqualShare,
+            resource_types: vec![ResourceType::ComputeUnit, ResourceType::StorageGb, ResourceType::BandwidthMbps],
+            sharing_policies: vec![SharingPolicy::MembersOnly],
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MembershipRules {
     pub min_reputation_score: f64,
@@ -138,6 +180,18 @@ pub struct MembershipRules {
     pub membership_duration: Option<Duration>,
     pub required_roles: Vec<MemberRole>,
     pub onboarding_process: OnboardingProcess,
+}
+
+impl Default for MembershipRules {
+    fn default() -> Self {
+        Self {
+            min_reputation_score: 0.0,
+            max_members: 100,
+            membership_duration: None,
+            required_roles: vec![MemberRole::Member],
+            onboarding_process: OnboardingProcess::VotingRequired,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,12 +202,34 @@ pub struct DisputeResolutionRules {
     pub appeal_process: AppealProcess,
 }
 
+impl Default for DisputeResolutionRules {
+    fn default() -> Self {
+        Self {
+            resolution_time_limit_hours: 72,
+            min_arbitrators: 3,
+            arbitrator_selection: ArbitratorSelection::Reputation,
+            appeal_process: AppealProcess::SingleLevel,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CrossFederationRules {
     pub allowed_federation_types: Vec<FederationType>,
     pub resource_sharing_limits: HashMap<ResourceType, u64>,
     pub min_reputation_requirement: f64,
     pub governance_participation: GovernanceParticipation,
+}
+
+impl Default for CrossFederationRules {
+    fn default() -> Self {
+        Self {
+            allowed_federation_types: vec![FederationType::ResourceSharing, FederationType::Governance],
+            resource_sharing_limits: HashMap::new(),
+            min_reputation_requirement: 50.0,
+            governance_participation: GovernanceParticipation::ReadOnly,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -173,6 +249,7 @@ pub enum MemberRole {
     Observer,
     Arbitrator,
     ResourceProvider,
+    Founder,
     Custom(String),
 }
 
@@ -192,6 +269,12 @@ pub enum FederationStatus {
     Suspended,
     Dissolving,
     Dissolved,
+}
+
+impl Default for FederationStatus {
+    fn default() -> Self {
+        Self::Active
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -302,16 +385,46 @@ pub struct ResourceAllocationDetails {
     pub details: HashMap<String, String>,
 }
 
+impl Default for ResourceAllocationDetails {
+    fn default() -> Self {
+        Self {
+            resource_type: ResourceType::ComputeUnit,
+            member_id: String::new(),
+            amount: 0,
+            duration: 86400, // 1 day in seconds
+            details: HashMap::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GovernanceUpdateDetails {
     pub parameters: HashMap<String, String>,
     pub reason: String,
 }
 
+impl Default for GovernanceUpdateDetails {
+    fn default() -> Self {
+        Self {
+            parameters: HashMap::new(),
+            reason: String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FederationTermsUpdateDetails {
     pub section: String,
     pub changes: HashMap<String, String>,
+}
+
+impl Default for FederationTermsUpdateDetails {
+    fn default() -> Self {
+        Self {
+            section: String::new(),
+            changes: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -458,6 +571,21 @@ pub enum FederationError {
     
     #[error("Networking error: {0}")]
     NetworkingError(String),
+    
+    #[error("Member is already in the federation: {0}")]
+    AlreadyMember(String),
+    
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+    
+    #[error("Invalid proposal: {0}")]
+    InvalidProposal(String),
+    
+    #[error("Invalid vote: {0}")]
+    InvalidVote(String),
+    
+    #[error("Insufficient resources: {0}")]
+    InsufficientResources(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -589,13 +717,38 @@ impl Federation {
     }
     
     pub fn update_governance(&mut self, details: GovernanceUpdateDetails) -> Result<(), FederationError> {
+        // Instead of directly inserting into a map, we'll update the relevant fields
         for (key, value) in details.parameters {
-            self.terms.governance_params.insert(key, value);
+            match key.as_str() {
+                "min_votes_required" => {
+                    if let Ok(val) = value.parse::<u32>() {
+                        self.terms.governance_rules.min_votes_required = val;
+                    }
+                },
+                "approval_threshold_percent" => {
+                    if let Ok(val) = value.parse::<u8>() {
+                        self.terms.governance_rules.approval_threshold_percent = val;
+                    }
+                },
+                "min_voting_period_hours" => {
+                    if let Ok(val) = value.parse::<u32>() {
+                        self.terms.governance_rules.min_voting_period_hours = val;
+                    }
+                },
+                "max_voting_period_hours" => {
+                    if let Ok(val) = value.parse::<u32>() {
+                        self.terms.governance_rules.max_voting_period_hours = val;
+                    }
+                },
+                _ => {
+                    // Ignore unknown parameters
+                }
+            }
         }
         
         self.add_audit_log_entry(
             "governance_update",
-            format!("Governance parameters updated: {}", details.reason)
+            format!("Governance updated: {}", details.reason)
         );
         
         Ok(())
@@ -603,13 +756,17 @@ impl Federation {
     
     pub fn update_terms(&mut self, terms: FederationTerms) -> Result<(), FederationError> {
         self.terms = terms;
-        
-        self.add_audit_log_entry(
-            "terms_update",
-            "Federation terms updated".to_string()
-        );
-        
+        self.add_audit_log_entry("UpdateTerms", "Federation terms updated".to_string());
         Ok(())
+    }
+    
+    pub fn update_governance_rules(&mut self, key: String, value: String) -> Result<(), FederationError> {
+        let mut params = HashMap::new();
+        params.insert(key, value);
+        self.update_governance(GovernanceUpdateDetails {
+            parameters: params,
+            reason: "Governance rules update".to_string(),
+        })
     }
     
     fn add_audit_log_entry(&mut self, event_type: &str, description: String) {

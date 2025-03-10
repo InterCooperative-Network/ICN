@@ -6,8 +6,6 @@ use tokio::sync::RwLock;
 use std::time::SystemTime;
 use serde_json;
 use uuid::Uuid;
-use icn_types::{ResourceType, Resource};
-use log::*;
 
 pub mod federation;
 pub mod governance;
@@ -15,7 +13,7 @@ pub mod dispute;
 
 pub use federation::{
     Federation, FederationType, FederationTerms, FederationError, 
-    FederationStatus, MemberStatus, MemberRole, ResourcePool,
+    FederationStatus, MemberStatus, MemberRole, ResourcePool, ResourceType,
     ProposalType, ProposalStatus, Vote, VoteDecision, MembershipAction,
     ResourceAllocationDetails, MemberInfo, ResourceAllocation
 };
@@ -29,6 +27,34 @@ pub use dispute::{
     DisputeManager, DisputeConfig, Dispute, DisputeError, DisputeResult,
     DisputeType, DisputeStatus, ResolutionMethod, ResolutionOutcome
 };
+
+// Define our own FederationId type that can be converted from/to string easily
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct FederationId(pub String);
+
+impl From<String> for FederationId {
+    fn from(id: String) -> Self {
+        FederationId(id)
+    }
+}
+
+impl From<&str> for FederationId {
+    fn from(id: &str) -> Self {
+        FederationId(id.to_string())
+    }
+}
+
+impl From<FederationId> for String {
+    fn from(id: FederationId) -> Self {
+        id.0
+    }
+}
+
+impl std::fmt::Display for FederationId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 // Add SDP support
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -216,7 +242,11 @@ impl FederationManager {
         federation_id: String,
         proposal_type: ProposalType,
         voting_period: Option<u64>,
+        tags: Option<Vec<String>>,
     ) -> Result<String, FederationError> {
+        let federation_id = FederationId(federation_id);
+        let tags = tags.unwrap_or_default();
+        
         self.governance_manager.create_proposal(
             title,
             description,
@@ -224,7 +254,7 @@ impl FederationManager {
             federation_id,
             proposal_type,
             voting_period,
-            Vec::new(),
+            tags,
         ).await
         .map_err(|e| FederationError::GovernanceError(e.to_string()))
     }
@@ -257,6 +287,8 @@ impl FederationManager {
         dispute_type: DisputeType,
         severity: u8,
     ) -> Result<String, FederationError> {
+        let federation_id = FederationId(federation_id);
+        
         self.dispute_manager.file_dispute(
             title,
             description,
@@ -279,142 +311,75 @@ impl FederationManager {
         self.dispute_manager.clone()
     }
 
-    pub async fn join_federation(
+    pub async fn add_member(
         &self,
-        federation_id: &str,
-        member_did: &str,
-        commitment: Vec<String>,
+        federation_id: String,
+        member_did: String,
+        commitments: Vec<String>,
     ) -> Result<(), FederationError> {
-        let mut federations = self.federations.write().await;
+        let federation_id = FederationId(federation_id);
         
-        if let Some(federation) = federations.get_mut(federation_id) {
-            if federation.members.contains_key(member_did) {
-                return Err(FederationError::AlreadyMember(member_did.to_string()));
-            }
-
-            // Verify member eligibility
-            if !self.verify_member_eligibility(member_did).await {
-                return Err(FederationError::ValidationError("Member does not meet eligibility requirements".to_string()));
-            }
-
-            // Verify commitments
-            if !self.verify_commitments(&federation.terms, &commitment).await {
-                return Err(FederationError::ValidationError("Invalid commitments".to_string()));
-            }
-
-            federation.members.insert(member_did.to_string(), MemberStatus::Active);
-            federation.member_roles.insert(member_did.to_string(), MemberRole::Member);
-
-            Ok(())
-        } else {
-            Err(FederationError::FederationNotFound(federation_id.to_string()))
-        }
-    }
-
-    async fn verify_member_eligibility(&self, _member_did: &str) -> bool {
-        // Implement actual eligibility verification
-        true
-    }
-
-    async fn verify_commitments(&self, _terms: &FederationTerms, _commitment: &[String]) -> bool {
-        // Implement actual commitment verification
-        true
-    }
-
-    pub async fn submit_proposal(
-        &self,
-        federation_id: &str,
-        proposal: FederationProposal,
-    ) -> Result<(), FederationError> {
-        let mut federations = self.federations.write().await;
+        // Verify federation exists
+        let mut federation = match self.get_federation(&federation_id.0).await {
+            Some(fed) => fed,
+            None => return Err(FederationError::FederationNotFound(federation_id.0)),
+        };
         
-        if let Some(federation) = federations.get_mut(federation_id) {
-            // Verify proposer is a member
-            if !federation.members.contains_key(&proposal.proposer) {
-                return Err(FederationError::MemberNotFound(proposal.proposer));
-            }
-
-            // Verify proposal type is allowed
-            if !federation.terms.governance_rules.allowed_proposal_types.contains(&proposal.proposal_type) {
-                return Err(FederationError::InvalidProposal("Proposal type not allowed".to_string()));
-            }
-
-            federation.proposals.push(proposal);
-            Ok(())
-        } else {
-            Err(FederationError::FederationNotFound(federation_id.to_string()))
+        // Check if the member is already in the federation
+        if federation.members.contains_key(&member_did) {
+            return Err(FederationError::AlreadyMember(member_did.to_string()));
         }
-    }
-
-    pub async fn vote(
-        &self,
-        federation_id: &str,
-        vote: Vote,
-    ) -> Result<(), FederationError> {
-        let mut federations = self.federations.write().await;
         
-        if let Some(federation) = federations.get_mut(federation_id) {
-            // Verify voter is a member
-            if !federation.members.contains_key(&vote.voter) {
-                return Err(FederationError::MemberNotFound(vote.voter));
-            }
-
-            // Find the active proposal
-            for proposal in &mut federation.proposals {
-                if proposal.status == ProposalStatus::Active {
-                    proposal.votes.insert(vote.voter.clone(), vote);
-                    return Ok(());
-                }
-            }
-
-            Err(FederationError::InvalidVote("No active proposal found".to_string()))
-        } else {
-            Err(FederationError::FederationNotFound(federation_id.to_string()))
+        // Verify eligibility (reputation, commitments, etc.)
+        // TODO: Implement reputation check
+        if false { // placeholder for reputation check
+            return Err(FederationError::ValidationError("Member does not meet eligibility requirements".to_string()));
         }
-    }
-
-    pub async fn update_federation_status(
-        &self,
-        federation_id: &str,
-        new_status: FederationStatus,
-    ) -> Result<(), FederationError> {
-        let mut federations = self.federations.write().await;
         
-        if let Some(federation) = federations.get_mut(federation_id) {
-            federation.status = new_status;
-            Ok(())
-        } else {
-            Err(FederationError::FederationNotFound(federation_id.to_string()))
+        // Verify commitments
+        if commitments.is_empty() {
+            return Err(FederationError::ValidationError("Invalid commitments".to_string()));
         }
+        
+        // Add the member
+        federation.members.insert(member_did.to_string(), MemberInfo::default());
+        federation.member_roles.insert(member_did.to_string(), vec![MemberRole::Member]);
+        
+        // Update federation
+        self.update_federation(federation).await
     }
 
     pub async fn allocate_resources(
         &self,
-        federation_id: &str,
+        federation_id: String,
         allocation: ResourceAllocationDetails,
     ) -> Result<(), FederationError> {
-        let mut federations = self.federations.write().await;
+        let federation_id = FederationId(federation_id);
         
-        if let Some(federation) = federations.get_mut(federation_id) {
-            // Verify recipient is a member
-            if !federation.members.contains_key(&allocation.recipient) {
-                return Err(FederationError::MemberNotFound(allocation.recipient));
-            }
-
-            // Verify allocation is within limits
-            let pool = federation.resources.get(&allocation.resource_type)
-                .ok_or_else(|| FederationError::InsufficientResources("Resource type not available".to_string()))?;
-
-            if pool.available_capacity < allocation.amount {
-                return Err(FederationError::InsufficientResources("Not enough resources available".to_string()));
-            }
-
-            // Allocate resources
-            self.resource_manager.allocate_resources(allocation).await?;
-
-            Ok(())
-        } else {
-            Err(FederationError::FederationNotFound(federation_id.to_string()))
+        // Verify federation exists
+        let mut federation = match self.get_federation(&federation_id.0).await {
+            Some(fed) => fed,
+            None => return Err(FederationError::FederationNotFound(federation_id.0)),
+        };
+        
+        // Verify member exists
+        if !federation.members.contains_key(&allocation.member_id) {
+            return Err(FederationError::MemberNotFound(allocation.member_id.clone()));
         }
+        
+        // Verify resource type is supported
+        let resource_pool = federation.resources.get(&allocation.resource_type)
+            .ok_or_else(|| FederationError::InsufficientResources("Resource type not available".to_string()))?;
+        
+        // Verify sufficient resources are available
+        if resource_pool.available_capacity < allocation.amount {
+            return Err(FederationError::InsufficientResources("Not enough resources available".to_string()));
+        }
+        
+        // Allocate resources
+        federation.allocate_resource(allocation.clone())?;
+        
+        // Update federation
+        self.update_federation(federation).await
     }
 }

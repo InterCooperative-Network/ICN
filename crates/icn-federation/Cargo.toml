@@ -13,6 +13,7 @@ thiserror = "1.0"
 icn-types = { path = "../icn-types" }
 icn-governance = { path = "../icn-governance" }
 icn-zk = { path = "../icn-zk" }
+log = "0.4"
 
 # New dependencies
 icn-crypto = { path = "../icn-crypto" }

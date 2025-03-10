@@ -1,10 +1,14 @@
+use thiserror::Error;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use serde::{Serialize, Deserialize};
-use icn_types::{StorageError, StorageResult, StorageBackend, StorageConfig};
+use icn_types::{StorageError as IcnStorageError, StorageResult as IcnStorageResult, StorageBackend as IcnStorageBackend, StorageConfig};
 use std::time::Duration;
-use ipfs_api_backend_actix::{IpfsClient, TryFromUri};
+use ipfs_api_backend_actix::{IpfsClient, TryFromUri, IpfsApi};
 use futures::TryStreamExt;
+use std::io::Cursor;
+use std::collections::HashMap;
+use std::sync::RwLock;
 
 mod cache;
 use cache::StorageCache;
@@ -26,6 +30,12 @@ pub enum StorageError {
     
     #[error("IPFS error: {0}")]
     IpfsError(String),
+    
+    #[error("Reference already exists")]
+    ReferenceAlreadyExists,
+    
+    #[error("Reference not found")]
+    ReferenceNotFound,
 }
 
 /// Represents the result of storage operations
@@ -115,7 +125,9 @@ impl StorageManager {
 
     /// Store data using IPFS
     pub async fn store_ipfs(&self, data: &[u8]) -> StorageResult<String> {
-        let result = self.ipfs_client.add(data).await
+        // Create a cursor around the data to implement Read trait
+        let cursor = Cursor::new(data.to_vec());
+        let result = self.ipfs_client.add(cursor).await
             .map_err(|e| StorageError::IpfsError(e.to_string()))?;
         Ok(result.hash)
     }
@@ -132,32 +144,37 @@ impl StorageManager {
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    use std::sync::RwLock;
     
     // Mock storage backend for testing
     struct MockStorage {
-        data: HashMap<String, Vec<u8>>,
+        data: RwLock<HashMap<String, Vec<u8>>>,
     }
     
     #[async_trait::async_trait]
     impl StorageBackend for MockStorage {
         async fn set(&self, key: &str, value: &[u8]) -> StorageResult<()> {
-            self.data.insert(key.to_string(), value.to_vec());
+            let mut data = self.data.write().unwrap();
+            data.insert(key.to_string(), value.to_vec());
             Ok(())
         }
         
         async fn get(&self, key: &str) -> StorageResult<Vec<u8>> {
-            self.data.get(key)
+            let data = self.data.read().unwrap();
+            data.get(key)
                 .cloned()
                 .ok_or_else(|| StorageError::NotFound(key.to_string()))
         }
         
         async fn delete(&self, key: &str) -> StorageResult<()> {
-            self.data.remove(key);
+            let mut data = self.data.write().unwrap();
+            data.remove(key);
             Ok(())
         }
         
         async fn exists(&self, key: &str) -> StorageResult<bool> {
-            Ok(self.data.contains_key(key))
+            let data = self.data.read().unwrap();
+            Ok(data.contains_key(key))
         }
     }
     
@@ -172,7 +189,7 @@ mod tests {
         };
         
         let storage = StorageManager::new(
-            Box::new(MockStorage { data: HashMap::new() }),
+            Box::new(MockStorage { data: RwLock::new(HashMap::new()) }),
             config
         );
 
