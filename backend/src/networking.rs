@@ -1,8 +1,7 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::{self, Sender, Receiver};
-use tokio::time::{Duration, sleep, Instant};
-use log::{info, error};
+use tokio::time::Instant;
+use log::info;
 use std::time::SystemTime;
 
 #[derive(Clone, Debug)]
@@ -34,11 +33,11 @@ pub enum Message {
 }
 
 pub trait NetworkingOperations {
-    fn start(&self) -> Result<(), String>;
-    fn stop(&self) -> Result<(), String>;
-    fn connect(&self, address: &str) -> Result<(), String>;
-    fn disconnect(&self, address: &str) -> Result<(), String>;
-    fn send_message(&self, address: &str, message: &[u8]) -> Result<(), String>;
+    fn start(&mut self) -> Result<(), String>;
+    fn stop(&mut self) -> Result<(), String>;
+    fn connect(&mut self, address: &str) -> Result<(), String>;
+    fn disconnect(&mut self, address: &str) -> Result<(), String>;
+    fn send_message(&mut self, address: &str, message: &[u8]) -> Result<(), String>;
     fn receive_message(&self, address: &str) -> Result<Vec<u8>, String>;
 }
 
@@ -217,27 +216,27 @@ impl NetworkManager {
 }
 
 impl NetworkingOperations for NetworkManager {
-    fn start(&self) -> Result<(), String> {
+    fn start(&mut self) -> Result<(), String> {
         info!("Starting network connections");
         Ok(())
     }
 
-    fn stop(&self) -> Result<(), String> {
+    fn stop(&mut self) -> Result<(), String> {
         info!("Stopping network connections");
         Ok(())
     }
 
-    fn connect(&self, address: &str) -> Result<(), String> {
+    fn connect(&mut self, address: &str) -> Result<(), String> {
         info!("Connecting to network address: {}", address);
         Ok(())
     }
 
-    fn disconnect(&self, address: &str) -> Result<(), String> {
+    fn disconnect(&mut self, address: &str) -> Result<(), String> {
         info!("Disconnecting from network address: {}", address);
         Ok(())
     }
 
-    fn send_message(&self, address: &str, message: &[u8]) -> Result<(), String> {
+    fn send_message(&mut self, address: &str, message: &[u8]) -> Result<(), String> {
         info!("Sending message to network address: {}", address);
         self.cache.insert(address.to_string(), message.to_vec());
         Ok(())

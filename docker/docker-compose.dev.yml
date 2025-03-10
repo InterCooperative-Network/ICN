@@ -21,13 +21,12 @@ services:
   backend:
     build:
       context: ..
-      dockerfile: docker/backend.dev.Dockerfile
+      dockerfile: backend.Dockerfile
     restart: unless-stopped
     depends_on:
       - db
     ports:
       - "8081:8081"
-      - "9229:9229"  # For debugging
     volumes:
       - ../backend:/usr/src/app/backend
       - ../crates:/usr/src/app/crates
@@ -38,8 +37,6 @@ services:
       - DATABASE_URL=postgres://${POSTGRES_USER:-icnuser}:${POSTGRES_PASSWORD:-icnpass}@db:5432/${POSTGRES_DB:-icndb}
       - RUST_LOG=${RUST_LOG:-debug}
       - RUST_BACKTRACE=1
-      - CARGO_BUILD_TARGET_DIR=/usr/src/app/target
-    command: ["cargo", "watch", "-x", "run --bin icn-backend"]
     networks:
       - icn-network
 
@@ -47,7 +44,7 @@ services:
   frontend:
     build:
       context: ..
-      dockerfile: docker/frontend.dev.Dockerfile
+      dockerfile: frontend.Dockerfile
     restart: unless-stopped
     depends_on:
       - backend
@@ -60,20 +57,14 @@ services:
     environment:
       - REACT_APP_API_URL=http://localhost:8081/api
       - NODE_ENV=development
-      - CHOKIDAR_USEPOLLING=true  # Enable polling for Windows/WSL
-    command: ["npm", "run", "dev"]
     networks:
       - icn-network
 
 volumes:
   db_data:
-    name: icn_dev_db_data
   cargo_cache:
-    name: icn_dev_cargo_cache
   target_cache:
-    name: icn_dev_target_cache
   backend_logs:
-    name: icn_dev_backend_logs
 
 networks:
   icn-network:
