@@ -83,7 +83,8 @@ pub struct Proposal {
 pub struct HealthStatus {
     pub status: String,
     pub version: String,
-    pub uptime: u64,
+    #[serde(default)]
+    pub uptime: Option<u64>,
     #[serde(default)]
     pub node_id: Option<String>,
 }
@@ -281,9 +282,9 @@ impl IcnClient {
     }
     
     pub async fn check_health(&self) -> Result<HealthStatus, IcnClientError> {
-        debug!("Checking health at {}/health", self.base_url);
+        debug!("Checking health at {}/api/v1/health", self.base_url);
         
-        let response = match self.client.get(&format!("{}/health", self.base_url)).send().await {
+        let response = match self.client.get(&format!("{}/api/v1/health", self.base_url)).send().await {
             Ok(resp) => resp,
             Err(e) => {
                 error!("Health check request failed: {}", e);
