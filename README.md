@@ -32,33 +32,59 @@ This project is in active development. The following components are currently fu
 
 ## Quick Start
 
-1. Clone the repository:
+We've simplified the setup process with two easy-to-use scripts:
+
+### 1. Setup
 
 ```bash
+# Clone the repository (if you haven't already)
 git clone https://github.com/yourusername/ICN.git
 cd ICN
+
+# Run the setup script
+./setup.sh
 ```
 
-2. Set up the development environment:
+The setup script will:
+- Check for required dependencies
+- Set up your Rust environment
+- Configure the database
+- Build the backend components
+- Install frontend dependencies
+
+### 2. Run
 
 ```bash
-# Copy environment configuration
-cp .env.template .env
+# Start all services
+./run.sh
 
-# Start development containers
-docker-compose -f docker-compose.dev.yml up -d
-
-# Initialize the database
-./scripts/setup_db.sh
-
-# Build and start the ICN system
-./scripts/run_icn_dev.sh
+# Or start specific components
+./run.sh backend    # Start only backend
+./run.sh frontend   # Start only frontend
+./run.sh consensus  # Start only consensus engine
 ```
 
-3. Run the CLI:
+### 3. Other Useful Commands
 
 ```bash
-cargo run -p icn-cli -- --help
+# Check status of services
+./run.sh status
+
+# View logs
+./run.sh logs
+./run.sh logs backend  # View specific service logs
+
+# Stop all services
+./run.sh stop
+
+# Run tests
+./run.sh test
+
+# Clean up environment
+./run.sh clean
+
+# Show help
+./run.sh help
 ```
 
 ## Project Structure
@@ -66,56 +92,29 @@ cargo run -p icn-cli -- --help
 ```
 icn/
 ├── crates/                    # Core Rust crates
-│   ├── icn-cli/              # Command-line interface
-│   ├── icn-consensus/        # Consensus implementation
-│   ├── icn-crypto/           # Cryptographic operations
-│   ├── icn-federation/       # Federation management
-│   ├── icn-networking/       # P2P networking layer
-│   ├── icn-types/           # Common data types
-│   └── icn-zk/              # Zero-knowledge proofs
-├── docs/                     # Documentation
-├── scripts/                  # Utility scripts
-└── docker/                   # Docker configurations
+│   ├── icn-cli/               # Command-line interface
+│   ├── icn-consensus/         # Consensus implementation
+│   ├── icn-crypto/            # Cryptographic operations
+│   ├── icn-federation/        # Federation management
+│   ├── icn-networking/        # P2P networking layer
+│   ├── icn-types/             # Common data types
+│   └── icn-zk/                # Zero-knowledge proofs
+├── backend/                   # Backend server implementation
+├── frontend/                  # Frontend web application
+├── docs/                      # Documentation
+├── config/                    # Configuration files
+├── scripts/                   # Utility scripts
+└── docker/                    # Docker configurations
 ```
 
 ## Development
 
-### Building Components
-
-Build a specific component:
-
-```bash
-cargo build -p <crate-name>
-```
-
-Run tests:
-
-```bash
-cargo test
-```
-
 ### Configuration
 
 The system can be configured through:
-
-- Environment variables (see `.env.template`)
+- Environment variables (see `.env.template` if available)
 - Configuration files in `config/`
 - CLI arguments
-
-### Docker Development Environment
-
-For development with Docker:
-
-```bash
-# Start development environment
-docker-compose -f docker-compose.dev.yml up -d
-
-# View logs
-docker-compose -f docker-compose.dev.yml logs -f
-
-# Stop environment
-docker-compose -f docker-compose.dev.yml down
-```
 
 ## Documentation
 
