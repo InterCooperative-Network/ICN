@@ -25,86 +25,88 @@ This project is in active development. The following components are currently fu
 
 ## Prerequisites
 
+- Docker and Docker Compose v2.0+
+- Git
+- Make (optional)
+
+For local development without Docker:
 - Rust 1.70.0 or later
 - PostgreSQL 15.0 or later
-- Node.js 18.0 or later (for frontend)
-- Docker and Docker Compose
+- Node.js 18.0 or later
+- Redis 7.0 or later
 
 ## Quick Start
 
-We've simplified the setup process with two easy-to-use scripts:
-
-### 1. Setup
+### 1. Clone and Configure
 
 ```bash
-# Clone the repository (if you haven't already)
+# Clone the repository
 git clone https://github.com/yourusername/ICN.git
 cd ICN
 
-# Run the setup script
-./setup.sh
+# Copy and configure environment variables
+cp .env.template .env
+# Edit .env with your preferred settings
 ```
 
-The setup script will:
-- Check for required dependencies
-- Set up your Rust environment
-- Configure the database
-- Build the backend components
-- Install frontend dependencies
-
-### 2. Run
+### 2. Launch with Docker (Recommended)
 
 ```bash
 # Start all services
-./run.sh
+docker compose up -d
 
-# Or start specific components
-./run.sh backend    # Start only backend
-./run.sh frontend   # Start only frontend
-./run.sh consensus  # Start only consensus engine
+# Or start specific services
+docker compose up -d postgres redis  # Start dependencies
+docker compose up -d backend        # Start backend
+docker compose up -d frontend       # Start frontend
 ```
 
-### 3. Other Useful Commands
+### 3. Launch for Development
 
 ```bash
-# Check status of services
-./run.sh status
+# Run the setup script
+./setup.sh
 
-# View logs
-./run.sh logs
-./run.sh logs backend  # View specific service logs
+# Start services individually
+./scripts/dev/run_backend_dev.sh
+./scripts/dev/run_frontend_dev.sh
+./scripts/dev/run_consensus.sh
 
-# Stop all services
-./run.sh stop
+# Monitor services
+./scripts/utils/monitor_icn.sh
+./scripts/utils/check_icn_status.sh
+```
 
-# Run tests
-./run.sh test
+### 4. Run Tests
 
-# Clean up environment
-./run.sh clean
-
-# Show help
-./run.sh help
+```bash
+# Run all tests
+./scripts/test/test_federation.sh
+./scripts/test/test_icn_cli.sh
 ```
 
 ## Project Structure
 
 ```
 icn/
-├── crates/                    # Core Rust crates
-│   ├── icn-cli/               # Command-line interface
-│   ├── icn-consensus/         # Consensus implementation
-│   ├── icn-crypto/            # Cryptographic operations
-│   ├── icn-federation/        # Federation management
-│   ├── icn-networking/        # P2P networking layer
-│   ├── icn-types/             # Common data types
-│   └── icn-zk/                # Zero-knowledge proofs
 ├── backend/                   # Backend server implementation
 ├── frontend/                  # Frontend web application
-├── docs/                      # Documentation
-├── config/                    # Configuration files
+├── crates/                    # Core Rust crates
+│   ├── icn-cli/              # Command-line interface
+│   ├── icn-consensus/        # Consensus implementation
+│   ├── icn-crypto/           # Cryptographic operations
+│   ├── icn-federation/       # Federation management
+│   ├── icn-networking/       # P2P networking layer
+│   ├── icn-types/            # Common data types
+│   └── icn-zk/               # Zero-knowledge proofs
+├── docker/                    # Docker configurations
 ├── scripts/                   # Utility scripts
-└── docker/                    # Docker configurations
+│   ├── dev/                  # Development scripts
+│   ├── test/                 # Test scripts
+│   └── utils/                # Utility scripts
+├── config/                    # Configuration files
+├── docs/                      # Documentation
+└── templates/                 # Template files
 ```
 
 ## Development
@@ -112,9 +114,31 @@ icn/
 ### Configuration
 
 The system can be configured through:
-- Environment variables (see `.env.template` if available)
-- Configuration files in `config/`
-- CLI arguments
+1. Environment variables (copy `.env.template` to `.env`)
+2. Configuration files in `config/`
+3. CLI arguments
+
+### Development Workflow
+
+1. Start dependencies:
+```bash
+docker compose up -d postgres redis
+```
+
+2. Run backend in development mode:
+```bash
+./scripts/dev/run_backend_dev.sh
+```
+
+3. Run frontend in development mode:
+```bash
+./scripts/dev/run_frontend_dev.sh
+```
+
+4. Monitor services:
+```bash
+./scripts/utils/monitor_icn.sh
+```
 
 ## Documentation
 

@@ -1,18 +1,26 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { NodeDashboard } from './components/nodes/NodeDashboard';
-import { Layout } from './components/layout/Layout';
+import { Routes, Route } from 'react-router-dom';
+import { Suspense, lazy } from 'react';
+
+// Lazy-loaded components
+const Home = lazy(() => import('./pages/Home'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const NotFound = lazy(() => import('./pages/NotFound'));
+
+// Layout components
+import Layout from './components/Layout';
+import LoadingSpinner from './components/LoadingSpinner';
 
 function App() {
   return (
-    <Router>
-      <Layout>
+    <Layout>
+      <Suspense fallback={<LoadingSpinner />}>
         <Routes>
-          <Route path="/" element={<NodeDashboard />} />
-          {/* Add other routes as they are implemented */}
+          <Route path="/" element={<Home />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
-      </Layout>
-    </Router>
+      </Suspense>
+    </Layout>
   );
 }
 
