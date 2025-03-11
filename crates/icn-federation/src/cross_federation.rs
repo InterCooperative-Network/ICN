@@ -13,6 +13,7 @@ use crate::resource_manager::{ResourceProvider, ResourceError};
 use crate::FederationError;
 
 use crate::federation::Federation;
+use crate::federation_id_to_string;
 
 /// Represents a cross-federation resource sharing agreement
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,7 +149,7 @@ impl CrossFederationManager {
             .ok_or_else(|| FederationError::NotFound(format!("Agreement not found: {}", agreement_id)))?;
         
         // Verify the agreement is for the correct target federation
-        if agreement.target_federation_id != target_federation.id {
+        if agreement.target_federation_id != federation_id_to_string(&target_federation.id) {
             return Err(FederationError::Unauthorized(
                 "Federation is not the target of this agreement".to_string()
             ));
@@ -517,7 +518,11 @@ impl CrossFederationMessenger {
         // Create signature
         let signature_data = format!(
             "{}:{}:{}:{}:{}",
-            message_id, self.federation_id, recipient, Utc::now(), hex::encode(&encrypted_content)
+            message_id, 
+            federation_id_to_string(&self.federation_id), 
+            federation_id_to_string(&recipient), 
+            Utc::now(), 
+            hex::encode(&encrypted_content)
         );
         
         let signature = match self.key_pair.sign(signature_data.as_bytes()) {
@@ -692,7 +697,11 @@ impl CrossFederationMessenger {
         // Create signature data
         let signature_data = format!(
             "{}:{}:{}:{}:{}",
-            message.id, message.sender, message.recipient, message.timestamp, hex::encode(&message.encrypted_content)
+            message.id, 
+            federation_id_to_string(&message.sender), 
+            federation_id_to_string(&message.recipient), 
+            message.timestamp, 
+            hex::encode(&message.encrypted_content)
         );
         
         // In a real implementation, we'd verify the signature using the sender's public key

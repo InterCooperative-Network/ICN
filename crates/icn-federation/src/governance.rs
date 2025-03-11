@@ -13,8 +13,9 @@ use icn_crypto::KeyPair;
 
 use crate::federation::{
     Federation, FederationType, FederationTerms, FederationError,
-    ProposalType, ProposalStatus, Vote, VoteDecision, MemberRole, MemberId, CooperativeId
+    ProposalType, ProposalStatus, Vote, VoteDecision, MemberRole,
 };
+use icn_types::{MemberId, CooperativeId};
 
 /// Error types for federation governance
 #[derive(Error, Debug)]

@@ -394,7 +394,7 @@ impl FederationManager {
         // Create resource allocation details
         let allocation = federation::ResourceAllocationDetails {
             resource_type,
-            member_id: member_id.to_string(),
+            member_id: member_id.did.clone(),
             amount,
             duration: 0, // No expiration
             details: HashMap::new(),
@@ -417,11 +417,11 @@ impl FederationManager {
         proposal_type_str: String, 
         details: HashMap<String, String>
     ) -> FederationResult<String> {
-        let fed_id = FederationId(federation_id.to_string());
+        let fed_id = federation_id_from_string(federation_id.to_string());
         let federations = self.federations.read().await;
         
         // Ensure federation exists
-        let _federation = federations.get(&fed_id)
+        let _federation = federations.get(federation_id)
             .ok_or_else(|| FederationError::FederationNotFound(federation_id.to_string()))?;
         
         if let Some(governance) = &self.governance_manager {
@@ -499,4 +499,11 @@ pub enum FederationError {
     
     #[error("Federation not found: {0}")]
     FederationNotFound(String),
+}
+
+/// Implementation to convert federation::FederationError to FederationError
+impl From<federation::FederationError> for FederationError {
+    fn from(err: federation::FederationError) -> Self {
+        FederationError::InternalError(err.to_string())
+    }
 }

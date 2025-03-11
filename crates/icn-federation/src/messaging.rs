@@ -9,6 +9,7 @@ use icn_crypto::KeyPair;
 use icn_types::FederationId;
 use sodiumoxide::crypto::box_;
 use hex;
+use crate::federation_id_to_string;
 
 /// Error types for federation messaging
 #[derive(Error, Debug)]
@@ -259,7 +260,7 @@ impl FederationMessenger {
         let encrypted_content = self.encrypt_for_recipient(recipient, content).await?;
         
         // Generate signature
-        let federation_id_str = crate::federation_id_to_string(&self.federation_id);
+        let federation_id_str = federation_id_to_string(&self.federation_id);
         let signature_data = format!(
             "{}:{}:{}:{}:{}",
             message_id, federation_id_str, recipient, Utc::now(), hex::encode(&encrypted_content)
@@ -294,23 +295,23 @@ impl FederationMessenger {
     /// Encrypt content for a specific recipient
     async fn encrypt_for_recipient(&self, recipient: &str, content: &[u8]) -> Result<Vec<u8>, MessagingError> {
         // Get recipient's public key
-        let keys = self.public_keys.read().await;
-        let public_key = keys.get(recipient)
-            .ok_or_else(|| MessagingError::InvalidRecipient(format!("No public key for {}", recipient)))?;
+        let public_keys = self.public_keys.read().await;
+        let public_key = public_keys.get(recipient)
+            .ok_or_else(|| MessagingError::InvalidRecipient(format!("No public key found for {}", recipient)))?;
         
         // Encrypt the content
-        encrypt(content, public_key).map_err(|e| MessagingError::EncryptionFailed(e.to_string()))
+        encrypt(content, self.key_pair.clone()).map_err(|e| MessagingError::EncryptionFailed(e.to_string()))
     }
 
     /// Decrypt content of a message
     async fn decrypt_message(&self, message: &FederationMessage) -> Result<Vec<u8>, MessagingError> {
         // Verify the message is for us
-        if message.recipient != self.federation_id {
+        if message.recipient != federation_id_to_string(&self.federation_id) {
             return Err(MessagingError::Unauthorized("Message not intended for this recipient".to_string()));
         }
         
         // Decrypt using our private key
-        decrypt(&message.encrypted_content, &self.key_pair.private_key)
+        decrypt(&message.encrypted_content, self.key_pair.clone())
             .map_err(|e| MessagingError::DecryptionFailed(e.to_string()))
     }
 
@@ -375,7 +376,7 @@ impl FederationMessenger {
         }
         
         // Check if this message is intended for us
-        let federation_id_str = crate::federation_id_to_string(&self.federation_id);
+        let federation_id_str = federation_id_to_string(&self.federation_id);
         if message.recipient != federation_id_str && !self.is_broadcast(&message).await {
             return Err(MessagingError::InvalidRecipient(format!(
                 "Message not intended for this federation: {}", message.recipient
@@ -462,7 +463,7 @@ impl FederationMessenger {
 
     /// Subscribe to a message channel
     pub async fn subscribe_to_channel(&self, channel: &str) {
-        let member_id = self.federation_id.clone();
+        let member_id = federation_id_to_string(&self.federation_id);
         let mut channels = self.channels.write().await;
         
         let subscribers = channels.entry(channel.to_string()).or_insert_with(HashSet::new);
@@ -471,7 +472,7 @@ impl FederationMessenger {
 
     /// Unsubscribe from a message channel
     pub async fn unsubscribe_from_channel(&self, channel: &str) {
-        let member_id = self.federation_id.clone();
+        let member_id = federation_id_to_string(&self.federation_id);
         let mut channels = self.channels.write().await;
         
         if let Some(subscribers) = channels.get_mut(channel) {
@@ -498,7 +499,7 @@ impl FederationMessenger {
         
         // Send to each subscriber
         for subscriber in subscribers {
-            if subscriber != &self.federation_id {
+            if subscriber != &federation_id_to_string(&self.federation_id) {
                 let msg_id = self.send_new_message(
                     subscriber,
                     message_type.clone(),
@@ -635,14 +636,16 @@ impl FederationMessenger {
 }
 
 // Simple encryption/decryption functions
-fn encrypt(data: &[u8], _key: &KeyPair) -> Result<Vec<u8>, MessagingError> {
-    // This is a placeholder implementation
-    // In a real implementation, we would use the key to encrypt the data
-    Ok(data.to_vec())
+fn encrypt(data: &[u8], key: KeyPair) -> Result<Vec<u8>, MessagingError> {
+    // Placeholder implementation - in a real system, use proper encryption
+    let mut encrypted = Vec::new();
+    encrypted.extend_from_slice(data);
+    Ok(encrypted)
 }
 
-fn decrypt(data: &[u8], _key: &KeyPair) -> Result<Vec<u8>, MessagingError> {
-    // This is a placeholder implementation
-    // In a real implementation, we would use the key to decrypt the data
-    Ok(data.to_vec())
+fn decrypt(data: &[u8], key: KeyPair) -> Result<Vec<u8>, MessagingError> {
+    // Placeholder implementation - in a real system, use proper decryption
+    let mut decrypted = Vec::new();
+    decrypted.extend_from_slice(data);
+    Ok(decrypted)
 }

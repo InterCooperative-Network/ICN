@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use icn_types::FederationId;
 use crate::FederationError;
+use crate::federation_id_to_string;
 
 /// Error types for treasury operations
 #[derive(Error, Debug)]
@@ -187,16 +188,18 @@ impl Treasury {
 
     /// Initialize an asset balance
     pub async fn initialize_asset(&self, asset_type: AssetType, initial_balance: u64) -> Result<(), TreasuryError> {
+        // Check if asset already exists
         let mut balances = self.balances.write().await;
         
-        // Check if asset already exists
-        if balances.contains_key(&asset_type) {
-            return Err(TreasuryError::InvalidTransaction(
-                format!("Asset {} already initialized", asset_type_to_string(&asset_type))
+        // Create a borrowed reference for asset_type_to_string
+        let asset_type_ref = &asset_type;
+        if balances.contains_key(asset_type_ref) {
+            return Err(TreasuryError::OperationFailed(
+                format!("Asset already initialized: {}", asset_type_to_string(asset_type_ref))
             ));
         }
         
-        // Create new asset balance
+        // Create new balance entry
         let balance = AssetBalance {
             asset_type: asset_type.clone(),
             available: initial_balance,
@@ -205,7 +208,8 @@ impl Treasury {
             last_updated: Utc::now(),
         };
         
-        balances.insert(asset_type, balance);
+        // Add to balances with a clone
+        balances.insert(asset_type.clone(), balance);
         
         // Record initialization transaction
         let tx = TreasuryTransaction {
@@ -213,7 +217,7 @@ impl Treasury {
             asset_type: asset_type.clone(),
             amount: initial_balance,
             from: "system".to_string(),
-            to: self.federation_id.clone(),
+            to: federation_id_to_string(&self.federation_id),
             timestamp: Utc::now(),
             state: TransactionState::Completed,
             description: Some(format!("Initialize {} asset", asset_type_to_string(&asset_type))),
