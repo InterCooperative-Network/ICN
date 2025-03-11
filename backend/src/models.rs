@@ -1,5 +1,8 @@
 use serde::{Serialize, Deserialize};
 use chrono::NaiveDateTime;
+use sqlx::types::time::OffsetDateTime;
+use uuid::Uuid;
+use time::OffsetDateTime as TimeOffsetDateTime;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proposal {
@@ -67,4 +70,44 @@ pub struct Resource {
     pub capacity: i64,
     pub usage: i64,
     pub status: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct User {
+    pub id: i64,
+    pub username: String,
+    pub email: String,
+    pub password_hash: String,
+    pub created_at: Option<OffsetDateTime>,
+    pub updated_at: Option<OffsetDateTime>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Node {
+    pub id: i64,
+    pub title: String,
+    pub content: String,
+    pub user_id: i64,
+    pub created_at: Option<OffsetDateTime>,
+    pub updated_at: Option<OffsetDateTime>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Edge {
+    pub id: i64,
+    pub source_id: i64,
+    pub target_id: i64,
+    pub relationship_type: String,
+    pub user_id: i64,
+    pub created_at: Option<OffsetDateTime>,
+    pub updated_at: Option<OffsetDateTime>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Session {
+    pub id: String,
+    pub user_id: i64,
+    pub token: String,
+    pub expires_at: OffsetDateTime,
+    pub created_at: Option<OffsetDateTime>,
 }

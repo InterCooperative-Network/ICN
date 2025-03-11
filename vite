@@ -1,0 +1,1582 @@
+
+Port 3000 is in use, trying another one...
+
+  VITE v4.5.9  ready in 214 ms
+
+  ➜  Local:   http://localhost:3001/
+  ➜  Network: http://172.17.0.2:3001/
+   Compiling subtle v2.6.1
+   Compiling futures-io v0.3.31
+   Compiling tracing-core v0.1.33
+   Compiling untrusted v0.9.0
+   Compiling foldhash v0.1.4
+   Compiling allocator-api2 v0.2.21
+   Compiling rustls-pki-types v1.11.0
+   Compiling powerfmt v0.2.0
+   Compiling num-traits v0.2.19
+   Compiling crossbeam-utils v0.8.21
+   Compiling generic-array v0.14.7
+   Compiling time-core v0.1.3
+   Compiling serde v1.0.218
+   Compiling num-conv v0.1.0
+   Compiling ring v0.17.13
+   Compiling bitvec v1.0.1
+   Compiling parking v2.2.1
+   Compiling getrandom v0.3.1
+   Compiling futures-util v0.3.31
+   Compiling tinyvec_macros v0.1.1
+   Compiling digest v0.10.7
+   Compiling crc-catalog v2.4.0
+   Compiling zerocopy v0.7.35
+   Compiling cfg-if v0.1.10
+   Compiling maybe-uninit v2.0.0
+   Compiling concurrent-queue v2.5.0
+   Compiling deranged v0.3.11
+   Compiling tokio v1.44.0
+   Compiling time-macros v0.2.20
+   Compiling crc v3.2.1
+   Compiling tinyvec v1.9.0
+   Compiling crossbeam-utils v0.7.2
+   Compiling form_urlencoded v1.2.1
+   Compiling unicode-properties v0.1.3
+   Compiling hashbrown v0.15.2
+   Compiling unicode-bidi v0.3.18
+   Compiling sha2 v0.10.8
+   Compiling tracing v0.1.41
+   Compiling hmac v0.12.1
+   Compiling rustls-pemfile v2.2.0
+   Compiling webpki-roots v0.26.8
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.6
+   Compiling crossbeam-epoch v0.9.18
+   Compiling event-listener v5.4.0
+   Compiling radium v0.6.2
+   Compiling crossbeam-queue v0.3.12
+   Compiling home v0.5.11
+   Compiling dotenvy v0.15.7
+   Compiling whoami v1.5.2
+   Compiling num-integer v0.1.46
+   Compiling ppv-lite86 v0.2.20
+   Compiling funty v1.1.0
+   Compiling crossbeam-deque v0.8.6
+   Compiling wyz v0.2.0
+   Compiling sec1 v0.7.3
+   Compiling atoi v2.0.0
+   Compiling memoffset v0.5.6
+   Compiling md-5 v0.10.6
+   Compiling indexmap v2.7.1
+   Compiling hashlink v0.10.0
+   Compiling unicode-normalization v0.1.24
+   Compiling hkdf v0.12.4
+   Compiling rayon-core v1.12.1
+   Compiling futures-channel v0.3.31
+   Compiling crypto-bigint v0.5.5
+   Compiling regex-syntax v0.8.5
+   Compiling arrayref v0.3.9
+   Compiling tempfile v3.18.0
+   Compiling crossbeam-epoch v0.8.2
+   Compiling signature v2.2.0
+   Compiling rand_chacha v0.3.1
+   Compiling num_cpus v1.16.0
+   Compiling bitvec v0.20.4
+   Compiling num-iter v0.1.45
+   Compiling rfc6979 v0.4.0
+   Compiling rand v0.8.5
+   Compiling stringprep v0.1.5
+   Compiling crossbeam-deque v0.7.4
+   Compiling crossbeam-queue v0.2.3
+   Compiling crossbeam-channel v0.4.4
+   Compiling http-body v1.0.1
+   Compiling ff v0.10.1
+   Compiling constant_time_eq v0.1.5
+   Compiling futures v0.1.31
+   Compiling arrayvec v0.5.2
+   Compiling arrayvec v0.7.6
+   Compiling tower-layer v0.3.3
+   Compiling libsodium-sys v0.2.7
+   Compiling syn v1.0.109
+   Compiling bit-vec v0.6.3
+   Compiling group v0.10.0
+   Compiling signature v1.6.4
+   Compiling time v0.3.39
+   Compiling blake2s_simd v0.5.11
+   Compiling pairing v0.20.0
+   Compiling bit-set v0.5.3
+   Compiling ed25519 v1.5.3
+   Compiling crossbeam v0.7.3
+   Compiling heapsize v0.4.2
+   Compiling sha1 v0.10.6
+   Compiling inout v0.1.4
+   Compiling predicates-core v1.0.9
+   Compiling regex-syntax v0.6.29
+   Compiling sync_wrapper v1.0.2
+   Compiling constant_time_eq v0.3.1
+   Compiling elastic-array v0.10.3
+   Compiling cipher v0.4.4
+   Compiling curve25519-dalek v4.1.3
+   Compiling rustls v0.23.23
+   Compiling blake2s_simd v1.0.3
+   Compiling num-bigint v0.4.6
+   Compiling float-cmp v0.9.0
+   Compiling crossbeam-channel v0.5.14
+   Compiling rand v0.4.6
+   Compiling ff v0.13.1
+   Compiling log v0.3.9
+   Compiling overload v0.1.1
+   Compiling group v0.13.0
+   Compiling difflib v0.4.0
+   Compiling parity-bytes v0.1.2
+   Compiling hashdb v0.3.0
+   Compiling elliptic-curve v0.13.8
+   Compiling futures-cpupool v0.1.8
+   Compiling pairing v0.23.0
+   Compiling termtree v0.5.1
+   Compiling normalize-line-endings v0.3.0
+   Compiling predicates-tree v1.0.12
+   Compiling patricia-trie v0.3.0
+   Compiling bls12_381 v0.8.0
+   Compiling ecdsa v0.16.9
+   Compiling primeorder v0.13.6
+   Compiling nu-ansi-term v0.46.0
+   Compiling smallvec v1.14.0
+   Compiling serde_json v1.0.140
+   Compiling either v1.15.0
+   Compiling parking_lot_core v0.9.10
+   Compiling icu_normalizer v1.5.0
+   Compiling bincode v1.3.3
+   Compiling chrono v0.4.40
+   Compiling uuid v1.15.1
+   Compiling ff v0.9.0
+   Compiling regex-automata v0.4.9
+   Compiling rayon v1.10.0
+   Compiling parking_lot v0.12.3
+   Compiling group v0.9.0
+   Compiling num-bigint-dig v0.8.4
+   Compiling rustls-webpki v0.102.8
+   Compiling pairing v0.19.0
+   Compiling p256 v0.13.2
+   Compiling futures-intrusive v0.5.0
+   Compiling bellman v0.9.0
+   Compiling idna_adapter v1.2.0
+   Compiling idna v1.0.3
+   Compiling futures-executor v0.3.31
+   Compiling http-body-util v0.1.2
+   Compiling url v2.5.4
+   Compiling tokio-stream v0.1.17
+   Compiling rsa v0.9.7
+   Compiling futures v0.3.31
+   Compiling regex-automata v0.1.10
+   Compiling itertools v0.10.5
+   Compiling rust_decimal v1.36.0
+   Compiling serde_urlencoded v0.7.1
+   Compiling axum-core v0.4.5
+   Compiling simple_asn1 v0.6.3
+   Compiling x25519-dalek v2.0.1
+   Compiling serde_path_to_error v0.1.17
+   Compiling blowfish v0.9.1
+   Compiling tungstenite v0.21.0
+   Compiling async-stream v0.3.6
+   Compiling pem v3.0.5
+   Compiling tracing-log v0.2.0
+   Compiling blake2 v0.10.6
+   Compiling matchers v0.1.0
+   Compiling password-hash v0.5.0
+   Compiling sharded-slab v0.1.7
+   Compiling is-terminal v0.4.16
+   Compiling thread_local v1.1.8
+   Compiling matchit v0.7.3
+   Compiling downcast v0.11.0
+   Compiling fragile v2.0.0
+   Compiling jsonwebtoken v9.3.1
+   Compiling tower v0.4.13
+   Compiling bcrypt v0.15.1
+   Compiling tower-http v0.5.2
+   Compiling dotenv v0.15.0
+   Compiling fid-rs v0.1.1
+   Compiling bellman v0.14.0
+   Compiling argon2 v0.5.3
+   Compiling regex v1.11.1
+   Compiling louds-rs v0.4.0
+   Compiling trie-rs v0.1.1
+   Compiling predicates v2.1.5
+   Compiling env_logger v0.9.3
+   Compiling tracing-subscriber v0.3.19
+   Compiling env_logger v0.10.2
+   Compiling mockall_derive v0.11.4
+   Compiling sqlx-core v0.8.3
+   Compiling icn-types v0.1.0 (/workspaces/ICN/crates/icn-types)
+   Compiling tokio-util v0.7.13
+   Compiling icn-reputation v0.1.0 (/workspaces/ICN/crates/icn-reputation)
+   Compiling tokio-native-tls v0.3.1
+   Compiling hyper v1.6.0
+   Compiling tower v0.5.2
+   Compiling tokio-tungstenite v0.21.0
+warning: unused import: `std::sync::Arc`
+ --> crates/icn-reputation/src/lib.rs:2:5
+  |
+2 | use std::sync::Arc;
+  |     ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: `icn-reputation` (lib) generated 1 warning (run `cargo fix --lib -p icn-reputation` to apply 1 suggestion)
+   Compiling tokio-test v0.4.4
+   Compiling mockall v0.11.4
+   Compiling h2 v0.3.26
+   Compiling hyper-util v0.1.10
+   Compiling axum v0.7.9
+   Compiling icn-crypto v0.1.0 (/workspaces/ICN/crates/icn-crypto)
+   Compiling icn-common v0.1.0 (/workspaces/ICN/crates/icn-common)
+   Compiling icn-identity v0.1.0 (/workspaces/ICN/crates/icn-identity)
+warning: unused import: `p256::NistP256`
+ --> crates/icn-crypto/src/lib.rs:6:5
+  |
+6 | use p256::NistP256;
+  |     ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+   Compiling sqlx-postgres v0.8.3
+   Compiling icn-p2p v0.1.0 (/workspaces/ICN/crates/icn-p2p)
+warning: unused variable: `addresses`
+  --> crates/icn-p2p/src/networking.rs:59:13
+   |
+59 |         let addresses = peer.addresses.clone();
+   |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_addresses`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: `icn-crypto` (lib) generated 1 warning (run `cargo fix --lib -p icn-crypto` to apply 1 suggestion)
+warning: variable does not need to be mutable
+   --> crates/icn-p2p/src/networking.rs:164:22
+    |
+164 |         let (sender, mut receiver) = mpsc::channel(100);
+    |                      ----^^^^^^^^
+    |                      |
+    |                      help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: field `network_key` is never read
+   --> crates/icn-p2p/src/networking.rs:134:5
+    |
+130 | pub struct NetworkManager {
+    |            -------------- field in this struct
+...
+134 |     network_key: Vec<u8>,
+    |     ^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `secret` is never read
+  --> crates/icn-p2p/src/sdp.rs:14:5
+   |
+12 | struct SecretWrapper {
+   |        ------------- field in this struct
+13 |     // EphemeralSecret doesn't implement Debug
+14 |     secret: EphemeralSecret,
+   |     ^^^^^^
+
+warning: `icn-p2p` (lib) generated 4 warnings (run `cargo fix --lib -p icn-p2p` to apply 1 suggestion)
+   Compiling hyper v0.14.32
+   Compiling sqlx-macros-core v0.8.3
+   Compiling sqlx-macros v0.8.3
+   Compiling hyper-tls v0.5.0
+   Compiling reqwest v0.11.23
+   Compiling sqlx v0.8.3
+   Compiling icn-zk v0.1.0 (/workspaces/ICN/crates/icn-zk)
+warning: unused variable: `cs`
+  --> crates/icn-zk/src/lib.rs:14:9
+   |
+14 |         cs: &mut CS
+   |         ^^ help: if this is intentional, prefix it with an underscore: `_cs`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: field `0` is never read
+  --> crates/icn-zk/src/lib.rs:59:21
+   |
+59 | pub struct Variable(u32);
+   |            -------- ^^^
+   |            |
+   |            field in this struct
+   |
+   = help: consider removing this field
+   = note: `Variable` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+   Compiling icn-governance v0.1.0 (/workspaces/ICN/crates/icn-governance)
+warning: `icn-zk` (lib) generated 2 warnings
+warning: unused variable: `id`
+   --> crates/icn-governance/src/lib.rs:423:38
+    |
+423 |     pub async fn get_proposal(&self, id: &str) -> GovernanceResult<Option<Proposal>> {
+    |                                      ^^ help: if this is intentional, prefix it with an underscore: `_id`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `federation_id`
+   --> crates/icn-governance/src/lib.rs:428:40
+    |
+428 |     pub async fn list_proposals(&self, federation_id: &FederationId) -> GovernanceResult<Vec<Proposal>> {
+    |                                        ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_federation_id`
+
+warning: unused variable: `proposal_id`
+   --> crates/icn-governance/src/lib.rs:433:37
+    |
+433 |     pub async fn submit_vote(&self, proposal_id: &str, vote: Vote) -> GovernanceResult<()> {
+    |                                     ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_proposal_id`
+
+warning: unused variable: `vote`
+   --> crates/icn-governance/src/lib.rs:433:56
+    |
+433 |     pub async fn submit_vote(&self, proposal_id: &str, vote: Vote) -> GovernanceResult<()> {
+    |                                                        ^^^^ help: if this is intentional, prefix it with an underscore: `_vote`
+
+warning: unused variable: `proposal_id`
+   --> crates/icn-governance/src/lib.rs:438:42
+    |
+438 |     pub async fn execute_proposal(&self, proposal_id: &str) -> GovernanceResult<()> {
+    |                                          ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_proposal_id`
+
+warning: fields `asset_id`, `recipient_id`, and `allocation_share` are never read
+   --> crates/icn-governance/src/lib.rs:137:5
+    |
+136 | pub struct AssetAllocation {
+    |            --------------- fields in this struct
+137 |     asset_id: String,
+    |     ^^^^^^^^
+138 |     recipient_id: String,
+    |     ^^^^^^^^^^^^
+139 |     allocation_share: f64,
+    |     ^^^^^^^^^^^^^^^^
+    |
+    = note: `AssetAllocation` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` on by default
+
+warning: fields `creditor_id`, `debtor_id`, `amount`, and `due_date` are never read
+   --> crates/icn-governance/src/lib.rs:144:5
+    |
+143 | pub struct DebtSettlement {
+    |            -------------- fields in this struct
+144 |     creditor_id: String,
+    |     ^^^^^^^^^^^
+145 |     debtor_id: String,
+    |     ^^^^^^^^^
+146 |     amount: f64,
+    |     ^^^^^^
+147 |     due_date: chrono::DateTime<chrono::Utc>,
+    |     ^^^^^^^^
+    |
+    = note: `DebtSettlement` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: fields `member_id`, `new_federation_id`, and `transition_period` are never read
+   --> crates/icn-governance/src/lib.rs:152:5
+    |
+151 | pub struct MemberReassignment {
+    |            ------------------ fields in this struct
+152 |     member_id: String,
+    |     ^^^^^^^^^
+153 |     new_federation_id: Option<String>,
+    |     ^^^^^^^^^^^^^^^^^
+154 |     transition_period: chrono::Duration,
+    |     ^^^^^^^^^^^^^^^^^
+    |
+    = note: `MemberReassignment` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: function `execute_approved_action` is never used
+   --> crates/icn-governance/src/lib.rs:405:4
+    |
+405 | fn execute_approved_action() {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `icn-governance` (lib) generated 9 warnings
+   Compiling sodiumoxide v0.2.7
+   Compiling icn-federation v0.1.0 (/workspaces/ICN/crates/icn-federation)
+warning: unused import: `uuid::Uuid`
+ --> crates/icn-federation/src/federation.rs:5:5
+  |
+5 | use uuid::Uuid;
+  |     ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `HashSet`
+ --> crates/icn-federation/src/governance.rs:1:33
+  |
+1 | use std::collections::{HashMap, HashSet};
+  |                                 ^^^^^^^
+
+warning: unused import: `Duration`
+ --> crates/icn-federation/src/governance.rs:3:29
+  |
+3 | use std::time::{SystemTime, Duration};
+  |                             ^^^^^^^^
+
+warning: unused imports: `debug`, `info`, and `warn`
+ --> crates/icn-federation/src/governance.rs:8:11
+  |
+8 | use log::{debug, info, warn, error};
+  |           ^^^^^  ^^^^  ^^^^
+
+warning: unused import: `icn_crypto::KeyPair`
+  --> crates/icn-federation/src/governance.rs:12:5
+   |
+12 | use icn_crypto::KeyPair;
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `FederationTerms`, `FederationType`, and `MemberRole`
+  --> crates/icn-federation/src/governance.rs:15:17
+   |
+15 |     Federation, FederationType, FederationTerms, FederationError,
+   |                 ^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^
+16 |     ProposalType, ProposalStatus, Vote, VoteDecision, MemberRole,
+   |                                                       ^^^^^^^^^^
+
+warning: unused import: `HashSet`
+ --> crates/icn-federation/src/dispute.rs:1:33
+  |
+1 | use std::collections::{HashMap, HashSet};
+  |                                 ^^^^^^^
+
+warning: unused import: `Duration`
+ --> crates/icn-federation/src/dispute.rs:3:29
+  |
+3 | use std::time::{SystemTime, Duration};
+  |                             ^^^^^^^^
+
+warning: unused imports: `debug` and `info`
+ --> crates/icn-federation/src/dispute.rs:8:11
+  |
+8 | use log::{debug, info, warn, error};
+  |           ^^^^^  ^^^^
+
+warning: unused import: `async_trait::async_trait`
+ --> crates/icn-federation/src/dispute.rs:9:5
+  |
+9 | use async_trait::async_trait;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Mutex`
+ --> crates/icn-federation/src/messaging.rs:3:27
+  |
+3 | use tokio::sync::{RwLock, Mutex};
+  |                           ^^^^^
+
+warning: unused import: `sodiumoxide::crypto::box_`
+  --> crates/icn-federation/src/messaging.rs:10:5
+   |
+10 | use sodiumoxide::crypto::box_;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `rust_decimal::Decimal`
+ --> crates/icn-federation/src/treasury.rs:1:5
+  |
+1 | use rust_decimal::Decimal;
+  |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::sync::Arc`
+ --> crates/icn-federation/src/treasury.rs:4:5
+  |
+4 | use std::sync::Arc;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `Mutex`
+ --> crates/icn-federation/src/treasury.rs:5:27
+  |
+5 | use tokio::sync::{RwLock, Mutex};
+  |                           ^^^^^
+
+warning: unused import: `crate::FederationError`
+  --> crates/icn-federation/src/treasury.rs:10:5
+   |
+10 | use crate::FederationError;
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `ResourceError`
+  --> crates/icn-federation/src/cross_federation.rs:12:49
+   |
+12 | use crate::resource_manager::{ResourceProvider, ResourceError};
+   |                                                 ^^^^^^^^^^^^^
+
+warning: unused import: `SharingAgreementStatus`
+ --> crates/icn-federation/src/resource_manager.rs:7:57
+  |
+7 | use crate::resource_sharing::{ResourceSharingAgreement, SharingAgreementStatus};
+  |                                                         ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `resource_manager::ResourceProvider as ResourceManagerTrait`
+  --> crates/icn-federation/src/lib.rs:43:5
+   |
+43 | use resource_manager::ResourceProvider as ResourceManagerTrait;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `details`
+   --> crates/icn-federation/src/lib.rs:236:9
+    |
+236 |         details: HashMap<String, String>
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_details`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `details`
+   --> crates/icn-federation/src/lib.rs:418:9
+    |
+418 |         details: HashMap<String, String>
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_details`
+
+warning: unused variable: `provider_id`
+   --> crates/icn-federation/src/dispute.rs:474:13
+    |
+474 |         let provider_id = MemberId { 
+    |             ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_provider_id`
+
+warning: unused variable: `public_key`
+   --> crates/icn-federation/src/messaging.rs:299:13
+    |
+299 |         let public_key = public_keys.get(recipient)
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_public_key`
+
+warning: unused variable: `sender_public_key`
+   --> crates/icn-federation/src/messaging.rs:445:13
+    |
+445 |         let sender_public_key = keys.get(&message.sender)
+    |             ^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_sender_public_key`
+
+warning: unused variable: `signature_data`
+   --> crates/icn-federation/src/messaging.rs:449:13
+    |
+449 |         let signature_data = format!(
+    |             ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_signature_data`
+
+warning: unused variable: `allocation_id`
+   --> crates/icn-federation/src/treasury.rs:455:14
+    |
+455 |         for (allocation_id, allocation) in budget_allocations.iter() {
+    |              ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_allocation_id`
+
+warning: unused variable: `requester_did`
+   --> crates/icn-federation/src/cross_federation.rs:183:9
+    |
+183 |         requester_did: &str,
+    |         ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_requester_did`
+
+warning: unused variable: `requester_federation`
+   --> crates/icn-federation/src/cross_federation.rs:184:9
+    |
+184 |         requester_federation: &Federation,
+    |         ^^^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_requester_federation`
+
+warning: unused variable: `allocation_id`
+   --> crates/icn-federation/src/cross_federation.rs:228:9
+    |
+228 |         allocation_id: &str,
+    |         ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_allocation_id`
+
+warning: unused variable: `reason`
+   --> crates/icn-federation/src/cross_federation.rs:266:9
+    |
+266 |         reason: &str,
+    |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_reason`
+
+warning: unused variable: `federation_id`
+   --> crates/icn-federation/src/cross_federation.rs:333:9
+    |
+333 |         federation_id: &FederationId,
+    |         ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_federation_id`
+
+warning: unused variable: `sender_public_key`
+   --> crates/icn-federation/src/cross_federation.rs:689:13
+    |
+689 |         let sender_public_key = registry.get(&message.sender)
+    |             ^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_sender_public_key`
+
+warning: unused variable: `signature_data`
+   --> crates/icn-federation/src/cross_federation.rs:698:13
+    |
+698 |         let signature_data = format!(
+    |             ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_signature_data`
+
+warning: unused variable: `key`
+   --> crates/icn-federation/src/messaging.rs:639:25
+    |
+639 | fn encrypt(data: &[u8], key: KeyPair) -> Result<Vec<u8>, MessagingError> {
+    |                         ^^^ help: if this is intentional, prefix it with an underscore: `_key`
+
+warning: unused variable: `key`
+   --> crates/icn-federation/src/messaging.rs:646:25
+    |
+646 | fn decrypt(data: &[u8], key: KeyPair) -> Result<Vec<u8>, MessagingError> {
+    |                         ^^^ help: if this is intentional, prefix it with an underscore: `_key`
+
+warning: unused variable: `recipient_id`
+   --> crates/icn-federation/src/cross_federation.rs:554:37
+    |
+554 |     fn encrypt_for_recipient(&self, recipient_id: &FederationId, content: &[u8]) -> Result<Vec<u8>, CrossFederationError> {
+    |                                     ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_recipient_id`
+
+warning: unused variable: `reason`
+   --> crates/icn-federation/src/resource_sharing.rs:235:33
+    |
+235 |     pub fn terminate(&mut self, reason: &str) -> Result<(), String> {
+    |                                 ^^^^^^ help: if this is intentional, prefix it with an underscore: `_reason`
+
+warning: fields `reputation_service` and `sdp_config` are never read
+   --> crates/icn-federation/src/lib.rs:127:5
+    |
+123 | pub struct FederationManager {
+    |            ----------------- fields in this struct
+...
+127 |     reputation_service: Option<Arc<dyn ReputationService>>,
+    |     ^^^^^^^^^^^^^^^^^^
+128 |     resource_manager: Option<Arc<dyn ResourceProvider>>,
+129 |     sdp_config: SDPConfig,
+    |     ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: method `get_federation` is never used
+   --> crates/icn-federation/src/governance.rs:602:14
+    |
+255 | impl GovernanceManager {
+    | ---------------------- method in this implementation
+...
+602 |     async fn get_federation(&self, federation_id: &FederationId) -> GovernanceResult<Federation> {
+    |              ^^^^^^^^^^^^^^
+
+warning: methods `get_federation` and `get_federation_for_update` are never used
+   --> crates/icn-federation/src/dispute.rs:308:14
+    |
+292 | impl DisputeManager {
+    | ------------------- methods in this implementation
+...
+308 |     async fn get_federation(&self, federation_id: &FederationId) -> DisputeResult<Federation> {
+    |              ^^^^^^^^^^^^^^
+...
+319 |     async fn get_federation_for_update(&self, federation_id: &FederationId) -> DisputeResult<Federation> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+   Compiling icn-consensus v0.1.0 (/workspaces/ICN/crates/icn-consensus)
+error[E0761]: file for module `sharding` found at both "crates/icn-consensus/src/sharding.rs" and "crates/icn-consensus/src/sharding/mod.rs"
+  --> crates/icn-consensus/src/lib.rs:22:1
+   |
+22 | pub mod sharding;
+   | ^^^^^^^^^^^^^^^^^
+   |
+   = help: delete or rename one of them to remove the ambiguity
+
+error[E0255]: the name `FederationTerms` is defined multiple times
+   --> crates/icn-consensus/src/lib.rs:732:1
+    |
+17  | use icn_federation::federation::{FederationType, FederationTerms, Federation};
+    |                                                  --------------- previous import of the type `FederationTerms` here
+...
+732 | struct FederationTerms {
+    | ^^^^^^^^^^^^^^^^^^^^^^ `FederationTerms` redefined here
+    |
+    = note: `FederationTerms` must be defined only once in the type namespace of this module
+help: you can use `as` to change the binding name of the import
+    |
+17  | use icn_federation::federation::{FederationType, FederationTerms as OtherFederationTerms, Federation};
+    |                                                                  +++++++++++++++++++++++
+
+error[E0255]: the name `FederationType` is defined multiple times
+   --> crates/icn-consensus/src/lib.rs:740:1
+    |
+17  | use icn_federation::federation::{FederationType, FederationTerms, Federation};
+    |                                  -------------- previous import of the type `FederationType` here
+...
+740 | enum FederationType {
+    | ^^^^^^^^^^^^^^^^^^^ `FederationType` redefined here
+    |
+    = note: `FederationType` must be defined only once in the type namespace of this module
+help: you can use `as` to change the binding name of the import
+    |
+17  | use icn_federation::federation::{FederationType as OtherFederationType, FederationTerms, Federation};
+    |                                                 ++++++++++++++++++++++
+
+error[E0252]: the name `Federation` is defined multiple times
+  --> crates/icn-consensus/src/lib.rs:28:22
+   |
+17 | use icn_federation::federation::{FederationType, FederationTerms, Federation};
+   |                                                                   ---------- previous import of the type `Federation` here
+...
+28 | pub use federation::{Federation, FederationType, FederationTerms, FederationError};
+   |                      ^^^^^^^^^^ `Federation` reimported here
+   |
+   = note: `Federation` must be defined only once in the type namespace of this module
+help: you can use `as` to change the binding name of the import
+   |
+28 | pub use federation::{Federation as OtherFederation, FederationType, FederationTerms, FederationError};
+   |                                 ++++++++++++++++++
+
+error[E0432]: unresolved import `icn_types::BlockHeader`
+  --> crates/icn-consensus/src/round_management.rs:10:24
+   |
+10 | use icn_types::{Block, BlockHeader, Transaction};
+   |                        ^^^^^^^^^^^ no `BlockHeader` in the root
+
+error[E0432]: unresolved import `crate::reputation`
+ --> crates/icn-consensus/src/proof_of_cooperation.rs:5:12
+  |
+5 | use crate::reputation::{ReputationManager, ReputationInterface};
+  |            ^^^^^^^^^^ could not find `reputation` in the crate root
+
+error[E0432]: unresolved import `crate::timeout_handling::TimeoutStrategy`
+ --> crates/icn-consensus/src/round_management.rs:9:5
+  |
+9 | use crate::timeout_handling::TimeoutStrategy;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `TimeoutStrategy` in `timeout_handling`
+
+error[E0412]: cannot find type `FedType` in this scope
+   --> crates/icn-consensus/src/lib.rs:397:26
+    |
+397 |         federation_type: FedType,
+    |                          ^^^^^^^ not found in this scope
+
+error[E0412]: cannot find type `FedTerms` in this scope
+   --> crates/icn-consensus/src/lib.rs:398:16
+    |
+398 |         terms: FedTerms,
+    |                ^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find function `verify_proof` in this scope
+   --> crates/icn-consensus/src/lib.rs:477:13
+    |
+477 |         if !verify_proof(proof) {
+    |             ^^^^^^^^^^^^ not found in this scope
+    |
+help: consider importing one of these functions
+    |
+1   + use bellman::groth16::verify_proof;
+    |
+1   + use icn_zk::verify_proof;
+    |
+
+error[E0412]: cannot find type `FedType` in this scope
+   --> crates/icn-consensus/src/lib.rs:695:26
+    |
+695 |         federation_type: FedType,
+    |                          ^^^^^^^ not found in this scope
+
+error[E0412]: cannot find type `FedTerms` in this scope
+   --> crates/icn-consensus/src/lib.rs:697:16
+    |
+697 |         terms: FedTerms,
+    |                ^^^^^^^^ not found in this scope
+
+error[E0412]: cannot find type `FedTerms` in this scope
+   --> crates/icn-consensus/src/lib.rs:727:20
+    |
+727 |         new_terms: FedTerms,
+    |                    ^^^^^^^^ not found in this scope
+
+error[E0603]: trait `Circuit` is private
+ --> crates/icn-consensus/src/proof_of_cooperation.rs:1:34
+  |
+1 | use icn_zk::{ProofOfCooperation, Circuit, verify_proof};
+  |                                  ^^^^^^^ private trait
+  |
+note: the trait `Circuit` is defined here
+ --> /workspaces/ICN/crates/icn-zk/src/lib.rs:1:15
+  |
+1 | use bellman::{Circuit, ConstraintSystem as BellmanCS, SynthesisError};
+  |               ^^^^^^^
+help: import `Circuit` directly
+  |
+1 | use icn_zk::{ProofOfCooperation, bellman::Circuit, verify_proof};
+  |                                  ~~~~~~~~~~~~~~~~
+
+error[E0603]: enum import `FederationType` is private
+  --> crates/icn-consensus/src/lib.rs:28:34
+   |
+28 | pub use federation::{Federation, FederationType, FederationTerms, FederationError};
+   |                                  ^^^^^^^^^^^^^^ private enum import
+   |
+note: the enum import `FederationType` is defined here...
+  --> crates/icn-consensus/src/federation.rs:5:22
+   |
+5  | use icn_federation::{FederationType, FederationTerms};
+   |                      ^^^^^^^^^^^^^^
+note: ...and refers to the enum `FederationType` which is defined here
+  --> /workspaces/ICN/crates/icn-federation/src/lib.rs:27:17
+   |
+27 |     Federation, FederationType, FederationTerms, FederationError as FederationModuleError, 
+   |                 ^^^^^^^^^^^^^^ you could import this directly
+help: import `FederationType` directly
+   |
+28 | pub use federation::{Federation, icn_federation::federation::FederationType, FederationTerms, FederationError};
+   |                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+error[E0603]: struct import `FederationTerms` is private
+  --> crates/icn-consensus/src/lib.rs:28:50
+   |
+28 | pub use federation::{Federation, FederationType, FederationTerms, FederationError};
+   |                                                  ^^^^^^^^^^^^^^^ private struct import
+   |
+note: the struct import `FederationTerms` is defined here...
+  --> crates/icn-consensus/src/federation.rs:5:38
+   |
+5  | use icn_federation::{FederationType, FederationTerms};
+   |                                      ^^^^^^^^^^^^^^^
+note: ...and refers to the struct `FederationTerms` which is defined here
+  --> /workspaces/ICN/crates/icn-federation/src/lib.rs:27:33
+   |
+27 |     Federation, FederationType, FederationTerms, FederationError as FederationModuleError, 
+   |                                 ^^^^^^^^^^^^^^^ you could import this directly
+help: import `FederationTerms` directly
+   |
+28 | pub use federation::{Federation, FederationType, icn_federation::federation::FederationTerms, FederationError};
+   |                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+warning: unused imports: `debug`, `info`, and `warn`
+ --> crates/icn-consensus/src/lib.rs:6:11
+  |
+6 | use log::{debug, error, info, warn};
+  |           ^^^^^         ^^^^  ^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `thiserror::Error`
+  --> crates/icn-consensus/src/lib.rs:10:5
+   |
+10 | use thiserror::Error;
+   |     ^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::time::Duration`
+ --> crates/icn-consensus/src/federation.rs:4:5
+  |
+4 | use std::time::Duration;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::sync::Arc`
+ --> crates/icn-consensus/src/proof_of_cooperation.rs:2:5
+  |
+2 | use std::sync::Arc;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `tokio::sync::RwLock`
+ --> crates/icn-consensus/src/proof_of_cooperation.rs:3:5
+  |
+3 | use tokio::sync::RwLock;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> crates/icn-consensus/src/proof_of_cooperation.rs:4:5
+  |
+4 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `bellman::Circuit`
+ --> crates/icn-consensus/src/proof_of_cooperation.rs:6:5
+  |
+6 | use bellman::Circuit;
+  |     ^^^^^^^^^^^^^^^^
+
+warning: unused import: `debug`
+ --> crates/icn-consensus/src/round_management.rs:6:23
+  |
+6 | use log::{info, warn, debug};
+  |                       ^^^^^
+
+warning: unused import: `tokio::sync::RwLock`
+ --> crates/icn-consensus/src/pbft.rs:4:5
+  |
+4 | use tokio::sync::RwLock;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `info` and `warn`
+ --> crates/icn-consensus/src/pbft.rs:5:25
+  |
+5 | use log::{debug, error, info, warn};
+  |                         ^^^^  ^^^^
+
+warning: unused import: `tokio::time::sleep`
+ --> crates/icn-consensus/src/timeout_handling.rs:3:5
+  |
+3 | use tokio::time::sleep;
+  |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Federation`
+  --> crates/icn-consensus/src/lib.rs:28:22
+   |
+28 | pub use federation::{Federation, FederationType, FederationTerms, FederationError};
+   |                      ^^^^^^^^^^
+
+error[E0117]: only traits defined in the current crate can be implemented for types defined outside of the crate
+   --> crates/icn-consensus/src/lib.rs:731:10
+    |
+731 | #[derive(Serialize, Deserialize)]
+    |          ^^^^^^^^^
+732 | struct FederationTerms {
+    |        --------------- `icn_federation::FederationTerms` is not defined in the current crate
+    |
+    = note: impl doesn't have any local type before any uncovered type parameters
+    = note: for more information see https://doc.rust-lang.org/reference/items/implementations.html#orphan-rules
+    = note: define and implement a trait or new type instead
+    = note: this error originates in the derive macro `Serialize` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0117]: only traits defined in the current crate can be implemented for types defined outside of the crate
+   --> crates/icn-consensus/src/lib.rs:739:10
+    |
+739 | #[derive(Serialize, Deserialize)]
+    |          ^^^^^^^^^
+740 | enum FederationType {
+    |      -------------- `icn_federation::FederationType` is not defined in the current crate
+    |
+    = note: impl doesn't have any local type before any uncovered type parameters
+    = note: for more information see https://doc.rust-lang.org/reference/items/implementations.html#orphan-rules
+    = note: define and implement a trait or new type instead
+    = note: this error originates in the derive macro `Serialize` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0117]: only traits defined in the current crate can be implemented for types defined outside of the crate
+   --> crates/icn-consensus/src/lib.rs:731:21
+    |
+731 | #[derive(Serialize, Deserialize)]
+    |                     ^^^^^^^^^^^
+732 | struct FederationTerms {
+    |        --------------- `icn_federation::FederationTerms` is not defined in the current crate
+    |
+    = note: impl doesn't have any local type before any uncovered type parameters
+    = note: for more information see https://doc.rust-lang.org/reference/items/implementations.html#orphan-rules
+    = note: define and implement a trait or new type instead
+    = note: this error originates in the derive macro `Deserialize` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0117]: only traits defined in the current crate can be implemented for types defined outside of the crate
+   --> crates/icn-consensus/src/lib.rs:739:21
+    |
+739 | #[derive(Serialize, Deserialize)]
+    |                     ^^^^^^^^^^^
+740 | enum FederationType {
+    |      -------------- `icn_federation::FederationType` is not defined in the current crate
+    |
+    = note: impl doesn't have any local type before any uncovered type parameters
+    = note: for more information see https://doc.rust-lang.org/reference/items/implementations.html#orphan-rules
+    = note: define and implement a trait or new type instead
+    = note: this error originates in the derive macro `Deserialize` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0053]: method `submit_vote` has an incompatible type for trait
+   --> crates/icn-consensus/src/lib.rs:665:43
+    |
+665 |     async fn submit_vote(&mut self, vote: Vote) -> Result<VoteStatus, GovernanceError> {
+    |                                           ^^^^ expected `icn_common::Vote`, found `Vote`
+    |
+    = note: expected signature `fn(&'life0 mut ProofOfCooperation, icn_common::Vote) -> Pin<Box<(dyn futures::Future<Output = Result<icn_common::VoteStatus, icn_common::GovernanceError>> + Send + 'async_trait)>>`
+               found signature `fn(&'life0 mut ProofOfCooperation, Vote) -> Pin<Box<(dyn futures::Future<Output = Result<VoteStatus, GovernanceError>> + Send + 'async_trait)>>`
+help: change the parameter type to match the trait
+    |
+665 |     async fn submit_vote(&mut self, vote: icn_common::Vote) -> Result<VoteStatus, GovernanceError> {
+    |                                           ~~~~~~~~~~~~~~~~
+
+error[E0053]: method `process_approved_proposal` has an incompatible type for trait
+   --> crates/icn-consensus/src/lib.rs:651:1
+    |
+651 | #[async_trait]
+    | ^^^^^^^^^^^^^^ expected `icn_common::GovernanceError`, found `GovernanceError`
+    |
+    = note: expected signature `fn(&'life0 mut ProofOfCooperation, &'life1 _) -> Pin<Box<(dyn futures::Future<Output = Result<(), icn_common::GovernanceError>> + Send + 'async_trait)>>`
+               found signature `fn(&'life0 mut ProofOfCooperation, &'life1 _) -> Pin<Box<(dyn futures::Future<Output = Result<(), GovernanceError>> + Send + 'async_trait)>>`
+    = note: this error originates in the attribute macro `async_trait` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: change the output type to match the trait
+    |
+651 | Pin<Box<(dyn futures::Future<Output = Result<(), icn_common::GovernanceError>> + Send + 'async_trait)>>
+    |
+
+error[E0599]: no variant or associated item named `ConsensusFailure` found for enum `ConsensusError` in the current scope
+   --> crates/icn-consensus/src/lib.rs:220:42
+    |
+40  | pub enum ConsensusError {
+    | ----------------------- variant or associated item `ConsensusFailure` not found for this enum
+...
+220 |             .map_err(|e| ConsensusError::ConsensusFailure(e.to_string()))?;
+    |                                          ^^^^^^^^^^^^^^^^ variant or associated item not found in `ConsensusError`
+
+warning: `icn-federation` (lib) generated 40 warnings (run `cargo fix --lib -p icn-federation` to apply 19 suggestions)
+error[E0599]: no variant or associated item named `BftError` found for enum `ConsensusError` in the current scope
+   --> crates/icn-consensus/src/lib.rs:227:40
+    |
+40  | pub enum ConsensusError {
+    | ----------------------- variant or associated item `BftError` not found for this enum
+...
+227 |             return Err(ConsensusError::BftError(
+    |                                        ^^^^^^^^ variant or associated item not found in `ConsensusError`
+
+error[E0599]: no variant or associated item named `TimeoutError` found for enum `ConsensusError` in the current scope
+   --> crates/icn-consensus/src/lib.rs:275:33
+    |
+40  | pub enum ConsensusError {
+    | ----------------------- variant or associated item `TimeoutError` not found for this enum
+...
+275 |             Err(ConsensusError::TimeoutError("PBFT consensus timed out".into()))
+    |                                 ^^^^^^^^^^^^ variant or associated item not found in `ConsensusError`
+
+error[E0599]: no variant or associated item named `ConsensusFailure` found for enum `ConsensusError` in the current scope
+   --> crates/icn-consensus/src/lib.rs:277:33
+    |
+40  | pub enum ConsensusError {
+    | ----------------------- variant or associated item `ConsensusFailure` not found for this enum
+...
+277 |             Err(ConsensusError::ConsensusFailure("No proposed block".into()))
+    |                                 ^^^^^^^^^^^^^^^^ variant or associated item not found in `ConsensusError`
+
+error[E0599]: no method named `chunks` found for struct `VecDeque` in the current scope
+   --> crates/icn-consensus/src/lib.rs:292:48
+    |
+292 |         let chunks: Vec<_> = self.participants.chunks(self.participants.len() / 4).collect();
+    |                                                ^^^^^^ method not found in `VecDeque<String>`
+
+error[E0599]: no variant or associated item named `BftError` found for enum `ConsensusError` in the current scope
+   --> crates/icn-consensus/src/lib.rs:341:40
+    |
+40  | pub enum ConsensusError {
+    | ----------------------- variant or associated item `BftError` not found for this enum
+...
+341 |             return Err(ConsensusError::BftError(
+    |                                        ^^^^^^^^ variant or associated item not found in `ConsensusError`
+
+error[E0599]: no variant or associated item named `TimeoutError` found for enum `ConsensusError` in the current scope
+   --> crates/icn-consensus/src/lib.rs:363:37
+    |
+40  | pub enum ConsensusError {
+    | ----------------------- variant or associated item `TimeoutError` not found for this enum
+...
+363 |                 Err(ConsensusError::TimeoutError("Consensus round timed out".into()))
+    |                                     ^^^^^^^^^^^^ variant or associated item not found in `ConsensusError`
+
+error[E0308]: mismatched types
+   --> crates/icn-consensus/src/lib.rs:512:16
+    |
+512 |             if key_pair.verify(message.as_bytes(), signature.as_bytes()) {
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `bool`, found `Result<bool, CryptoError>`
+    |
+    = note: expected type `bool`
+               found enum `Result<bool, icn_crypto::CryptoError>`
+help: use the `?` operator to extract the `Result<bool, icn_crypto::CryptoError>` value, propagating a `Result::Err` value to the caller
+    |
+512 |             if key_pair.verify(message.as_bytes(), signature.as_bytes())? {
+    |                                                                         +
+
+error[E0599]: no variant or associated item named `ValidationFailure` found for enum `ConsensusError` in the current scope
+   --> crates/icn-consensus/src/lib.rs:515:37
+    |
+40  | pub enum ConsensusError {
+    | ----------------------- variant or associated item `ValidationFailure` not found for this enum
+...
+515 |                 Err(ConsensusError::ValidationFailure("Invalid signature".to_string()))
+    |                                     ^^^^^^^^^^^^^^^^^ variant or associated item not found in `ConsensusError`
+
+error[E0599]: no variant or associated item named `ValidationFailure` found for enum `ConsensusError` in the current scope
+   --> crates/icn-consensus/src/lib.rs:518:33
+    |
+40  | pub enum ConsensusError {
+    | ----------------------- variant or associated item `ValidationFailure` not found for this enum
+...
+518 |             Err(ConsensusError::ValidationFailure("Public key not found".to_string()))
+    |                                 ^^^^^^^^^^^^^^^^^ variant or associated item not found in `ConsensusError`
+
+warning: unused variable: `message`
+   --> crates/icn-consensus/src/lib.rs:543:49
+    |
+543 |     async fn broadcast_consensus_message(&self, message: pbft::ConsensusMessage) -> Result<(), ConsensusError> {
+    |                                                 ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_message`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+error[E0277]: the trait bound `bls12_381::Scalar: ff::PrimeField` is not satisfied
+   --> crates/icn-consensus/src/proof_of_cooperation.rs:10:17
+    |
+10  |     proofs: Vec<ProofOfCooperation<bls12_381::Scalar>>,
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `ff::PrimeField` is not implemented for `bls12_381::Scalar`
+    |
+help: trait impl with same name found
+   --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bls12_381-0.8.0/src/scalar.rs:688:1
+    |
+688 | impl PrimeField for Scalar {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = note: perhaps two different versions of crate `ff` are being used?
+note: there are multiple different versions of crate `ff` in the dependency graph
+   --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ff-0.9.0/src/lib.rs:113:1
+    |
+113 | pub trait PrimeField: Field + From<u64> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this is the required trait
+    |
+   ::: crates/icn-consensus/src/proof_of_cooperation.rs:1:5
+    |
+1   | use icn_zk::{ProofOfCooperation, Circuit, verify_proof};
+    |     ------ one version of crate `ff` used here, as a dependency of crate `bellman`
+    |
+   ::: crates/icn-consensus/src/lib.rs:16:5
+    |
+16  | use icn_crypto::KeyPair;
+    |     ---------- one version of crate `ff` used here, as a dependency of crate `group`
+    |
+   ::: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bls12_381-0.8.0/src/scalar.rs:22:1
+    |
+22  | pub struct Scalar(pub(crate) [u64; 4]);
+    | ----------------- this type doesn't implement the required trait
+    |
+   ::: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ff-0.13.1/src/batch.rs:18:1
+    |
+18  | pub trait BatchInvert<F: Field> {
+    | ------------------------------- this is the found trait
+    = help: you can use `cargo tree` to explore your dependency tree
+note: required by a bound in `icn_zk::ProofOfCooperation`
+   --> /workspaces/ICN/crates/icn-zk/src/lib.rs:6:34
+    |
+6   | pub struct ProofOfCooperation<F: PrimeField> {
+    |                                  ^^^^^^^^^^ required by this bound in `ProofOfCooperation`
+
+error[E0277]: the trait bound `bls12_381::Scalar: ff::PrimeField` is not satisfied
+   --> crates/icn-consensus/src/proof_of_cooperation.rs:20:40
+    |
+20  |     pub fn add_proof(&mut self, proof: ProofOfCooperation<bls12_381::Scalar>) {
+    |                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `ff::PrimeField` is not implemented for `bls12_381::Scalar`
+    |
+help: trait impl with same name found
+   --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bls12_381-0.8.0/src/scalar.rs:688:1
+    |
+688 | impl PrimeField for Scalar {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = note: perhaps two different versions of crate `ff` are being used?
+note: there are multiple different versions of crate `ff` in the dependency graph
+   --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ff-0.9.0/src/lib.rs:113:1
+    |
+113 | pub trait PrimeField: Field + From<u64> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this is the required trait
+    |
+   ::: crates/icn-consensus/src/proof_of_cooperation.rs:1:5
+    |
+1   | use icn_zk::{ProofOfCooperation, Circuit, verify_proof};
+    |     ------ one version of crate `ff` used here, as a dependency of crate `bellman`
+    |
+   ::: crates/icn-consensus/src/lib.rs:16:5
+    |
+16  | use icn_crypto::KeyPair;
+    |     ---------- one version of crate `ff` used here, as a dependency of crate `group`
+    |
+   ::: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bls12_381-0.8.0/src/scalar.rs:22:1
+    |
+22  | pub struct Scalar(pub(crate) [u64; 4]);
+    | ----------------- this type doesn't implement the required trait
+    |
+   ::: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ff-0.13.1/src/batch.rs:18:1
+    |
+18  | pub trait BatchInvert<F: Field> {
+    | ------------------------------- this is the found trait
+    = help: you can use `cargo tree` to explore your dependency tree
+note: required by a bound in `icn_zk::ProofOfCooperation`
+   --> /workspaces/ICN/crates/icn-zk/src/lib.rs:6:34
+    |
+6   | pub struct ProofOfCooperation<F: PrimeField> {
+    |                                  ^^^^^^^^^^ required by this bound in `ProofOfCooperation`
+
+error[E0599]: no method named `reset_sequence` found for struct `tokio::sync::MutexGuard<'_, PbftConsensus>` in the current scope
+   --> crates/icn-consensus/src/round_management.rs:154:14
+    |
+154 |         pbft.reset_sequence();
+    |              ^^^^^^^^^^^^^^ method not found in `MutexGuard<'_, PbftConsensus>`
+
+error[E0609]: no field `header` on type `&Block`
+   --> crates/icn-consensus/src/round_management.rs:230:65
+    |
+230 |             block_height: self.current_block.as_ref().map(|b| b.header.height),
+    |                                                                 ^^^^^^ unknown field
+    |
+    = note: available fields are: `index`, `previous_hash`, `timestamp`, `transactions`, `hash` ... and 3 others
+
+error[E0599]: no method named `force_view_change` found for struct `tokio::sync::MutexGuard<'_, PbftConsensus>` in the current scope
+   --> crates/icn-consensus/src/round_management.rs:272:14
+    |
+272 |         pbft.force_view_change();
+    |              ^^^^^^^^^^^^^^^^^ method not found in `MutexGuard<'_, PbftConsensus>`
+
+error[E0609]: no field `merkle_root` on type `&Block`
+  --> crates/icn-consensus/src/validation.rs:60:18
+   |
+60 |         if block.merkle_root.is_empty() {
+   |                  ^^^^^^^^^^^ unknown field
+   |
+   = note: available fields are: `index`, `previous_hash`, `timestamp`, `transactions`, `hash` ... and 3 others
+
+error[E0609]: no field `shard_id` on type `&Block`
+  --> crates/icn-consensus/src/validation.rs:65:59
+   |
+65 |         if !self.shard_manager.shards.contains_key(&block.shard_id) {
+   |                                                           ^^^^^^^^ unknown field
+   |
+   = note: available fields are: `index`, `previous_hash`, `timestamp`, `transactions`, `hash` ... and 3 others
+
+error[E0609]: no field `shard_id` on type `&Block`
+  --> crates/icn-consensus/src/validation.rs:66:92
+   |
+66 |             return Err(ValidationError::InvalidBlock(format!("Invalid shard ID: {}", block.shard_id)));
+   |                                                                                            ^^^^^^^^ unknown field
+   |
+   = note: available fields are: `index`, `previous_hash`, `timestamp`, `transactions`, `hash` ... and 3 others
+
+error[E0609]: no field `minimum_reputation` on type `icn_federation::FederationTerms`
+  --> crates/icn-consensus/src/federation.rs:87:46
+   |
+87 |         participant_reputation >= self.terms.minimum_reputation
+   |                                              ^^^^^^^^^^^^^^^^^^ unknown field
+   |
+   = note: available fields are: `governance_rules`, `resource_rules`, `membership_rules`, `dispute_resolution_rules`, `cross_federation_rules`
+
+error[E0277]: the trait bound `bls12_381::Scalar: ff::PrimeField` is not satisfied
+   --> crates/icn-consensus/src/proof_of_cooperation.rs:16:21
+    |
+16  |             proofs: Vec::new()
+    |                     ^^^^^^^^^^ the trait `ff::PrimeField` is not implemented for `bls12_381::Scalar`
+    |
+help: trait impl with same name found
+   --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bls12_381-0.8.0/src/scalar.rs:688:1
+    |
+688 | impl PrimeField for Scalar {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = note: perhaps two different versions of crate `ff` are being used?
+note: there are multiple different versions of crate `ff` in the dependency graph
+   --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ff-0.9.0/src/lib.rs:113:1
+    |
+113 | pub trait PrimeField: Field + From<u64> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this is the required trait
+    |
+   ::: crates/icn-consensus/src/proof_of_cooperation.rs:1:5
+    |
+1   | use icn_zk::{ProofOfCooperation, Circuit, verify_proof};
+    |     ------ one version of crate `ff` used here, as a dependency of crate `bellman`
+    |
+   ::: crates/icn-consensus/src/lib.rs:16:5
+    |
+16  | use icn_crypto::KeyPair;
+    |     ---------- one version of crate `ff` used here, as a dependency of crate `group`
+    |
+   ::: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bls12_381-0.8.0/src/scalar.rs:22:1
+    |
+22  | pub struct Scalar(pub(crate) [u64; 4]);
+    | ----------------- this type doesn't implement the required trait
+    |
+   ::: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ff-0.13.1/src/batch.rs:18:1
+    |
+18  | pub trait BatchInvert<F: Field> {
+    | ------------------------------- this is the found trait
+    = help: you can use `cargo tree` to explore your dependency tree
+note: required by a bound in `icn_zk::ProofOfCooperation`
+   --> /workspaces/ICN/crates/icn-zk/src/lib.rs:6:34
+    |
+6   | pub struct ProofOfCooperation<F: PrimeField> {
+    |                                  ^^^^^^^^^^ required by this bound in `ProofOfCooperation`
+
+error[E0277]: the trait bound `bls12_381::Scalar: ff::PrimeField` is not satisfied
+   --> crates/icn-consensus/src/proof_of_cooperation.rs:16:21
+    |
+16  |             proofs: Vec::new()
+    |                     ^^^^^^^^ the trait `ff::PrimeField` is not implemented for `bls12_381::Scalar`
+    |
+help: trait impl with same name found
+   --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bls12_381-0.8.0/src/scalar.rs:688:1
+    |
+688 | impl PrimeField for Scalar {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = note: perhaps two different versions of crate `ff` are being used?
+note: there are multiple different versions of crate `ff` in the dependency graph
+   --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ff-0.9.0/src/lib.rs:113:1
+    |
+113 | pub trait PrimeField: Field + From<u64> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this is the required trait
+    |
+   ::: crates/icn-consensus/src/proof_of_cooperation.rs:1:5
+    |
+1   | use icn_zk::{ProofOfCooperation, Circuit, verify_proof};
+    |     ------ one version of crate `ff` used here, as a dependency of crate `bellman`
+    |
+   ::: crates/icn-consensus/src/lib.rs:16:5
+    |
+16  | use icn_crypto::KeyPair;
+    |     ---------- one version of crate `ff` used here, as a dependency of crate `group`
+    |
+   ::: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bls12_381-0.8.0/src/scalar.rs:22:1
+    |
+22  | pub struct Scalar(pub(crate) [u64; 4]);
+    | ----------------- this type doesn't implement the required trait
+    |
+   ::: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ff-0.13.1/src/batch.rs:18:1
+    |
+18  | pub trait BatchInvert<F: Field> {
+    | ------------------------------- this is the found trait
+    = help: you can use `cargo tree` to explore your dependency tree
+note: required by a bound in `icn_zk::ProofOfCooperation`
+   --> /workspaces/ICN/crates/icn-zk/src/lib.rs:6:34
+    |
+6   | pub struct ProofOfCooperation<F: PrimeField> {
+    |                                  ^^^^^^^^^^ required by this bound in `ProofOfCooperation`
+
+error[E0277]: the trait bound `bls12_381::Scalar: ff::PrimeField` is not satisfied
+   --> crates/icn-consensus/src/proof_of_cooperation.rs:21:9
+    |
+21  |         self.proofs.push(proof);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^ the trait `ff::PrimeField` is not implemented for `bls12_381::Scalar`
+    |
+help: trait impl with same name found
+   --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bls12_381-0.8.0/src/scalar.rs:688:1
+    |
+688 | impl PrimeField for Scalar {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = note: perhaps two different versions of crate `ff` are being used?
+note: there are multiple different versions of crate `ff` in the dependency graph
+   --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ff-0.9.0/src/lib.rs:113:1
+    |
+113 | pub trait PrimeField: Field + From<u64> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this is the required trait
+    |
+   ::: crates/icn-consensus/src/proof_of_cooperation.rs:1:5
+    |
+1   | use icn_zk::{ProofOfCooperation, Circuit, verify_proof};
+    |     ------ one version of crate `ff` used here, as a dependency of crate `bellman`
+    |
+   ::: crates/icn-consensus/src/lib.rs:16:5
+    |
+16  | use icn_crypto::KeyPair;
+    |     ---------- one version of crate `ff` used here, as a dependency of crate `group`
+    |
+   ::: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bls12_381-0.8.0/src/scalar.rs:22:1
+    |
+22  | pub struct Scalar(pub(crate) [u64; 4]);
+    | ----------------- this type doesn't implement the required trait
+    |
+   ::: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ff-0.13.1/src/batch.rs:18:1
+    |
+18  | pub trait BatchInvert<F: Field> {
+    | ------------------------------- this is the found trait
+    = help: you can use `cargo tree` to explore your dependency tree
+note: required by a bound in `icn_zk::ProofOfCooperation`
+   --> /workspaces/ICN/crates/icn-zk/src/lib.rs:6:34
+    |
+6   | pub struct ProofOfCooperation<F: PrimeField> {
+    |                                  ^^^^^^^^^^ required by this bound in `ProofOfCooperation`
+
+error[E0308]: mismatched types
+  --> crates/icn-consensus/src/proof_of_cooperation.rs:57:22
+   |
+57 |         verify_proof(&self.data)
+   |         ------------ ^^^^^^^^^^ expected `&str`, found `&Vec<u8>`
+   |         |
+   |         arguments to this function are incorrect
+   |
+   = note: expected reference `&str`
+              found reference `&Vec<u8>`
+note: function defined here
+  --> /workspaces/ICN/crates/icn-zk/src/lib.rs:35:8
+   |
+35 | pub fn verify_proof(_proof: &str) -> bool {
+   |        ^^^^^^^^^^^^
+
+error[E0599]: no method named `is_empty` found for enum `std::option::Option` in the current scope
+    --> crates/icn-consensus/src/validation.rs:132:34
+     |
+132  |         if transaction.signature.is_empty() {
+     |                                  ^^^^^^^^ method not found in `Option<String>`
+     |
+note: the method `is_empty` exists on the type `std::string::String`
+    --> /usr/local/rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/string.rs:1839:5
+     |
+1839 |     pub const fn is_empty(&self) -> bool {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: consider using `Option::expect` to unwrap the `std::string::String` value, panicking if the value is an `Option::None`
+     |
+132  |         if transaction.signature.expect("REASON").is_empty() {
+     |                                 +++++++++++++++++
+
+error[E0609]: no field `data` on type `&'life1 Transaction`
+   --> crates/icn-consensus/src/validation.rs:137:24
+    |
+137 |         if transaction.data.is_empty() {
+    |                        ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `sender`, `receiver`, `amount`, `transaction_type` ... and 6 others
+
+error[E0782]: expected a type, found a trait
+   --> crates/icn-consensus/src/lib.rs:172:24
+    |
+172 |             vote_trie: Trie::new(),
+    |                        ^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+172 |             vote_trie: <dyn Trie>::new(),
+    |                        ++++     +
+
+error[E0782]: expected a type, found a trait
+   --> crates/icn-consensus/src/lib.rs:196:26
+    |
+196 |         self.vote_trie = Trie::new();
+    |                          ^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+196 |         self.vote_trie = <dyn Trie>::new();
+    |                          ++++     +
+
+error[E0599]: no variant or associated item named `ConsensusFailure` found for enum `ConsensusError` in the current scope
+   --> crates/icn-consensus/src/lib.rs:403:40
+    |
+40  | pub enum ConsensusError {
+    | ----------------------- variant or associated item `ConsensusFailure` not found for this enum
+...
+403 |             return Err(ConsensusError::ConsensusFailure(
+    |                                        ^^^^^^^^^^^^^^^^ variant or associated item not found in `ConsensusError`
+
+error[E0599]: no function or associated item named `new` found for struct `icn_federation::Federation` in the current scope
+   --> crates/icn-consensus/src/lib.rs:412:38
+    |
+412 |         let federation = Federation::new(
+    |                                      ^^^ function or associated item not found in `Federation`
+
+error[E0599]: the method `insert` exists for struct `HashSet<Vote>`, but its trait bounds were not satisfied
+   --> crates/icn-consensus/src/lib.rs:673:24
+    |
+68  | pub struct Vote {
+    | --------------- doesn't satisfy `Vote: std::cmp::Eq` or `Vote: std::hash::Hash`
+...
+673 |         proposal.votes.insert(vote);
+    |                        ^^^^^^
+    |
+    = note: the following trait bounds were not satisfied:
+            `Vote: std::cmp::Eq`
+            `Vote: std::hash::Hash`
+help: consider annotating `Vote` with `#[derive(Eq, Hash, PartialEq)]`
+    |
+68  + #[derive(Eq, Hash, PartialEq)]
+69  | pub struct Vote {
+    |
+
+error[E0609]: no field `minimum_reputation` on type `&icn_federation::FederationTerms`
+   --> crates/icn-consensus/src/lib.rs:733:5
+    |
+733 |     minimum_reputation: i64,
+    |     ^^^^^^^^^^^^^^^^^^ unknown field
+    |
+    = note: available fields are: `governance_rules`, `resource_rules`, `membership_rules`, `dispute_resolution_rules`, `cross_federation_rules`
+
+error[E0609]: no field `resource_sharing_policies` on type `&icn_federation::FederationTerms`
+   --> crates/icn-consensus/src/lib.rs:734:5
+    |
+734 |     resource_sharing_policies: String,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^ unknown field
+    |
+    = note: available fields are: `governance_rules`, `resource_rules`, `membership_rules`, `dispute_resolution_rules`, `cross_federation_rules`
+
+error[E0609]: no field `duration` on type `&icn_federation::FederationTerms`
+   --> crates/icn-consensus/src/lib.rs:736:5
+    |
+736 |     duration: String,
+    |     ^^^^^^^^ unknown field
+    |
+    = note: available fields are: `governance_rules`, `resource_rules`, `membership_rules`, `dispute_resolution_rules`, `cross_federation_rules`
+
+error[E0560]: struct `icn_federation::FederationTerms` has no field named `minimum_reputation`
+   --> crates/icn-consensus/src/lib.rs:733:5
+    |
+733 |     minimum_reputation: i64,
+    |     ^^^^^^^^^^^^^^^^^^ `icn_federation::FederationTerms` does not have this field
+    |
+    = note: all struct fields are already assigned
+
+error[E0560]: struct `icn_federation::FederationTerms` has no field named `resource_sharing_policies`
+   --> crates/icn-consensus/src/lib.rs:734:5
+    |
+734 |     resource_sharing_policies: String,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^ `icn_federation::FederationTerms` does not have this field
+    |
+    = note: all struct fields are already assigned
+
+error[E0308]: mismatched types
+   --> crates/icn-consensus/src/lib.rs:731:21
+    |
+731 | #[derive(Serialize, Deserialize)]
+    |                     ^^^^^^^^^^^ expected `GovernanceRules`, found `String`
+    |
+    = note: this error originates in the derive macro `Deserialize` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0560]: struct `icn_federation::FederationTerms` has no field named `duration`
+   --> crates/icn-consensus/src/lib.rs:736:5
+    |
+736 |     duration: String,
+    |     ^^^^^^^^ `icn_federation::FederationTerms` does not have this field
+    |
+    = note: all struct fields are already assigned
+
+error[E0599]: no variant or associated item named `Cooperative` found for enum `icn_federation::FederationType` in the current scope
+   --> crates/icn-consensus/src/lib.rs:741:5
+    |
+740 |   enum FederationType {
+    |  ______-
+741 | |     Cooperative,
+    | |    -^^^^^^^^^^^ variant or associated item not found in `FederationType`
+    | |____|
+    |
+
+error[E0599]: no variant or associated item named `Community` found for enum `icn_federation::FederationType` in the current scope
+   --> crates/icn-consensus/src/lib.rs:742:5
+    |
+740 |   enum FederationType {
+    |  ______-
+741 | |     Cooperative,
+742 | |     Community,
+    | |    -^^^^^^^^^ variant or associated item not found in `FederationType`
+    | |____|
+    |
+
+error[E0502]: cannot borrow `*self` as immutable because it is also borrowed as mutable
+  --> crates/icn-consensus/src/pbft.rs:94:16
+   |
+90 |         if let Some(prepared_set) = self.prepared_messages.get_mut(&message.block_hash) {
+   |                                     ---------------------- mutable borrow occurs here
+...
+94 |             if self.has_quorum(prepared_set.len()) {
+   |                ^^^^            ------------ mutable borrow later used here
+   |                |
+   |                immutable borrow occurs here
+
+error[E0502]: cannot borrow `*self` as immutable because it is also borrowed as mutable
+   --> crates/icn-consensus/src/pbft.rs:127:12
+    |
+122 |         let view_changes = self.view_change_messages.entry(message.view_number)
+    |                            ------------------------- mutable borrow occurs here
+...
+127 |         if self.has_quorum(view_changes.len()) {
+    |            ^^^^            ------------ mutable borrow later used here
+    |            |
+    |            immutable borrow occurs here
+
+warning: unused variable: `max_block_size`
+   --> crates/icn-consensus/src/validation.rs:106:13
+    |
+106 |         let max_block_size = 1024 * 1024; // 1MB
+    |             ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_max_block_size`
+
+warning: unused variable: `message`
+   --> crates/icn-consensus/src/validation.rs:152:40
+    |
+152 |     async fn validate_signature(&self, message: &[u8], signature: &[u8], public_key: &PublicKey) -> Result<bool, ValidationError> {
+    |                                        ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_message`
+
+warning: unused variable: `public_key`
+   --> crates/icn-consensus/src/validation.rs:152:74
+    |
+152 |     async fn validate_signature(&self, message: &[u8], signature: &[u8], public_key: &PublicKey) -> Result<bool, ValidationError> {
+    |                                                                          ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_public_key`
+
+error[E0782]: expected a type, found a trait
+  --> crates/icn-consensus/src/lib.rs:97:16
+   |
+97 |     vote_trie: Trie,
+   |                ^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+97 |     vote_trie: dyn Trie,
+   |                +++
+
+Some errors have detailed explanations: E0053, E0117, E0252, E0255, E0277, E0308, E0412, E0425, E0432...
+For more information about an error, try `rustc --explain E0053`.
+warning: `icn-consensus` (lib) generated 16 warnings
