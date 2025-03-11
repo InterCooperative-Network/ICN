@@ -45,7 +45,7 @@ use resource_manager::ResourceProvider as ResourceManagerTrait;
 /// Result type for federation operations
 pub type FederationResult<T> = Result<T, FederationError>;
 
-/// Helper to create a FederationId from a String
+/// Helper to convert a String to a FederationId
 pub fn federation_id_from_string(id: String) -> FederationId {
     FederationId(id)
 }
@@ -53,27 +53,6 @@ pub fn federation_id_from_string(id: String) -> FederationId {
 /// Helper to convert a FederationId to a String
 pub fn federation_id_to_string(id: &FederationId) -> String {
     id.0.clone()
-}
-
-/// Implementation to help with displaying FederationId
-impl std::fmt::Display for FederationId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-/// Implementation to help with comparing FederationId with String
-impl PartialEq<String> for FederationId {
-    fn eq(&self, other: &String) -> bool {
-        self.0 == *other
-    }
-}
-
-/// Implementation to help with comparing String with FederationId
-impl PartialEq<FederationId> for String {
-    fn eq(&self, other: &FederationId) -> bool {
-        *self == other.0
-    }
 }
 
 // Add SDP support
@@ -246,32 +225,45 @@ impl FederationManager {
         federations.values().cloned().collect()
     }
     
-    /// Create a proposal for a federation
+    /// Create a proposal
     pub async fn create_proposal(
-        &self,
-        title: String,
-        description: String,
-        proposer: String,
-        federation_id: String,
-        proposal_type: ProposalType,
-        voting_period: Option<u64>,
-        tags: Option<Vec<String>>,
-    ) -> Result<String, FederationError> {
-        // Convert the federation_id to our local FederationId type
-        let federation_id_local = FederationId(federation_id);
+        &self, 
+        federation_id: &str, 
+        title: String, 
+        description: String, 
+        proposer: String, 
+        proposal_type_str: String, 
+        details: HashMap<String, String>
+    ) -> FederationResult<String> {
+        let fed_id = federation_id_from_string(federation_id.to_string());
+        let federations = self.federations.read().await;
         
-        // Call the governance_manager with our local FederationId type
+        // Ensure federation exists
+        let _federation = federations.get(federation_id)
+            .ok_or_else(|| FederationError::FederationNotFound(federation_id.to_string()))?;
+        
         if let Some(governance) = &self.governance_manager {
-            governance.create_proposal(
-                title,
-                description,
-                proposer,
-                federation_id_local,
-                proposal_type,
-                voting_period,
-                tags.unwrap_or_default(),
+            // Convert the string proposal type to a ProposalType enum
+            let proposal_type = ProposalType::Custom(proposal_type_str);
+            
+            // Create an empty tags vector
+            let tags: Vec<String> = Vec::new();
+            
+            // No specific voting period, use default
+            let voting_period: Option<u64> = None;
+            
+            let proposal_id = governance.create_proposal(
+                title, 
+                description, 
+                proposer, 
+                fed_id, 
+                proposal_type, 
+                voting_period, 
+                tags
             ).await
-            .map_err(|e| FederationError::GovernanceError(e.to_string()))
+                .map_err(|e| FederationError::GovernanceError(e.to_string()))?;
+            
+            Ok(proposal_id)
         } else {
             Err(FederationError::GovernanceManagerNotConfigured)
         }
@@ -309,11 +301,11 @@ impl FederationManager {
         dispute_type: DisputeType,
         severity: u8,
     ) -> FederationResult<String> {
-        let fed_id = FederationId(federation_id.to_string());
+        let fed_id = federation_id_from_string(federation_id.to_string());
         let federations = self.federations.read().await;
         
         // Ensure federation exists
-        let _federation = federations.get(&fed_id)
+        let _federation = federations.get(federation_id)
             .ok_or_else(|| FederationError::FederationNotFound(federation_id.to_string()))?;
         
         if let Some(dispute_manager) = &self.dispute_manager {
@@ -355,11 +347,11 @@ impl FederationManager {
         
         // Check if member already exists
         if federation.members.contains(&member_id) {
-            return Err(FederationError::AlreadyExists(format!("Member {} already exists", member_id)));
+            return Err(FederationError::AlreadyExists(format!("Member {:?} already exists", member_id)));
         }
         
         // Create membership action
-        let action = federation::MembershipAction::Add(member_id.clone());
+        let action = federation::MembershipAction::Add(member_id.did.clone());
         
         // Create updated federation with new member
         let mut updated_federation = federation.clone();
@@ -367,7 +359,7 @@ impl FederationManager {
         
         // Add roles if specified
         if !roles.is_empty() {
-            updated_federation.member_roles.insert(member_id.to_string(), roles);
+            updated_federation.member_roles.insert(member_id.did.clone(), roles);
         }
         
         // Update federation
@@ -387,7 +379,7 @@ impl FederationManager {
         
         // Check if member exists
         if !federation.members.contains(member_id) {
-            return Err(FederationError::NotFound(format!("Member {} not found", member_id)));
+            return Err(FederationError::NotFound(format!("Member {:?} not found", member_id)));
         }
         
         // Parse resource type
@@ -504,4 +496,7 @@ pub enum FederationError {
     
     #[error("Resource manager not configured")]
     ResourceManagerNotConfigured,
+    
+    #[error("Federation not found: {0}")]
+    FederationNotFound(String),
 }
